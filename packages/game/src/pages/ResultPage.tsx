@@ -24,18 +24,16 @@ export default function ResultPage() {
   const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitFailed, setSubmitFailed] = useState(false)
+  const [retried, setRetried] = useState(false)
 
   const totalMs =
     state.totalStartTime != null && state.totalEndTime != null
       ? state.totalEndTime - state.totalStartTime
       : null
 
-  // Submit score on mount (daily mode only)
-  useEffect(() => {
-    if (state.mode !== 'daily' || totalMs == null || state.moduleStats.length === 0) return
-
-    setSubmitting(true)
-    const submission = {
+  const buildSubmission = useCallback(() => {
+    if (totalMs == null) return null
+    return {
       date: getTodayString(),
       nickname: 'Anonymous',
       time_ms: Math.round(totalMs),
@@ -44,17 +42,49 @@ export default function ResultPage() {
       operations_hash: 'practice',  // placeholder — real hash in future phase
       device_id: getDeviceId(),
     }
+  }, [totalMs, state.attemptNumber, state.moduleStats])
 
+  // Submit score on mount (daily mode only)
+  useEffect(() => {
+    if (state.mode !== 'daily' || totalMs == null || state.moduleStats.length === 0) return
+
+    const submission = buildSubmission()
+    if (!submission) return
+
+    // Persist locally so a retry can succeed even if user navigates back
+    try {
+      sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
+    } catch { /* storage full */ }
+
+    setSubmitting(true)
     submitScore(submission).then(result => {
       setSubmitting(false)
       if (result) {
         setRankResult(result)
+        try { sessionStorage.removeItem(`pending-score:${submission.date}`) } catch { /* ignore */ }
       } else {
         setSubmitFailed(true)
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleRetrySubmit = useCallback(() => {
+    setRetried(true)
+    setSubmitFailed(false)
+    setSubmitting(true)
+    const submission = buildSubmission()
+    if (!submission) { setSubmitting(false); return }
+    submitScore(submission).then(result => {
+      setSubmitting(false)
+      if (result) {
+        setRankResult(result)
+        try { sessionStorage.removeItem(`pending-score:${submission.date}`) } catch { /* ignore */ }
+      } else {
+        setSubmitFailed(true)
+      }
+    })
+  }, [buildSubmission])
 
   const handlePlayAgain = () => {
     dispatch({ type: 'RESET' })
@@ -131,7 +161,14 @@ Review our run and tell me: what caused the most delays, and what should we add 
             </span>
           )}
           {submitFailed && (
-            <span className={styles.rankMuted}>Could not submit score (offline?)</span>
+            <span className={styles.rankMuted}>
+              Could not submit score (offline?)
+              {!retried && (
+                <button className={styles.retryBtn} onClick={handleRetrySubmit}>
+                  Try again
+                </button>
+              )}
+            </span>
           )}
         </div>
       )}

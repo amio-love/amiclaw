@@ -1,3 +1,37 @@
+.wrapper {
+  width: 100%;
+}
+
+/* Toggle button: hidden on desktop, shown on mobile */
+.toggle {
+  display: none;
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  gap: 8px;
+  align-items: center;
+  min-height: var(--touch-target);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.chevron {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+/* Details panel */
 .bar {
   display: flex;
   flex-wrap: wrap;
@@ -42,4 +76,20 @@
 .unlit {
   background: var(--color-border);
   color: var(--color-text-muted);
+}
+
+/* Mobile: collapse details behind toggle */
+@media (max-width: 768px) {
+  .toggle {
+    display: flex;
+  }
+
+  .bar {
+    display: none;
+    margin-top: 4px;
+  }
+
+  .bar.open {
+    display: flex;
+  }
 }

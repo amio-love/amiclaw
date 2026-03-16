@@ -180,6 +180,22 @@
   color: var(--color-text-muted);
 }
 
+.retryBtn {
+  margin-left: 10px;
+  background: none;
+  border: none;
+  color: var(--color-neon-cyan);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.retryBtn:hover {
+  color: var(--color-text-primary);
+}
+
 .noData {
   font-family: var(--font-mono);
   font-size: 1rem;

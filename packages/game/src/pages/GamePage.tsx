@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
 import { useGame } from '@/store/game-context'
@@ -53,6 +53,21 @@ function generateAllModules(
   }
 }
 
+/** Load a daily manual with sessionStorage fallback on network failure. */
+async function loadWithCache(manualUrl: string): Promise<Manual> {
+  const cacheKey = `manual-cache:${manualUrl}`
+  try {
+    const manual = await loadManual(manualUrl)
+    // Cache for offline fallback
+    try { sessionStorage.setItem(cacheKey, yaml.dump(manual)) } catch { /* storage full */ }
+    return manual
+  } catch {
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) return yaml.load(cached) as Manual
+    throw new Error('Could not load manual. Check your connection.')
+  }
+}
+
 export default function GamePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -85,10 +100,26 @@ export default function GamePage() {
         if (mode === 'practice') {
           manual = yaml.load(practiceYamlRaw) as Manual
         } else {
-          manual = await loadManual(manualUrl)
+          manual = await loadWithCache(manualUrl)
         }
+
         const sceneInfo = generateSceneInfo(rng)
-        const { configs, answers } = generateAllModules(rng, manual, sceneInfo)
+
+        let configs: ModuleConfig[]
+        let answers: ModuleAnswer[]
+        try {
+          const result = generateAllModules(rng, manual, sceneInfo)
+          configs = result.configs
+          answers = result.answers
+        } catch (genErr) {
+          console.error('Generator exhaustion:', genErr)
+          dispatch({
+            type: 'LOAD_ERROR',
+            message: 'Puzzle generation failed. Please restart.',
+          })
+          return
+        }
+
         dispatch({
           type: 'MANUAL_LOADED',
           manual,
@@ -153,29 +184,32 @@ export default function GamePage() {
 
     errorCountRef.current += 1
 
-    const idx = state.currentModuleIndex
-    let config: ModuleConfig
-    let answer: ModuleAnswer
-    if (idx === 0) {
-      const result = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
-      config = result.config; answer = result.answer
-    } else if (idx === 1) {
-      const result = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
-      config = result.config; answer = result.answer
-    } else if (idx === 2) {
-      const result = generateButton(rng, manual.modules.button.rules, sceneInfo)
-      config = result.config; answer = result.answer
-    } else {
-      const result = generateKeypad(rng, manual.modules.keypad, sceneInfo)
-      config = result.config; answer = result.answer
+    try {
+      const idx = state.currentModuleIndex
+      let config: ModuleConfig
+      let answer: ModuleAnswer
+      if (idx === 0) {
+        const result = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
+        config = result.config; answer = result.answer
+      } else if (idx === 1) {
+        const result = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
+        config = result.config; answer = result.answer
+      } else if (idx === 2) {
+        const result = generateButton(rng, manual.modules.button.rules, sceneInfo)
+        config = result.config; answer = result.answer
+      } else {
+        const result = generateKeypad(rng, manual.modules.keypad, sceneInfo)
+        config = result.config; answer = result.answer
+      }
+      dispatch({ type: 'REGENERATE_MODULE', config, answer })
+    } catch (genErr) {
+      console.error('Generator exhaustion during error regeneration:', genErr)
+      dispatch({
+        type: 'LOAD_ERROR',
+        message: 'Puzzle generation failed. Please restart.',
+      })
     }
-    dispatch({ type: 'REGENERATE_MODULE', config, answer })
   }, [dispatch, state.currentModuleIndex, state.manual, state.sceneInfo])
-
-  const handleRetry = useCallback(() => {
-    // Re-trigger the load effect by resetting state
-    window.location.reload()
-  }, [])
 
   const renderModule = () => {
     const idx = state.currentModuleIndex
@@ -205,7 +239,10 @@ export default function GamePage() {
           {state.errorMessage ? (
             <>
               <p className={styles.errorText}>{state.errorMessage}</p>
-              <button className={styles.retryBtn} onClick={handleRetry}>RETRY</button>
+              <button className={styles.retryBtn} onClick={() => window.location.reload()}>
+                RETRY
+              </button>
+              <Link to="/" className={styles.homeLink}>← Go Home</Link>
             </>
           ) : (
             <p className={styles.loadingText}>LOADING MANUAL…</p>
