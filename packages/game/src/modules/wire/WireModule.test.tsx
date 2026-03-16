@@ -11,7 +11,7 @@ const config = {
   ],
 }
 const answer = { type: 'wire' as const, cutPosition: 2 }
-const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as const }
+const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as [] }
 
 describe('WireModule', () => {
   it('calls onComplete when correct wire is clicked', () => {

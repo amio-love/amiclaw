@@ -1,0 +1,35 @@
+.bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.segment {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.filled {
+  background: var(--color-neon-green);
+  box-shadow: 0 0 8px var(--color-neon-green);
+}
+
+.active {
+  background: var(--color-neon-cyan);
+  box-shadow: 0 0 8px var(--color-neon-cyan);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active {
+    animation: none;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

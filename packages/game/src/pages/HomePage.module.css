@@ -1,0 +1,211 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  gap: 32px;
+}
+
+.title {
+  font-family: var(--font-mono);
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  font-weight: bold;
+  color: var(--color-neon-cyan);
+  letter-spacing: 0.15em;
+  text-shadow:
+    0 0 10px var(--color-neon-cyan),
+    0 0 30px var(--color-neon-cyan),
+    0 0 60px rgba(0, 255, 255, 0.4);
+  animation: flicker 6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title { animation: none; }
+}
+
+.subtitle {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: -20px;
+  letter-spacing: 0.05em;
+}
+
+.ctaRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btnPrimary {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--color-neon-cyan);
+  border: 2px solid var(--color-neon-cyan);
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.btnPrimary:hover,
+.btnPrimary:focus-visible {
+  background: rgba(0, 255, 255, 0.08);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.btnSecondary {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btnSecondary:hover,
+.btnSecondary:focus-visible {
+  border-color: var(--color-text-muted);
+  color: var(--color-neon-cyan);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.leaderboardLink {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+}
+
+.leaderboardLink:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+.promptSection {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.promptLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.promptBox {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 14px 14px 14px 14px;
+}
+
+.promptText {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding-right: 80px;
+}
+
+.copyBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--color-neon-cyan);
+  border: 1px solid var(--color-neon-cyan);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+  min-height: var(--touch-target);
+}
+
+.copyBtn:hover,
+.copyBtn:focus-visible {
+  background: rgba(0, 255, 255, 0.08);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.copied {
+  color: var(--color-neon-green);
+  border-color: var(--color-neon-green);
+}
+
+.howTo {
+  width: 100%;
+  max-width: 640px;
+}
+
+.howToTitle {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.howToList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.howToList li {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--color-text-primary);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.stepNum {
+  font-family: var(--font-mono);
+  color: var(--color-neon-cyan);
+  font-weight: bold;
+  min-width: 20px;
+}
+
+.footer {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}

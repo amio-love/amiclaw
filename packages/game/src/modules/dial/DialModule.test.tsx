@@ -12,7 +12,7 @@ const config: DialConfig = {
   currentPositions: [0, 0, 0],
 }
 const answer: DialAnswer = { type: 'dial', positions: [0, 0, 0] }
-const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as const }
+const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as [] }
 
 describe('DialModule', () => {
   it('rotating a dial right does not throw and updates state', () => {

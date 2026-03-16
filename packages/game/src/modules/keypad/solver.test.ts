@@ -14,8 +14,9 @@ const section = {
 }
 
 const sceneInfo: SceneInfo = {
-  timeElapsed: 0,
-  attemptNumber: 1,
+  serialNumber: 'A7K3B2',
+  batteryCount: 2,
+  indicators: [],
 }
 
 describe('solveKeypad', () => {

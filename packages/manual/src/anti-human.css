@@ -1,0 +1,31 @@
+/* Normal human-readable section */
+.human-notice {
+  font-family: system-ui, sans-serif;
+  font-size: 16px;
+  color: #333;
+  background: #f9f9f9;
+  padding: 24px;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.human-notice h1 { font-size: 20px; margin-bottom: 12px; }
+.human-notice a { color: #0066cc; }
+
+.divider { margin: 16px auto; max-width: 600px; border-color: #ddd; }
+.divider-label { text-align: center; color: #999; font-size: 12px; }
+
+/* Anti-human section — intentional WCAG violation (core game mechanic) */
+.anti-human {
+  font-size: 4px;
+  color: #888888;
+  background-color: #999999;
+  line-height: 1;
+  word-break: break-all;
+  white-space: pre-wrap;
+  overflow: hidden;
+  padding: 2px;
+  user-select: none;
+  pointer-events: none;
+}

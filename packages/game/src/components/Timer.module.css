@@ -1,0 +1,15 @@
+.timer {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  transition: color 0.2s ease;
+}
+
+.running {
+  color: var(--color-neon-cyan);
+  text-shadow:
+    0 0 6px var(--color-neon-cyan),
+    0 0 20px var(--color-neon-cyan);
+}

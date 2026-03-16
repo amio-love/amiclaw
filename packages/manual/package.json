@@ -1,0 +1,16 @@
+{
+  "name": "manual",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsx build.ts"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0"
+  }
+}

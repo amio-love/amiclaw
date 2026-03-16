@@ -1,0 +1,141 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  gap: 16px;
+}
+
+.topBar {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modeMeta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.moduleArea {
+  width: 100%;
+  max-width: 640px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottomArea {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Overlay states */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: rgba(13, 13, 26, 0.92);
+  z-index: 100;
+}
+
+.defusedText {
+  font-family: var(--font-mono);
+  font-size: clamp(3rem, 12vw, 6rem);
+  font-weight: bold;
+  color: var(--color-neon-green);
+  text-shadow:
+    0 0 10px var(--color-neon-green),
+    0 0 40px var(--color-neon-green);
+  animation: success-flash 0.4s ease;
+}
+
+.readyText {
+  font-family: var(--font-mono);
+  font-size: clamp(1.5rem, 6vw, 3rem);
+  color: var(--color-neon-cyan);
+  text-shadow: 0 0 10px var(--color-neon-cyan);
+}
+
+.loadingText {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  color: var(--color-text-muted);
+  animation: fade-in 0.3s ease;
+}
+
+.errorText {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--color-neon-red);
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.startBtn {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: bold;
+  padding: 16px 48px;
+  background: transparent;
+  color: var(--color-neon-cyan);
+  border: 2px solid var(--color-neon-cyan);
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.15em;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  min-height: var(--touch-target);
+}
+
+.startBtn:hover,
+.startBtn:focus-visible {
+  background: rgba(0, 255, 255, 0.1);
+  box-shadow: 0 0 40px rgba(0, 255, 255, 0.5);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.retryBtn {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  padding: 12px 32px;
+  background: transparent;
+  color: var(--color-neon-red);
+  border: 1px solid var(--color-neon-red);
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  min-height: var(--touch-target);
+}
+
+.retryBtn:hover,
+.retryBtn:focus-visible {
+  background: rgba(255, 7, 58, 0.08);
+  outline: 2px solid var(--color-neon-red);
+  outline-offset: 2px;
+}
+
+.moduleLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-transform: uppercase;
+}
