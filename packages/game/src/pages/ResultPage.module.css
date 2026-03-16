@@ -165,6 +165,21 @@
   border-color: var(--color-neon-green);
 }
 
+.rankBlock {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  min-height: 1.5rem;
+  text-align: center;
+}
+
+.rankValue {
+  color: var(--color-neon-cyan);
+}
+
+.rankMuted {
+  color: var(--color-text-muted);
+}
+
 .noData {
   font-family: var(--font-mono);
   font-size: 1rem;

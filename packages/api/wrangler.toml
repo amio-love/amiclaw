@@ -1,0 +1,11 @@
+name = "bombsquad-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "LEADERBOARD"
+id = ""         # Fill in after: wrangler kv:namespace create LEADERBOARD
+preview_id = "" # Fill in preview ID from same command
+
+[vars]
+ENVIRONMENT = "production"

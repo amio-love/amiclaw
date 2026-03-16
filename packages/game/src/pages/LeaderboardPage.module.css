@@ -54,6 +54,14 @@
   color: var(--color-neon-cyan);
 }
 
+.status {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 32px;
+}
+
 .link {
   font-family: var(--font-mono);
   font-size: 0.85rem;
