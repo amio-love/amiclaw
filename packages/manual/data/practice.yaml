@@ -1,0 +1,177 @@
+meta:
+  version: "practice"
+  type: practice
+
+modules:
+  wire_routing:
+    rules:
+      - condition: { wire_count: 4, color_at_last: "red" }
+        action: "cut_wire"
+        target: { position: "last" }
+      - condition: { wire_count: 4, color_at_last: "blue" }
+        action: "cut_wire"
+        target: { position: "first" }
+      - condition: { wire_count: 4, color_at_last: "yellow" }
+        action: "cut_wire"
+        target: { position: "last", color: "red" }
+      - condition: { wire_count: 4, color_at_last: "white" }
+        action: "cut_wire"
+        target: { position: 1 }
+      - condition: { wire_count: 4, color_at_last: "green" }
+        action: "cut_wire"
+        target: { position: "last" }
+      - condition: { wire_count: 4, color_at_last: "black" }
+        action: "cut_wire"
+        target: { position: "first" }
+      - condition: { wire_count: 4, count_red: { gt: 1 } }
+        action: "cut_wire"
+        target: { position: "last", color: "red" }
+      - condition: { wire_count: 4, battery_count: { gt: 2 } }
+        action: "cut_wire"
+        target: { position: 2 }
+      - condition: { wire_count: 4 }
+        action: "cut_wire"
+        target: { position: "first" }
+      - condition: { wire_count: 5, color_at_last: "red" }
+        action: "cut_wire"
+        target: { position: 3 }
+      - condition: { wire_count: 5, color_at_last: "blue" }
+        action: "cut_wire"
+        target: { position: "last" }
+      - condition: { wire_count: 5, color_at_last: "yellow" }
+        action: "cut_wire"
+        target: { position: "first" }
+      - condition: { wire_count: 5, count_blue: { gt: 1 } }
+        action: "cut_wire"
+        target: { position: "first", color: "blue" }
+      - condition: { wire_count: 5, indicator_FRK_lit: true }
+        action: "cut_wire"
+        target: { position: 2 }
+      - condition: { wire_count: 5 }
+        action: "cut_wire"
+        target: { position: 2 }
+      - condition: {}
+        action: "cut_wire"
+        target: { position: "first" }
+
+  symbol_dial:
+    columns:
+      - ["omega", "psi", "star", "delta", "xi", "diamond"]
+      - ["psi", "diamond", "omega", "trident", "xi", "delta"]
+      - ["star", "xi", "delta", "psi", "diamond", "omega"]
+      - ["delta", "star", "diamond", "xi", "omega", "psi"]
+      - ["xi", "delta", "psi", "omega", "star", "trident"]
+      - ["diamond", "omega", "xi", "star", "psi", "delta"]
+    rule: "Find the column containing all 3 dial symbols. Set each dial to that symbol's position in the column."
+
+  button:
+    rules:
+      - condition: { color: "blue", label: "ABORT" }
+        action: { type: "hold", release_on_light: "white" }
+      - condition: { color: "blue", label: "DETONATE" }
+        action: { type: "tap" }
+      - condition: { color: "red", label: "HOLD" }
+        action: { type: "tap" }
+      - condition: { color: "red", indicator_FRK_lit: true }
+        action: { type: "tap" }
+      - condition: { color: "yellow", battery_count: { gt: 2 } }
+        action: { type: "hold", release_on_light: "yellow" }
+      - condition: { color: "yellow" }
+        action: { type: "tap" }
+      - condition: { color: "white", label: "PRESS" }
+        action: { type: "hold", release_on_light: "blue" }
+      - condition: { color: "white" }
+        action: { type: "tap" }
+      - condition: { battery_count: { gt: 2 }, label: "DETONATE" }
+        action: { type: "tap" }
+      - condition: { battery_count: { lte: 2 } }
+        action: { type: "hold", release_on_light: "red" }
+      - condition: { label: "ABORT" }
+        action: { type: "hold", release_on_light: "white" }
+      - condition: {}
+        action: { type: "tap" }
+
+  keypad:
+    sequences:
+      - ["omega", "delta", "psi", "xi", "diamond", "star"]
+      - ["star", "xi", "omega", "delta", "diamond", "psi"]
+      - ["psi", "diamond", "star", "omega", "delta", "xi"]
+      - ["delta", "omega", "xi", "diamond", "psi", "star"]
+      - ["diamond", "psi", "delta", "star", "xi", "omega"]
+      - ["xi", "star", "diamond", "psi", "omega", "delta"]
+    rule: "Find the sequence containing all 4 keypad symbols. Press them in the order they appear in that sequence."
+
+decoy_modules:
+  morse_code:
+    rules:
+      - pattern: "... --- ..."
+        word: "SOS"
+        action: "transmit"
+      - pattern: ".... . .-.. .-.. ---"
+        word: "HELLO"
+        action: "transmit"
+      - pattern: "-... --- -- -..."
+        word: "BOMB"
+        action: "transmit"
+      - pattern: ".-- .. .-. ."
+        word: "WIRE"
+        action: "cut"
+      - pattern: "-.. . - --- -. .- - ."
+        word: "DETONATE"
+        action: "abort"
+      - pattern: ".- .-. -- ."
+        word: "ARME"
+        action: "transmit"
+  maze:
+    grid_size: 6
+    rules:
+      - start: [0, 0]
+        end: [5, 5]
+        path: "RRRRRUUUUU"
+      - start: [2, 3]
+        end: [0, 0]
+        path: "LLLUUU"
+      - start: [1, 1]
+        end: [4, 4]
+        path: "RRRRUUU"
+      - start: [3, 0]
+        end: [3, 5]
+        path: "UUUUU"
+      - start: [0, 2]
+        end: [5, 2]
+        path: "RRRRR"
+  memory:
+    stages: 5
+    rules:
+      - stage: 1
+        display: 1
+        action: "press_position_2"
+      - stage: 1
+        display: 2
+        action: "press_position_2"
+      - stage: 2
+        display: 3
+        action: "press_label_4"
+      - stage: 3
+        display: 1
+        action: "press_same_position"
+      - stage: 4
+        display: 4
+        action: "press_same_label"
+      - stage: 5
+        display: 2
+        action: "press_same_position_as_stage_1"
+  simon_says:
+    rules:
+      - has_vowel_in_serial: true
+        color_map: { red: "blue", blue: "red", green: "yellow", yellow: "green" }
+      - has_vowel_in_serial: false
+        color_map: { red: "blue", blue: "yellow", green: "green", yellow: "red" }
+      - strikes: 1
+        has_vowel_in_serial: true
+        color_map: { red: "blue", blue: "red", green: "yellow", yellow: "green" }
+      - strikes: 1
+        has_vowel_in_serial: false
+        color_map: { red: "red", blue: "blue", green: "yellow", yellow: "green" }
+      - strikes: 2
+        color_map: { red: "yellow", blue: "green", green: "blue", yellow: "red" }

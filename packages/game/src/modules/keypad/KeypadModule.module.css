@@ -1,0 +1,55 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: fit-content;
+}
+
+.grid.error  { animation: error-flash 600ms ease-out, shake 600ms ease-out; }
+.grid.success { animation: success-flash 600ms ease-out; }
+
+.cell {
+  width: 120px;
+  height: 120px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: border-color 150ms;
+}
+
+.cell:hover { border-color: var(--color-neon-cyan); }
+
+.cell.selected { border-color: var(--color-neon-cyan); }
+
+.symbol {
+  width: 80px;
+  height: 80px;
+  stroke: var(--color-text-primary);
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cell.selected .symbol { stroke: var(--color-neon-cyan); }
+
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-neon-cyan);
+  color: var(--color-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

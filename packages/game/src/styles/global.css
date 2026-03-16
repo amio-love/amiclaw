@@ -1,0 +1,45 @@
+/* Design tokens */
+:root {
+  /* Colors */
+  --color-bg: #1a1a2e;
+  --color-neon-cyan: #00ffff;
+  --color-neon-green: #39ff14;
+  --color-neon-red: #ff073a;
+  --color-surface: #0d0d1a;
+  --color-border: #1e2a4a;
+  --color-text-primary: #e0e0ff;
+  --color-text-muted: #6b7299;
+
+  /* Typography */
+  --font-mono: 'Courier New', 'Consolas', monospace;
+  --font-sans: system-ui, -apple-system, sans-serif;
+
+  /* Layout */
+  --puzzle-max-width: 60%;
+  --touch-target: 44px;
+  --breakpoint-mobile: 768px;
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+#root {
+  min-height: 100%;
+}
+
+/* Focus rings */
+:focus-visible {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}

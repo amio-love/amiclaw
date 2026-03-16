@@ -1,0 +1,37 @@
+.container {
+  animation: fade-in 300ms ease-out;
+}
+
+.container.error {
+  animation: error-flash 600ms ease-out, shake 600ms ease-out;
+}
+
+.container.success {
+  animation: success-flash 800ms ease-out;
+}
+
+.wire-hit-target {
+  cursor: crosshair;
+  stroke: transparent;
+  stroke-width: 20;
+  fill: none;
+}
+
+.wire-hit-target:hover {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.wire-visual {
+  stroke-width: 4;
+  fill: none;
+  stroke-linecap: round;
+  transition: opacity 100ms;
+}
+
+.wire-cut-top {
+  animation: wire-cut-top 400ms ease-out forwards;
+}
+
+.wire-cut-bottom {
+  animation: wire-cut-bottom 400ms ease-out forwards;
+}
