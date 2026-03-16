@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter game dev",
-    "build": "pnpm --filter game build",
+    "build": "pnpm --filter manual build && pnpm --filter game build",
     "test": "pnpm --filter game test",
     "test:run": "pnpm --filter game test:run"
   },
