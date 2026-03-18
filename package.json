@@ -5,9 +5,17 @@
     "dev": "pnpm --filter game dev",
     "build": "pnpm --filter manual build && pnpm --filter game build",
     "test": "pnpm --filter game test",
-    "test:run": "pnpm --filter game test:run"
+    "test:run": "pnpm --filter game test:run",
+    "prepare": "husky"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "husky": "^9.1.7"
   }
 }
