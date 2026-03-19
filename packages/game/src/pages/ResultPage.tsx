@@ -27,26 +27,26 @@ export default function ResultPage() {
   const [retried, setRetried] = useState(false)
 
   const totalMs =
-    state.totalStartTime != null && state.totalEndTime != null
+    state.totalStartTime !== null && state.totalEndTime !== null
       ? state.totalEndTime - state.totalStartTime
       : null
 
   const buildSubmission = useCallback(() => {
-    if (totalMs == null) return null
+    if (totalMs === null) return null
     return {
       date: getTodayString(),
       nickname: 'Anonymous',
       time_ms: Math.round(totalMs),
       attempt_number: state.attemptNumber,
-      module_times: state.moduleStats.map(s => Math.round(s.timeMs)),
-      operations_hash: 'practice',  // placeholder — real hash in future phase
+      module_times: state.moduleStats.map((s) => Math.round(s.timeMs)),
+      operations_hash: 'practice', // placeholder — real hash in future phase
       device_id: getDeviceId(),
     }
   }, [totalMs, state.attemptNumber, state.moduleStats])
 
   // Submit score on mount (daily mode only)
   useEffect(() => {
-    if (state.mode !== 'daily' || totalMs == null || state.moduleStats.length === 0) return
+    if (state.mode !== 'daily' || totalMs === null || state.moduleStats.length === 0) return
 
     const submission = buildSubmission()
     if (!submission) return
@@ -54,19 +54,25 @@ export default function ResultPage() {
     // Persist locally so a retry can succeed even if user navigates back
     try {
       sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
-    } catch { /* storage full */ }
+    } catch {
+      /* storage full */
+    }
 
     setSubmitting(true)
-    submitScore(submission).then(result => {
+    submitScore(submission).then((result) => {
       setSubmitting(false)
       if (result) {
         setRankResult(result)
-        try { sessionStorage.removeItem(`pending-score:${submission.date}`) } catch { /* ignore */ }
+        try {
+          sessionStorage.removeItem(`pending-score:${submission.date}`)
+        } catch {
+          /* ignore */
+        }
       } else {
         setSubmitFailed(true)
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRetrySubmit = useCallback(() => {
@@ -74,12 +80,19 @@ export default function ResultPage() {
     setSubmitFailed(false)
     setSubmitting(true)
     const submission = buildSubmission()
-    if (!submission) { setSubmitting(false); return }
-    submitScore(submission).then(result => {
+    if (!submission) {
+      setSubmitting(false)
+      return
+    }
+    submitScore(submission).then((result) => {
       setSubmitting(false)
       if (result) {
         setRankResult(result)
-        try { sessionStorage.removeItem(`pending-score:${submission.date}`) } catch { /* ignore */ }
+        try {
+          sessionStorage.removeItem(`pending-score:${submission.date}`)
+        } catch {
+          /* ignore */
+        }
       } else {
         setSubmitFailed(true)
       }
@@ -88,15 +101,14 @@ export default function ResultPage() {
 
   const handlePlayAgain = () => {
     dispatch({ type: 'RESET' })
-    navigate('/game?mode=' + state.mode)
+    navigate(`/game?mode=${state.mode}`)
   }
 
   const buildSummary = useCallback(() => {
     const date = getTodayString()
-    const modeLabel = state.mode === 'daily'
-      ? `Daily Challenge (Attempt #${state.attemptNumber})`
-      : 'Practice'
-    const timeStr = totalMs != null ? formatMs(totalMs) : '--:--'
+    const modeLabel =
+      state.mode === 'daily' ? `Daily Challenge (Attempt #${state.attemptNumber})` : 'Practice'
+    const timeStr = totalMs !== null ? formatMs(totalMs) : '--:--'
     const breakdown = state.moduleStats
       .map((s, i) => {
         const name = MODULE_LABELS[i] ?? s.moduleType
@@ -114,7 +126,7 @@ Date: ${date}
 Mode: ${modeLabel}
 Result: Success ✓
 Total Time: ${timeStr}
-${rankLine ? rankLine + '\n' : ''}
+${rankLine ? `${rankLine}\n` : ''}
 Module Breakdown:
 ${breakdown}
 
@@ -134,7 +146,10 @@ Review our run and tell me: what caused the most delays, and what should we add 
     return (
       <main className={styles.page}>
         <p className={styles.noData}>
-          No game data. <Link to="/" className={styles.link}>Go Home</Link>
+          No game data.{' '}
+          <Link to="/" className={styles.link}>
+            Go Home
+          </Link>
         </p>
       </main>
     )
@@ -144,9 +159,7 @@ Review our run and tell me: what caused the most delays, and what should we add 
     <main className={styles.page}>
       <h1 className={`${styles.header} ${styles.headerDefused}`}>DEFUSED</h1>
 
-      {totalMs != null && (
-        <div className={styles.totalTime}>{formatMs(totalMs)}</div>
-      )}
+      {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
       <p className={styles.meta}>
         {state.mode === 'daily' ? `Daily Challenge — Attempt #${state.attemptNumber}` : 'Practice'}
@@ -208,8 +221,12 @@ Review our run and tell me: what caused the most delays, and what should we add 
           {copied ? 'COPIED!' : 'Copy Run Summary'}
         </button>
         <div className={styles.secondaryLinks}>
-          <Link to="/leaderboard" className={styles.link}>Leaderboard</Link>
-          <Link to="/" className={styles.link}>Home</Link>
+          <Link to="/leaderboard" className={styles.link}>
+            Leaderboard
+          </Link>
+          <Link to="/" className={styles.link}>
+            Home
+          </Link>
         </div>
       </div>
     </main>

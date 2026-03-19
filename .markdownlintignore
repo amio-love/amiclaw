@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+docs/AmiClaw_GameDesign.md
+docs/AmiClaw_MVP.md
+docs/DesignSystem.md
+docs/ai-changelog-guide.md
+docs/plans/**
+docs/superpowers/**
+prompts/**
