@@ -1,0 +1,45 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: 'feat: '
+labels: ['enhancement', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature. Please describe the problem you are trying to solve.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the pain point or use case.
+      placeholder: I am blocked when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe how you would like this to work.
+      placeholder: I would like...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or alternative approaches.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this request?
+      options:
+        - Nice to have
+        - Important
+        - Critical
+    validations:
+      required: true
