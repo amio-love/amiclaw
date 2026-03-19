@@ -5,9 +5,11 @@
 
 # Node
 node_modules/
+.pnpm-store/
 dist/
 .output/
 .cache/
+*.tsbuildinfo
 
 # Environment
 .env
@@ -30,3 +32,7 @@ coverage/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Release artifacts
+RELEASE_NOTES.md
+RELEASE_TITLE.txt
