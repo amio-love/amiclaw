@@ -17,6 +17,16 @@ You will receive:
 You will output a polished changelog section body ready to place below the
 version header.
 
+## Workflow Policy
+
+`CHANGELOG.md` is maintained continuously.
+
+- Every change that will land on `main` must add or update notes directly below
+  `## [Unreleased](...)`
+- Do not wait until release day to start the changelog
+- On release day, move the curated unreleased notes into the new versioned
+  section and recreate an empty `Unreleased` section at the top
+
 ## Core Principle
 
 Raw engineering notes describe what developers did. Your job is to describe what
@@ -89,6 +99,8 @@ Always keep:
 ## [Unreleased](https://github.com/OWNER/REPO/compare/1.2.0...HEAD)
 ```
 
+All new main-bound changelog entries belong immediately below this header.
+
 ### Version Header
 
 Always use linked version headers:
@@ -122,6 +134,7 @@ Leave a blank line between headline items.
 
 - The version number follows SemVer unless the release owner explicitly chose otherwise
 - `Unreleased` is a linked header to `compare/<new-tag>...HEAD`
+- Every change headed to `main` was recorded under `Unreleased` before merge
 - The version header is linked to `compare/<previous-tag>...<new-tag>`
 - No commit syntax remains in the prose
 - Internal-only changes are omitted unless they are user-visible

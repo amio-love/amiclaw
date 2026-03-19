@@ -29,18 +29,24 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/):
 - Keep PRs focused on a single concern
 - Include tests for new behavior
 - Update documentation if needed
+- Update `CHANGELOG.md` under `Unreleased` for every change that will land on `main`
 - Ensure CI passes before requesting review
 - Use the repository PR template
 
 ## Release Workflow
 
-Normal development lands on `main`. On release day:
+Every change that lands on `main` must be recorded in `CHANGELOG.md` directly
+below the `Unreleased` header. Keep the newest unreleased notes there as work
+lands, instead of waiting until release day.
 
-1. Edit `CHANGELOG.md`
-2. Bump the version file if the project starts using one
-3. Commit the release changes
-4. Tag that exact commit
-5. Push the release commit and tag
+On release day:
+
+1. Curate the `Unreleased` notes into the new versioned section
+2. Reset `Unreleased` so it compares the new tag to `HEAD`
+3. Bump the version file if the project starts using one
+4. Commit the release changes
+5. Tag that exact commit
+6. Push the release commit and tag
 
 Use `docs/changelog-style-guide.md` when drafting changelog content.
 
