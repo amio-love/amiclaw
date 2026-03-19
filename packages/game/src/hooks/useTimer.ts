@@ -6,22 +6,16 @@ import { useState, useEffect, useRef } from 'react'
  * Returns elapsed time in ms and a formatted MM:SS string.
  */
 export function useTimer(startTime: number | null, endTime: number | null): { elapsedMs: number; display: string } {
-  const [elapsedMs, setElapsedMs] = useState(0)
+  const [now, setNow] = useState(() => performance.now())
   const rafRef = useRef<number>(0)
 
   useEffect(() => {
-    if (startTime === null) {
-      setElapsedMs(0)
-      return
-    }
-
-    if (endTime !== null) {
-      setElapsedMs(endTime - startTime)
+    if (startTime === null || endTime !== null) {
       return
     }
 
     const tick = () => {
-      setElapsedMs(performance.now() - startTime)
+      setNow(performance.now())
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -31,6 +25,7 @@ export function useTimer(startTime: number | null, endTime: number | null): { el
     }
   }, [startTime, endTime])
 
+  const elapsedMs = startTime === null ? 0 : (endTime ?? now) - startTime
   const totalSeconds = Math.floor(elapsedMs / 1000)
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
