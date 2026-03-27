@@ -1,10 +1,12 @@
 # BombSquad MVP — Development Plan Index
 
+> Historical note: this index was written before implementation started. The repository now contains working code in `packages/game`, `packages/manual`, and `packages/api`. Use this file as the original architecture/phase reference, and see `docs/plans/2026-03-27-bombsquad-remaining-work-checklist.md` for the current remaining-work baseline.
+
 ## Context
 
 **AmiClaw** (`claw.amio.fans`) is a platform that hosts multiple agent+human collaborative game modes. **BombSquad** (`bombsquad.amio.fans`) is the first game on this platform — a bomb-defusing game inspired by "Keep Talking and Nobody Explodes". The player sees 2D puzzles on a web page and communicates via voice with any AI assistant (Claude, ChatGPT, Gemini, etc.) that reads a YAML manual to guide them. Zero AI integration needed — communication happens entirely through the player's physical voice.
 
-**Current state**: Greenfield project. Only design docs exist. No code yet.
+**Current state at time of writing**: Greenfield project. Only design docs existed.
 
 **Goal**: Build a deployable BombSquad MVP in ~3 weeks that validates the core gameplay loop: "human describes + AI reads manual + human acts".
 

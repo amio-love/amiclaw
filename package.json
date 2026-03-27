@@ -7,7 +7,7 @@
     "lint:fix": "pnpm exec eslint . --fix && pnpm exec markdownlint-cli2 --fix \"*.md\" \".github/**/*.md\" \"docs/changelog-style-guide.md\"",
     "format": "pnpm exec prettier . --write",
     "format:check": "pnpm exec prettier --check .",
-    "build": "pnpm --filter manual build && pnpm --filter game build",
+    "build": "pnpm --filter manual build && pnpm --filter game build && node scripts/assemble-pages.mjs",
     "test": "pnpm --filter game test",
     "test:run": "pnpm --filter game test:run",
     "prepare": "husky"
@@ -30,9 +30,9 @@
     ]
   },
   "devDependencies": {
-    "@eslint/js": "^9.23.0",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
+    "@eslint/js": "^9.23.0",
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-react-hooks": "^7.0.1",

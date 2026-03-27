@@ -110,6 +110,40 @@
   gap: 10px;
 }
 
+.promptModeRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.promptModeBtn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.promptModeBtn:hover,
+.promptModeBtn:focus-visible {
+  border-color: var(--color-neon-cyan);
+  color: var(--color-text-primary);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.promptModeActive {
+  border-color: var(--color-neon-cyan);
+  color: var(--color-neon-cyan);
+  background: rgba(0, 255, 255, 0.08);
+}
+
 .promptLabel {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -152,6 +186,16 @@
   transition: background 0.15s ease;
   white-space: nowrap;
   min-height: var(--touch-target);
+}
+
+@media (max-width: 640px) {
+  .promptBox {
+    padding-top: 64px;
+  }
+
+  .promptText {
+    padding-right: 0;
+  }
 }
 
 .copyBtn:hover,

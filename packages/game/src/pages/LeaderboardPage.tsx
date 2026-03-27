@@ -49,7 +49,6 @@ export default function LeaderboardPage() {
               <th>Nickname</th>
               <th>Time</th>
               <th>Attempts</th>
-              <th>AI Tool</th>
             </tr>
           </thead>
           <tbody>
@@ -59,7 +58,6 @@ export default function LeaderboardPage() {
                 <td>{row.nickname}</td>
                 <td className={styles.time}>{formatMs(row.time_ms)}</td>
                 <td>{row.attempt_number}</td>
-                <td>{row.ai_tool ?? '—'}</td>
               </tr>
             ))}
           </tbody>

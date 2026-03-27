@@ -60,7 +60,7 @@ describe('full game flow: home → practice → result', () => {
       expect(screen.getByText('BOMBSQUAD')).toBeInTheDocument()
 
       // Navigate to practice game
-      fireEvent.click(screen.getByRole('button', { name: /PRACTICE/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^PRACTICE$/i }))
 
       // Practice manual is inlined via ?raw — wait for the async load() microtask to complete
       await waitFor(() => expect(screen.getByText('READY?')).toBeInTheDocument())

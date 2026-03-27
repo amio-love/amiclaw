@@ -1,5 +1,7 @@
 # Split BombSquad MVP Plan into Per-Phase Plans
 
+> Historical note: this planning file predates implementation. The repository now contains working code and should not be treated as a statement of current repo status.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Split the monolithic 6-phase BombSquad MVP development plan into 6 independent plan files + a master index, each detailed enough for agentic execution.

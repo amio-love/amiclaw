@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { copyToClipboard } from '@/utils/clipboard'
+import { buildAssistantPrompt, type PromptMode } from '@/utils/assistant-prompt'
 import styles from './HomePage.module.css'
 
 const HOW_TO_STEPS = [
   'Open your AI (Claude, ChatGPT, Gemini…) in voice mode on another device or tab.',
-  'Copy the prompt below and send it to your AI. Wait for it to confirm it has read the manual.',
+  'Pick Practice Prompt or Daily Prompt, then send the copied prompt to your AI. Wait for it to confirm it has read the manual.',
   'Click Practice or Daily Challenge, then hit Start when your AI is ready.',
   'Describe what you see — your AI will guide you. Shorter time = higher rank.',
 ]
@@ -15,19 +16,10 @@ export default function HomePage() {
   const navigate = useNavigate()
   const { practiceUrl, dailyUrl } = useDailyChallenge()
   const [copied, setCopied] = useState(false)
+  const [promptMode, setPromptMode] = useState<PromptMode>('daily')
 
-  const promptText = `You are a bomb disposal expert. Your partner is facing a bomb and needs your guidance.
-
-The operations manual is here: ${practiceUrl}
-
-Please read the complete manual first, then tell your partner you are ready.
-
-Rules:
-- They will describe what they see via voice
-- You find the matching rules and tell them what to do
-- Shorter time = higher global rank
-- Ask about the Scene Info bar (serial number, battery count, indicator lights) — many rules depend on these
-- Give concise instructions; ask follow-up questions if unsure`
+  const manualUrl = promptMode === 'daily' ? dailyUrl : practiceUrl
+  const promptText = buildAssistantPrompt({ mode: promptMode, manualUrl })
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(promptText)
@@ -75,6 +67,24 @@ Rules:
 
       <section className={styles.promptSection} aria-label="AI prompt">
         <div className={styles.promptLabel}>Copy this prompt for your AI</div>
+        <div className={styles.promptModeRow} role="group" aria-label="Prompt mode">
+          <button
+            type="button"
+            className={`${styles.promptModeBtn} ${promptMode === 'practice' ? styles.promptModeActive : ''}`}
+            onClick={() => setPromptMode('practice')}
+            aria-pressed={promptMode === 'practice'}
+          >
+            Practice Prompt
+          </button>
+          <button
+            type="button"
+            className={`${styles.promptModeBtn} ${promptMode === 'daily' ? styles.promptModeActive : ''}`}
+            onClick={() => setPromptMode('daily')}
+            aria-pressed={promptMode === 'daily'}
+          >
+            Daily Prompt
+          </button>
+        </div>
         <div className={styles.promptBox}>
           <pre className={styles.promptText}>{promptText}</pre>
           <button

@@ -18,6 +18,7 @@ import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
+import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import styles from './GamePage.module.css'
 
 const MODULE_NAMES = ['WIRE ROUTING', 'SYMBOL DIAL', 'BIG BUTTON', 'KEYPAD'] as const
@@ -84,15 +85,16 @@ export default function GamePage() {
 
   // Load the manual on mount
   useEffect(() => {
-    const seed = Date.now()
+    const seed = getRunSeed(mode)
     const rng = createRng(seed)
     rngRef.current = rng
 
     const manualUrl = mode === 'practice'
       ? 'https://bombsquad.amio.fans/manual/practice'
       : (customUrl ?? `https://bombsquad.amio.fans/manual/${new Date().toISOString().slice(0, 10)}`)
+    const attemptNumber = getAttemptNumberForMode(mode)
 
-    dispatch({ type: 'START_LOADING', mode, manualUrl })
+    dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })
 
     const load = async () => {
       try {
@@ -276,7 +278,7 @@ export default function GamePage() {
         <Timer display={timerDisplay} isRunning={isRunning} />
         <div className={styles.modeMeta}>
           <div>{mode === 'daily' ? 'DAILY' : 'PRACTICE'}</div>
-          <div>ATTEMPT #{state.attemptNumber}</div>
+          <div>{mode === 'daily' ? `ATTEMPT #${state.attemptNumber}` : 'LOCAL PRACTICE'}</div>
         </div>
       </div>
 

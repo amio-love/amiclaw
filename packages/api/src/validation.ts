@@ -1,4 +1,4 @@
-import type { ScoreSubmission } from '@shared/leaderboard-types'
+import type { ScoreSubmission } from '../../../shared/leaderboard-types'
 
 const MIN_GAME_TIME_MS = 15_000    // 15 seconds minimum — reject obvious cheats
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max

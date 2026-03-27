@@ -77,10 +77,35 @@ amiclaw/
 
 Install dependencies and start the development workflow from the repository root:
 
+The repository now contains working local implementations for the game, manual
+pipeline, and leaderboard handlers.
+
+Core local verification:
+
+```bash
+pnpm test:run
+pnpm build
+pnpm --filter api typecheck
+```
+
+Recommended local workflow:
+
 ```bash
 pnpm install
 pnpm dev
 ```
+
+Operational notes:
+
+- Manual sources live in `packages/manual/data/`
+- `pnpm build` assembles the manual assets into `packages/game/dist/manual/`
+  for Cloudflare Pages
+- The current UI keeps leaderboard nickname anonymous by default
+- `ai_tool` is supported by the schema but not collected by the current UI yet
+- `operations_hash` is still an MVP placeholder in the current submission flow
+
+See [`docs/BombSquad_Operations.md`](./docs/BombSquad_Operations.md) for
+deployment layout, manual publishing steps, and live verification tasks.
 
 Common commands:
 

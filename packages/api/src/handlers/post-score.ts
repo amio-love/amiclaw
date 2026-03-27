@@ -1,4 +1,8 @@
-import type { ScoreSubmission, LeaderboardEntry, ScoreSubmissionResponse } from '@shared/leaderboard-types'
+import type {
+  ScoreSubmission,
+  LeaderboardEntry,
+  ScoreSubmissionResponse,
+} from '../../../../shared/leaderboard-types'
 import { validateSubmission, sanitizeNickname } from '../validation'
 
 const RATE_LIMIT_MS = 10_000

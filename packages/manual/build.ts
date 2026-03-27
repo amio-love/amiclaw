@@ -1,5 +1,12 @@
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs'
-import { resolve, join, dirname } from 'path'
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'fs'
+import { resolve, join, dirname, basename } from 'path'
 import { fileURLToPath } from 'url'
 import yaml from 'js-yaml'
 
@@ -8,9 +15,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const templatePath = resolve(__dirname, 'src/template.html')
 const template = readFileSync(templatePath, 'utf8')
 const outDir = resolve(__dirname, 'dist')
-mkdirSync(outDir, { recursive: true })
+const cssPath = resolve(__dirname, 'src/anti-human.css')
+const dataOutDir = join(outDir, 'data')
 
-function buildPage(yamlPath: string, outName: string) {
+rmSync(outDir, { recursive: true, force: true })
+mkdirSync(outDir, { recursive: true })
+mkdirSync(dataOutDir, { recursive: true })
+copyFileSync(cssPath, join(outDir, 'anti-human.css'))
+
+function buildPage(yamlPath: string, slug: string) {
   const content = readFileSync(yamlPath, 'utf8')
   // Minify YAML: collapse to a single line for anti-human rendering
   const minified = yaml.dump(yaml.load(content), {
@@ -19,15 +32,17 @@ function buildPage(yamlPath: string, outName: string) {
   }).replace(/\n/g, ' ').trim()
 
   const html = template.replace('{{YAML_CONTENT}}', minified)
-  const outPath = join(outDir, outName)
-  writeFileSync(outPath, html)
-  console.log(`Built: ${outPath}`)
+  const pageDir = join(outDir, slug)
+  mkdirSync(pageDir, { recursive: true })
+  writeFileSync(join(pageDir, 'index.html'), html)
+  writeFileSync(join(dataOutDir, `${slug}.yaml`), content)
+  console.log(`Built manual route: /manual/${slug}`)
 }
 
 // Build practice manual
 buildPage(
   resolve(__dirname, 'data/practice.yaml'),
-  'practice.html',
+  'practice',
 )
 
 // Build daily manuals
@@ -35,7 +50,7 @@ const dailyDir = resolve(__dirname, 'data/daily')
 try {
   for (const file of readdirSync(dailyDir)) {
     if (file.endsWith('.yaml')) {
-      buildPage(join(dailyDir, file), file.replace('.yaml', '.html'))
+      buildPage(join(dailyDir, file), basename(file, '.yaml'))
     }
   }
 } catch {

@@ -1,4 +1,7 @@
-import type { LeaderboardEntry, LeaderboardResponse } from '@shared/leaderboard-types'
+import type {
+  LeaderboardEntry,
+  LeaderboardResponse,
+} from '../../../../shared/leaderboard-types'
 
 export async function handleGetLeaderboard(
   request: Request,

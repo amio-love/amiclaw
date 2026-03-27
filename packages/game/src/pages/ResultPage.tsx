@@ -39,7 +39,7 @@ export default function ResultPage() {
       time_ms: Math.round(totalMs),
       attempt_number: state.attemptNumber,
       module_times: state.moduleStats.map((s) => Math.round(s.timeMs)),
-      operations_hash: 'practice', // placeholder — real hash in future phase
+      operations_hash: 'mvp-placeholder', // temporary placeholder until real run hashing is implemented
       device_id: getDeviceId(),
     }
   }, [totalMs, state.attemptNumber, state.moduleStats])

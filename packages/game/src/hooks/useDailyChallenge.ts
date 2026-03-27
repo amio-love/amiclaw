@@ -1,5 +1,9 @@
 import { useState, useCallback } from 'react'
 import { getTodayString } from '@/utils/date'
+import {
+  readDailyAttemptCount,
+  reserveDailyAttempt,
+} from '@/utils/session'
 
 /**
  * Returns manual URLs for today's daily challenge and the practice mode.
@@ -15,18 +19,11 @@ export function useDailyChallenge(): {
   const dailyUrl = `https://bombsquad.amio.fans/manual/${today}`
   const practiceUrl = 'https://bombsquad.amio.fans/manual/practice'
 
-  const key = `attempt-${today}`
-  const [attemptNumber, setAttemptNumber] = useState(() =>
-    parseInt(sessionStorage.getItem(key) ?? '0', 10)
-  )
+  const [attemptNumber, setAttemptNumber] = useState(() => readDailyAttemptCount(sessionStorage, today))
 
   const incrementAttempt = useCallback(() => {
-    setAttemptNumber(prev => {
-      const next = prev + 1
-      sessionStorage.setItem(key, String(next))
-      return next
-    })
-  }, [key])
+    setAttemptNumber(reserveDailyAttempt(sessionStorage, today))
+  }, [today])
 
   return { practiceUrl, dailyUrl, attemptNumber, incrementAttempt }
 }

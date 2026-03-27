@@ -43,7 +43,7 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type GameAction =
-  | { type: 'START_LOADING'; mode: GameMode; manualUrl: string }
+  | { type: 'START_LOADING'; mode: GameMode; manualUrl: string; attemptNumber: number }
   | { type: 'MANUAL_LOADED'; manual: Manual; sceneInfo: SceneInfo; moduleConfigs: ModuleConfig[]; moduleAnswers: ModuleAnswer[]; rngSeed: number }
   | { type: 'LOAD_ERROR'; message: string }
   | { type: 'START_GAME' }
@@ -86,7 +86,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         status: 'LOADING',
         mode: action.mode,
         manualUrl: action.manualUrl,
-        attemptNumber: state.attemptNumber,
+        attemptNumber: action.attemptNumber,
       }
 
     case 'MANUAL_LOADED':
@@ -176,12 +176,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'RESET':
-      return {
-        ...INITIAL_STATE,
-        attemptNumber: state.attemptNumber + 1,
-        mode: state.mode,
-        manualUrl: state.manualUrl,
-      }
+      return { ...INITIAL_STATE }
 
     default:
       return state

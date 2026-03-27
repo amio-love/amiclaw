@@ -1,7 +1,9 @@
 # Plan: Write Design Context to CLAUDE.md
 
+> Historical note: this plan predates the current implementation and design-system docs. It should be read as archival planning context, not as a statement of current repository status.
+
 ## Context
-AmiClaw is a greenfield human-AI collaborative gaming platform with no code yet. The docs specify a cyberpunk bomb-defusal aesthetic, but no formal design system or style specs exist. We need to establish persistent design context in CLAUDE.md so all future sessions follow consistent design principles.
+AmiClaw was a greenfield human-AI collaborative gaming platform with no code yet when this plan was written. The repository now contains code and design-system docs.
 
 ## What to Do
 1. Create `/Users/yubai/amiclaw/CLAUDE.md` with a `## Design Context` section
