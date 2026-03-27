@@ -96,6 +96,29 @@ The game currently uses the local bundled practice YAML for practice mode and th
 5. Use `packages/game/dist` as the Pages output directory.
 6. Ensure the root `functions/` directory is enabled for the Pages project.
 
+## GitHub Actions Deployment
+
+The repository includes `.github/workflows/pages-deploy.yml` for the
+CLI-based Cloudflare Pages deployment path.
+
+Required GitHub repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_PAGES_PROJECT_NAME`
+
+The workflow runs on pushes to `main` and on manual dispatch. It:
+
+1. installs dependencies with pnpm
+2. runs `pnpm build`
+3. deploys `packages/game/dist` with `wrangler pages deploy`
+
+The required Cloudflare API token permission is:
+
+- Account
+- Cloudflare Pages
+- Edit
+
 ## Live Verification Checklist
 
 These checks are still required against the real deployment:
