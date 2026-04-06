@@ -41,6 +41,6 @@
     "lint-staged": "^16.0.0",
     "markdownlint-cli2": "^0.22.0",
     "prettier": "^3.5.3",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.0"
   }
 }
