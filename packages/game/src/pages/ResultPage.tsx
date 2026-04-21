@@ -22,7 +22,6 @@ export default function ResultPage() {
   const { state, dispatch } = useGame()
   const [copied, setCopied] = useState(false)
   const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(null)
-  const [submitting, setSubmitting] = useState(false)
   const [submitFailed, setSubmitFailed] = useState(false)
   const [retried, setRetried] = useState(false)
 
@@ -30,6 +29,12 @@ export default function ResultPage() {
     state.totalStartTime !== null && state.totalEndTime !== null
       ? state.totalEndTime - state.totalStartTime
       : null
+
+  // Initialize submitting=true when the effect below will actually fire a request,
+  // so we avoid a synchronous setState in the effect body (react-hooks/set-state-in-effect).
+  const [submitting, setSubmitting] = useState(
+    () => state.mode === 'daily' && totalMs !== null && state.moduleStats.length > 0
+  )
 
   const buildSubmission = useCallback(() => {
     if (totalMs === null) return null
@@ -58,7 +63,6 @@ export default function ResultPage() {
       /* storage full */
     }
 
-    setSubmitting(true)
     submitScore(submission).then((result) => {
       setSubmitting(false)
       if (result) {
