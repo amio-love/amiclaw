@@ -45,7 +45,7 @@ export default tseslint.config(
           varsIgnorePattern: '^_',
         },
       ],
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
       eqeqeq: ['error', 'always'],
       'no-var': 'error',
@@ -54,7 +54,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['*.config.{js,mjs,cjs,ts}', 'scripts/**/*.{js,ts}', 'packages/manual/build.ts'],
+    files: ['*.config.{js,mjs,cjs,ts}', 'scripts/**/*.{js,mjs,cjs,ts}', 'packages/manual/build.ts'],
     rules: {
       'no-console': 'off',
     },
