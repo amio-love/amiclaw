@@ -13,6 +13,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Daily mode** `GamePage` now distinguishes "manual not yet published" (404)
+  from generic load failures and renders a dedicated fallback that links to
+  Practice mode instead of showing the opaque "Could not load manual" retry
+- **Repo hygiene** Removed seven stale compiled `.js` shadow files under
+  `packages/game/src/{components,store,utils}/` that were silently overriding
+  the TypeScript sources at build/test time; the earlier `.gitignore` pattern
+  now actually has nothing to re-ignore
+- **Planning docs** Superseded the 2026-03-27 remaining-work checklist, which
+  listed already-shipped items as open, with a current snapshot dated 2026-04-21
 - **CI** Unblocked the main branch lint job after the `eslint-plugin-react-hooks`
   7.x upgrade by initializing `ResultPage` submit state with a lazy `useState`
   initializer instead of a synchronous `setState` inside `useEffect`

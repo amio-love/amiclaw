@@ -1,10 +1,17 @@
 # BombSquad Remaining Work Checklist
 
+> **Superseded on 2026-04-21** by
+> [`2026-04-21-bombsquad-remaining-work-checklist.md`](./2026-04-21-bombsquad-remaining-work-checklist.md).
+> The product-correctness items listed below (deterministic practice seed,
+> attempt tracking, per-mode prompt) had in fact already been shipped when
+> this file was written; kept here for historical continuity only.
+
 ## Summary
 
 The core MVP game loop is implemented and currently passes local verification (`pnpm test:run`, `pnpm build`, `pnpm --filter api typecheck`). The highest-impact remaining work is not the AI-facing manual itself. That already exists. The main gaps are production readiness, a few product-behavior mismatches, and stale documentation.
 
 Priority order:
+
 1. Fix gameplay and data mismatches that affect user-facing correctness
 2. Finish deployment and production configuration
 3. Complete real-world verification for manual delivery, AI usability, and mobile play

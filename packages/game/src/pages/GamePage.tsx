@@ -5,7 +5,7 @@ import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manu
 import { useGame } from '@/store/game-context'
 import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
-import { loadManual } from '@/utils/yaml-loader'
+import { loadManual, ManualNotFoundError } from '@/utils/yaml-loader'
 import { generateWire } from '@/modules/wire/generator'
 import { generateDial } from '@/modules/dial/generator'
 import { generateButton } from '@/modules/button/generator'
@@ -27,8 +27,9 @@ const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN'
 const SERIAL_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
 
 function generateSceneInfo(rng: Rng): SceneInfo {
-  const serialNumber = Array.from({ length: 6 }, () =>
-    SERIAL_CHARS[rng.intBetween(0, SERIAL_CHARS.length - 1)]
+  const serialNumber = Array.from(
+    { length: 6 },
+    () => SERIAL_CHARS[rng.intBetween(0, SERIAL_CHARS.length - 1)]
   ).join('')
   const batteryCount = rng.intBetween(1, 4)
   const indicatorCount = rng.intBetween(0, 3)
@@ -42,7 +43,7 @@ function generateSceneInfo(rng: Rng): SceneInfo {
 function generateAllModules(
   rng: Rng,
   manual: Manual,
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): { configs: ModuleConfig[]; answers: ModuleAnswer[] } {
   const wire = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
   const dial = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
@@ -60,9 +61,16 @@ async function loadWithCache(manualUrl: string): Promise<Manual> {
   try {
     const manual = await loadManual(manualUrl)
     // Cache for offline fallback
-    try { sessionStorage.setItem(cacheKey, yaml.dump(manual)) } catch { /* storage full */ }
+    try {
+      sessionStorage.setItem(cacheKey, yaml.dump(manual))
+    } catch {
+      /* storage full */
+    }
     return manual
-  } catch {
+  } catch (err) {
+    // 404 means the manual was never published — no point consulting the cache.
+    // Re-throw so the caller can render a dedicated "not published" UI.
+    if (err instanceof ManualNotFoundError) throw err
     const cached = sessionStorage.getItem(cacheKey)
     if (cached) return yaml.load(cached) as Manual
     throw new Error('Could not load manual. Check your connection.')
@@ -89,9 +97,11 @@ export default function GamePage() {
     const rng = createRng(seed)
     rngRef.current = rng
 
-    const manualUrl = mode === 'practice'
-      ? 'https://bombsquad.amio.fans/manual/practice'
-      : (customUrl ?? `https://bombsquad.amio.fans/manual/${new Date().toISOString().slice(0, 10)}`)
+    const manualUrl =
+      mode === 'practice'
+        ? 'https://bombsquad.amio.fans/manual/practice'
+        : (customUrl ??
+          `https://bombsquad.amio.fans/manual/${new Date().toISOString().slice(0, 10)}`)
     const attemptNumber = getAttemptNumberForMode(mode)
 
     dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })
@@ -131,16 +141,20 @@ export default function GamePage() {
           rngSeed: seed,
         })
       } catch (err) {
+        const notPublished = err instanceof ManualNotFoundError
         dispatch({
           type: 'LOAD_ERROR',
           message: err instanceof Error ? err.message : 'Failed to load manual',
+          kind: notPublished ? 'not_published' : 'generic',
         })
       }
     }
 
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // Re-run when mode changes so switching between daily and practice (e.g. via
+    // the "Try Practice" fallback on a 404 daily manual) reloads the correct manual.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
 
   // Navigate to result when ALL_COMPLETE transitions to RESULT
   useEffect(() => {
@@ -192,16 +206,20 @@ export default function GamePage() {
       let answer: ModuleAnswer
       if (idx === 0) {
         const result = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
-        config = result.config; answer = result.answer
+        config = result.config
+        answer = result.answer
       } else if (idx === 1) {
         const result = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
-        config = result.config; answer = result.answer
+        config = result.config
+        answer = result.answer
       } else if (idx === 2) {
         const result = generateButton(rng, manual.modules.button.rules, sceneInfo)
-        config = result.config; answer = result.answer
+        config = result.config
+        answer = result.answer
       } else {
         const result = generateKeypad(rng, manual.modules.keypad, sceneInfo)
-        config = result.config; answer = result.answer
+        config = result.config
+        answer = result.answer
       }
       dispatch({ type: 'REGENERATE_MODULE', config, answer })
     } catch (genErr) {
@@ -226,10 +244,14 @@ export default function GamePage() {
       sceneInfo,
     }
 
-    if (idx === 0) return <WireModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 1) return <DialModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 2) return <ButtonModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 3) return <KeypadModule config={config as never} answer={answer as never} {...commonProps} />
+    if (idx === 0)
+      return <WireModule config={config as never} answer={answer as never} {...commonProps} />
+    if (idx === 1)
+      return <DialModule config={config as never} answer={answer as never} {...commonProps} />
+    if (idx === 2)
+      return <ButtonModule config={config as never} answer={answer as never} {...commonProps} />
+    if (idx === 3)
+      return <KeypadModule config={config as never} answer={answer as never} {...commonProps} />
     return null
   }
 
@@ -239,13 +261,34 @@ export default function GamePage() {
       <main className={styles.page}>
         <div className={styles.overlay}>
           {state.errorMessage ? (
-            <>
-              <p className={styles.errorText}>{state.errorMessage}</p>
-              <button className={styles.retryBtn} onClick={() => window.location.reload()}>
-                RETRY
-              </button>
-              <Link to="/" className={styles.homeLink}>← Go Home</Link>
-            </>
+            state.errorKind === 'not_published' ? (
+              <>
+                <p className={styles.errorText}>
+                  Today&apos;s manual is not published yet.
+                  <br />
+                  Try Practice mode, or come back later.
+                </p>
+                <button
+                  className={styles.startBtn}
+                  onClick={() => navigate('/game?mode=practice', { replace: true })}
+                >
+                  TRY PRACTICE
+                </button>
+                <Link to="/" className={styles.homeLink}>
+                  ← Go Home
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className={styles.errorText}>{state.errorMessage}</p>
+                <button className={styles.retryBtn} onClick={() => window.location.reload()}>
+                  RETRY
+                </button>
+                <Link to="/" className={styles.homeLink}>
+                  ← Go Home
+                </Link>
+              </>
+            )
           ) : (
             <p className={styles.loadingText}>LOADING MANUAL…</p>
           )}
@@ -260,10 +303,7 @@ export default function GamePage() {
       <main className={styles.page}>
         <div className={styles.overlay}>
           <p className={styles.readyText}>READY?</p>
-          <button
-            className={styles.startBtn}
-            onClick={() => dispatch({ type: 'START_GAME' })}
-          >
+          <button className={styles.startBtn} onClick={() => dispatch({ type: 'START_GAME' })}>
             START
           </button>
         </div>
@@ -284,9 +324,7 @@ export default function GamePage() {
 
       <div className={styles.moduleArea}>
         <div>
-          <p className={styles.moduleLabel}>
-            {MODULE_NAMES[state.currentModuleIndex]}
-          </p>
+          <p className={styles.moduleLabel}>{MODULE_NAMES[state.currentModuleIndex]}</p>
           {renderModule()}
         </div>
       </div>
