@@ -40,3 +40,6 @@ RELEASE_TITLE.txt
 # Stale compiled output accidentally produced next to TS sources
 packages/*/src/**/*.js
 packages/*/src/**/*.jsx
+
+# Claude Code session state
+.claude/

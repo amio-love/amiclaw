@@ -17,9 +17,11 @@ export type GameMode = 'practice' | 'daily'
 
 export interface ModuleStat {
   moduleType: string
-  timeMs: number        // time spent on this module in ms
-  errorCount: number    // number of wrong answers before solving
+  timeMs: number // time spent on this module in ms
+  errorCount: number // number of wrong answers before solving
 }
+
+export type LoadErrorKind = 'not_published' | 'generic'
 
 export interface GameState {
   status: GameStatus
@@ -27,13 +29,14 @@ export interface GameState {
   manual: Manual | null
   manualUrl: string | null
   sceneInfo: SceneInfo | null
-  moduleConfigs: (ModuleConfig | null)[]    // length 4
-  moduleAnswers: (ModuleAnswer | null)[]    // length 4
+  moduleConfigs: (ModuleConfig | null)[] // length 4
+  moduleAnswers: (ModuleAnswer | null)[] // length 4
   currentModuleIndex: number
   moduleStats: ModuleStat[]
-  totalStartTime: number | null             // performance.now() timestamp
+  totalStartTime: number | null // performance.now() timestamp
   totalEndTime: number | null
   errorMessage: string | null
+  errorKind: LoadErrorKind | null
   attemptNumber: number
   rngSeed: number
 }
@@ -44,8 +47,15 @@ export interface GameState {
 
 export type GameAction =
   | { type: 'START_LOADING'; mode: GameMode; manualUrl: string; attemptNumber: number }
-  | { type: 'MANUAL_LOADED'; manual: Manual; sceneInfo: SceneInfo; moduleConfigs: ModuleConfig[]; moduleAnswers: ModuleAnswer[]; rngSeed: number }
-  | { type: 'LOAD_ERROR'; message: string }
+  | {
+      type: 'MANUAL_LOADED'
+      manual: Manual
+      sceneInfo: SceneInfo
+      moduleConfigs: ModuleConfig[]
+      moduleAnswers: ModuleAnswer[]
+      rngSeed: number
+    }
+  | { type: 'LOAD_ERROR'; message: string; kind?: LoadErrorKind }
   | { type: 'START_GAME' }
   | { type: 'MODULE_COMPLETE'; timeMs: number; errorCount: number; moduleType: string }
   | { type: 'NEXT_MODULE' }
@@ -70,6 +80,7 @@ const INITIAL_STATE: GameState = {
   totalStartTime: null,
   totalEndTime: null,
   errorMessage: null,
+  errorKind: null,
   attemptNumber: 1,
   rngSeed: 0,
 }
@@ -99,18 +110,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         moduleAnswers: action.moduleAnswers as (ModuleAnswer | null)[],
         rngSeed: action.rngSeed,
         errorMessage: null,
+        errorKind: null,
       }
 
     case 'LOAD_ERROR':
       return {
         ...state,
-        status: 'LOADING',   // stays on loading screen, shows error
+        status: 'LOADING', // stays on loading screen, shows error
         errorMessage: action.message,
+        errorKind: action.kind ?? 'generic',
       }
 
     case 'START_GAME': {
       if (import.meta.env.DEV) {
-        const missingConfig = state.moduleConfigs.some(c => c === null)
+        const missingConfig = state.moduleConfigs.some((c) => c === null)
         if (missingConfig) {
           throw new Error('START_GAME dispatched while some moduleConfigs are null')
         }
@@ -196,11 +209,7 @@ export const GameContext = createContext<GameContextValue | null>(null)
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, INITIAL_STATE)
-  return (
-    <GameContext.Provider value={{ state, dispatch }}>
-      {children}
-    </GameContext.Provider>
-  )
+  return <GameContext.Provider value={{ state, dispatch }}>{children}</GameContext.Provider>
 }
 
 export function useGame(): GameContextValue {
