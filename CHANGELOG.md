@@ -25,6 +25,12 @@ Versions follow [Semantic Versioning](https://semver.org).
   added an explicit `--branch=main` to the deploy command, and dropped
   the unused `gitHubToken` input. Repo secrets shrink from three to two
   (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`), matching `amio-love/amio`
+- **Onboarding** Scene Info bar is now always visible in-game instead of collapsing
+  behind an unlabelled chevron on mobile — first-time players no longer have to
+  discover and tap a toggle to find the serial number, battery count, and indicator
+  lights their AI partner needs. The standard assistant prompt has also been
+  rewritten to make reading the full Scene Info bar the explicit opening move
+  before any module is attempted
 - **Daily mode** `GamePage` now distinguishes "manual not yet published" (404)
   from generic load failures and renders a dedicated fallback that links to
   Practice mode instead of showing the opaque "Could not load manual" retry
