@@ -19,10 +19,12 @@ Please read the complete manual first, then tell your partner you are ready.
 
 ${modeBrief}
 
+Opening move (do this BEFORE the first module):
+Ask your partner to read the entire Scene Info bar at the bottom of the screen. It contains the serial number, the battery count, and zero or more indicator lights. For each indicator they must tell you the label AND whether it is lit or unlit — many rules depend on the unlit ones too. These values stay the same for the whole run, so note them once and reuse across modules.
+
 Rules:
 - They will describe what they see via voice
 - You find the matching rules and tell them what to do
 - Shorter time = higher global rank on daily runs
-- Ask about the Scene Info bar (serial number, battery count, indicator lights) — many rules depend on these
 - Give concise instructions; ask follow-up questions if unsure`
 }
