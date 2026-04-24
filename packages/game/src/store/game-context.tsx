@@ -1,5 +1,6 @@
-import { createContext, useContext, useReducer, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
 import type { ModuleConfig, ModuleAnswer, Manual, SceneInfo } from '@shared/manual-schema'
+import { clearPersistedState, loadPersistedState, savePersistedState } from './persistence'
 
 // ---------------------------------------------------------------------------
 // Status & State
@@ -33,8 +34,14 @@ export interface GameState {
   moduleAnswers: (ModuleAnswer | null)[] // length 4
   currentModuleIndex: number
   moduleStats: ModuleStat[]
-  totalStartTime: number | null // performance.now() timestamp
+  /** Wall-clock timestamp (Date.now()) when the whole run started. */
+  totalStartTime: number | null
+  /** Wall-clock timestamp (Date.now()) when the last module was solved. */
   totalEndTime: number | null
+  /** Wall-clock timestamp when the current module entered PLAYING. */
+  currentModuleStartTime: number | null
+  /** How many wrong attempts the player has made on the current module. */
+  currentModuleErrorCount: number
   errorMessage: string | null
   errorKind: LoadErrorKind | null
   attemptNumber: number
@@ -57,7 +64,7 @@ export type GameAction =
     }
   | { type: 'LOAD_ERROR'; message: string; kind?: LoadErrorKind }
   | { type: 'START_GAME' }
-  | { type: 'MODULE_COMPLETE'; timeMs: number; errorCount: number; moduleType: string }
+  | { type: 'MODULE_COMPLETE'; moduleType: string }
   | { type: 'NEXT_MODULE' }
   | { type: 'ALL_MODULES_COMPLETE' }
   | { type: 'REGENERATE_MODULE'; config: ModuleConfig; answer: ModuleAnswer }
@@ -79,6 +86,8 @@ const INITIAL_STATE: GameState = {
   moduleStats: [],
   totalStartTime: null,
   totalEndTime: null,
+  currentModuleStartTime: null,
+  currentModuleErrorCount: 0,
   errorMessage: null,
   errorKind: null,
   attemptNumber: 1,
@@ -128,17 +137,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           throw new Error('START_GAME dispatched while some moduleConfigs are null')
         }
       }
+      const now = Date.now()
       return {
         ...state,
         status: 'PLAYING',
         currentModuleIndex: 0,
         moduleStats: [],
-        totalStartTime: performance.now(),
+        totalStartTime: now,
         totalEndTime: null,
+        currentModuleStartTime: now,
+        currentModuleErrorCount: 0,
       }
     }
 
-    case 'MODULE_COMPLETE':
+    case 'MODULE_COMPLETE': {
+      const now = Date.now()
+      const startedAt = state.currentModuleStartTime ?? now
       return {
         ...state,
         status: 'MODULE_COMPLETE',
@@ -146,26 +160,32 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...state.moduleStats,
           {
             moduleType: action.moduleType,
-            timeMs: action.timeMs,
-            errorCount: action.errorCount,
+            timeMs: now - startedAt,
+            errorCount: state.currentModuleErrorCount,
           },
         ],
       }
+    }
 
     case 'NEXT_MODULE': {
       const next = state.currentModuleIndex + 1
+      const now = Date.now()
       if (next >= 4) {
         return {
           ...state,
           status: 'ALL_COMPLETE',
           currentModuleIndex: next,
-          totalEndTime: performance.now(),
+          totalEndTime: now,
+          currentModuleStartTime: null,
+          currentModuleErrorCount: 0,
         }
       }
       return {
         ...state,
         status: 'PLAYING',
         currentModuleIndex: next,
+        currentModuleStartTime: now,
+        currentModuleErrorCount: 0,
       }
     }
 
@@ -173,7 +193,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         status: 'RESULT',
-        totalEndTime: state.totalEndTime ?? performance.now(),
+        totalEndTime: state.totalEndTime ?? Date.now(),
       }
 
     case 'REGENERATE_MODULE': {
@@ -185,6 +205,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         moduleConfigs: configs,
         moduleAnswers: answers,
+        currentModuleErrorCount: state.currentModuleErrorCount + 1,
       }
     }
 
@@ -207,8 +228,43 @@ interface GameContextValue {
 
 export const GameContext = createContext<GameContextValue | null>(null)
 
+/**
+ * Statuses worth persisting across an accidental refresh. LOADING isn't —
+ * the mount effect will simply reload — and RESULT can be regenerated from
+ * the same session storage used by the submission retry flow. PLAYING and
+ * MODULE_COMPLETE are the critical cases: those are where a dropped refresh
+ * would cost the player their timer and per-module stats.
+ */
+const PERSISTABLE_STATUSES: GameStatus[] = [
+  'READY',
+  'PLAYING',
+  'MODULE_COMPLETE',
+  'ALL_COMPLETE',
+  'RESULT',
+]
+
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(gameReducer, INITIAL_STATE)
+  // Lazy initializer reads the persisted state once on mount so a refresh
+  // during PLAYING / MODULE_COMPLETE restores scene, configs, stats, timer.
+  const [state, dispatch] = useReducer(gameReducer, INITIAL_STATE, (initial) => {
+    const persisted = loadPersistedState()
+    if (persisted && PERSISTABLE_STATUSES.includes(persisted.status)) {
+      return persisted
+    }
+    return initial
+  })
+
+  // Mirror every state transition back into sessionStorage. Clearing on
+  // RESET (status === 'LOADING' and no manual loaded) keeps stale runs from
+  // haunting a brand-new game in the same tab.
+  useEffect(() => {
+    if (state.status === 'LOADING' && state.manual === null) {
+      clearPersistedState()
+    } else if (PERSISTABLE_STATUSES.includes(state.status)) {
+      savePersistedState(state)
+    }
+  }, [state])
+
   return <GameContext.Provider value={{ state, dispatch }}>{children}</GameContext.Provider>
 }
 
