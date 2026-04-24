@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildAssistantPrompt } from './assistant-prompt'
+import { SYMBOLS } from '@shared/symbols'
 
 describe('buildAssistantPrompt', () => {
   it('uses the practice manual URL in practice prompts', () => {
@@ -29,5 +30,19 @@ describe('buildAssistantPrompt', () => {
       expect(prompt).toContain('序列号')
       expect(prompt).toContain('指示灯')
     }
+  })
+
+  it('injects every symbol id and description from the SYMBOLS registry', () => {
+    const prompt = buildAssistantPrompt({ mode: 'practice', manualUrl: 'x' })
+    for (const sym of SYMBOLS) {
+      expect(prompt).toContain(sym.id)
+      expect(prompt).toContain(sym.description)
+    }
+  })
+
+  it('warns the AI not to give "rotate until you see symbol X" dial instructions', () => {
+    const prompt = buildAssistantPrompt({ mode: 'practice', manualUrl: 'x' })
+    expect(prompt).toContain('目标是 index，不是具体符号')
+    expect(prompt).toContain('自己独立的 6 个符号池')
   })
 })
