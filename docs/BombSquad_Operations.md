@@ -106,7 +106,7 @@ Required GitHub repository secrets:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
-The Cloudflare Pages project name (`bombsquad`) is hardcoded in the workflow
+The Cloudflare Pages project name (`amiclaw`) is hardcoded in the workflow
 command — no third secret required. If the project is renamed on Cloudflare,
 update `.github/workflows/pages-deploy.yml` in the same commit.
 

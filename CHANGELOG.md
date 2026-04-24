@@ -20,7 +20,7 @@ Versions follow [Semantic Versioning](https://semver.org).
   which pnpm rejects in a workspace with `ERR_PNPM_ADDING_TO_ROOT` and the
   deploy step crashed before ever shipping a build. Also simplified the
   workflow to match the working `amio` repo pattern: the Pages project
-  name is now hardcoded (`bombsquad`) instead of sourced from a
+  name is now hardcoded (`amiclaw`) instead of sourced from a
   `CLOUDFLARE_PAGES_PROJECT_NAME` secret that was easy to leave unset,
   added an explicit `--branch=main` to the deploy command, and dropped
   the unused `gitHubToken` input. Repo secrets shrink from three to two
