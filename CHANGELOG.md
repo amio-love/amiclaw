@@ -27,6 +27,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Manual URL self-heals across domains** The prompt players copy into
+  their AI, and the URL the game fetches daily manuals from, both now
+  use `window.location.origin` instead of a hardcoded
+  `bombsquad.amio.fans`. A fresh deploy to `amiclaw.pages.dev` or any
+  custom domain works immediately — previously the copied prompt pointed
+  at a hostname that hadn't been wired up yet and the AI hit 404
 - **Symbol dial communication** Rewrote the dial module's manual rule prose so
   the AI partner no longer gives "rotate dial N until you see symbol X"
   instructions — which frequently fail because each dial has its own
