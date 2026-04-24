@@ -27,7 +27,12 @@ Versions follow [Semantic Versioning](https://semver.org).
   and the assistant prompt now includes a dedicated dial-module clarification
   block plus a symbol alias table generated directly from `SYMBOLS` so the
   prompt can never drift from the actual rendered shapes (no more
-  `star = 六角星` when the SVG is a five-pointed star)
+  `star = 六角星` when the SVG is a five-pointed star). Also tightened the
+  dial generator so the three starting symbols are always pairwise distinct
+  — previously the independent per-dial shuffle could produce duplicates,
+  which made any reasonable LLM conclude "columns contain each symbol only
+  once, so two dials cannot share a symbol, so the player must be wrong"
+  and refuse to proceed
 - **Pages deploy workflow** Hoisted `wrangler` to a root devDependency so
   `pnpm exec wrangler` resolves at the workspace root. The previous setup
   had wrangler only in `packages/api`, so `cloudflare/wrangler-action` on
