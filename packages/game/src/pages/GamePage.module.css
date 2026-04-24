@@ -23,6 +23,31 @@
   line-height: 1.5;
 }
 
+.exitBtn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 6px 12px;
+  margin-left: 12px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  min-height: var(--touch-target);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.exitBtn:hover,
+.exitBtn:focus-visible {
+  color: var(--color-neon-red);
+  border-color: var(--color-neon-red);
+  outline: 2px solid var(--color-neon-red);
+  outline-offset: 2px;
+}
+
 .moduleArea {
   width: 100%;
   max-width: 640px;
@@ -99,7 +124,9 @@
   cursor: pointer;
   letter-spacing: 0.15em;
   box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
   min-height: var(--touch-target);
 }
 

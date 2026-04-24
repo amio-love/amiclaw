@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Refresh resilience** An accidental F5 / Cmd+R mid-run no longer wipes
+  the current game. GameState is mirrored into sessionStorage on every
+  transition, the timer is now driven by wall-clock `Date.now()` so the
+  persisted start time stays meaningful across page loads, and per-module
+  timing / error counting moved from refs into the reducer so they survive
+  a refresh too. A new "退出" button in the in-game top bar is the only
+  deliberate way to clear the run (with a confirmation dialog); closing
+  the tab also clears, since we use sessionStorage rather than localStorage
 - **Localization** Full Simplified-Chinese translation of every player-facing
   string — home page, game HUD, Scene Info bar labels, result page, leaderboard,
   404 "manual not published" fallback, assistant prompt, and the human-readable

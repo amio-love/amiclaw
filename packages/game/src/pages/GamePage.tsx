@@ -85,14 +85,32 @@ export default function GamePage() {
 
   const { state, dispatch } = useGame()
   const rngRef = useRef<Rng | null>(null)
-  const moduleStartRef = useRef<number>(0)
-  const errorCountRef = useRef(0)
 
   const { display: timerDisplay } = useTimer(state.totalStartTime, state.totalEndTime)
   const isRunning = state.status === 'PLAYING' || state.status === 'MODULE_COMPLETE'
 
-  // Load the manual on mount
+  // Load the manual on mount — but skip the reload if the provider already
+  // restored a live, in-progress run for this exact mode from sessionStorage.
+  // Without that guard, an accidental F5 would replay START_LOADING, reset
+  // the timer, regenerate all 4 puzzles, and throw away the module stats the
+  // player had already earned.
   useEffect(() => {
+    const hasRestoredRun =
+      state.mode === mode &&
+      state.manual !== null &&
+      state.sceneInfo !== null &&
+      state.moduleConfigs.every((c) => c !== null) &&
+      ['READY', 'PLAYING', 'MODULE_COMPLETE', 'ALL_COMPLETE'].includes(state.status)
+
+    if (hasRestoredRun) {
+      // Still need a working RNG for error-regeneration, but it can be a
+      // fresh one — regen just needs new random values, not reproducibility.
+      if (rngRef.current === null) {
+        rngRef.current = createRng(state.rngSeed || Date.now())
+      }
+      return
+    }
+
     const seed = getRunSeed(mode)
     const rng = createRng(seed)
     rngRef.current = rng
@@ -169,14 +187,6 @@ export default function GamePage() {
     }
   }, [state.status, navigate])
 
-  // Track module start time when entering PLAYING
-  useEffect(() => {
-    if (state.status === 'PLAYING') {
-      moduleStartRef.current = performance.now()
-      errorCountRef.current = 0
-    }
-  }, [state.status, state.currentModuleIndex])
-
   // Auto-advance from MODULE_COMPLETE after 800ms
   useEffect(() => {
     if (state.status !== 'MODULE_COMPLETE') return
@@ -187,18 +197,24 @@ export default function GamePage() {
   }, [state.status, dispatch])
 
   const handleModuleComplete = useCallback(() => {
-    const timeMs = performance.now() - moduleStartRef.current
     const moduleType = ['wire', 'dial', 'button', 'keypad'][state.currentModuleIndex]
-    dispatch({ type: 'MODULE_COMPLETE', timeMs, errorCount: errorCountRef.current, moduleType })
+    // Reducer computes time from state.currentModuleStartTime (Date.now()
+    // based), and reads state.currentModuleErrorCount. Keeping those in
+    // state, not refs, is what makes refresh-resilience possible.
+    dispatch({ type: 'MODULE_COMPLETE', moduleType })
   }, [dispatch, state.currentModuleIndex])
+
+  const handleExitRun = useCallback(() => {
+    if (!window.confirm('退出当前关卡？进度会清空。')) return
+    dispatch({ type: 'RESET' })
+    navigate('/')
+  }, [dispatch, navigate])
 
   const handleModuleError = useCallback(() => {
     const rng = rngRef.current
     const manual = state.manual
     const sceneInfo = state.sceneInfo
     if (!rng || !manual || !sceneInfo) return
-
-    errorCountRef.current += 1
 
     try {
       const idx = state.currentModuleIndex
@@ -226,7 +242,7 @@ export default function GamePage() {
       console.error('Generator exhaustion during error regeneration:', genErr)
       dispatch({
         type: 'LOAD_ERROR',
-        message: 'Puzzle generation failed. Please restart.',
+        message: '谜题生成失败，请重新开始。',
       })
     }
   }, [dispatch, state.currentModuleIndex, state.manual, state.sceneInfo])
@@ -320,6 +336,14 @@ export default function GamePage() {
           <div>{mode === 'daily' ? '每日' : '练习'}</div>
           <div>{mode === 'daily' ? `第 ${state.attemptNumber} 次` : '本地练习'}</div>
         </div>
+        <button
+          type="button"
+          className={styles.exitBtn}
+          onClick={handleExitRun}
+          aria-label="退出当前关卡"
+        >
+          退出
+        </button>
       </div>
 
       <div className={styles.moduleArea}>

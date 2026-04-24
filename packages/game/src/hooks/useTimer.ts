@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 
 /**
- * Counts up from a start time (performance.now() timestamp).
+ * Counts up from a wall-clock start time (Date.now() timestamp).
+ * Switching from performance.now() to Date.now() means the timer survives
+ * a page refresh — the persisted start time stays meaningful because
+ * Date.now() is an absolute epoch millisecond, not a per-page-load origin.
  * Updates every animation frame while running.
  * Returns elapsed time in ms and a formatted MM:SS string.
  */
-export function useTimer(startTime: number | null, endTime: number | null): { elapsedMs: number; display: string } {
-  const [now, setNow] = useState(() => performance.now())
+export function useTimer(
+  startTime: number | null,
+  endTime: number | null
+): { elapsedMs: number; display: string } {
+  const [now, setNow] = useState(() => Date.now())
   const rafRef = useRef<number>(0)
 
   useEffect(() => {
@@ -15,7 +21,7 @@ export function useTimer(startTime: number | null, endTime: number | null): { el
     }
 
     const tick = () => {
-      setNow(performance.now())
+      setNow(Date.now())
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
