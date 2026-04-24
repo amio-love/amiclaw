@@ -19,7 +19,7 @@ export default function LeaderboardPage() {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    fetchLeaderboard(today).then(data => {
+    fetchLeaderboard(today).then((data) => {
       setLoading(false)
       if (data) {
         setEntries(data.entries)
@@ -31,28 +31,28 @@ export default function LeaderboardPage() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>LEADERBOARD</h1>
-      <p className={styles.notice}>DAILY — {today}</p>
+      <h1 className={styles.title}>排行榜</h1>
+      <p className={styles.notice}>每日 — {today}</p>
 
-      {loading && <p className={styles.status}>Loading…</p>}
-      {error && <p className={styles.status}>Leaderboard unavailable. Check back later.</p>}
+      {loading && <p className={styles.status}>加载中…</p>}
+      {error && <p className={styles.status}>排行榜暂不可用，稍后再试。</p>}
 
       {!loading && !error && entries.length === 0 && (
-        <p className={styles.status}>No scores yet today. Be the first!</p>
+        <p className={styles.status}>今日还没有成绩，来抢第一！</p>
       )}
 
       {entries.length > 0 && (
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Nickname</th>
-              <th>Time</th>
-              <th>Attempts</th>
+              <th>排名</th>
+              <th>昵称</th>
+              <th>用时</th>
+              <th>次数</th>
             </tr>
           </thead>
           <tbody>
-            {entries.map(row => (
+            {entries.map((row) => (
               <tr key={row.rank}>
                 <td className={styles.rank}>#{row.rank}</td>
                 <td>{row.nickname}</td>
@@ -64,7 +64,9 @@ export default function LeaderboardPage() {
         </table>
       )}
 
-      <Link to="/" className={styles.link}>← Home</Link>
+      <Link to="/" className={styles.link}>
+        ← 首页
+      </Link>
     </main>
   )
 }

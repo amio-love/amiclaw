@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Localization** Full Simplified-Chinese translation of every player-facing
+  string — home page, game HUD, Scene Info bar labels, result page, leaderboard,
+  404 "manual not published" fallback, assistant prompt, and the human-readable
+  banner on the manual page. Schema values (wire colors, symbol IDs, module
+  slugs) remain English because they are matched as enum IDs by generators and
+  solvers; the AI bridges Chinese player descriptions to the English data
 - **Cloudflare Pages deployment** GitHub Actions can now build the monorepo and
   publish the assembled Pages artifact with `wrangler pages deploy`, avoiding
   the broken dashboard deploy-command path.

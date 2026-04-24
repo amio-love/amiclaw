@@ -21,7 +21,7 @@ import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import styles from './GamePage.module.css'
 
-const MODULE_NAMES = ['WIRE ROUTING', 'SYMBOL DIAL', 'BIG BUTTON', 'KEYPAD'] as const
+const MODULE_NAMES = ['线路', '密码盘', '按钮', '键盘'] as const
 
 const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']
 const SERIAL_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
@@ -73,7 +73,7 @@ async function loadWithCache(manualUrl: string): Promise<Manual> {
     if (err instanceof ManualNotFoundError) throw err
     const cached = sessionStorage.getItem(cacheKey)
     if (cached) return yaml.load(cached) as Manual
-    throw new Error('Could not load manual. Check your connection.')
+    throw new Error('手册加载失败，请检查网络。')
   }
 }
 
@@ -127,7 +127,7 @@ export default function GamePage() {
           console.error('Generator exhaustion:', genErr)
           dispatch({
             type: 'LOAD_ERROR',
-            message: 'Puzzle generation failed. Please restart.',
+            message: '谜题生成失败，请重新开始。',
           })
           return
         }
@@ -144,7 +144,7 @@ export default function GamePage() {
         const notPublished = err instanceof ManualNotFoundError
         dispatch({
           type: 'LOAD_ERROR',
-          message: err instanceof Error ? err.message : 'Failed to load manual',
+          message: err instanceof Error ? err.message : '手册加载失败',
           kind: notPublished ? 'not_published' : 'generic',
         })
       }
@@ -264,33 +264,33 @@ export default function GamePage() {
             state.errorKind === 'not_published' ? (
               <>
                 <p className={styles.errorText}>
-                  Today&apos;s manual is not published yet.
+                  今天的手册还没发布。
                   <br />
-                  Try Practice mode, or come back later.
+                  可以先玩练习模式，或稍后再来。
                 </p>
                 <button
                   className={styles.startBtn}
                   onClick={() => navigate('/game?mode=practice', { replace: true })}
                 >
-                  TRY PRACTICE
+                  去练习
                 </button>
                 <Link to="/" className={styles.homeLink}>
-                  ← Go Home
+                  ← 返回首页
                 </Link>
               </>
             ) : (
               <>
                 <p className={styles.errorText}>{state.errorMessage}</p>
                 <button className={styles.retryBtn} onClick={() => window.location.reload()}>
-                  RETRY
+                  重试
                 </button>
                 <Link to="/" className={styles.homeLink}>
-                  ← Go Home
+                  ← 返回首页
                 </Link>
               </>
             )
           ) : (
-            <p className={styles.loadingText}>LOADING MANUAL…</p>
+            <p className={styles.loadingText}>加载手册中…</p>
           )}
         </div>
       </main>
@@ -302,9 +302,9 @@ export default function GamePage() {
     return (
       <main className={styles.page}>
         <div className={styles.overlay}>
-          <p className={styles.readyText}>READY?</p>
+          <p className={styles.readyText}>准备好了吗？</p>
           <button className={styles.startBtn} onClick={() => dispatch({ type: 'START_GAME' })}>
-            START
+            开始
           </button>
         </div>
       </main>
@@ -317,8 +317,8 @@ export default function GamePage() {
       <div className={styles.topBar}>
         <Timer display={timerDisplay} isRunning={isRunning} />
         <div className={styles.modeMeta}>
-          <div>{mode === 'daily' ? 'DAILY' : 'PRACTICE'}</div>
-          <div>{mode === 'daily' ? `ATTEMPT #${state.attemptNumber}` : 'LOCAL PRACTICE'}</div>
+          <div>{mode === 'daily' ? '每日' : '练习'}</div>
+          <div>{mode === 'daily' ? `第 ${state.attemptNumber} 次` : '本地练习'}</div>
         </div>
       </div>
 
@@ -340,7 +340,7 @@ export default function GamePage() {
 
       {state.status === 'MODULE_COMPLETE' && (
         <div className={styles.overlay}>
-          <p className={styles.defusedText}>DEFUSED</p>
+          <p className={styles.defusedText}>拆除成功</p>
         </div>
       )}
     </main>

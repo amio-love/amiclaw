@@ -1,9 +1,9 @@
 import styles from './ProgressBar.module.css'
 
 interface ProgressBarProps {
-  total: number      // always 4 for MVP
+  total: number // always 4 for MVP
   completed: number
-  current: number    // index of active module
+  current: number // index of active module
 }
 
 export default function ProgressBar({ total, completed, current }: ProgressBarProps) {
@@ -13,7 +13,7 @@ export default function ProgressBar({ total, completed, current }: ProgressBarPr
       role="progressbar"
       aria-valuenow={completed}
       aria-valuemax={total}
-      aria-label={`${completed} of ${total} modules complete`}
+      aria-label={`已完成 ${completed} / ${total} 个模块`}
     >
       {Array.from({ length: total }, (_, i) => {
         let segClass = styles.segment
@@ -23,7 +23,7 @@ export default function ProgressBar({ total, completed, current }: ProgressBarPr
           <span
             key={i}
             className={segClass}
-            aria-label={`Module ${i + 1}: ${i < completed ? 'complete' : i === current ? 'in progress' : 'pending'}`}
+            aria-label={`模块 ${i + 1}：${i < completed ? '已完成' : i === current ? '进行中' : '待拆'}`}
           />
         )
       })}
