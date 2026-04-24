@@ -13,20 +13,20 @@ interface SceneInfoBarProps {
  */
 export default function SceneInfoBar({ sceneInfo }: SceneInfoBarProps) {
   return (
-    <div className={styles.bar} aria-label="Scene information panel">
+    <div className={styles.bar} aria-label="场景信息栏">
       <span className={styles.field}>
-        <span className={styles.label}>SN:</span>
+        <span className={styles.label}>序号：</span>
         <span className={styles.value}>{sceneInfo.serialNumber}</span>
       </span>
       <span className={styles.field}>
-        <span className={styles.label}>BATT:</span>
+        <span className={styles.label}>电池：</span>
         <span className={styles.value}>{sceneInfo.batteryCount}</span>
       </span>
       {sceneInfo.indicators.map((ind, i) => (
         <span
           key={`${ind.label}-${i}`}
           className={`${styles.indicator} ${ind.lit ? styles.lit : styles.unlit}`}
-          title={ind.lit ? `${ind.label} (lit)` : `${ind.label} (unlit)`}
+          title={ind.lit ? `${ind.label}（亮）` : `${ind.label}（灭）`}
         >
           {ind.label}
         </span>

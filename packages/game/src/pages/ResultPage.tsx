@@ -8,7 +8,7 @@ import { submitScore } from '@/utils/leaderboard-api'
 import type { ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
-const MODULE_LABELS = ['Wire', 'Dial', 'Button', 'Keypad']
+const MODULE_LABELS = ['线路', '密码盘', '按钮', '键盘']
 
 function formatMs(ms: number): string {
   const total = Math.floor(ms / 1000)
@@ -110,32 +110,29 @@ export default function ResultPage() {
 
   const buildSummary = useCallback(() => {
     const date = getTodayString()
-    const modeLabel =
-      state.mode === 'daily' ? `Daily Challenge (Attempt #${state.attemptNumber})` : 'Practice'
+    const modeLabel = state.mode === 'daily' ? `每日挑战（第 ${state.attemptNumber} 次）` : '练习'
     const timeStr = totalMs !== null ? formatMs(totalMs) : '--:--'
     const breakdown = state.moduleStats
       .map((s, i) => {
         const name = MODULE_LABELS[i] ?? s.moduleType
         const t = formatMs(s.timeMs)
         const resets = s.errorCount
-        return `${i + 1}. ${name.padEnd(7)} — ${t}  (${resets} reset${resets !== 1 ? 's' : ''})`
+        return `${i + 1}. ${name} — ${t}（重置 ${resets} 次）`
       })
       .join('\n')
-    const rankLine = rankResult
-      ? `Global Rank: #${rankResult.rank} of ${rankResult.total_players}`
-      : ''
+    const rankLine = rankResult ? `全球排名：#${rankResult.rank} / ${rankResult.total_players}` : ''
 
-    return `=== BombSquad Result ===
-Date: ${date}
-Mode: ${modeLabel}
-Result: Success ✓
-Total Time: ${timeStr}
+    return `=== BombSquad 赛后摘要 ===
+日期：${date}
+模式：${modeLabel}
+结果：拆弹成功 ✓
+总用时：${timeStr}
 ${rankLine ? `${rankLine}\n` : ''}
-Module Breakdown:
+模块详情：
 ${breakdown}
 
-Debrief prompt:
-Review our run and tell me: what caused the most delays, and what should we add to our strategy?`
+复盘提问：
+帮我看看这一局 —— 哪一块拖了最多时间？我们下次该怎么改进沟通？`
   }, [state, totalMs, rankResult])
 
   const handleCopySummary = async () => {
@@ -150,9 +147,9 @@ Review our run and tell me: what caused the most delays, and what should we add 
     return (
       <main className={styles.page}>
         <p className={styles.noData}>
-          No game data.{' '}
+          暂无数据。{' '}
           <Link to="/" className={styles.link}>
-            Go Home
+            返回首页
           </Link>
         </p>
       </main>
@@ -161,28 +158,28 @@ Review our run and tell me: what caused the most delays, and what should we add 
 
   return (
     <main className={styles.page}>
-      <h1 className={`${styles.header} ${styles.headerDefused}`}>DEFUSED</h1>
+      <h1 className={`${styles.header} ${styles.headerDefused}`}>拆弹成功</h1>
 
       {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
       <p className={styles.meta}>
-        {state.mode === 'daily' ? `Daily Challenge — Attempt #${state.attemptNumber}` : 'Practice'}
+        {state.mode === 'daily' ? `每日挑战 — 第 ${state.attemptNumber} 次` : '练习'}
       </p>
 
       {state.mode === 'daily' && (
         <div className={styles.rankBlock}>
-          {submitting && <span className={styles.rankMuted}>Submitting score…</span>}
+          {submitting && <span className={styles.rankMuted}>提交成绩中…</span>}
           {rankResult && (
             <span className={styles.rankValue}>
-              Global Rank: <strong>#{rankResult.rank}</strong> / {rankResult.total_players}
+              全球排名：<strong>#{rankResult.rank}</strong> / {rankResult.total_players}
             </span>
           )}
           {submitFailed && (
             <span className={styles.rankMuted}>
-              Could not submit score (offline?)
+              提交失败（可能离线）
               {!retried && (
                 <button className={styles.retryBtn} onClick={handleRetrySubmit}>
-                  Try again
+                  重试
                 </button>
               )}
             </span>
@@ -191,14 +188,14 @@ Review our run and tell me: what caused the most delays, and what should we add 
       )}
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Module Breakdown</h2>
+        <h2 className={styles.sectionTitle}>模块用时</h2>
         <table className={styles.table}>
           <thead>
             <tr>
               <th>#</th>
-              <th>Module</th>
-              <th>Time</th>
-              <th>Resets</th>
+              <th>模块</th>
+              <th>用时</th>
+              <th>重置</th>
             </tr>
           </thead>
           <tbody>
@@ -216,20 +213,20 @@ Review our run and tell me: what caused the most delays, and what should we add 
 
       <div className={styles.actions}>
         <button className={styles.btnPlayAgain} onClick={handlePlayAgain}>
-          PLAY AGAIN
+          再来一局
         </button>
         <button
           className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
           onClick={handleCopySummary}
         >
-          {copied ? 'COPIED!' : 'Copy Run Summary'}
+          {copied ? '已复制！' : '复制赛后摘要'}
         </button>
         <div className={styles.secondaryLinks}>
           <Link to="/leaderboard" className={styles.link}>
-            Leaderboard
+            排行榜
           </Link>
           <Link to="/" className={styles.link}>
-            Home
+            首页
           </Link>
         </div>
       </div>
