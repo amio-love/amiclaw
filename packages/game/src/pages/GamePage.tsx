@@ -115,11 +115,17 @@ export default function GamePage() {
     const rng = createRng(seed)
     rngRef.current = rng
 
+    // Always derive the manual URL from the current origin so whichever
+    // domain is serving the game also serves the matching manual, and the
+    // AI partner never hits a 404 from a stale hardcoded hostname.
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'https://bombsquad.amio.fans'
     const manualUrl =
       mode === 'practice'
-        ? 'https://bombsquad.amio.fans/manual/practice'
-        : (customUrl ??
-          `https://bombsquad.amio.fans/manual/${new Date().toISOString().slice(0, 10)}`)
+        ? `${origin}/manual/practice`
+        : (customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
     const attemptNumber = getAttemptNumberForMode(mode)
 
     dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })
