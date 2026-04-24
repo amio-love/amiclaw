@@ -13,6 +13,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Pages deploy workflow** Hoisted `wrangler` to a root devDependency so
+  `pnpm exec wrangler` resolves at the workspace root. The previous setup
+  had wrangler only in `packages/api`, so `cloudflare/wrangler-action` on
+  every push to `main` fell back to `pnpm add wrangler@<ver>` at the root,
+  which pnpm rejects in a workspace with `ERR_PNPM_ADDING_TO_ROOT` and the
+  deploy step crashed before ever shipping a build
 - **Daily mode** `GamePage` now distinguishes "manual not yet published" (404)
   from generic load failures and renders a dedicated fallback that links to
   Practice mode instead of showing the opaque "Could not load manual" retry
