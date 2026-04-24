@@ -65,7 +65,7 @@ modules:
       - ['trident', 'xi', 'crescent', 'omega', 'delta', 'psi']
       - ['star', 'omega', 'psi', 'crescent', 'xi', 'trident']
       - ['xi', 'trident', 'delta', 'star', 'omega', 'crescent']
-    rule: "Player reports the 3 symbols currently shown on the dials (each starts at position 0). In `columns` below, find the one column that contains all 3 symbols. For dial i, the target position = the index (0=top, 5=bottom) of dial i's current symbol within that matching column. Instruct the player to rotate each dial from its starting position 0 to that index. Never say 'rotate dial N until you see symbol X' — each dial has its own 6-symbol pool and X may not exist on that dial. The target is an index, not a specific symbol."
+    rule: "Player reports the 3 symbols currently shown on the dials (each starts at position 0). The generator guarantees those 3 starting symbols are pairwise distinct, so trust the player's reading. In `columns` below, find the one column that contains all 3 symbols. For dial i, the target position = the index (0=top, 5=bottom) of dial i's current symbol within that matching column. Instruct the player to rotate each dial from its starting position 0 to that index. Never say 'rotate dial N until you see symbol X' — each dial has its own 6-symbol pool and X may not exist on that dial. The target is an index, not a specific symbol."
 
   button:
     rules:
