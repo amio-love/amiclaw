@@ -76,4 +76,16 @@ describe('generateDial', () => {
     expect(result1.config).toEqual(result2.config)
     expect(result1.answer).toEqual(result2.answer)
   })
+
+  it('always produces 3 distinct starting symbols at position 0', () => {
+    // Guards the invariant that lets an AI partner trust "I see S1, S2, S3"
+    // as three distinct readings. Repeating the generator many times makes it
+    // vanishingly unlikely for a duplicate-start regression to slip through.
+    const rng = createRng(1)
+    for (let i = 0; i < 200; i++) {
+      const { config } = generateDial(rng, section, sceneInfo)
+      const starts = config.dials.map((dial, d) => dial[config.currentPositions[d]])
+      expect(new Set(starts).size).toBe(3)
+    }
+  })
 })

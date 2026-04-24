@@ -62,7 +62,7 @@ modules:
       - ['delta', 'star', 'diamond', 'xi', 'omega', 'psi']
       - ['xi', 'delta', 'psi', 'omega', 'star', 'trident']
       - ['diamond', 'omega', 'xi', 'star', 'psi', 'delta']
-    rule: '找到同时包含场景中全部 3 个轮盘符号的那一列，按该列从上到下的顺序把每个轮盘转到对应位置。'
+    rule: '玩家报 3 个轮盘当前显示的符号 S1、S2、S3（都在位置 0）—— 生成器保证这 3 个起始符号互不相同，你可以信任玩家的描述。在下方 columns 里找那条同时包含 S1、S2、S3 的列。对第 i 个轮盘，目标位置 = S_i 在命中列中的 index（0=最上，5=最下）。指示玩家把每个轮盘从位置 0 按右箭头到达该 index 即可，不要说"让轮盘显示某个符号"——每个轮盘有自己独立的 6 符号池，跨轮盘不通用。'
 
   button:
     rules:
@@ -99,7 +99,7 @@ modules:
       - ['delta', 'omega', 'xi', 'diamond', 'psi', 'star']
       - ['diamond', 'psi', 'delta', 'star', 'xi', 'omega']
       - ['xi', 'star', 'diamond', 'psi', 'omega', 'delta']
-    rule: '找到同时包含场景中全部 4 个键盘符号的那一条序列，按该序列里出现的先后顺序依次点击它们。'
+    rule: '键盘 2×2 共 4 个格子，符号全部可见。在下方 sequences 里找那条同时包含这 4 个符号的序列；让玩家按该序列里出现的先后顺序点击它们（玩家不需要理解"位置"，只需要说"点某某符号"即可）。'
 
 decoy_modules:
   morse_code:
