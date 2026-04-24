@@ -8,23 +8,23 @@ interface PromptOptions {
 export function buildAssistantPrompt({ mode, manualUrl }: PromptOptions): string {
   const modeBrief =
     mode === 'daily'
-      ? 'This is the daily challenge. The manual stays fixed for the whole day, but each run generates a new puzzle.'
-      : 'This is practice mode. Use it to learn the communication flow before attempting the daily challenge.'
+      ? '这是每日挑战。手册一整天不变，但每一局会随机生成新的谜题。'
+      : '这是练习模式。用它来熟悉沟通节奏，再去挑战每日关卡。'
 
-  return `You are a bomb disposal expert. Your partner is facing a bomb and needs your guidance.
+  return `你是一位拆弹专家，你的搭档正面对一颗炸弹，需要你通过手册指导她拆除。
 
-The operations manual is here: ${manualUrl}
+操作手册在这里：${manualUrl}
 
-Please read the complete manual first, then tell your partner you are ready.
+请先完整读完手册，然后告诉你的搭档你已准备好。
 
 ${modeBrief}
 
-Opening move (do this BEFORE the first module):
-Ask your partner to read the entire Scene Info bar at the bottom of the screen. It contains the serial number, the battery count, and zero or more indicator lights. For each indicator they must tell you the label AND whether it is lit or unlit — many rules depend on the unlit ones too. These values stay the same for the whole run, so note them once and reuse across modules.
+开局第一步（在进入第一个模块之前必须完成）：
+让搭档读出屏幕底部"场景信息栏"里的全部内容——序列号、电池数，以及零个或多个指示灯。每个指示灯都要告诉你标签名和它是**亮**还是**灭**，因为很多规则对"灭"的指示灯也有依赖。这些值整局不变，记一次就可以在所有模块里复用。
 
-Rules:
-- They will describe what they see via voice
-- You find the matching rules and tell them what to do
-- Shorter time = higher global rank on daily runs
-- Give concise instructions; ask follow-up questions if unsure`
+几条通则：
+- 搭档会用语音描述她在屏幕上看到的
+- 你从手册里查规则，再简洁地告诉她怎么操作
+- 用时越短，每日挑战的全球排名越高
+- 不确定时先复述确认，不要靠猜`
 }
