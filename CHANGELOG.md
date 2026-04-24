@@ -13,6 +13,18 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Pages deploy workflow** Hoisted `wrangler` to a root devDependency so
+  `pnpm exec wrangler` resolves at the workspace root. The previous setup
+  had wrangler only in `packages/api`, so `cloudflare/wrangler-action` on
+  every push to `main` fell back to `pnpm add wrangler@<ver>` at the root,
+  which pnpm rejects in a workspace with `ERR_PNPM_ADDING_TO_ROOT` and the
+  deploy step crashed before ever shipping a build. Also simplified the
+  workflow to match the working `amio` repo pattern: the Pages project
+  name is now hardcoded (`amiclaw`) instead of sourced from a
+  `CLOUDFLARE_PAGES_PROJECT_NAME` secret that was easy to leave unset,
+  added an explicit `--branch=main` to the deploy command, and dropped
+  the unused `gitHubToken` input. Repo secrets shrink from three to two
+  (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`), matching `amio-love/amio`
 - **Daily mode** `GamePage` now distinguishes "manual not yet published" (404)
   from generic load failures and renders a dedicated fallback that links to
   Practice mode instead of showing the opaque "Could not load manual" retry
