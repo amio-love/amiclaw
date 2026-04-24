@@ -19,6 +19,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Symbol dial communication** Rewrote the dial module's manual rule prose so
+  the AI partner no longer gives "rotate dial N until you see symbol X"
+  instructions — which frequently fail because each dial has its own
+  independent 6-symbol pool and X may not exist on that dial. The new prose
+  spells out that the target is an _index_ into the matching column (0–5),
+  and the assistant prompt now includes a dedicated dial-module clarification
+  block plus a symbol alias table generated directly from `SYMBOLS` so the
+  prompt can never drift from the actual rendered shapes (no more
+  `star = 六角星` when the SVG is a five-pointed star)
 - **Pages deploy workflow** Hoisted `wrangler` to a root devDependency so
   `pnpm exec wrangler` resolves at the workspace root. The previous setup
   had wrangler only in `packages/api`, so `cloudflare/wrangler-action` on

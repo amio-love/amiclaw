@@ -1,230 +1,230 @@
 meta:
-  version: "2026-03-16"
+  version: '2026-03-16'
   type: daily
 
 modules:
   wire_routing:
     rules:
-      - condition: { wire_count: 4, color_at_last: "blue" }
-        action: "cut_wire"
-        target: { position: "last" }
-      - condition: { wire_count: 4, color_at_last: "green" }
-        action: "cut_wire"
+      - condition: { wire_count: 4, color_at_last: 'blue' }
+        action: 'cut_wire'
+        target: { position: 'last' }
+      - condition: { wire_count: 4, color_at_last: 'green' }
+        action: 'cut_wire'
         target: { position: 2 }
-      - condition: { wire_count: 4, color_at_last: "white" }
-        action: "cut_wire"
-        target: { position: "first", color: "blue" }
-      - condition: { wire_count: 4, color_at_last: "red" }
-        action: "cut_wire"
-        target: { position: "first" }
-      - condition: { wire_count: 4, color_at_last: "yellow" }
-        action: "cut_wire"
-        target: { position: "last" }
-      - condition: { wire_count: 4, color_at_last: "black" }
-        action: "cut_wire"
+      - condition: { wire_count: 4, color_at_last: 'white' }
+        action: 'cut_wire'
+        target: { position: 'first', color: 'blue' }
+      - condition: { wire_count: 4, color_at_last: 'red' }
+        action: 'cut_wire'
+        target: { position: 'first' }
+      - condition: { wire_count: 4, color_at_last: 'yellow' }
+        action: 'cut_wire'
+        target: { position: 'last' }
+      - condition: { wire_count: 4, color_at_last: 'black' }
+        action: 'cut_wire'
         target: { position: 1 }
       - condition: { wire_count: 4, count_blue: { gt: 1 } }
-        action: "cut_wire"
-        target: { position: "first", color: "blue" }
+        action: 'cut_wire'
+        target: { position: 'first', color: 'blue' }
       - condition: { wire_count: 4, battery_count: { lte: 1 } }
-        action: "cut_wire"
-        target: { position: "last" }
+        action: 'cut_wire'
+        target: { position: 'last' }
       - condition: { wire_count: 4 }
-        action: "cut_wire"
+        action: 'cut_wire'
         target: { position: 1 }
-      - condition: { wire_count: 5, color_at_last: "blue" }
-        action: "cut_wire"
-        target: { position: "first" }
-      - condition: { wire_count: 5, color_at_last: "red" }
-        action: "cut_wire"
-        target: { position: "last", color: "red" }
-      - condition: { wire_count: 5, color_at_last: "black" }
-        action: "cut_wire"
+      - condition: { wire_count: 5, color_at_last: 'blue' }
+        action: 'cut_wire'
+        target: { position: 'first' }
+      - condition: { wire_count: 5, color_at_last: 'red' }
+        action: 'cut_wire'
+        target: { position: 'last', color: 'red' }
+      - condition: { wire_count: 5, color_at_last: 'black' }
+        action: 'cut_wire'
         target: { position: 2 }
-      - condition: { wire_count: 5, color_at_last: "yellow" }
-        action: "cut_wire"
+      - condition: { wire_count: 5, color_at_last: 'yellow' }
+        action: 'cut_wire'
         target: { position: 3 }
       - condition: { wire_count: 5, indicator_CAR_lit: true }
-        action: "cut_wire"
-        target: { position: "first" }
+        action: 'cut_wire'
+        target: { position: 'first' }
       - condition: { wire_count: 5, battery_count: { gt: 2 } }
-        action: "cut_wire"
-        target: { position: "last", color: "blue" }
+        action: 'cut_wire'
+        target: { position: 'last', color: 'blue' }
       - condition: { wire_count: 5 }
-        action: "cut_wire"
+        action: 'cut_wire'
         target: { position: 3 }
       - condition: {}
-        action: "cut_wire"
-        target: { position: "last" }
+        action: 'cut_wire'
+        target: { position: 'last' }
 
   symbol_dial:
     columns:
-      - ["crescent", "psi", "delta", "star", "xi", "omega"]
-      - ["psi", "crescent", "omega", "trident", "star", "delta"]
-      - ["omega", "delta", "star", "psi", "crescent", "xi"]
-      - ["trident", "xi", "crescent", "omega", "delta", "psi"]
-      - ["star", "omega", "psi", "crescent", "xi", "trident"]
-      - ["xi", "trident", "delta", "star", "omega", "crescent"]
-    rule: "Find the column containing all 3 dial symbols. Set each dial to that symbol's row position in the column."
+      - ['crescent', 'psi', 'delta', 'star', 'xi', 'omega']
+      - ['psi', 'crescent', 'omega', 'trident', 'star', 'delta']
+      - ['omega', 'delta', 'star', 'psi', 'crescent', 'xi']
+      - ['trident', 'xi', 'crescent', 'omega', 'delta', 'psi']
+      - ['star', 'omega', 'psi', 'crescent', 'xi', 'trident']
+      - ['xi', 'trident', 'delta', 'star', 'omega', 'crescent']
+    rule: "Player reports the 3 symbols currently shown on the dials (each starts at position 0). In `columns` below, find the one column that contains all 3 symbols. For dial i, the target position = the index (0=top, 5=bottom) of dial i's current symbol within that matching column. Instruct the player to rotate each dial from its starting position 0 to that index. Never say 'rotate dial N until you see symbol X' — each dial has its own 6-symbol pool and X may not exist on that dial. The target is an index, not a specific symbol."
 
   button:
     rules:
-      - condition: { color: "red", label: "ABORT" }
-        action: { type: "hold", release_on_light: "red" }
-      - condition: { color: "red", label: "DETONATE" }
-        action: { type: "hold", release_on_light: "yellow" }
-      - condition: { color: "blue", label: "PRESS" }
-        action: { type: "tap" }
-      - condition: { color: "blue", indicator_CAR_lit: true }
-        action: { type: "hold", release_on_light: "blue" }
-      - condition: { color: "yellow", label: "HOLD" }
-        action: { type: "hold", release_on_light: "white" }
-      - condition: { color: "yellow" }
-        action: { type: "tap" }
-      - condition: { color: "white", battery_count: { gt: 3 } }
-        action: { type: "tap" }
-      - condition: { color: "white" }
-        action: { type: "hold", release_on_light: "red" }
-      - condition: { label: "DETONATE", battery_count: { lte: 2 } }
-        action: { type: "hold", release_on_light: "blue" }
-      - condition: { label: "ABORT" }
-        action: { type: "tap" }
+      - condition: { color: 'red', label: 'ABORT' }
+        action: { type: 'hold', release_on_light: 'red' }
+      - condition: { color: 'red', label: 'DETONATE' }
+        action: { type: 'hold', release_on_light: 'yellow' }
+      - condition: { color: 'blue', label: 'PRESS' }
+        action: { type: 'tap' }
+      - condition: { color: 'blue', indicator_CAR_lit: true }
+        action: { type: 'hold', release_on_light: 'blue' }
+      - condition: { color: 'yellow', label: 'HOLD' }
+        action: { type: 'hold', release_on_light: 'white' }
+      - condition: { color: 'yellow' }
+        action: { type: 'tap' }
+      - condition: { color: 'white', battery_count: { gt: 3 } }
+        action: { type: 'tap' }
+      - condition: { color: 'white' }
+        action: { type: 'hold', release_on_light: 'red' }
+      - condition: { label: 'DETONATE', battery_count: { lte: 2 } }
+        action: { type: 'hold', release_on_light: 'blue' }
+      - condition: { label: 'ABORT' }
+        action: { type: 'tap' }
       - condition: { battery_count: { gt: 3 } }
-        action: { type: "tap" }
+        action: { type: 'tap' }
       - condition: {}
-        action: { type: "hold", release_on_light: "white" }
+        action: { type: 'hold', release_on_light: 'white' }
 
   keypad:
     sequences:
-      - ["crescent", "omega", "trident", "star", "psi", "delta"]
-      - ["omega", "delta", "crescent", "xi", "trident", "psi"]
-      - ["trident", "star", "xi", "omega", "delta", "crescent"]
-      - ["delta", "psi", "omega", "crescent", "xi", "star"]
-      - ["xi", "crescent", "psi", "trident", "star", "omega"]
-      - ["star", "trident", "delta", "psi", "crescent", "xi"]
-    rule: "Find the sequence containing all 4 keypad symbols. Press them in the order they appear in that sequence (leftmost = first)."
+      - ['crescent', 'omega', 'trident', 'star', 'psi', 'delta']
+      - ['omega', 'delta', 'crescent', 'xi', 'trident', 'psi']
+      - ['trident', 'star', 'xi', 'omega', 'delta', 'crescent']
+      - ['delta', 'psi', 'omega', 'crescent', 'xi', 'star']
+      - ['xi', 'crescent', 'psi', 'trident', 'star', 'omega']
+      - ['star', 'trident', 'delta', 'psi', 'crescent', 'xi']
+    rule: 'The keypad has 4 cells in a 2×2 grid with all symbols visible. In `sequences` below, find the one sequence that contains all 4 keypad symbols. Instruct the player to tap them in the order they appear in that matching sequence (the player taps by symbol, not by position — no index arithmetic needed).'
 
 decoy_modules:
   morse_code:
     rules:
-      - pattern: "... --- ..."
-        word: "SOS"
-        action: "transmit"
-      - pattern: ".. -. -.. .. -.-. .- - ---"
-        word: "INDICATOR"
-        action: "identify"
-      - pattern: "... . .-. .. .- .."
-        word: "SERIAL"
-        action: "read_sn"
-      - pattern: "-- --- .-. ... ."
-        word: "MORSE"
-        action: "transmit"
-      - pattern: "... - .- .-. ."
-        word: "STARE"
-        action: "tap"
-      - pattern: ".- -... --- .-. -"
-        word: "ABORT"
-        action: "hold"
-      - pattern: "-.. . ..-. ..- ... ."
-        word: "DEFUSE"
-        action: "cut"
+      - pattern: '... --- ...'
+        word: 'SOS'
+        action: 'transmit'
+      - pattern: '.. -. -.. .. -.-. .- - ---'
+        word: 'INDICATOR'
+        action: 'identify'
+      - pattern: '... . .-. .. .- ..'
+        word: 'SERIAL'
+        action: 'read_sn'
+      - pattern: '-- --- .-. ... .'
+        word: 'MORSE'
+        action: 'transmit'
+      - pattern: '... - .- .-. .'
+        word: 'STARE'
+        action: 'tap'
+      - pattern: '.- -... --- .-. -'
+        word: 'ABORT'
+        action: 'hold'
+      - pattern: '-.. . ..-. ..- ... .'
+        word: 'DEFUSE'
+        action: 'cut'
   capacitor:
-    rule: "Count capacitor flashes. If odd and battery count > 2, tap. If even, hold until display shows 0."
+    rule: 'Count capacitor flashes. If odd and battery count > 2, tap. If even, hold until display shows 0.'
     thresholds:
       - flashes: { odd: true }
         condition: { battery_count: { gt: 2 } }
-        action: "tap"
+        action: 'tap'
       - flashes: { even: true }
-        action: "hold_until_zero"
+        action: 'hold_until_zero'
   password:
     columns:
-      - ["a", "b", "c", "d", "e"]
-      - ["x", "y", "z", "a", "b"]
-      - ["m", "n", "o", "p", "q"]
-      - ["f", "g", "h", "i", "j"]
-      - ["r", "s", "t", "u", "v"]
-      - ["k", "l", "m", "n", "o"]
-    valid_passwords: ["about", "cable", "fritz", "storm", "blast"]
+      - ['a', 'b', 'c', 'd', 'e']
+      - ['x', 'y', 'z', 'a', 'b']
+      - ['m', 'n', 'o', 'p', 'q']
+      - ['f', 'g', 'h', 'i', 'j']
+      - ['r', 's', 't', 'u', 'v']
+      - ['k', 'l', 'm', 'n', 'o']
+    valid_passwords: ['about', 'cable', 'fritz', 'storm', 'blast']
   who_is_first:
     display_words:
-      - word: "YES"
-        action: "press_top_left"
-      - word: "FIRST"
-        action: "press_bottom_right"
-      - word: "DISPLAY"
-        action: "press_bottom_right"
-      - word: "OKAY"
-        action: "press_top_right"
-      - word: "SAYS"
-        action: "press_bottom_left"
-      - word: "NOTHING"
-        action: "press_bottom_right"
+      - word: 'YES'
+        action: 'press_top_left'
+      - word: 'FIRST'
+        action: 'press_bottom_right'
+      - word: 'DISPLAY'
+        action: 'press_bottom_right'
+      - word: 'OKAY'
+        action: 'press_top_right'
+      - word: 'SAYS'
+        action: 'press_bottom_left'
+      - word: 'NOTHING'
+        action: 'press_bottom_right'
     button_words:
-      - trigger: "READY"
-        press: "YES"
-      - trigger: "FIRST"
-        press: "OKAY"
-      - trigger: "NO"
-        press: "BLANK"
-      - trigger: "BLANK"
-        press: "MIDDLE LEFT"
+      - trigger: 'READY'
+        press: 'YES'
+      - trigger: 'FIRST'
+        press: 'OKAY'
+      - trigger: 'NO'
+        press: 'BLANK'
+      - trigger: 'BLANK'
+        press: 'MIDDLE LEFT'
   complicated_wires:
-    rule: "Each wire has up to 3 properties: red, blue, star, LED. Map all combinations to cut/no-cut based on battery count and indicators."
+    rule: 'Each wire has up to 3 properties: red, blue, star, LED. Map all combinations to cut/no-cut based on battery count and indicators.'
     rules:
       - properties: []
-        action: "cut"
-      - properties: ["red"]
-        action: "no_cut"
-      - properties: ["blue"]
-        action: "cut"
-      - properties: ["star"]
-        action: "cut"
-      - properties: ["led"]
-        action: "no_cut"
-      - properties: ["red", "blue"]
-        action: "cut"
+        action: 'cut'
+      - properties: ['red']
+        action: 'no_cut'
+      - properties: ['blue']
+        action: 'cut'
+      - properties: ['star']
+        action: 'cut'
+      - properties: ['led']
+        action: 'no_cut'
+      - properties: ['red', 'blue']
+        action: 'cut'
         condition: { battery_count: { gte: 2 } }
-      - properties: ["red", "star"]
-        action: "no_cut"
-      - properties: ["blue", "star"]
-        action: "cut"
+      - properties: ['red', 'star']
+        action: 'no_cut'
+      - properties: ['blue', 'star']
+        action: 'cut'
         condition: { battery_count: { gte: 2 } }
-      - properties: ["red", "led"]
-        action: "no_cut"
-      - properties: ["blue", "led"]
-        action: "cut"
-      - properties: ["star", "led"]
-        action: "no_cut"
-      - properties: ["red", "blue", "star"]
-        action: "no_cut"
-      - properties: ["red", "blue", "led"]
-        action: "cut"
+      - properties: ['red', 'led']
+        action: 'no_cut'
+      - properties: ['blue', 'led']
+        action: 'cut'
+      - properties: ['star', 'led']
+        action: 'no_cut'
+      - properties: ['red', 'blue', 'star']
+        action: 'no_cut'
+      - properties: ['red', 'blue', 'led']
+        action: 'cut'
         condition: { battery_count: { gte: 3 } }
-      - properties: ["red", "star", "led"]
-        action: "no_cut"
-      - properties: ["blue", "star", "led"]
-        action: "cut"
-      - properties: ["red", "blue", "star", "led"]
-        action: "no_cut"
+      - properties: ['red', 'star', 'led']
+        action: 'no_cut'
+      - properties: ['blue', 'star', 'led']
+        action: 'cut'
+      - properties: ['red', 'blue', 'star', 'led']
+        action: 'no_cut'
   knob:
     positions: [0, 1, 2, 3, 4, 5]
-    rule: "Read the 4 LED pattern and the arrow direction. Match to the table below."
+    rule: 'Read the 4 LED pattern and the arrow direction. Match to the table below.'
     table:
-      - led_pattern: "UUUU"
-        arrow: "up"
+      - led_pattern: 'UUUU'
+        arrow: 'up'
         answer: 0
-      - led_pattern: "UDUD"
-        arrow: "right"
+      - led_pattern: 'UDUD'
+        arrow: 'right'
         answer: 2
-      - led_pattern: "DDDD"
-        arrow: "down"
+      - led_pattern: 'DDDD'
+        arrow: 'down'
         answer: 5
-      - led_pattern: "UUDD"
-        arrow: "left"
+      - led_pattern: 'UUDD'
+        arrow: 'left'
         answer: 1
-      - led_pattern: "DUDU"
-        arrow: "up"
+      - led_pattern: 'DUDU'
+        arrow: 'up'
         answer: 3
-      - led_pattern: "DDUU"
-        arrow: "right"
+      - led_pattern: 'DDUU'
+        arrow: 'right'
         answer: 4
