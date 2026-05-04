@@ -30,18 +30,18 @@
     ]
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.2",
-    "@commitlint/config-conventional": "^20.5.0",
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
     "@eslint/js": "^9.23.0",
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.5.0",
+    "globals": "^17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.0.0",
     "markdownlint-cli2": "^0.22.1",
     "prettier": "^3.8.3",
-    "typescript-eslint": "^8.59.0",
-    "wrangler": "^4.85.0"
+    "typescript-eslint": "^8.59.1",
+    "wrangler": "^4.87.0"
   }
 }
