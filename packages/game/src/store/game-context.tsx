@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
 import type { ModuleConfig, ModuleAnswer, Manual, SceneInfo } from '@shared/manual-schema'
 import { clearPersistedState, loadPersistedState, savePersistedState } from './persistence'
+import { logEvent } from '@/utils/event-log'
 
 // ---------------------------------------------------------------------------
 // Status & State
@@ -122,13 +123,27 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         errorKind: null,
       }
 
-    case 'LOAD_ERROR':
+    // Note on logEvent calls inside this reducer: in dev, React.StrictMode
+    // double-invokes reducers to detect impurity, so each event below will
+    // appear twice in the local browser console. Production builds invoke
+    // reducers once, so Cloudflare Pages logs (the actual metric source) see
+    // exactly one event per state transition. If dev-mode noise becomes a
+    // problem we can gate calls on `import.meta.env.PROD` or relocate to an
+    // effect — for now the production guarantee is what matters.
+    case 'LOAD_ERROR': {
+      const kind = action.kind ?? 'generic'
+      logEvent('manual_load_failed', {
+        kind,
+        message: action.message,
+        mode: state.mode,
+      })
       return {
         ...state,
         status: 'LOADING', // stays on loading screen, shows error
         errorMessage: action.message,
-        errorKind: action.kind ?? 'generic',
+        errorKind: kind,
       }
+    }
 
     case 'START_GAME': {
       if (import.meta.env.DEV) {
@@ -138,6 +153,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
       const now = Date.now()
+      logEvent('game_start', {
+        mode: state.mode,
+        attemptNumber: state.attemptNumber,
+        rngSeed: state.rngSeed,
+      })
       return {
         ...state,
         status: 'PLAYING',
@@ -153,6 +173,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'MODULE_COMPLETE': {
       const now = Date.now()
       const startedAt = state.currentModuleStartTime ?? now
+      const timeMs = now - startedAt
+      logEvent('module_solve', {
+        moduleType: action.moduleType,
+        moduleIndex: state.currentModuleIndex,
+        timeMs,
+        errorCount: state.currentModuleErrorCount,
+      })
       return {
         ...state,
         status: 'MODULE_COMPLETE',
@@ -160,7 +187,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...state.moduleStats,
           {
             moduleType: action.moduleType,
-            timeMs: now - startedAt,
+            timeMs,
             errorCount: state.currentModuleErrorCount,
           },
         ],
@@ -189,12 +216,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
     }
 
-    case 'ALL_MODULES_COMPLETE':
+    case 'ALL_MODULES_COMPLETE': {
+      const endedAt = state.totalEndTime ?? Date.now()
+      const totalTimeMs = state.totalStartTime !== null ? endedAt - state.totalStartTime : 0
+      logEvent('game_complete', {
+        totalTimeMs,
+        attemptNumber: state.attemptNumber,
+        moduleStats: state.moduleStats,
+        mode: state.mode,
+      })
       return {
         ...state,
         status: 'RESULT',
-        totalEndTime: state.totalEndTime ?? Date.now(),
+        totalEndTime: endedAt,
       }
+    }
 
     case 'REGENERATE_MODULE': {
       const configs = [...state.moduleConfigs] as (ModuleConfig | null)[]

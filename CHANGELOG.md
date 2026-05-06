@@ -5,6 +5,10 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+### Added
+
+- Frontend event logging for practice/daily games (game_start, module_solve, game_complete, game_abandon, manual_load_failed) — emitted via console.info with prefix [bombsquad-event] for manual analysis of completion rate
+
 ### Improvements
 
 - **Refresh resilience** An accidental F5 / Cmd+R mid-run no longer wipes
