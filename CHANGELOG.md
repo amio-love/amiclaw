@@ -7,6 +7,8 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **API package cleanup** Removed dormant standalone Worker entry from
+  `packages/api`; Pages Functions remains the sole leaderboard API path.
 - **Refresh resilience** An accidental F5 / Cmd+R mid-run no longer wipes
   the current game. GameState is mirrored into sessionStorage on every
   transition, the timer is now driven by wall-clock `Date.now()` so the
