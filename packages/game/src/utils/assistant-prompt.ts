@@ -22,8 +22,10 @@ export function buildAssistantPrompt({ mode, manualUrl }: PromptOptions): string
       : '这是练习模式。用它来熟悉沟通节奏，再去挑战每日关卡。'
 
   // Pull descriptions from the symbol registry so the prompt never drifts
-  // from the shapes the game actually renders.
-  const symbolAliasTable = SYMBOLS.map((s) => `- ${s.id}: ${s.description}`).join('\n')
+  // from the shapes the game actually renders. Each manual YAML's `symbols:`
+  // block ships the same strings — so when the AI reads the manual it sees
+  // the same vocabulary alignment.
+  const symbolAliasTable = SYMBOLS.map((s) => `- **${s.id}**: ${s.description}`).join('\n')
 
   return `你是一位拆弹专家，你的搭档正面对一颗炸弹，需要你通过手册指导她拆除。
 
@@ -42,9 +44,10 @@ ${modeBrief}
 - 用时越短，每日挑战的全球排名越高
 - 不确定时先复述确认，不要靠猜
 - 搭档可能用中文描述颜色（红/蓝/黄/绿/白/黑），手册用英文（red/blue/yellow/green/white/black），你自己在两者间做翻译
-- 搭档会用形象描述说符号，按下方"符号对照表"映射到手册里的 id
+- 搭档会用形象描述说符号，按下方"## 符号视觉对照"映射到手册里的 id；遇到描述只对得上 1-2 个字符特征的情况，主动按描述里的"易被误描述为 X"提示去消歧，不要默认猜中
 
-符号对照表（英文 id 与形状描述，玩家的中文描述自行匹配）：
+## 符号视觉对照
+（英文 id 与形状描述。玩家的中文描述与"易被误描述为 X"匹配时优先选标准描述对应的 id，不要被相近形状骗到。）
 ${symbolAliasTable}
 
 密码盘模块的特别说明（关键，极易理解错）：

@@ -7,6 +7,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Manual symbol vocabulary** Each abstract symbol (omega, psi, trident,
+  etc.) now ships with a visual description so AI partners can disambiguate
+  player descriptions ("三叉戟" vs psi, "扇子" vs trident, etc.) without
+  round-trip clarification. Manual YAMLs gained a top-level `symbols:` block
+  with Chinese descriptions that explicitly call out the most common
+  confusions; the build pipeline fails loudly if a symbol referenced in
+  `symbol_dial.columns` or `keypad.sequences` lacks a description (or if
+  the block declares an unused entry). The assistant prompt's "符号视觉
+  对照" section is generated from the same SSOT so the prompt and the
+  manual stay in lockstep.
 - **Leaderboard live update** Submitted scores now appear in the leaderboard
   immediately, replacing the previous up-to-60-second cache-invalidation lag.
   After a successful POST the result page persists an optimistic entry in

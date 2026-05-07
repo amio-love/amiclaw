@@ -2,6 +2,22 @@ meta:
   version: 'practice'
   type: practice
 
+symbols:
+  omega:
+    description: '马蹄铁形 / 倒 U 形,底部两个向外的小脚,中间无竖线穿过'
+  psi:
+    description: "类似 U 形碗中间一根长竖线穿过、并向下延伸超出碗底,容易被误描述为'三叉戟'"
+  star:
+    description: '标准五角星 ☆,五个等长尖角向外'
+  delta:
+    description: '等边三角形 △,三条直边围成封闭三角'
+  xi:
+    description: '三条等长的平行横线,Ξ 形,无竖线无圆弧'
+  diamond:
+    description: '正方形旋转 45 度后的菱形 ◇,四条等长边对角对称'
+  trident:
+    description: "三根并排竖向尖刺,顶部两条弧分别连接左-中和中-右刺(像折扇展开,n|n 模式),容易被误描述为'扇子'"
+
 modules:
   wire_routing:
     rules:

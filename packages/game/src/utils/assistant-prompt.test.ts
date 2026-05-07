@@ -40,6 +40,19 @@ describe('buildAssistantPrompt', () => {
     }
   })
 
+  it('renders the symbol section under a "符号视觉对照" header with bold ids', () => {
+    const prompt = buildAssistantPrompt({ mode: 'practice', manualUrl: 'x' })
+    expect(prompt).toContain('## 符号视觉对照')
+    expect(prompt).toContain('**psi**')
+    expect(prompt).toContain('**trident**')
+  })
+
+  it("flags the CP4 confusions (psi vs '三叉戟', trident vs '扇子')", () => {
+    const prompt = buildAssistantPrompt({ mode: 'practice', manualUrl: 'x' })
+    expect(prompt).toContain('三叉戟')
+    expect(prompt).toContain('扇子')
+  })
+
   it('warns the AI not to give "rotate until you see symbol X" dial instructions', () => {
     const prompt = buildAssistantPrompt({ mode: 'practice', manualUrl: 'x' })
     expect(prompt).toContain('目标是 index，不是具体符号')
