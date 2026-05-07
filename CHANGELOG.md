@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Leaderboard live update** Submitted scores now appear in the leaderboard
+  immediately, replacing the previous up-to-60-second cache-invalidation lag.
+  After a successful POST the result page persists an optimistic entry in
+  sessionStorage; the leaderboard view splices it in at the returned rank
+  (with a `data-just-submitted` marker) until the next GET refresh returns
+  the authoritative copy.
 - **API package cleanup** Removed dormant standalone Worker entry from
   `packages/api`; Pages Functions remains the sole leaderboard API path.
 - **Refresh resilience** An accidental F5 / Cmd+R mid-run no longer wipes

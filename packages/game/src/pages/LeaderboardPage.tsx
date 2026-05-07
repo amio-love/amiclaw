@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchLeaderboard } from '@/utils/leaderboard-api'
+import {
+  clearOptimisticEntry,
+  entriesContainOptimistic,
+  loadOptimisticEntry,
+  mergeOptimisticEntry,
+  type OptimisticLeaderboardEntry,
+} from '@/utils/leaderboard-optimistic'
 import { getTodayString } from '@/utils/date'
 import type { LeaderboardEntry } from '@shared/leaderboard-types'
 import styles from './LeaderboardPage.module.css'
+
+function isOptimistic(entry: LeaderboardEntry): entry is OptimisticLeaderboardEntry {
+  return (entry as OptimisticLeaderboardEntry)._justSubmitted === true
+}
 
 function formatMs(ms: number): string {
   const total = Math.floor(ms / 1000)
@@ -14,7 +25,12 @@ function formatMs(ms: number): string {
 
 export default function LeaderboardPage() {
   const today = getTodayString()
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([])
+  // Seed from any optimistic entry persisted by the result page so the player
+  // sees their freshly-submitted row before the GET resolves.
+  const [entries, setEntries] = useState<LeaderboardEntry[]>(() => {
+    const optimistic = loadOptimisticEntry(today)
+    return optimistic ? [optimistic] : []
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -22,7 +38,18 @@ export default function LeaderboardPage() {
     fetchLeaderboard(today).then((data) => {
       setLoading(false)
       if (data) {
-        setEntries(data.entries)
+        // Server response is authoritative. If an optimistic entry is still
+        // around AND the GET payload doesn't yet include it (cache hasn't
+        // flipped), splice it in at its claimed rank so the player still sees
+        // it. Once the cache flips and the GET contains the real row, drop the
+        // optimistic copy and let the server response stand on its own.
+        const optimistic = loadOptimisticEntry(today)
+        if (optimistic && !entriesContainOptimistic(data.entries, optimistic)) {
+          setEntries(mergeOptimisticEntry(data.entries, optimistic))
+        } else {
+          if (optimistic) clearOptimisticEntry(today)
+          setEntries(data.entries)
+        }
       } else {
         setError(true)
       }
@@ -53,7 +80,7 @@ export default function LeaderboardPage() {
           </thead>
           <tbody>
             {entries.map((row) => (
-              <tr key={row.rank}>
+              <tr key={row.rank} data-just-submitted={isOptimistic(row) ? 'true' : undefined}>
                 <td className={styles.rank}>#{row.rank}</td>
                 <td>{row.nickname}</td>
                 <td className={styles.time}>{formatMs(row.time_ms)}</td>

@@ -5,7 +5,8 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@/utils/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
 import { submitScore } from '@/utils/leaderboard-api'
-import type { ScoreSubmissionResponse } from '@shared/leaderboard-types'
+import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
+import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
 const MODULE_LABELS = ['线路', '密码盘', '按钮', '键盘']
@@ -36,7 +37,7 @@ export default function ResultPage() {
     () => state.mode === 'daily' && totalMs !== null && state.moduleStats.length > 0
   )
 
-  const buildSubmission = useCallback(() => {
+  const buildSubmission = useCallback((): ScoreSubmission | null => {
     if (totalMs === null) return null
     return {
       date: getTodayString(),
@@ -48,6 +49,19 @@ export default function ResultPage() {
       device_id: getDeviceId(),
     }
   }, [totalMs, state.attemptNumber, state.moduleStats])
+
+  const recordOptimistic = useCallback(
+    (submission: ScoreSubmission, result: ScoreSubmissionResponse) => {
+      saveOptimisticEntry(submission.date, {
+        rank: result.rank,
+        nickname: submission.nickname,
+        time_ms: submission.time_ms,
+        attempt_number: submission.attempt_number,
+        ai_tool: submission.ai_tool,
+      })
+    },
+    []
+  )
 
   // Submit score on mount (daily mode only)
   useEffect(() => {
@@ -67,6 +81,7 @@ export default function ResultPage() {
       setSubmitting(false)
       if (result) {
         setRankResult(result)
+        recordOptimistic(submission, result)
         try {
           sessionStorage.removeItem(`pending-score:${submission.date}`)
         } catch {
@@ -92,6 +107,7 @@ export default function ResultPage() {
       setSubmitting(false)
       if (result) {
         setRankResult(result)
+        recordOptimistic(submission, result)
         try {
           sessionStorage.removeItem(`pending-score:${submission.date}`)
         } catch {
@@ -101,7 +117,7 @@ export default function ResultPage() {
         setSubmitFailed(true)
       }
     })
-  }, [buildSubmission])
+  }, [buildSubmission, recordOptimistic])
 
   const handlePlayAgain = () => {
     dispatch({ type: 'RESET' })
