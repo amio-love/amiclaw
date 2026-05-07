@@ -4,8 +4,8 @@ compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]
 binding = "LEADERBOARD"
-id = ""         # Fill in after: wrangler kv:namespace create LEADERBOARD
-preview_id = "" # Fill in preview ID from same command
+id = "d5c482eb41a94d7c88907fa6e2b432bc"         # production KV namespace; filled 2026-05-07
+preview_id = "69dd774b30ef4d8ca2b51828f3d7c4d4" # preview KV namespace; filled 2026-05-07
 
 [vars]
 ENVIRONMENT = "production"

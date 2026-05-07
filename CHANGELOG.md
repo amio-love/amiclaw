@@ -24,6 +24,10 @@ Versions follow [Semantic Versioning](https://semver.org).
 - **Cloudflare Pages deployment** GitHub Actions can now build the monorepo and
   publish the assembled Pages artifact with `wrangler pages deploy`, avoiding
   the broken dashboard deploy-command path.
+- **Leaderboard storage wiring** The `LEADERBOARD` KV namespace IDs are now
+  recorded in `wrangler.toml` and the binding is attached to the Pages project,
+  so the daily leaderboard endpoints persist scores in production instead of
+  returning a Workers runtime error.
 
 ### Fixed
 
