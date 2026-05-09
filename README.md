@@ -119,7 +119,7 @@ Workspace notes:
 
 - `packages/game` contains the React + Vite game client
 - `packages/manual` builds the static manual pages and YAML data
-- `packages/api` contains the Cloudflare Workers leaderboard API
+- `packages/api` contains the leaderboard handler module imported by Pages Functions
 
 See [`docs/plans/`](./docs/plans/) for implementation plans and
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) for contribution and release guidance.
