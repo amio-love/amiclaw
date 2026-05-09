@@ -6,6 +6,7 @@ import { useGame } from '@/store/game-context'
 import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
 import { loadManual, ManualNotFoundError } from '@/utils/yaml-loader'
+import { logEvent } from '@/utils/event-log'
 import { generateWire } from '@/modules/wire/generator'
 import { generateDial } from '@/modules/dial/generator'
 import { generateButton } from '@/modules/button/generator'
@@ -212,9 +213,15 @@ export default function GamePage() {
 
   const handleExitRun = useCallback(() => {
     if (!window.confirm('退出当前关卡？进度会清空。')) return
+    const elapsedMs = state.totalStartTime !== null ? Date.now() - state.totalStartTime : null
+    logEvent('game_abandon', {
+      currentModuleIndex: state.currentModuleIndex,
+      elapsedMs,
+      mode: state.mode,
+    })
     dispatch({ type: 'RESET' })
     navigate('/')
-  }, [dispatch, navigate])
+  }, [dispatch, navigate, state.currentModuleIndex, state.mode, state.totalStartTime])
 
   const handleModuleError = useCallback(() => {
     const rng = rngRef.current
