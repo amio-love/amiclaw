@@ -1,6 +1,6 @@
 import type { ScoreSubmission } from '../../../shared/leaderboard-types'
 
-const MIN_GAME_TIME_MS = 15_000    // 15 seconds minimum — reject obvious cheats
+const MIN_GAME_TIME_MS = 15_000 // 15 seconds minimum — reject obvious cheats
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max
 const MAX_NICKNAME_LEN = 20
 
@@ -10,10 +10,10 @@ export interface ValidationResult {
 }
 
 export function validateSubmission(submission: ScoreSubmission): ValidationResult {
-  if (typeof submission.time_ms !== 'number')    return fail('Invalid time_ms')
-  if (typeof submission.date !== 'string')       return fail('Invalid date')
-  if (typeof submission.device_id !== 'string')  return fail('Invalid device_id')
-  if (typeof submission.nickname !== 'string')   return fail('Invalid nickname')
+  if (typeof submission.time_ms !== 'number') return fail('Invalid time_ms')
+  if (typeof submission.date !== 'string') return fail('Invalid date')
+  if (typeof submission.device_id !== 'string') return fail('Invalid device_id')
+  if (typeof submission.nickname !== 'string') return fail('Invalid nickname')
 
   if (submission.time_ms < MIN_GAME_TIME_MS) return fail('Time too short — minimum 15 seconds')
   if (submission.time_ms > MAX_GAME_TIME_MS) return fail('Time exceeds maximum')
@@ -37,10 +37,23 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
 }
 
 export function sanitizeNickname(raw: string): string {
+  // Strip HTML tags iteratively. CodeQL flags single-pass `/<[^>]*>/g` as
+  // js/incomplete-multi-character-sanitization because input like
+  // `<sc<script>ript>` could in principle reintroduce `<script` after one
+  // pass; iterating until the regex stops matching closes that gap. The
+  // whitelist on the next line is a defence-in-depth backstop (only
+  // alphanumerics and a small punctuation set survive), so even pathological
+  // input cannot smuggle markup through.
+  let stripped = raw
+  let prev: string
+  do {
+    prev = stripped
+    stripped = stripped.replace(/<[^>]*>/g, '')
+  } while (stripped !== prev)
+
   return (
-    raw
-      .replace(/<[^>]*>/g, '')              // strip HTML tags
-      .replace(/[^\w\s\-_.!?]/g, '')        // allow alphanumeric + safe punctuation
+    stripped
+      .replace(/[^\w\s\-_.!?]/g, '') // allow alphanumeric + safe punctuation
       .trim()
       .slice(0, MAX_NICKNAME_LEN) || 'Anonymous'
   )
