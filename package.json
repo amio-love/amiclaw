@@ -27,7 +27,11 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "fast-uri": "^3.1.2",
+      "picomatch": "^4.0.4"
+    }
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
