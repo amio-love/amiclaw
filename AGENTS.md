@@ -63,8 +63,9 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
 - CI: keep `.github/workflows/ci.yml` aligned with the repository's real
   install, lint, test, and build commands.
 - PRs: all pull requests must use the PR template
-  (`.github/pull_request_template.md`). Branch protection requires at least
-  1 approving review before merge.
+  (`.github/pull_request_template.md`). The `main` branch currently has no
+  required review or required status check, so admins can fast-merge; PRs are
+  still preferred so CI runs and the diff is visible before it lands.
 - Dependencies: Dependabot opens PRs for updates automatically. Patch and minor
   updates are auto-merged; major updates require manual review.
 - Security: CodeQL runs on supported languages, dependency review blocks high

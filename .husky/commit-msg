@@ -1,1 +1,8 @@
+# Fallback self-heal in case pre-commit was bypassed (e.g., --no-verify on
+# pre-commit only) or another hook hasn't run yet. Cheap stat-check.
+if [ ! -x node_modules/.bin/commitlint ]; then
+  echo "[husky] commitlint missing; running pnpm install --frozen-lockfile..."
+  pnpm install --frozen-lockfile
+fi
+
 pnpm exec commitlint --edit "$1"
