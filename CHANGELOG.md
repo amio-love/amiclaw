@@ -11,6 +11,8 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Recap copy wording** Result-page summary text aligned with the MVP
+  section 5.3 example wording (header, result, module rows, retro intro).
 - **Manual symbol vocabulary** Each abstract symbol (omega, psi, trident,
   etc.) now ships with a visual description so AI partners can disambiguate
   player descriptions ("三叉戟" vs psi, "扇子" vs trident, etc.) without

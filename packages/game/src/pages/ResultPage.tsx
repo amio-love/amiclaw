@@ -133,21 +133,21 @@ export default function ResultPage() {
         const name = MODULE_LABELS[i] ?? s.moduleType
         const t = formatMs(s.timeMs)
         const resets = s.errorCount
-        return `${i + 1}. ${name} — ${t}（重置 ${resets} 次）`
+        return `${i + 1}. ${name}模块 - ${t} - 成功 (${resets} 次重置)`
       })
       .join('\n')
     const rankLine = rankResult ? `全球排名：#${rankResult.rank} / ${rankResult.total_players}` : ''
 
-    return `=== BombSquad 赛后摘要 ===
+    return `=== BombSquad 结果摘要 ===
 日期：${date}
 模式：${modeLabel}
-结果：拆弹成功 ✓
+结果：成功 ✅
 总用时：${timeStr}
 ${rankLine ? `${rankLine}\n` : ''}
 模块详情：
 ${breakdown}
 
-复盘提问：
+请和我一起复盘：
 帮我看看这一局 —— 哪一块拖了最多时间？我们下次该怎么改进沟通？`
   }, [state, totalMs, rankResult])
 
