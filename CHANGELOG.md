@@ -31,6 +31,9 @@ Versions follow [Semantic Versioning](https://semver.org).
   the authoritative copy.
 - **API package cleanup** Removed dormant standalone Worker entry from
   `packages/api`; Pages Functions remains the sole leaderboard API path.
+  README workspace note also updated to reflect the new shape: `packages/api`
+  is now described as the leaderboard handler module imported by Pages
+  Functions.
 - **Refresh resilience** An accidental F5 / Cmd+R mid-run no longer wipes
   the current game. GameState is mirrored into sessionStorage on every
   transition, the timer is now driven by wall-clock `Date.now()` so the
