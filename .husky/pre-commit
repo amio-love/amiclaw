@@ -1,2 +1,11 @@
+# Self-heal: install deps if hook tooling is missing.
+# Triggers on a fresh `git worktree add` checkout where `node_modules/` has not
+# been populated yet. Cheap stat-check on every commit; install path only fires
+# when binaries are absent.
+if [ ! -x node_modules/.bin/lint-staged ] || [ ! -x node_modules/.bin/commitlint ]; then
+  echo "[husky] node_modules incomplete in this worktree; running pnpm install --frozen-lockfile..."
+  pnpm install --frozen-lockfile
+fi
+
 pnpm exec lint-staged
 pnpm test:run
