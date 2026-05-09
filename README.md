@@ -65,7 +65,7 @@ You (browser) <-> voice <-> AI (reads manual URL)
 amiclaw/
 ├── docs/                    # Design documents and plans
 ├── packages/
-│   ├── api/                 # Cloudflare Workers leaderboard API
+│   ├── api/                 # Leaderboard handler module (Pages Functions)
 │   ├── game/                # BombSquad React SPA
 │   └── manual/              # Manual static pages and YAML data
 ├── prompts/                 # Prompt and skill templates
