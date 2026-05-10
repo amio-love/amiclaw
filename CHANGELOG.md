@@ -38,6 +38,18 @@ Versions follow [Semantic Versioning](https://semver.org).
   every shipped yaml `symbols.<id>.description` is character-equal to the
   `SYMBOLS` registry entry, catching silent drift between the two surfaces
   before it reaches deploy.
+- **Manual symbol description SSOT** Symbol descriptions now live in only
+  one place — `shared/symbols.ts`. The source manual YAMLs and the dist
+  raw YAMLs no longer carry a `symbols:` block; instead `packages/manual/build.ts`
+  derives each referenced symbol's description from the `SYMBOLS` registry
+  at build time and injects them into the YAML embedded in the rendered
+  manual HTML. The cross-SSOT character-equal guard now reads the embedded
+  HTML YAML instead of the source files, and a new test locks in that
+  neither the source nor the dist raw YAMLs ever re-introduce a `symbols:`
+  block. Developers edit a description in one file; CI continues to catch
+  any manual reference to an unregistered symbol id. Known trade-off: the
+  `?format=yaml` AI path no longer ships descriptions in the raw asset —
+  the assistant prompt remains the SSOT for consumers on that path.
 - **Leaderboard live update** Submitted scores now appear in the leaderboard
   immediately, replacing the previous up-to-60-second cache-invalidation lag.
   After a successful POST the result page persists an optimistic entry in
