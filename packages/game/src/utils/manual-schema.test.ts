@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { collectReferencedSymbols, validateManualSymbols, type Manual } from '@shared/manual-schema'
+import { SYMBOLS } from '@shared/symbols'
 import yaml from 'js-yaml'
 import { readFileSync, readdirSync } from 'fs'
 import { resolve, join } from 'path'
@@ -101,5 +102,57 @@ describe('shipped manual YAMLs', () => {
     for (const [id, entry] of Object.entries(manual.symbols)) {
       expect(entry.description.length, `symbol ${id} description too short`).toBeGreaterThan(4)
     }
+  })
+})
+
+describe('manual symbol descriptions match shared/symbols.ts SSOT', () => {
+  function loadYaml(path: string): Manual {
+    return yaml.load(readFileSync(path, 'utf8')) as Manual
+  }
+
+  // Build a Map<id, description> from the SYMBOLS registry. SYMBOLS is the
+  // SSOT for symbol metadata (id, name, description, SVG path); each manual
+  // YAML re-states `symbols.<id>.description` so the AI partner sees it when
+  // reading the manual. This test catches drift between the two surfaces.
+  const SSOT_DESCRIPTIONS: Map<string, string> = new Map(SYMBOLS.map((s) => [s.id, s.description]))
+
+  function diffYamlAgainstSSOT(label: string, manual: Manual): string[] {
+    const errors: string[] = []
+    for (const [id, entry] of Object.entries(manual.symbols ?? {})) {
+      const yamlDesc = entry.description
+      const ssotDesc = SSOT_DESCRIPTIONS.get(id)
+      if (ssotDesc === undefined) {
+        errors.push(
+          `${label}: symbol id '${id}' is NOT registered in shared/symbols.ts SYMBOLS — yaml should not ship descriptions for unregistered ids.\n` +
+            `  yaml description: ${JSON.stringify(yamlDesc)}`
+        )
+        continue
+      }
+      if (yamlDesc !== ssotDesc) {
+        errors.push(
+          `${label}: symbol '${id}' description differs from shared/symbols.ts SSOT (character-level mismatch).\n` +
+            `  yaml:    ${JSON.stringify(yamlDesc)}\n` +
+            `  SYMBOLS: ${JSON.stringify(ssotDesc)}`
+        )
+      }
+    }
+    return errors
+  }
+
+  it('practice.yaml symbol descriptions character-equal to SYMBOLS', () => {
+    const manual = loadYaml(PRACTICE_YAML)
+    const errors = diffYamlAgainstSSOT('practice.yaml', manual)
+    expect(errors, `\n${errors.join('\n')}`).toEqual([])
+  })
+
+  it('every daily YAML symbol descriptions character-equal to SYMBOLS', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const errors: string[] = []
+    for (const file of dailyFiles) {
+      const manual = loadYaml(join(DAILY_DIR, file))
+      errors.push(...diffYamlAgainstSSOT(`daily/${file}`, manual))
+    }
+    expect(errors, `\n${errors.join('\n')}`).toEqual([])
   })
 })

@@ -22,7 +22,10 @@ Versions follow [Semantic Versioning](https://semver.org).
   `symbol_dial.columns` or `keypad.sequences` lacks a description (or if
   the block declares an unused entry). The assistant prompt's "符号视觉
   对照" section is generated from the same SSOT so the prompt and the
-  manual stay in lockstep.
+  manual stay in lockstep, and a vitest assertion now also enforces that
+  every shipped yaml `symbols.<id>.description` is character-equal to the
+  `SYMBOLS` registry entry, catching silent drift between the two surfaces
+  before it reaches deploy.
 - **Leaderboard live update** Submitted scores now appear in the leaderboard
   immediately, replacing the previous up-to-60-second cache-invalidation lag.
   After a successful POST the result page persists an optimistic entry in
