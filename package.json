@@ -8,8 +8,8 @@
     "format": "pnpm exec prettier . --write",
     "format:check": "pnpm exec prettier --check .",
     "build": "pnpm --filter manual build && pnpm --filter game build && node scripts/assemble-pages.mjs",
-    "test": "pnpm --filter game test",
-    "test:run": "pnpm --filter game test:run",
+    "test": "pnpm -r run test",
+    "test:run": "pnpm -r run test:run",
     "prepare": "husky"
   },
   "lint-staged": {
