@@ -4,6 +4,7 @@ import { useGame } from '@/store/game-context'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@/utils/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
+import { logEvent } from '@/utils/event-log'
 import { submitScore } from '@/utils/leaderboard-api'
 import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
@@ -120,6 +121,13 @@ export default function ResultPage() {
   }, [buildSubmission, recordOptimistic])
 
   const handlePlayAgain = () => {
+    // Emit BEFORE the RESET so we still capture the just-finished run's mode
+    // and attempt number — after RESET those revert to INITIAL_STATE values
+    // and the signal is lost.
+    logEvent('replay_intent', {
+      mode: state.mode,
+      attemptNumber: state.attemptNumber,
+    })
     dispatch({ type: 'RESET' })
     navigate(`/game?mode=${state.mode}`)
   }
