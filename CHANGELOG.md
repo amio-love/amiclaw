@@ -13,6 +13,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Test runner self-containment** Internal refactor — `packages/manual` now
+  has its own vitest setup, and the cross-SSOT character-equal guard tests
+  (manual yaml symbols matching `shared/symbols.ts`) live in the manual
+  package alongside the data they test. The game-package test file is back
+  to schema-unit only, and root `pnpm test:run` runs both packages via
+  `-r run` (CI inherits automatically).
 - **Post-refresh guidance** A short banner appears at the top of the game
   page after an accidental F5 / Cmd+R, reminding the player what to say to
   their AI partner so the two of them can re-sync. Dismissible with a single
