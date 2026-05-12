@@ -1,27 +1,45 @@
+import { getDeviceId } from './device-fingerprint'
+
 /**
  * Frontend event logging for the BombSquad game.
  *
- * Emits a single structured `console.info` line per event so that during the
- * first post-ship week we can manually estimate the 单局完成率 north-star
- * metric (>= 70% completion within 10 minutes) by scanning browser console
- * logs. Backend KV ingestion is intentionally deferred — this helper exists
- * only as a stable, structured shape for later automation.
+ * POSTs a structured `EventPayload` to the Pages Function `/api/events`,
+ * which writes per-event-name counters and (for `game_start` /
+ * `game_complete`) unique-device sets to the LEADERBOARD KV namespace.
  *
- * Wire format:
- *   console.info('[bombsquad-event]', { event, timestamp, ...data })
+ * Wire shape (see `shared/event-types.ts`):
+ *   { event, timestamp, device_id, data? }
  *
- * `timestamp` is ISO 8601 (UTC) so logs from different clients sort.
+ * Posture is fire-and-forget: network failures are swallowed silently so
+ * a flaky uplink never breaks gameplay. `keepalive: true` lets events fired
+ * during page unload (e.g. `game_abandon` on tab close, `replay_intent`
+ * mid-navigation) still flush after the document is torn down.
+ *
+ * The function signature is identical to the previous `console.info`
+ * implementation so the six existing callsites do not change.
  */
-export const EVENT_LOG_PREFIX = '[bombsquad-event]'
-
 export function logEvent(name: string, data: Record<string, unknown> = {}): void {
-  const payload = {
-    event: name,
-    timestamp: new Date().toISOString(),
-    ...data,
+  // Fire-and-forget. Any synchronous error during payload construction
+  // (e.g. `getDeviceId` failing because localStorage is unavailable in a
+  // sandboxed iframe / privacy mode) and any async fetch rejection (network
+  // error, CORS, abort during page unload) are intentionally swallowed:
+  // telemetry must never surface to the player.
+  try {
+    const payload = {
+      event: name,
+      timestamp: new Date().toISOString(),
+      device_id: getDeviceId(),
+      data,
+    }
+
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    // Swallow synchronous failures (storage access denied, JSON
+    // serialization throw, missing fetch in non-browser host, etc.).
   }
-  // `console.info` is the intended channel; the project lint config allows
-  // only `warn`/`error` by default, so opt out locally for this telemetry sink.
-  // eslint-disable-next-line no-console
-  console.info(EVENT_LOG_PREFIX, payload)
 }
