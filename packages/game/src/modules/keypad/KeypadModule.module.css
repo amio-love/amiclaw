@@ -5,8 +5,14 @@
   width: fit-content;
 }
 
-.grid.error  { animation: error-flash 600ms ease-out, shake 600ms ease-out; }
-.grid.success { animation: success-flash 600ms ease-out; }
+.grid.error {
+  animation:
+    error-flash 600ms ease-out,
+    shake 600ms ease-out;
+}
+.grid.success {
+  animation: success-flash 600ms ease-out;
+}
 
 .cell {
   width: 120px;
@@ -21,9 +27,13 @@
   transition: border-color 150ms;
 }
 
-.cell:hover { border-color: var(--color-neon-cyan); }
+.cell:hover {
+  border-color: var(--color-neon-cyan);
+}
 
-.cell.selected { border-color: var(--color-neon-cyan); }
+.cell.selected {
+  border-color: var(--color-neon-cyan);
+}
 
 .symbol {
   width: 80px;
@@ -35,7 +45,9 @@
   stroke-linejoin: round;
 }
 
-.cell.selected .symbol { stroke: var(--color-neon-cyan); }
+.cell.selected .symbol {
+  stroke: var(--color-neon-cyan);
+}
 
 .badge {
   position: absolute;
@@ -52,4 +64,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.cell.clicking {
+  animation: click-pulse 200ms ease-out;
 }

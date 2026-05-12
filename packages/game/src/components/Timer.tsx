@@ -1,4 +1,5 @@
 import styles from './Timer.module.css'
+import { useStopwatchLoop } from '@/hooks/useStopwatchLoop'
 
 interface TimerProps {
   display: string // MM:SS from useTimer
@@ -6,6 +7,7 @@ interface TimerProps {
 }
 
 export default function Timer({ display, isRunning }: TimerProps) {
+  useStopwatchLoop(isRunning)
   return (
     <div
       className={`${styles.timer} ${isRunning ? styles.running : ''}`}

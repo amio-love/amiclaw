@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **Audio + animation feedback** Every in-module click now gives a short
+  pulse animation and a sound effect (confirm, wire-cut, dial-rotate,
+  keypad-press, button-down/up). Solving or failing a module plays a soft
+  success / error thunk. A mechanical-stopwatch tick now loops in the
+  background while the timer is running and stops as soon as the round
+  ends. Sounds are driven by three CC0 base samples (Kenney UI Audio,
+  ~20 KB total) and varied per operation via Web Audio playback-rate; no
+  new runtime dependencies. Animations are pure CSS keyframes wrapped in
+  `prefers-reduced-motion`.
 - Frontend event logging for practice/daily games (game_start, module_solve, game_complete, game_abandon, manual_load_failed) — emitted via console.info with prefix [bombsquad-event] for manual analysis of completion rate
 - `replay_intent` console.info event emitted when the result-page "再来一局" button is clicked — enables manual estimation of replay-willingness (roadmap §Strategic Objectives Validation Criteria #3, 复玩意愿 ≥50%) from console logs
 - Backend event ingestion via Pages Function `/api/events` — five existing event types (game_start, module_solve, game_complete, game_abandon, manual_load_failed) plus replay_intent now POST to a Cloudflare Pages Function that writes per-event-name counters and unique-device sets to the LEADERBOARD KV namespace under `events:{date}:*` keys. Frontend `console.info` channel is replaced by fire-and-forget fetch; events include device_id (sourced from the same localStorage UUID used by leaderboard submissions) so both session-level and unique-player completion-rate can be computed.

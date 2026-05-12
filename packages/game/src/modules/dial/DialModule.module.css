@@ -6,8 +6,14 @@
   animation: fade-in 300ms ease-out;
 }
 
-.wrapper.error { animation: error-flash 600ms ease-out, shake 600ms ease-out; }
-.wrapper.success { animation: success-flash 800ms ease-out; }
+.wrapper.error {
+  animation:
+    error-flash 600ms ease-out,
+    shake 600ms ease-out;
+}
+.wrapper.success {
+  animation: success-flash 800ms ease-out;
+}
 
 .dials-container {
   display: flex;
@@ -18,9 +24,17 @@
 }
 
 @media (max-width: 360px) {
-  .dials-container { gap: 12px; }
-  .dial-window { width: 64px; height: 64px; }
-  .symbol-svg { width: 48px; height: 48px; }
+  .dials-container {
+    gap: 12px;
+  }
+  .dial-window {
+    width: 64px;
+    height: 64px;
+  }
+  .symbol-svg {
+    width: 48px;
+    height: 48px;
+  }
 }
 
 .dial {
@@ -86,5 +100,16 @@
   background: rgba(0, 255, 255, 0.1);
 }
 
-.slide-up { animation: dial-slide-up 150ms ease-out forwards; }
-.slide-down { animation: dial-slide-down 150ms ease-out forwards; }
+.slide-up {
+  animation: dial-slide-up 150ms ease-out forwards;
+}
+.slide-down {
+  animation: dial-slide-down 150ms ease-out forwards;
+}
+
+.arrow-btn.clicking {
+  animation: click-pulse 200ms ease-out;
+}
+.confirm-btn.confirm-clicking {
+  animation: confirm-pulse 300ms ease-out;
+}

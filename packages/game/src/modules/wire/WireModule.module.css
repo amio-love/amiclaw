@@ -3,7 +3,9 @@
 }
 
 .container.error {
-  animation: error-flash 600ms ease-out, shake 600ms ease-out;
+  animation:
+    error-flash 600ms ease-out,
+    shake 600ms ease-out;
 }
 
 .container.success {
@@ -34,4 +36,8 @@
 
 .wire-cut-bottom {
   animation: wire-cut-bottom 400ms ease-out forwards;
+}
+
+.wire-hit-target.clicking {
+  animation: click-pulse 200ms ease-out;
 }
