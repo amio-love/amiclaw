@@ -77,6 +77,7 @@ export default function HomePage() {
       <p className={styles.footer}>支持 Claude · ChatGPT · Gemini 或任意语音 AI</p>
 
       <PromptModal
+        key={modal?.manualUrl}
         open={modal !== null}
         mode={modal?.mode ?? 'practice'}
         manualUrl={modal?.manualUrl ?? ''}
