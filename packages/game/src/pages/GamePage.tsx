@@ -20,6 +20,7 @@ import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
+import { getAudioContext } from '@/audio/audio-context'
 import styles from './GamePage.module.css'
 
 const MODULE_NAMES = ['线路', '密码盘', '按钮', '键盘'] as const
@@ -369,7 +370,16 @@ export default function GamePage() {
         {refreshBanner}
         <div className={styles.overlay}>
           <p className={styles.readyText}>准备好了吗？</p>
-          <button className={styles.startBtn} onClick={() => dispatch({ type: 'START_GAME' })}>
+          <button
+            className={styles.startBtn}
+            onClick={() => {
+              // Unlock the shared AudioContext inside this user-gesture handler
+              // so iOS Safari permits audio to start when the stopwatch loop
+              // begins (the stopwatch effect itself runs outside a gesture).
+              getAudioContext()
+              dispatch({ type: 'START_GAME' })
+            }}
+          >
             开始
           </button>
         </div>
