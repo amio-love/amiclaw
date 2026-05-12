@@ -13,6 +13,10 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Post-refresh guidance** A short banner appears at the top of the game
+  page after an accidental F5 / Cmd+R, reminding the player what to say to
+  their AI partner so the two of them can re-sync. Dismissible with a single
+  tap; does not show on fresh navigations.
 - **Prompt-copy modal** The home page no longer shows the assistant prompt
   inline. Clicking 「练习」or「每日挑战」now opens a small modal with the
   matching manual URL and a copy button; the player sends the URL to their AI
