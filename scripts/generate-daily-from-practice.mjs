@@ -248,9 +248,9 @@ function dumpYaml(obj) {
   return yaml.dump(obj, { lineWidth: -1 })
 }
 
-function writeDailyIfChanged(date, content) {
-  if (!existsSync(DAILY_DIR)) mkdirSync(DAILY_DIR, { recursive: true })
-  const target = join(DAILY_DIR, `${date}.yaml`)
+export function writeDailyIfChanged(date, content, targetDir = DAILY_DIR) {
+  if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+  const target = join(targetDir, `${date}.yaml`)
   if (existsSync(target)) {
     const existing = readFileSync(target, 'utf8')
     if (existing === content) return 'skip'

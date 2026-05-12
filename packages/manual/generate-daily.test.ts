@@ -6,15 +6,17 @@
  * pure derivation function directly and assert determinism + structural
  * invariants on a small set of dates.
  */
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join, resolve } from 'path'
 import {
   deriveDailyManual,
   fnv1a32,
   mulberry32,
   seededShuffle,
+  writeDailyIfChanged,
   // @ts-expect-error JS module imported from .mjs without types
 } from '../../scripts/generate-daily-from-practice.mjs'
 import { validateManualSymbols, type Manual } from '@shared/manual-schema'
@@ -35,6 +37,16 @@ describe('daily generator — deterministic RNG primitives', () => {
     expect(h).toBeLessThan(2 ** 32)
     // Two different dates → different hashes
     expect(fnv1a32('2026-05-12')).not.toBe(fnv1a32('2026-05-13'))
+  })
+
+  it('fnv1a32 emits the exact FNV-1a 32-bit values for pinned dates', () => {
+    // Pin the EXACT numeric output of FNV-1a/32 for three known dates so a
+    // silent swap to a different hash family (or a subtle off-by-one in the
+    // constants) fails this test instead of slipping into production and
+    // shifting every daily seed.
+    expect(fnv1a32('2026-05-12')).toBe(1656106231)
+    expect(fnv1a32('2026-12-31')).toBe(1294366724)
+    expect(fnv1a32('2027-01-01')).toBe(1431789288)
   })
 
   it('mulberry32 is reproducible for a given seed', () => {
@@ -154,5 +166,57 @@ describe('daily generator — deriveDailyManual', () => {
     deriveDailyManual(practice, '2026-05-12')
     deriveDailyManual(practice, '2026-08-01')
     expect(yaml.dump(practice)).toBe(before)
+  })
+})
+
+describe('daily generator — writeDailyIfChanged idempotency', () => {
+  // Each test uses its own tempdir to avoid coupling. The optional third
+  // `targetDir` arg lets us redirect away from the real
+  // `packages/manual/data/daily/` without changing behavior on the script's
+  // own callsite (which still defaults to DAILY_DIR).
+  const tempDirs: string[] = []
+  function makeTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'amiclaw-daily-test-'))
+    tempDirs.push(dir)
+    return dir
+  }
+  afterAll(() => {
+    for (const dir of tempDirs) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a new file on first call and returns "write"', () => {
+    const dir = makeTempDir()
+    const result = writeDailyIfChanged('2099-01-01', 'hello: world\n', dir) as 'write' | 'skip'
+    expect(result).toBe('write')
+    expect(readFileSync(join(dir, '2099-01-01.yaml'), 'utf8')).toBe('hello: world\n')
+  })
+
+  it('skips when existing content matches byte-for-byte and does not touch the file', () => {
+    const dir = makeTempDir()
+    const date = '2099-02-02'
+    const content = 'meta:\n  version: 2099-02-02\n  type: daily\n'
+    writeDailyIfChanged(date, content, dir)
+    const target = join(dir, `${date}.yaml`)
+    const mtimeBefore = statSync(target).mtimeMs
+    // Re-call with identical content: must return 'skip' and must not rewrite
+    // the file (mtime stays put, content stays byte-equal).
+    const result = writeDailyIfChanged(date, content, dir) as 'write' | 'skip'
+    expect(result).toBe('skip')
+    expect(readFileSync(target, 'utf8')).toBe(content)
+    expect(statSync(target).mtimeMs).toBe(mtimeBefore)
+  })
+
+  it('throws when existing content differs from new content (refuse to overwrite)', () => {
+    const dir = makeTempDir()
+    const date = '2099-03-03'
+    const target = join(dir, `${date}.yaml`)
+    // Seed the directory with content X via plain fs to simulate a committed
+    // file that diverges from what the generator would produce now.
+    writeFileSync(target, 'old: content\n')
+    expect(() => writeDailyIfChanged(date, 'new: content\n', dir)).toThrow(/Refusing to overwrite/)
+    // File on disk must remain the original — abort, do not overwrite.
+    expect(readFileSync(target, 'utf8')).toBe('old: content\n')
   })
 })
