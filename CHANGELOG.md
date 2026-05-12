@@ -20,9 +20,12 @@ Versions follow [Semantic Versioning](https://semver.org).
   to schema-unit only, and root `pnpm test:run` runs both packages via
   `-r run` (CI inherits automatically).
 - **Post-refresh guidance** A short banner appears at the top of the game
-  page after an accidental F5 / Cmd+R, reminding the player what to say to
-  their AI partner so the two of them can re-sync. Dismissible with a single
-  tap; does not show on fresh navigations.
+  page after an accidental F5 / Cmd+R, diagnosing what just happened so the
+  player can decide how to re-sync with their AI partner. The copy now
+  describes the situation in two lines — that the page state was reset, and
+  that the AI partner is still waiting on the previous step — without
+  prescribing an action. The banner auto-dismisses after 5 seconds, and the
+  × button remains for players who want to clear it sooner.
 - **Prompt-copy modal** The home page no longer shows the assistant prompt
   inline. Clicking 「练习」or「每日挑战」now opens a small modal with the
   matching manual URL and a copy button; the player sends the URL to their AI
@@ -105,6 +108,13 @@ Versions follow [Semantic Versioning](https://semver.org).
   "去练习" CTA instead of a broken SPA shell that crashed puzzle
   generation. The fix is a new `_routes.json` alongside the existing
   `_redirects`; the SPA continues to handle every other route.
+- **Post-refresh banner no longer false-fires on in-SPA navigation** The
+  refresh-detection signal is now consumed on first read per document load,
+  so exiting back to the home page and starting a new run — or returning from
+  the result page via 再来一局, or falling through to practice from a 404
+  daily manual — no longer surfaces the banner. The banner still appears once
+  after a genuine browser refresh and is gone for the rest of that document's
+  lifetime.
 - **Manual URL self-heals across domains** The prompt players copy into
   their AI, and the URL the game fetches daily manuals from, both now
   use `window.location.origin` instead of a hardcoded
