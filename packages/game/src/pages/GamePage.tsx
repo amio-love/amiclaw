@@ -74,7 +74,7 @@ async function loadWithCache(manualUrl: string): Promise<Manual> {
     if (err instanceof ManualNotFoundError) throw err
     const cached = sessionStorage.getItem(cacheKey)
     if (cached) return yaml.load(cached) as Manual
-    throw new Error('手册加载失败，请检查网络。')
+    throw new Error('手册加载失败，请检查网络。', { cause: err })
   }
 }
 
