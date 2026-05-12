@@ -1,0 +1,360 @@
+meta:
+  version: '2026-07-23'
+  type: daily
+modules:
+  wire_routing:
+    rules:
+      - condition:
+          wire_count: 4
+          color_at_last: red
+        action: cut_wire
+        target:
+          position: last
+      - condition:
+          wire_count: 4
+          color_at_last: yellow
+        action: cut_wire
+        target:
+          position: last
+          color: red
+      - condition:
+          wire_count: 4
+          count_red:
+            gt: 1
+        action: cut_wire
+        target:
+          position: last
+          color: red
+      - condition:
+          wire_count: 4
+          battery_count:
+            gt: 2
+        action: cut_wire
+        target:
+          position: 2
+      - condition:
+          wire_count: 4
+          color_at_last: green
+        action: cut_wire
+        target:
+          position: last
+      - condition:
+          wire_count: 4
+          color_at_last: white
+        action: cut_wire
+        target:
+          position: 1
+      - condition:
+          wire_count: 4
+          color_at_last: black
+        action: cut_wire
+        target:
+          position: first
+      - condition:
+          wire_count: 4
+          color_at_last: blue
+        action: cut_wire
+        target:
+          position: first
+      - condition:
+          wire_count: 4
+        action: cut_wire
+        target:
+          position: first
+      - condition:
+          wire_count: 5
+          color_at_last: blue
+        action: cut_wire
+        target:
+          position: last
+      - condition:
+          wire_count: 5
+          color_at_last: red
+        action: cut_wire
+        target:
+          position: 3
+      - condition:
+          wire_count: 5
+          color_at_last: yellow
+        action: cut_wire
+        target:
+          position: first
+      - condition:
+          wire_count: 5
+          indicator_FRK_lit: true
+        action: cut_wire
+        target:
+          position: 2
+      - condition:
+          wire_count: 5
+          count_blue:
+            gt: 1
+        action: cut_wire
+        target:
+          position: first
+          color: blue
+      - condition:
+          wire_count: 5
+        action: cut_wire
+        target:
+          position: 2
+      - condition: {}
+        action: cut_wire
+        target:
+          position: first
+  symbol_dial:
+    columns:
+      - - omega
+        - psi
+        - delta
+        - xi
+        - trident
+        - diamond
+      - - psi
+        - omega
+        - star
+        - delta
+        - xi
+        - diamond
+      - - omega
+        - psi
+        - delta
+        - star
+        - xi
+        - trident
+      - - delta
+        - diamond
+        - xi
+        - star
+        - psi
+        - omega
+      - - star
+        - omega
+        - xi
+        - diamond
+        - delta
+        - psi
+      - - xi
+        - delta
+        - diamond
+        - omega
+        - psi
+        - star
+    rule: 玩家报 3 个轮盘当前显示的符号 S1、S2、S3（都在位置 0）—— 生成器保证这 3 个起始符号互不相同，你可以信任玩家的描述。在下方 columns 里找那条同时包含 S1、S2、S3 的列。对第 i 个轮盘，目标位置 = S_i 在命中列中的 index（0=最上，5=最下）。指示玩家把每个轮盘从位置 0 按右箭头到达该 index 即可，不要说"让轮盘显示某个符号"——每个轮盘有自己独立的 6 符号池，跨轮盘不通用。
+  button:
+    rules:
+      - condition:
+          color: red
+          label: HOLD
+        action:
+          type: tap
+      - condition:
+          color: blue
+          label: ABORT
+        action:
+          type: hold
+          release_on_light: white
+      - condition:
+          battery_count:
+            lte: 2
+        action:
+          type: hold
+          release_on_light: red
+      - condition:
+          color: yellow
+        action:
+          type: tap
+      - condition:
+          color: white
+          label: PRESS
+        action:
+          type: hold
+          release_on_light: blue
+      - condition:
+          battery_count:
+            gt: 2
+          label: DETONATE
+        action:
+          type: tap
+      - condition:
+          color: red
+          indicator_FRK_lit: true
+        action:
+          type: tap
+      - condition:
+          color: yellow
+          battery_count:
+            gt: 2
+        action:
+          type: hold
+          release_on_light: yellow
+      - condition:
+          color: white
+        action:
+          type: tap
+      - condition:
+          label: ABORT
+        action:
+          type: hold
+          release_on_light: white
+      - condition:
+          color: blue
+          label: DETONATE
+        action:
+          type: tap
+      - condition: {}
+        action:
+          type: tap
+  keypad:
+    sequences:
+      - - omega
+        - diamond
+        - delta
+        - star
+        - xi
+        - psi
+      - - omega
+        - delta
+        - star
+        - diamond
+        - xi
+        - psi
+      - - delta
+        - omega
+        - star
+        - xi
+        - psi
+        - diamond
+      - - star
+        - omega
+        - diamond
+        - delta
+        - xi
+        - psi
+      - - psi
+        - xi
+        - omega
+        - delta
+        - diamond
+        - star
+      - - xi
+        - psi
+        - diamond
+        - delta
+        - omega
+        - star
+    rule: 键盘 2×2 共 4 个格子，符号全部可见。在下方 sequences 里找那条同时包含这 4 个符号的序列；让玩家按该序列里出现的先后顺序点击它们（玩家不需要理解"位置"，只需要说"点某某符号"即可）。
+decoy_modules:
+  morse_code:
+    rules:
+      - pattern: ... --- ...
+        word: SOS
+        action: transmit
+      - pattern: .... . .-.. .-.. ---
+        word: HELLO
+        action: transmit
+      - pattern: '-... --- -- -...'
+        word: BOMB
+        action: transmit
+      - pattern: .-- .. .-. .
+        word: WIRE
+        action: cut
+      - pattern: '-.. . - --- -. .- - .'
+        word: DETONATE
+        action: abort
+      - pattern: .- .-. -- .
+        word: ARME
+        action: transmit
+  maze:
+    grid_size: 6
+    rules:
+      - start:
+          - 0
+          - 0
+        end:
+          - 5
+          - 5
+        path: RRRRRUUUUU
+      - start:
+          - 2
+          - 3
+        end:
+          - 0
+          - 0
+        path: LLLUUU
+      - start:
+          - 1
+          - 1
+        end:
+          - 4
+          - 4
+        path: RRRRUUU
+      - start:
+          - 3
+          - 0
+        end:
+          - 3
+          - 5
+        path: UUUUU
+      - start:
+          - 0
+          - 2
+        end:
+          - 5
+          - 2
+        path: RRRRR
+  memory:
+    stages: 5
+    rules:
+      - stage: 1
+        display: 1
+        action: press_position_2
+      - stage: 1
+        display: 2
+        action: press_position_2
+      - stage: 2
+        display: 3
+        action: press_label_4
+      - stage: 3
+        display: 1
+        action: press_same_position
+      - stage: 4
+        display: 4
+        action: press_same_label
+      - stage: 5
+        display: 2
+        action: press_same_position_as_stage_1
+  simon_says:
+    rules:
+      - has_vowel_in_serial: true
+        color_map:
+          red: blue
+          blue: red
+          green: yellow
+          yellow: green
+      - has_vowel_in_serial: false
+        color_map:
+          red: blue
+          blue: yellow
+          green: green
+          yellow: red
+      - strikes: 1
+        has_vowel_in_serial: true
+        color_map:
+          red: blue
+          blue: red
+          green: yellow
+          yellow: green
+      - strikes: 1
+        has_vowel_in_serial: false
+        color_map:
+          red: red
+          blue: blue
+          green: yellow
+          yellow: green
+      - strikes: 2
+        color_map:
+          red: yellow
+          blue: green
+          green: blue
+          yellow: red
