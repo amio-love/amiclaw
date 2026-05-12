@@ -5,9 +5,18 @@
  *
  * `description` is Chinese and tuned for AI-to-player visual disambiguation:
  * canonical shape FIRST, then the most likely user-confusion phrasing in
- * "易被误描述为'X'" form. The same descriptions ship inside each manual
- * YAML's `symbols:` block so the AI sees them when reading the manual; this
- * registry is the source of the strings injected into the assistant prompt.
+ * "易被误描述为'X'" form. This file is the single source of truth for those
+ * strings — both downstream consumers derive from here at build / render
+ * time:
+ *   - `packages/manual/build.ts` injects each referenced symbol's
+ *     description into the YAML embedded in the rendered manual HTML
+ *     (`dist/<slug>/index.html`). The source YAML and the dist raw YAML
+ *     never carry a `symbols:` block.
+ *   - `packages/game/src/utils/assistant-prompt.ts` reads SYMBOLS at
+ *     runtime to populate the prompt's "## 符号视觉对照" section.
+ * A vitest guard (`manual-schema.test.ts`) enforces character-equal
+ * descriptions between SYMBOLS and the HTML-embedded YAML so the two
+ * surfaces cannot drift silently.
  */
 
 export interface Symbol {

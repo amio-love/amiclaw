@@ -109,11 +109,14 @@ export interface ManualModules {
 }
 
 /**
- * Per-symbol visual description shipped in the manual so the AI partner has
- * a vocabulary alignment between the abstract symbol id (e.g. `psi`) and the
- * shape the player will actually try to describe ("三叉戟" / "扇子"). The
- * build pipeline validates that every symbol referenced in `modules` has an
- * entry here.
+ * Per-symbol visual description embedded in each rendered manual HTML so
+ * the AI partner has a vocabulary alignment between the abstract symbol id
+ * (e.g. `psi`) and the shape the player will actually try to describe
+ * ("三叉戟" / "扇子"). Under the unified-SSOT architecture the descriptions
+ * live solely in `shared/symbols.ts` and the build pipeline injects them
+ * into the HTML-embedded yaml at build time — neither the source yaml nor
+ * the dist raw yaml carries them. The injected post-build shape still
+ * conforms to this interface, so it stays here as the canonical type.
  */
 export interface SymbolEntry {
   description: string
@@ -122,14 +125,25 @@ export interface SymbolEntry {
 export interface Manual {
   meta: ManualMeta
   modules: ManualModules
-  symbols: Record<string, SymbolEntry>
+  /**
+   * Optional in source yaml (Option C: descriptions live only in HTML
+   * after build-time injection from SYMBOLS). The build script populates
+   * this field on the cloned object that gets embedded in the HTML.
+   */
+  symbols?: Record<string, SymbolEntry>
   decoy_modules?: Record<string, unknown>
+}
+
+/** Minimal registry shape consumed by `validateManualSymbols`. */
+export interface SymbolRegistryEntry {
+  id: string
 }
 
 /**
  * Walk a manual and collect every symbol id referenced by rule data
  * (`symbol_dial.columns` + `keypad.sequences`). Used by the build-time
- * validator to enforce 1:1 coverage with the `symbols` block.
+ * validator to enforce that every reference resolves to a known symbol in
+ * the shared SYMBOLS registry.
  */
 export function collectReferencedSymbols(modules: ManualModules): Set<string> {
   const seen = new Set<string>()
@@ -143,34 +157,27 @@ export function collectReferencedSymbols(modules: ManualModules): Set<string> {
 }
 
 /**
- * Throw if the manual's `symbols` block is missing entries for any symbol
- * referenced in `modules` (or contains stale entries no longer used).
- * Pure function so tests can call it directly with parsed YAML.
+ * Throw if the manual references any symbol id not registered in the
+ * shared SYMBOLS registry (the SSOT). Descriptions are no longer
+ * authoritative on the manual side — they are injected from `registry`
+ * during the manual build pipeline — so this validator's only job is to
+ * confirm the manual's referenced ids are a subset of the registry's ids.
+ * Pure function so tests can call it directly with parsed YAML + SYMBOLS.
  */
-export function validateManualSymbols(manual: Manual): void {
+export function validateManualSymbols(
+  manual: Manual,
+  registry: readonly SymbolRegistryEntry[]
+): void {
   const referenced = collectReferencedSymbols(manual.modules)
-  const declared = new Set(Object.keys(manual.symbols ?? {}))
+  const registered = new Set(registry.map((s) => s.id))
 
   const missing: string[] = []
   for (const id of referenced) {
-    const entry = manual.symbols?.[id]
-    if (!entry || typeof entry.description !== 'string' || entry.description.trim() === '') {
-      missing.push(id)
-    }
+    if (!registered.has(id)) missing.push(id)
   }
   if (missing.length > 0) {
     throw new Error(
-      `Manual ${manual.meta?.version ?? '<unknown>'}: missing symbols.<id>.description for: ${missing.join(', ')}`
-    )
-  }
-
-  const stale: string[] = []
-  for (const id of declared) {
-    if (!referenced.has(id)) stale.push(id)
-  }
-  if (stale.length > 0) {
-    throw new Error(
-      `Manual ${manual.meta?.version ?? '<unknown>'}: symbols block declares unused entries: ${stale.join(', ')}`
+      `Manual ${manual.meta?.version ?? '<unknown>'}: symbol id(s) referenced in modules but not registered in shared/symbols.ts SYMBOLS: ${missing.join(', ')}`
     )
   }
 }
