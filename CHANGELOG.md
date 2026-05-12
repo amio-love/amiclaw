@@ -91,6 +91,20 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Daily challenge no longer crashes on missing dates** Every date for the
+  next year now serves a real daily manual derived deterministically from
+  the practice rulebook, so opening "每日挑战" on any date through
+  2027-05-11 loads a playable bomb instead of throwing
+  "谜题生成失败". Generator script `scripts/generate-daily-from-practice.mjs`
+  permutes the practice rules with a date-seeded RNG and writes one YAML
+  per day; same date always produces the same bomb.
+- **Friendly fallback for unpublished dates** Cloudflare now routes
+  `/manual/<date>` through the Pages Function before the SPA catch-all,
+  so requests for dates without a published manual return a clean 404
+  and the game renders the existing "今天的手册还没发布" UI with the
+  "去练习" CTA instead of a broken SPA shell that crashed puzzle
+  generation. The fix is a new `_routes.json` alongside the existing
+  `_redirects`; the SPA continues to handle every other route.
 - **Manual URL self-heals across domains** The prompt players copy into
   their AI, and the URL the game fetches daily manuals from, both now
   use `window.location.origin` instead of a hardcoded

@@ -8,6 +8,7 @@
     "format": "pnpm exec prettier . --write",
     "format:check": "pnpm exec prettier --check .",
     "build": "pnpm --filter manual build && pnpm --filter game build && node scripts/assemble-pages.mjs",
+    "gen:daily": "node scripts/generate-daily-from-practice.mjs",
     "test": "pnpm -r run test",
     "test:run": "pnpm -r run test:run",
     "prepare": "husky"
