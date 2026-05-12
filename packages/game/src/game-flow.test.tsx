@@ -65,8 +65,10 @@ describe('full game flow: home → practice → result', () => {
     // Home page
     expect(screen.getByText('BOMBSQUAD')).toBeInTheDocument()
 
-    // Navigate to practice game
+    // Clicking 练习 opens the prompt modal first; confirming inside the
+    // modal is what actually navigates into the game.
     fireEvent.click(screen.getByRole('button', { name: /^练习$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^确认开始游戏$/ }))
 
     // Practice manual is inlined via ?raw — wait for the async load() microtask to complete
     await waitFor(() => expect(screen.getByText('准备好了吗？')).toBeInTheDocument())

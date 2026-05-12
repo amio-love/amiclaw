@@ -12,6 +12,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Prompt-copy modal** The home page no longer shows the assistant prompt
+  inline. Clicking 「练习」or「每日挑战」now opens a small modal with the
+  matching manual URL and a copy button; the player sends the URL to their AI
+  partner, then presses「确认开始游戏」to enter the run. The "怎么开始"
+  panel is condensed to four steps reflecting the new flow. Updated MVP §6.2
+  data flow and roadmap Shipped 标准 to reflect the new URL-copy step.
 - **Recap copy wording** Result-page summary text aligned with the MVP
   section 5.3 example wording (header, result, module rows, retro intro).
 - **Manual symbol vocabulary** Each abstract symbol (omega, psi, trident,
