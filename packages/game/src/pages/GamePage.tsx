@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
@@ -23,6 +23,20 @@ import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import styles from './GamePage.module.css'
 
 const MODULE_NAMES = ['线路', '密码盘', '按钮', '键盘'] as const
+
+const REFRESH_BANNER_TEXT = '让你的 agent 去洗个头，甩干脑汁，重新再来'
+
+/**
+ * Detects whether the current page load was a browser refresh (F5 / Cmd+R)
+ * rather than a fresh navigation. Used to surface a one-time hint asking the
+ * player to re-sync with their AI partner. Guarded against SSR and older
+ * browsers that lack `performance.getEntriesByType`.
+ */
+function detectRefresh(): boolean {
+  if (typeof performance === 'undefined' || !performance.getEntriesByType) return false
+  const entries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
+  return entries[0]?.type === 'reload'
+}
 
 const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']
 const SERIAL_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
@@ -86,6 +100,27 @@ export default function GamePage() {
 
   const { state, dispatch } = useGame()
   const rngRef = useRef<Rng | null>(null)
+
+  // Captured once on mount so it stays stable across re-renders. The player
+  // can dismiss it; once dismissed it does not reappear for the lifetime of
+  // this page (state lives in component memory, intentionally not persisted).
+  const [wasRefreshed] = useState<boolean>(detectRefresh)
+  const [refreshBannerDismissed, setRefreshBannerDismissed] = useState(false)
+  const showRefreshBanner = wasRefreshed && !refreshBannerDismissed
+
+  const refreshBanner = showRefreshBanner ? (
+    <div className={styles.refreshBanner} role="status">
+      <span className={styles.refreshBannerText}>{REFRESH_BANNER_TEXT}</span>
+      <button
+        type="button"
+        className={styles.refreshBannerDismiss}
+        onClick={() => setRefreshBannerDismissed(true)}
+        aria-label="关闭提示"
+      >
+        ×
+      </button>
+    </div>
+  ) : null
 
   const { display: timerDisplay } = useTimer(state.totalStartTime, state.totalEndTime)
   const isRunning = state.status === 'PLAYING' || state.status === 'MODULE_COMPLETE'
@@ -288,6 +323,7 @@ export default function GamePage() {
   if (state.status === 'LOADING') {
     return (
       <main className={styles.page}>
+        {refreshBanner}
         <div className={styles.overlay}>
           {state.errorMessage ? (
             state.errorKind === 'not_published' ? (
@@ -330,6 +366,7 @@ export default function GamePage() {
   if (state.status === 'READY') {
     return (
       <main className={styles.page}>
+        {refreshBanner}
         <div className={styles.overlay}>
           <p className={styles.readyText}>准备好了吗？</p>
           <button className={styles.startBtn} onClick={() => dispatch({ type: 'START_GAME' })}>
@@ -343,6 +380,7 @@ export default function GamePage() {
   // PLAYING / MODULE_COMPLETE states
   return (
     <main className={styles.page}>
+      {refreshBanner}
       <div className={styles.topBar}>
         <Timer display={timerDisplay} isRunning={isRunning} />
         <div className={styles.modeMeta}>
