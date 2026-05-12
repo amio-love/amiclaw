@@ -1,11 +1,11 @@
 /**
  * ResultPage replay_intent event-log test.
  *
- * Asserts that clicking "再来一局" emits a single `[bombsquad-event]`
- * console.info line whose payload satisfies
- * `{ event: 'replay_intent', mode, attemptNumber }`. This is the data point
- * roadmap §Strategic Objectives Validation Criteria #3 (复玩意愿 ≥50%) is
- * estimated from during the manual-metrics window.
+ * Asserts that clicking "再来一局" issues a single POST to `/api/events`
+ * whose JSON body satisfies `{ event: 'replay_intent', data: { mode,
+ * attemptNumber } }`. This is the data point roadmap §Strategic Objectives
+ * Validation Criteria #3 (复玩意愿 ≥50%) is estimated from during the
+ * manual-metrics window.
  *
  * Setup approach: pre-seed sessionStorage with a finished-game (RESULT) state
  * so `GameProvider`'s lazy initializer hydrates straight into a renderable
@@ -15,9 +15,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+
+// `logEvent` reads `getDeviceId()` (which hits localStorage) when building
+// the POST body. The vitest jsdom env in this workspace has a non-functional
+// localStorage (`--localstorage-file` warning), so we stub the fingerprint
+// module to a deterministic UUID. `vi.hoisted` makes the value reachable
+// from the hoisted `vi.mock` factory without TDZ.
+const { STUB_DEVICE_ID } = vi.hoisted(() => ({
+  STUB_DEVICE_ID: 'aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee',
+}))
+vi.mock('@/utils/device-fingerprint', () => ({
+  getDeviceId: () => STUB_DEVICE_ID,
+}))
+
 import ResultPage from './ResultPage'
 import { GameProvider, type GameState } from '@/store/game-context'
-import { EVENT_LOG_PREFIX } from '@/utils/event-log'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v1'
 
@@ -60,20 +72,21 @@ function finishedPracticeState(): GameState {
 }
 
 describe('ResultPage replay_intent logging', () => {
-  let infoSpy: ReturnType<typeof vi.spyOn>
+  let fetchMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedPracticeState()))
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })))
+    vi.stubGlobal('fetch', fetchMock)
   })
 
   afterEach(() => {
-    infoSpy.mockRestore()
+    vi.unstubAllGlobals()
     sessionStorage.clear()
   })
 
-  it('emits replay_intent with mode and attemptNumber when "再来一局" is clicked', () => {
+  it('POSTs replay_intent with mode and attemptNumber when "再来一局" is clicked', () => {
     render(
       <MemoryRouter initialEntries={['/result']}>
         <GameProvider>
@@ -84,23 +97,30 @@ describe('ResultPage replay_intent logging', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '再来一局' }))
 
-    // Filter to replay_intent calls — defensive against any future event that
-    // might be emitted on the same path. The contract is "exactly one
-    // replay_intent per click", not "no other events".
-    const replayCalls = infoSpy.mock.calls.filter(
-      (c: unknown[]) =>
-        c[0] === EVENT_LOG_PREFIX &&
-        (c[1] as { event?: string } | undefined)?.event === 'replay_intent'
-    )
+    // Filter to /api/events POSTs whose body declares event: replay_intent —
+    // defensive against any future event that might be emitted on the same
+    // path. The contract is "exactly one replay_intent per click", not
+    // "no other events".
+    const replayCalls = fetchMock.mock.calls.filter((call: unknown[]) => {
+      const [url, init] = call as [string, RequestInit | undefined]
+      if (url !== '/api/events') return false
+      if (!init || typeof init.body !== 'string') return false
+      try {
+        const body = JSON.parse(init.body) as { event?: string }
+        return body.event === 'replay_intent'
+      } catch {
+        return false
+      }
+    })
     expect(replayCalls).toHaveLength(1)
 
-    const payload = replayCalls[0][1] as Record<string, unknown>
-    expect(payload).toMatchObject({
+    const [, init] = replayCalls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as Record<string, unknown>
+    expect(body).toMatchObject({
       event: 'replay_intent',
-      mode: 'practice',
-      attemptNumber: 7,
+      data: { mode: 'practice', attemptNumber: 7 },
     })
-    expect(typeof payload.timestamp).toBe('string')
-    expect(payload.timestamp as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/)
+    expect(typeof body.timestamp).toBe('string')
+    expect(body.timestamp as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/)
   })
 })
