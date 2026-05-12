@@ -31,7 +31,13 @@ export function playSfx(type: SfxType): void {
       const src = ctx.createBufferSource()
       src.buffer = buf
       src.playbackRate.value = preset.rate
-      src.connect(ctx.destination)
+      // GainNode in the chain so each preset's perceived loudness can be
+      // tuned independently — stopwatch tick sits below click feedback so
+      // the player hears actions clearly over the ambient timer.
+      const gain = ctx.createGain()
+      gain.gain.value = preset.gain
+      src.connect(gain)
+      gain.connect(ctx.destination)
       src.start(0)
     } catch {
       // Source node creation can throw if ctx was closed; safe to ignore.
