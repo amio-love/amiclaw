@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ButtonConfig, ButtonAnswer } from '@shared/manual-schema'
 import type { ModuleProps } from '../types'
+import { playSfx } from '@/audio/useSfx'
 import styles from './ButtonModule.module.css'
 
 const INDICATOR_COLORS = ['white', 'yellow', 'blue', 'red']
@@ -19,7 +20,10 @@ const CSS_COLORS: Record<string, string> = {
 }
 
 export default function ButtonModule({
-  config, answer, onComplete, onError,
+  config,
+  answer,
+  onComplete,
+  onError,
 }: ModuleProps<ButtonConfig, ButtonAnswer>) {
   const [buttonState, setButtonState] = useState<ButtonState>('idle')
   const [indicatorColorIdx, setIndicatorColorIdx] = useState(0)
@@ -29,27 +33,37 @@ export default function ButtonModule({
   const handlePointerDown = () => {
     if (buttonState !== 'idle') return
     setButtonState('pressed')
+    playSfx('button-down')
     pressTimerRef.current = setTimeout(() => {
       setButtonState('holding')
       cycleIntervalRef.current = setInterval(() => {
-        setIndicatorColorIdx(i => (i + 1) % INDICATOR_COLORS.length)
+        setIndicatorColorIdx((i) => (i + 1) % INDICATOR_COLORS.length)
       }, INDICATOR_CYCLE_MS)
     }, HOLD_THRESHOLD_MS)
   }
 
   const handlePointerUp = () => {
+    // onPointerLeave can fire after onPointerUp has already settled state —
+    // only the first call (while still pressed/holding) should resolve the
+    // attempt, otherwise we'd double-fire SFX and onError.
+    if (buttonState !== 'pressed' && buttonState !== 'holding') return
+
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
     if (cycleIntervalRef.current) {
       clearInterval(cycleIntervalRef.current)
       cycleIntervalRef.current = null
     }
 
+    playSfx('button-up')
+
     if (buttonState === 'pressed') {
       if (answer.action === 'tap') {
         setButtonState('success')
+        playSfx('module-success')
         setTimeout(onComplete, 600)
       } else {
         setButtonState('error')
+        playSfx('module-error')
         onError()
         setTimeout(() => setButtonState('idle'), 600)
       }
@@ -57,19 +71,27 @@ export default function ButtonModule({
       const releasedColor = INDICATOR_COLORS[indicatorColorIdx]
       if (answer.action === 'hold' && releasedColor === answer.releaseOnColor) {
         setButtonState('success')
+        playSfx('module-success')
         setTimeout(onComplete, 600)
       } else {
         setButtonState('error')
+        playSfx('module-error')
         onError()
-        setTimeout(() => { setButtonState('idle'); setIndicatorColorIdx(0) }, 600)
+        setTimeout(() => {
+          setButtonState('idle')
+          setIndicatorColorIdx(0)
+        }, 600)
       }
     }
   }
 
-  useEffect(() => () => {
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-    if (cycleIntervalRef.current) clearInterval(cycleIntervalRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+      if (cycleIntervalRef.current) clearInterval(cycleIntervalRef.current)
+    },
+    []
+  )
 
   const indicatorColor = CSS_COLORS[INDICATOR_COLORS[indicatorColorIdx]] ?? '#888'
   const buttonBg = CSS_COLORS[config.color] ?? '#444'
@@ -81,7 +103,12 @@ export default function ButtonModule({
     >
       <div
         className={styles.indicator}
-        style={{ backgroundColor: buttonState === 'holding' ? indicatorColor : CSS_COLORS[config.indicatorColor] ?? '#888' }}
+        style={{
+          backgroundColor:
+            buttonState === 'holding'
+              ? indicatorColor
+              : (CSS_COLORS[config.indicatorColor] ?? '#888'),
+        }}
         data-testid="button-indicator"
       />
       <button

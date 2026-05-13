@@ -1,7 +1,10 @@
 import { useState, useCallback } from 'react'
 import type { WireConfig, WireAnswer } from '@shared/manual-schema'
 import type { ModuleProps } from '../types'
+import { playSfx } from '@/audio/useSfx'
 import styles from './WireModule.module.css'
+
+const CLICK_PULSE_MS = 200
 
 const COLOR_MAP: Record<string, string> = {
   red: '#ff073a',
@@ -15,25 +18,39 @@ const COLOR_MAP: Record<string, string> = {
 type WireState = 'idle' | 'cut' | 'error'
 
 export default function WireModule({
-  config, answer, onComplete, onError,
+  config,
+  answer,
+  onComplete,
+  onError,
 }: ModuleProps<WireConfig, WireAnswer>) {
   const [state, setState] = useState<WireState>('idle')
   const [cutIndex, setCutIndex] = useState<number | null>(null)
+  const [pulsingWire, setPulsingWire] = useState<number | null>(null)
 
-  const handleClick = useCallback((index: number) => {
-    if (state !== 'idle') return
-    if (index === answer.cutPosition) {
-      setCutIndex(index)
-      setState('cut')
-      navigator.vibrate?.(100)
-      setTimeout(onComplete, 800)
-    } else {
-      setState('error')
-      navigator.vibrate?.(200)
-      onError()
-      setTimeout(() => setState('idle'), 600)
-    }
-  }, [state, answer.cutPosition, onComplete, onError])
+  const handleClick = useCallback(
+    (index: number) => {
+      if (state !== 'idle') return
+      playSfx('wire-cut')
+      setPulsingWire(index)
+      setTimeout(() => {
+        setPulsingWire((curr) => (curr === index ? null : curr))
+      }, CLICK_PULSE_MS)
+      if (index === answer.cutPosition) {
+        setCutIndex(index)
+        setState('cut')
+        playSfx('module-success')
+        navigator.vibrate?.(100)
+        setTimeout(onComplete, 800)
+      } else {
+        setState('error')
+        playSfx('module-error')
+        navigator.vibrate?.(200)
+        onError()
+        setTimeout(() => setState('idle'), 600)
+      }
+    },
+    [state, answer.cutPosition, onComplete, onError]
+  )
 
   const wireCount = config.wires.length
   const svgHeight = 40 + wireCount * 45 + 20
@@ -92,7 +109,7 @@ export default function WireModule({
               {/* Invisible hit target */}
               <path
                 d={d}
-                className={styles['wire-hit-target']}
+                className={`${styles['wire-hit-target']} ${pulsingWire === i ? styles.clicking : ''}`}
                 onClick={() => handleClick(i)}
                 data-testid={`wire-${i}`}
                 aria-label={`Cut wire ${i + 1} (${wire.color})`}
