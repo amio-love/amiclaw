@@ -25,18 +25,47 @@ import styles from './GamePage.module.css'
 
 const MODULE_NAMES = ['线路', '密码盘', '按钮', '键盘'] as const
 
-const REFRESH_BANNER_TEXT = '让你的 agent 去洗个头，甩干脑汁，重新再来'
+// Two-line diagnostic copy: line 1 names what just happened locally, line 2
+// names the AI partner's now-stale view. Kept as an array so the two lines
+// stay independently inspectable and we can render them as separate spans
+// without depending on CSS `white-space: pre-line` handling.
+const REFRESH_BANNER_LINES: readonly [string, string] = [
+  '你刚刷新了页面，这一关的状态被重置了。',
+  'AI 那边没收到通知，还在等你之前在做的事。',
+]
 
-/**
- * Detects whether the current page load was a browser refresh (F5 / Cmd+R)
- * rather than a fresh navigation. Used to surface a one-time hint asking the
- * player to re-sync with their AI partner. Guarded against SSR and older
- * browsers that lack `performance.getEntriesByType`.
- */
-function detectRefresh(): boolean {
+// Module-level, computed once when this module is first imported. Reads the
+// navigation entry — which is stable for the lifetime of the document — so
+// further reads within the SPA see the same value.
+const documentLoadedViaReload: boolean = (() => {
   if (typeof performance === 'undefined' || !performance.getEntriesByType) return false
   const entries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
   return entries[0]?.type === 'reload'
+})()
+
+// One-shot consumption flag. Lives at module scope so it survives GamePage
+// unmount/remount within the same document (exit → home → re-enter game),
+// but resets cleanly on the next real document load. Mutated only from a
+// commit-phase effect, never from `detectRefresh` itself — keeping the
+// detector free of render-time side effects so React StrictMode's dev-mode
+// double-invocation of `useState` initializers cannot accidentally burn
+// the flag before the component is actually shown.
+let refreshBannerConsumed = false
+
+/**
+ * Pure read: returns true iff the current document load was a browser
+ * refresh AND the banner hasn't been consumed yet. Safe to call from a
+ * `useState` initializer because it does not mutate module state. Actual
+ * consumption is performed by `consumeRefreshBanner` from a commit-phase
+ * effect (see GamePage below).
+ */
+function detectRefresh(): boolean {
+  return documentLoadedViaReload && !refreshBannerConsumed
+}
+
+/** Mark the refresh banner as consumed for the rest of this document's life. */
+function consumeRefreshBanner(): void {
+  refreshBannerConsumed = true
 }
 
 const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']
@@ -109,9 +138,35 @@ export default function GamePage() {
   const [refreshBannerDismissed, setRefreshBannerDismissed] = useState(false)
   const showRefreshBanner = wasRefreshed && !refreshBannerDismissed
 
+  // Consume the one-shot refresh flag from a commit-phase effect rather than
+  // from inside `detectRefresh`. This keeps the detector pure so StrictMode's
+  // dev-mode double-invocation of the `useState` initializer cannot burn the
+  // flag before the component is actually shown. Idempotent under StrictMode
+  // mount → cleanup → mount cycle: setting the flag to `true` twice is fine.
+  useEffect(() => {
+    if (wasRefreshed) consumeRefreshBanner()
+  }, [wasRefreshed])
+
+  // Auto-dismiss the banner 5 seconds after it first appears. Gated on
+  // `wasRefreshed` so we never start a timer on a fresh navigation, and on
+  // `refreshBannerDismissed` so a manual × tap immediately cancels the
+  // pending timer (cleanup runs, no orphan setState fires later).
+  useEffect(() => {
+    if (!wasRefreshed) return
+    if (refreshBannerDismissed) return
+    const id = setTimeout(() => {
+      setRefreshBannerDismissed(true)
+    }, 5000)
+    return () => clearTimeout(id)
+  }, [wasRefreshed, refreshBannerDismissed])
+
   const refreshBanner = showRefreshBanner ? (
     <div className={styles.refreshBanner} role="status">
-      <span className={styles.refreshBannerText}>{REFRESH_BANNER_TEXT}</span>
+      <span className={styles.refreshBannerText}>
+        <span>{REFRESH_BANNER_LINES[0]}</span>
+        <br />
+        <span>{REFRESH_BANNER_LINES[1]}</span>
+      </span>
       <button
         type="button"
         className={styles.refreshBannerDismiss}
