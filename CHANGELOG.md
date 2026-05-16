@@ -55,6 +55,13 @@ Versions follow [Semantic Versioning](https://semver.org).
   KV records pre-dating the `attempt_number` field gracefully render
   `今日最佳：MM:SS` without the suffix; practice mode skips both
   `今日最佳` and `全球排名` but still gets the three-question block.
+- **Attempt-label wording aligned with MVP §5.3** Daily-mode attempt labels
+  on the result page and in the copyable recap now say `第 N 次尝试` (with
+  `尝试`) instead of `第 N 次` (without). Touches the result-page meta line,
+  the copy-summary `modeLabel`, and `buildRetroQuestions` Q2 — bringing
+  these three surfaces in sync with spec §5.3 line 478 / 493. The
+  personal-best line `今日最佳：MM:SS（第 N 次）` keeps its existing
+  no-`尝试` form, matching spec §5.3 line 482's example.
 - **Manual symbol vocabulary** Each abstract symbol (omega, psi, trident,
   etc.) now ships with a visual description so AI partners can disambiguate
   player descriptions ("三叉戟" vs psi, "扇子" vs trident, etc.) without

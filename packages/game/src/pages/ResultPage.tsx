@@ -135,7 +135,8 @@ export default function ResultPage() {
 
   const buildSummary = useCallback(() => {
     const date = getTodayString()
-    const modeLabel = state.mode === 'daily' ? `每日挑战（第 ${state.attemptNumber} 次）` : '练习'
+    const modeLabel =
+      state.mode === 'daily' ? `每日挑战（第 ${state.attemptNumber} 次尝试）` : '练习'
     const timeStr = totalMs !== null ? formatMs(totalMs) : '--:--'
     const breakdown = state.moduleStats
       .map((s, i) => {
@@ -197,7 +198,7 @@ ${retroQuestions}`
       {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
       <p className={styles.meta}>
-        {state.mode === 'daily' ? `每日挑战 — 第 ${state.attemptNumber} 次` : '练习'}
+        {state.mode === 'daily' ? `每日挑战 — 第 ${state.attemptNumber} 次尝试` : '练习'}
       </p>
 
       {state.mode === 'daily' && (
