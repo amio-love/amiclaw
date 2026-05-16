@@ -19,6 +19,7 @@ import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
+import { TONGUE_TWISTERS } from '@/data/tongue-twisters'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext } from '@/audio/audio-context'
 import styles from './GamePage.module.css'
@@ -69,20 +70,16 @@ function consumeRefreshBanner(): void {
 }
 
 const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']
-const SERIAL_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
 
 function generateSceneInfo(rng: Rng): SceneInfo {
-  const serialNumber = Array.from(
-    { length: 6 },
-    () => SERIAL_CHARS[rng.intBetween(0, SERIAL_CHARS.length - 1)]
-  ).join('')
+  const sceneTongueTwister = rng.pick(TONGUE_TWISTERS)
   const batteryCount = rng.intBetween(1, 4)
   const indicatorCount = rng.intBetween(0, 3)
   const indicators = Array.from({ length: indicatorCount }, () => ({
     label: rng.pick(INDICATOR_LABELS),
     lit: rng.float() < 0.5,
   }))
-  return { serialNumber, batteryCount, indicators }
+  return { sceneTongueTwister, batteryCount, indicators }
 }
 
 function generateAllModules(

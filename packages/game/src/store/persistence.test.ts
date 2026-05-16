@@ -7,7 +7,7 @@ const sampleState: GameState = {
   mode: 'practice',
   manual: null,
   manualUrl: 'https://bombsquad.amio.fans/manual/practice',
-  sceneInfo: { serialNumber: 'ABC123', batteryCount: 2, indicators: [] },
+  sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
   moduleConfigs: [null, null, null, null],
   moduleAnswers: [null, null, null, null],
   currentModuleIndex: 1,

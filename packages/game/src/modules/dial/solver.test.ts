@@ -15,7 +15,7 @@ const section: ManualModules['symbol_dial'] = {
 }
 
 const sceneInfo: SceneInfo = {
-  serialNumber: 'TEST001',
+  sceneTongueTwister: '四是四十是十',
   batteryCount: 2,
   indicators: [],
 }
