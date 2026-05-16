@@ -12,12 +12,18 @@ const config: DialConfig = {
   currentPositions: [0, 0, 0],
 }
 const answer: DialAnswer = { type: 'dial', positions: [0, 0, 0] }
-const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as [] }
+const sceneInfo = { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] as [] }
 
 describe('DialModule', () => {
   it('rotating a dial right does not throw and updates state', () => {
     render(
-      <DialModule config={config} answer={answer} onComplete={vi.fn()} onError={vi.fn()} sceneInfo={sceneInfo} />
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))
     expect(screen.getByTestId('dial-0')).toBeInTheDocument()
@@ -27,7 +33,13 @@ describe('DialModule', () => {
     const onComplete = vi.fn()
     const onError = vi.fn()
     render(
-      <DialModule config={config} answer={answer} onComplete={onComplete} onError={onError} sceneInfo={sceneInfo} />
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={onComplete}
+        onError={onError}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))
     fireEvent.click(screen.getByTestId('dial-confirm'))
@@ -40,10 +52,18 @@ describe('DialModule', () => {
     const onComplete = vi.fn()
     const onError = vi.fn()
     render(
-      <DialModule config={config} answer={answer} onComplete={onComplete} onError={onError} sceneInfo={sceneInfo} />
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={onComplete}
+        onError={onError}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('dial-confirm'))
-    act(() => { vi.advanceTimersByTime(800) })
+    act(() => {
+      vi.advanceTimersByTime(800)
+    })
     expect(onComplete).toHaveBeenCalledOnce()
     expect(onError).not.toHaveBeenCalled()
     vi.useRealTimers()
@@ -54,14 +74,24 @@ describe('DialModule', () => {
     const onComplete = vi.fn()
     const onError = vi.fn()
     render(
-      <DialModule config={config} answer={answer} onComplete={onComplete} onError={onError} sceneInfo={sceneInfo} />
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={onComplete}
+        onError={onError}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))
     fireEvent.click(screen.getByTestId('dial-confirm'))
     expect(onError).toHaveBeenCalledOnce()
-    act(() => { vi.advanceTimersByTime(600) })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
     fireEvent.click(screen.getByTestId('dial-confirm'))
-    act(() => { vi.advanceTimersByTime(800) })
+    act(() => {
+      vi.advanceTimersByTime(800)
+    })
     expect(onComplete).toHaveBeenCalledOnce()
     vi.useRealTimers()
   })

@@ -5,13 +5,16 @@ import { solveButton } from './solver'
 import { generateButton } from './generator'
 
 const rules = [
-  { condition: { color: 'blue', label: 'ABORT' }, action: { type: 'hold' as const, release_on_light: 'white' } },
+  {
+    condition: { color: 'blue', label: 'ABORT' },
+    action: { type: 'hold' as const, release_on_light: 'white' },
+  },
   { condition: { color: 'red' }, action: { type: 'tap' as const } },
   { condition: {}, action: { type: 'tap' as const } }, // fallback
 ]
 
 const sceneInfo: SceneInfo = {
-  serialNumber: 'A7K3B9',
+  sceneTongueTwister: '四是四十是十',
   batteryCount: 3,
   indicators: [{ label: 'FRK', lit: true }],
 }
@@ -81,9 +84,6 @@ describe('generateButton', () => {
     const result2 = generateButton(rng2, rules, sceneInfo)
 
     // At least one field should differ
-    expect(
-      result1.config !== result2.config ||
-      result1.answer !== result2.answer
-    ).toBe(true)
+    expect(result1.config !== result2.config || result1.answer !== result2.answer).toBe(true)
   })
 })

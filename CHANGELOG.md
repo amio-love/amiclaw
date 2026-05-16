@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+### Changed
+
+- Replace the 6-character serial code in the SceneInfoBar with a Chinese
+  tongue-twister phrase ("暗号"). The player now reads the phrase aloud to
+  the AI partner — pronouncing it correctly becomes a small in-game challenge.
+  The unused `serial_last_digit` / `serial_has_vowel` derived rule-engine
+  context and the matching `simon_says` decoy block in `practice.yaml` and
+  365 daily manuals are removed alongside.
+
 ### Added
 
 - **Audio + animation feedback** Every in-module click now gives a short

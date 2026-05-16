@@ -3,7 +3,7 @@
  */
 
 export interface SceneInfo {
-  serialNumber: string // 6-char alphanumeric, e.g. "A7K3B9"
+  sceneTongueTwister: string // Chinese tongue-twister phrase, e.g. "四是四十是十"
   batteryCount: number // 1–4
   indicators: Indicator[]
 }
