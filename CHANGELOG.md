@@ -43,6 +43,18 @@ Versions follow [Semantic Versioning](https://semver.org).
   data flow and roadmap Shipped 标准 to reflect the new URL-copy step.
 - **Recap copy wording** Result-page summary text aligned with the MVP
   section 5.3 example wording (header, result, module rows, retro intro).
+- **Recap personal-best and retro questions** Result-page copy summary now
+  includes a `今日最佳：MM:SS（第 N 次）` line in daily mode (sourced from the
+  KV personal-best record returned by `/api/scores`) and replaces the single
+  trailing prompt with three contextual retrospective questions produced by
+  `buildRetroQuestions`. The first question names the slowest module (and
+  its reset count, when any); the second asks for a smooth-vs-stuck moment
+  or, on a 2nd+ daily attempt, invites a comparison to earlier attempts;
+  the third closes the loop on the skills file. Format ordering now matches
+  MVP §5.3 exactly: 总用时 → 今日最佳 → 全球排名 → 模块详情 → 三问. Legacy
+  KV records pre-dating the `attempt_number` field gracefully render
+  `今日最佳：MM:SS` without the suffix; practice mode skips both
+  `今日最佳` and `全球排名` but still gets the three-question block.
 - **Manual symbol vocabulary** Each abstract symbol (omega, psi, trident,
   etc.) now ships with a visual description so AI partners can disambiguate
   player descriptions ("三叉戟" vs psi, "扇子" vs trident, etc.) without

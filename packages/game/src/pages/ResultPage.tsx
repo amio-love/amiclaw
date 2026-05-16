@@ -7,6 +7,7 @@ import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
 import { submitScore } from '@/utils/leaderboard-api'
 import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
+import { buildRetroQuestions } from '@/utils/retro-questions'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
@@ -145,18 +146,27 @@ export default function ResultPage() {
       })
       .join('\n')
     const rankLine = rankResult ? `全球排名：#${rankResult.rank} / ${rankResult.total_players}` : ''
+    const personalBestLine =
+      state.mode === 'daily' && rankResult?.personal_best_ms !== undefined
+        ? `今日最佳：${formatMs(rankResult.personal_best_ms)}${
+            rankResult.personal_best_attempt !== undefined
+              ? `（第 ${rankResult.personal_best_attempt} 次）`
+              : ''
+          }`
+        : ''
+    const retroQuestions = buildRetroQuestions(state.moduleStats, state.attemptNumber, state.mode)
 
     return `=== BombSquad 结果摘要 ===
 日期：${date}
 模式：${modeLabel}
 结果：成功 ✅
 总用时：${timeStr}
-${rankLine ? `${rankLine}\n` : ''}
+${personalBestLine ? `${personalBestLine}\n` : ''}${rankLine ? `${rankLine}\n` : ''}
 模块详情：
 ${breakdown}
 
 请和我一起复盘：
-帮我看看这一局 —— 哪一块拖了最多时间？我们下次该怎么改进沟通？`
+${retroQuestions}`
   }, [state, totalMs, rankResult])
 
   const handleCopySummary = async () => {
