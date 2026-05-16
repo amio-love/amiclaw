@@ -261,7 +261,7 @@ describe('ResultPage buildSummary recap format', () => {
 
     const text = getCopiedText()
     // The personal-best line itself must NOT carry the attempt-number suffix,
-    // but the mode label ("每日挑战（第 3 次）") still legitimately includes
+    // but the mode label ("每日挑战（第 3 次尝试）") still legitimately includes
     // "（第" — so assert on the personal-best line specifically.
     const personalBestLine = text.split('\n').find((l) => l.startsWith('今日最佳：'))
     expect(personalBestLine).toBe('今日最佳：03:15')
