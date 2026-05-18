@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ManualNotFoundError, loadManual } from './yaml-loader'
+import {
+  ManualNetworkError,
+  ManualNotFoundError,
+  ManualParseError,
+  loadManual,
+} from './yaml-loader'
 
 const SAMPLE_MANUAL_YAML = `
 meta:
@@ -12,6 +17,11 @@ modules:
   button: { rules: [] }
   keypad: { sequences: [] }
 `
+
+// `*missing` references an undefined YAML anchor — js-yaml reliably throws
+// a YAMLException ("undefined alias"), which is the parse-failure path we
+// want to distinguish from network failures at the loader boundary.
+const INVALID_YAML = '*missing'
 
 describe('loadManual', () => {
   const originalFetch = globalThis.fetch
@@ -29,7 +39,7 @@ describe('loadManual', () => {
     )
   })
 
-  it('rejects with a generic Error on other non-ok responses', async () => {
+  it('rejects with ManualNetworkError on other non-ok responses', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response('server boom', { status: 500 }))
 
     let caught: unknown
@@ -38,9 +48,43 @@ describe('loadManual', () => {
     } catch (err) {
       caught = err
     }
-    expect(caught).toBeInstanceOf(Error)
+    expect(caught).toBeInstanceOf(ManualNetworkError)
     expect(caught).not.toBeInstanceOf(ManualNotFoundError)
+    expect((caught as ManualNetworkError).status).toBe(500)
     expect((caught as Error).message).toContain('500')
+  })
+
+  it('rejects with ManualNetworkError when fetch itself rejects', async () => {
+    const networkFailure = new TypeError('Failed to fetch')
+    globalThis.fetch = vi.fn().mockRejectedValue(networkFailure)
+
+    let caught: unknown
+    try {
+      await loadManual('https://example.test/manual/offline-case')
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(ManualNetworkError)
+    expect((caught as ManualNetworkError).status).toBeUndefined()
+    expect((caught as { cause?: unknown }).cause).toBe(networkFailure)
+  })
+
+  it('rejects with ManualParseError when the body is invalid YAML', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(INVALID_YAML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      })
+    )
+
+    let caught: unknown
+    try {
+      await loadManual('https://example.test/manual/bad-yaml-case')
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(ManualParseError)
+    expect(caught).not.toBeInstanceOf(ManualNetworkError)
   })
 
   it('returns the parsed manual on success', async () => {

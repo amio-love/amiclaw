@@ -198,16 +198,19 @@ ${breakdown}
               全球排名：<strong>#{rankResult.rank}</strong> / {rankResult.total_players}
             </span>
           )}
-          {submitFailed && (
-            <span className={styles.rankMuted}>
-              提交失败（可能离线）
-              {!retried && (
+          {submitFailed &&
+            (retried ? (
+              <span className={styles.rankMuted}>
+                网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com
+              </span>
+            ) : (
+              <span className={styles.rankMuted}>
+                提交失败（可能离线）
                 <button className={styles.retryBtn} onClick={handleRetrySubmit}>
                   重试
                 </button>
-              )}
-            </span>
-          )}
+              </span>
+            ))}
         </div>
       )}
 

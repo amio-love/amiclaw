@@ -34,6 +34,17 @@ Versions follow [Semantic Versioning](https://semver.org).
   breakpoint stacks the CTAs vertically with full-width buttons, tightens the
   BOMBSQUAD title letter-spacing, and aligns home-page padding so 320 / 375 /
   414 viewports no longer overflow.
+- **Failure-state guidance** Four failure surfaces in the daily flow now
+  point players toward a recovery path instead of dead-ending. A corrupted
+  manual is recognized as a parse error and surfaces "手册格式异常，请截图邮件
+  反馈给 <byheaven0912@gmail.com>" instead of the previous misleading
+  "check your network" prompt. Network drops show "加载失败，请检查网络或换
+  Chrome / Safari 试试。一直失败可邮件反馈" alongside a retry button. The
+  leaderboard error state, previously a static "排行榜暂不可用，稍后再试。",
+  now exposes an inline 重试 button plus the same feedback hint. And a
+  result-page repeat-submit failure no longer leaves a blank screen — it
+  shows "网络不稳定，可下次再来重新提交。或邮件反馈" so players know the
+  run isn't lost on our side.
 - **Test runner self-containment** Internal refactor — `packages/manual` now
   has its own vitest setup, and the cross-SSOT character-equal guard tests
   (manual yaml symbols matching `shared/symbols.ts`) live in the manual

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchLeaderboard } from '@/utils/leaderboard-api'
 import {
@@ -34,7 +34,12 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
+  // The fetch + merge body is shared between mount and retry. Synchronous
+  // `setLoading(true)` / `setError(false)` are deliberately kept OUT of here so
+  // calling it from `useEffect` doesn't trigger react-hooks/set-state-in-effect;
+  // the mount path relies on the initial `loading: true` / `error: false` state,
+  // and the retry handler resets both before calling this.
+  const fetchEntries = useCallback(() => {
     fetchLeaderboard(today).then((data) => {
       setLoading(false)
       if (data) {
@@ -56,13 +61,31 @@ export default function LeaderboardPage() {
     })
   }, [today])
 
+  useEffect(() => {
+    fetchEntries()
+  }, [fetchEntries])
+
+  const handleRetry = useCallback(() => {
+    setLoading(true)
+    setError(false)
+    fetchEntries()
+  }, [fetchEntries])
+
   return (
     <main className={styles.page}>
       <h1 className={styles.title}>排行榜</h1>
       <p className={styles.notice}>每日 — {today}</p>
 
       {loading && <p className={styles.status}>加载中…</p>}
-      {error && <p className={styles.status}>排行榜暂不可用，稍后再试。</p>}
+      {error && (
+        <div className={styles.errorBlock}>
+          <p className={styles.status}>排行榜暂不可用，稍后再试。</p>
+          <button type="button" className={styles.retryBtn} onClick={handleRetry}>
+            重试
+          </button>
+          <p className={styles.statusMuted}>若一直无法访问，可邮件 byheaven0912@gmail.com 反馈</p>
+        </div>
+      )}
 
       {!loading && !error && entries.length === 0 && (
         <p className={styles.status}>今日还没有成绩，来抢第一！</p>
