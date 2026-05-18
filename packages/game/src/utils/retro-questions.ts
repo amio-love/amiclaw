@@ -48,7 +48,7 @@ export function buildRetroQuestions(
 
   const q2 =
     mode === 'daily' && attemptNumber > 1
-      ? `这是我今天的第 ${attemptNumber} 次，跟前几次比哪里更顺、哪里更卡？`
+      ? `这是我今天的第 ${attemptNumber} 次尝试，跟前几次比哪里更顺、哪里更卡？`
       : `这一局有什么时刻沟通格外顺、有什么时刻格外卡？`
 
   const q3 = `我们的 skills 文件需要补什么，下次能再快一点？`
