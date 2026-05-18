@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import NicknameModal from '@/components/NicknameModal'
 import { useGame } from '@/store/game-context'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@/utils/date'
@@ -7,6 +8,7 @@ import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
 import { submitScore } from '@/utils/leaderboard-api'
 import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
+import { getStoredNickname } from '@/utils/nickname'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
@@ -32,24 +34,39 @@ export default function ResultPage() {
       ? state.totalEndTime - state.totalStartTime
       : null
 
-  // Initialize submitting=true when the effect below will actually fire a request,
-  // so we avoid a synchronous setState in the effect body (react-hooks/set-state-in-effect).
-  const [submitting, setSubmitting] = useState(
-    () => state.mode === 'daily' && totalMs !== null && state.moduleStats.length > 0
-  )
+  // Daily mode submits a score. Practice mode never submits and never asks
+  // for a nickname.
+  const hasFinishedDailyRun =
+    state.mode === 'daily' && totalMs !== null && state.moduleStats.length > 0
 
-  const buildSubmission = useCallback((): ScoreSubmission | null => {
-    if (totalMs === null) return null
-    return {
-      date: getTodayString(),
-      nickname: 'Anonymous',
-      time_ms: Math.round(totalMs),
-      attempt_number: state.attemptNumber,
-      module_times: state.moduleStats.map((s) => Math.round(s.timeMs)),
-      operations_hash: 'mvp-placeholder', // temporary placeholder until real run hashing is implemented
-      device_id: getDeviceId(),
-    }
-  }, [totalMs, state.attemptNumber, state.moduleStats])
+  // Lazy initializers: read the stored nickname once on mount. Subsequent
+  // useState calls reuse the captured value so the three pieces of mount
+  // state stay consistent without triple-reading localStorage.
+  const [nickname, setNickname] = useState<string | null>(() => getStoredNickname())
+  const [nicknameModalOpen, setNicknameModalOpen] = useState(
+    () => hasFinishedDailyRun && nickname === null
+  )
+  // Initialize submitting=true only when the effect below will actually fire a
+  // request, so we avoid a synchronous setState in the effect body
+  // (react-hooks/set-state-in-effect). First-visit daily runs wait for the
+  // modal confirmation before flipping submitting=true.
+  const [submitting, setSubmitting] = useState(() => hasFinishedDailyRun && nickname !== null)
+
+  const buildSubmission = useCallback(
+    (nicknameValue: string): ScoreSubmission | null => {
+      if (totalMs === null) return null
+      return {
+        date: getTodayString(),
+        nickname: nicknameValue,
+        time_ms: Math.round(totalMs),
+        attempt_number: state.attemptNumber,
+        module_times: state.moduleStats.map((s) => Math.round(s.timeMs)),
+        operations_hash: 'mvp-placeholder', // temporary placeholder until real run hashing is implemented
+        device_id: getDeviceId(),
+      }
+    },
+    [totalMs, state.attemptNumber, state.moduleStats]
+  )
 
   const recordOptimistic = useCallback(
     (submission: ScoreSubmission, result: ScoreSubmissionResponse) => {
@@ -64,42 +81,66 @@ export default function ResultPage() {
     []
   )
 
-  // Submit score on mount (daily mode only)
-  useEffect(() => {
-    if (state.mode !== 'daily' || totalMs === null || state.moduleStats.length === 0) return
+  // Fires the actual submission. Callers own `submitting` toggles — the mount
+  // path relies on the lazy `useState` initializer above to start truthy, and
+  // the modal-confirm path flips it on synchronously before calling here.
+  // Keeping `setSubmitting(true)` out of this function lets us call it from
+  // inside `useEffect` without tripping react-hooks/set-state-in-effect.
+  const performSubmission = useCallback(
+    (nicknameValue: string) => {
+      const submission = buildSubmission(nicknameValue)
+      if (!submission) return
 
-    const submission = buildSubmission()
-    if (!submission) return
-
-    // Persist locally so a retry can succeed even if user navigates back
-    try {
-      sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
-    } catch {
-      /* storage full */
-    }
-
-    submitScore(submission).then((result) => {
-      setSubmitting(false)
-      if (result) {
-        setRankResult(result)
-        recordOptimistic(submission, result)
-        try {
-          sessionStorage.removeItem(`pending-score:${submission.date}`)
-        } catch {
-          /* ignore */
-        }
-      } else {
-        setSubmitFailed(true)
+      // Persist locally so a retry can succeed even if user navigates back
+      try {
+        sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
+      } catch {
+        /* storage full */
       }
-    })
+
+      submitScore(submission).then((result) => {
+        setSubmitting(false)
+        if (result) {
+          setRankResult(result)
+          recordOptimistic(submission, result)
+          try {
+            sessionStorage.removeItem(`pending-score:${submission.date}`)
+          } catch {
+            /* ignore */
+          }
+        } else {
+          setSubmitFailed(true)
+        }
+      })
+    },
+    [buildSubmission, recordOptimistic]
+  )
+
+  // Submit score on mount when a nickname is already known (returning daily
+  // player). First-visit daily players wait for the modal handler below.
+  useEffect(() => {
+    if (!hasFinishedDailyRun) return
+    if (nickname === null) return
+    performSubmission(nickname)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleNicknameConfirm = useCallback(
+    (value: string) => {
+      setNickname(value)
+      setNicknameModalOpen(false)
+      setSubmitting(true)
+      performSubmission(value)
+    },
+    [performSubmission]
+  )
+
   const handleRetrySubmit = useCallback(() => {
+    if (nickname === null) return
     setRetried(true)
     setSubmitFailed(false)
     setSubmitting(true)
-    const submission = buildSubmission()
+    const submission = buildSubmission(nickname)
     if (!submission) {
       setSubmitting(false)
       return
@@ -118,7 +159,7 @@ export default function ResultPage() {
         setSubmitFailed(true)
       }
     })
-  }, [buildSubmission, recordOptimistic])
+  }, [buildSubmission, recordOptimistic, nickname])
 
   const handlePlayAgain = () => {
     // Emit BEFORE the RESET so we still capture the just-finished run's mode
@@ -192,22 +233,28 @@ ${breakdown}
 
       {state.mode === 'daily' && (
         <div className={styles.rankBlock}>
-          {submitting && <span className={styles.rankMuted}>提交成绩中…</span>}
+          {nicknameModalOpen && <span className={styles.rankMuted}>提交前请填写昵称</span>}
+          {!nicknameModalOpen && submitting && (
+            <span className={styles.rankMuted}>提交成绩中…</span>
+          )}
           {rankResult && (
             <span className={styles.rankValue}>
               全球排名：<strong>#{rankResult.rank}</strong> / {rankResult.total_players}
             </span>
           )}
-          {submitFailed && (
-            <span className={styles.rankMuted}>
-              提交失败（可能离线）
-              {!retried && (
+          {submitFailed &&
+            (retried ? (
+              <span className={styles.rankMuted}>
+                网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com
+              </span>
+            ) : (
+              <span className={styles.rankMuted}>
+                提交失败（可能离线）
                 <button className={styles.retryBtn} onClick={handleRetrySubmit}>
                   重试
                 </button>
-              )}
-            </span>
-          )}
+              </span>
+            ))}
         </div>
       )}
 
@@ -254,6 +301,8 @@ ${breakdown}
           </Link>
         </div>
       </div>
+
+      <NicknameModal open={nicknameModalOpen} onConfirm={handleNicknameConfirm} />
     </main>
   )
 }

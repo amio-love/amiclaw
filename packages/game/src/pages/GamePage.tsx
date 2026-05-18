@@ -5,7 +5,12 @@ import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manu
 import { useGame } from '@/store/game-context'
 import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
-import { loadManual, ManualNotFoundError } from '@/utils/yaml-loader'
+import {
+  loadManual,
+  ManualNetworkError,
+  ManualNotFoundError,
+  ManualParseError,
+} from '@/utils/yaml-loader'
 import { logEvent } from '@/utils/event-log'
 import { generateWire } from '@/modules/wire/generator'
 import { generateDial } from '@/modules/dial/generator'
@@ -113,9 +118,21 @@ async function loadWithCache(manualUrl: string): Promise<Manual> {
     // 404 means the manual was never published — no point consulting the cache.
     // Re-throw so the caller can render a dedicated "not published" UI.
     if (err instanceof ManualNotFoundError) throw err
+    // Parse error means the server-side YAML is malformed — the cached copy
+    // (a successfully-loaded earlier dump) won't help the user understand the
+    // current breakage, and we want UI to surface "format" not "network".
+    if (err instanceof ManualParseError) throw err
+    // Network error (fetch reject / 5xx etc.) — try cached copy first.
     const cached = sessionStorage.getItem(cacheKey)
-    if (cached) return yaml.load(cached) as Manual
-    throw new Error('手册加载失败，请检查网络。', { cause: err })
+    if (cached) {
+      try {
+        return yaml.load(cached) as Manual
+      } catch {
+        /* cached blob unreadable — fall through to typed error */
+      }
+    }
+    if (err instanceof ManualNetworkError) throw err
+    throw new ManualNetworkError(manualUrl, undefined, err)
   }
 }
 
@@ -254,12 +271,28 @@ export default function GamePage() {
           rngSeed: seed,
         })
       } catch (err) {
-        const notPublished = err instanceof ManualNotFoundError
-        dispatch({
-          type: 'LOAD_ERROR',
-          message: err instanceof Error ? err.message : '手册加载失败',
-          kind: notPublished ? 'not_published' : 'generic',
-        })
+        if (err instanceof ManualNotFoundError) {
+          dispatch({ type: 'LOAD_ERROR', message: err.message, kind: 'not_published' })
+        } else if (err instanceof ManualParseError) {
+          dispatch({
+            type: 'LOAD_ERROR',
+            message: '手册格式异常，请截图邮件反馈给 byheaven0912@gmail.com',
+            kind: 'yaml_parse',
+          })
+        } else if (err instanceof ManualNetworkError) {
+          dispatch({
+            type: 'LOAD_ERROR',
+            message:
+              '加载失败，请检查网络或换 Chrome / Safari 试试。一直失败可邮件 byheaven0912@gmail.com',
+            kind: 'network',
+          })
+        } else {
+          dispatch({
+            type: 'LOAD_ERROR',
+            message: err instanceof Error ? err.message : '手册加载失败',
+            kind: 'generic',
+          })
+        }
       }
     }
 
@@ -396,9 +429,25 @@ export default function GamePage() {
                   ← 返回首页
                 </Link>
               </>
+            ) : state.errorKind === 'yaml_parse' ? (
+              <>
+                <p className={styles.errorText}>
+                  手册格式异常，请截图邮件反馈给 byheaven0912@gmail.com
+                </p>
+                <button className={styles.retryBtn} onClick={() => window.location.reload()}>
+                  重试
+                </button>
+                <Link to="/" className={styles.homeLink}>
+                  ← 返回首页
+                </Link>
+              </>
             ) : (
               <>
-                <p className={styles.errorText}>{state.errorMessage}</p>
+                <p className={styles.errorText}>
+                  {state.errorKind === 'network'
+                    ? '加载失败，请检查网络或换 Chrome / Safari 试试。一直失败可邮件 byheaven0912@gmail.com'
+                    : state.errorMessage}
+                </p>
                 <button className={styles.retryBtn} onClick={() => window.location.reload()}>
                   重试
                 </button>

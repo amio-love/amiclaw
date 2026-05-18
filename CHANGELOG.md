@@ -16,6 +16,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **Leaderboard nickname prompt** First time a player finishes a daily
+  challenge, the result page asks for a nickname (max 20 chars) before posting
+  the score. The value is stored in localStorage and reused on every later
+  daily run from the same device, so the leaderboard finally shows recognisable
+  names instead of a wall of "Anonymous". The prompt is required — submission
+  is blocked until a valid nickname is entered — and there is no edit-later
+  entry point in this release. Source task `add-leaderboard-anonymous-handle`.
 - **Audio + animation feedback** Every in-module click now gives a short
   pulse animation and a sound effect (confirm, wire-cut, dial-rotate,
   keypad-press, button-down/up). Solving or failing a module plays a soft
@@ -28,9 +35,32 @@ Versions follow [Semantic Versioning](https://semver.org).
 - Frontend event logging for practice/daily games (game_start, module_solve, game_complete, game_abandon, manual_load_failed) — emitted via console.info with prefix [bombsquad-event] for manual analysis of completion rate
 - `replay_intent` console.info event emitted when the result-page "再来一局" button is clicked — enables manual estimation of replay-willingness (roadmap §Strategic Objectives Validation Criteria #3, 复玩意愿 ≥50%) from console logs
 - Backend event ingestion via Pages Function `/api/events` — five existing event types (game_start, module_solve, game_complete, game_abandon, manual_load_failed) plus replay_intent now POST to a Cloudflare Pages Function that writes per-event-name counters and unique-device sets to the LEADERBOARD KV namespace under `events:{date}:*` keys. Frontend `console.info` channel is replaced by fire-and-forget fetch; events include device_id (sourced from the same localStorage UUID used by leaderboard submissions) so both session-level and unique-player completion-rate can be computed.
+- Beta data dashboard at `/api/dashboard?token=xxx` showing daily game_start/complete/replay counts and completion rates against the 70%/50% north-star thresholds. Requires `DASHBOARD_TOKEN` Pages secret (set via `wrangler secret put DASHBOARD_TOKEN`).
 
 ### Improvements
 
+- **Beta data dashboard TTL** Event-ingestion KV TTL extended from 48 hours
+  to 30 days so the dashboard can show the full 5/18→5/31 internal-beta
+  window cumulatively. Leaderboard KV TTL unchanged (still 48h).
+- **Landing first impression** The home page now leads with the four-step
+  "怎么开始" guide above the practice / daily CTAs, so visitors arriving from
+  a cold-shared link see the voice-AI partner is a prerequisite before they
+  tap a button. Step 1 carries a neon-cyan side accent and a "必备：" prefix
+  to highlight the AI-must-be-running requirement, and a new `≤480px` mobile
+  breakpoint stacks the CTAs vertically with full-width buttons, tightens the
+  BOMBSQUAD title letter-spacing, and aligns home-page padding so 320 / 375 /
+  414 viewports no longer overflow.
+- **Failure-state guidance** Four failure surfaces in the daily flow now
+  point players toward a recovery path instead of dead-ending. A corrupted
+  manual is recognized as a parse error and surfaces "手册格式异常，请截图邮件
+  反馈给 <byheaven0912@gmail.com>" instead of the previous misleading
+  "check your network" prompt. Network drops show "加载失败，请检查网络或换
+  Chrome / Safari 试试。一直失败可邮件反馈" alongside a retry button. The
+  leaderboard error state, previously a static "排行榜暂不可用，稍后再试。",
+  now exposes an inline 重试 button plus the same feedback hint. And a
+  result-page repeat-submit failure no longer leaves a blank screen — it
+  shows "网络不稳定，可下次再来重新提交。或邮件反馈" so players know the
+  run isn't lost on our side.
 - **Test runner self-containment** Internal refactor — `packages/manual` now
   has its own vitest setup, and the cross-SSOT character-equal guard tests
   (manual yaml symbols matching `shared/symbols.ts`) live in the manual
