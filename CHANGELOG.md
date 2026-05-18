@@ -23,8 +23,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
-- Event-ingestion KV TTL extended from 48 hours to 30 days so the dashboard can show the full 5/18→5/31 internal-beta window cumulatively. Leaderboard KV TTL unchanged (still 48h).
-
+- **Beta data dashboard TTL** Event-ingestion KV TTL extended from 48 hours
+  to 30 days so the dashboard can show the full 5/18→5/31 internal-beta
+  window cumulatively. Leaderboard KV TTL unchanged (still 48h).
+- **Landing first impression** The home page now leads with the four-step
+  "怎么开始" guide above the practice / daily CTAs, so visitors arriving from
+  a cold-shared link see the voice-AI partner is a prerequisite before they
+  tap a button. Step 1 carries a neon-cyan side accent and a "必备：" prefix
+  to highlight the AI-must-be-running requirement, and a new `≤480px` mobile
+  breakpoint stacks the CTAs vertically with full-width buttons, tightens the
+  BOMBSQUAD title letter-spacing, and aligns home-page padding so 320 / 375 /
+  414 viewports no longer overflow.
 - **Test runner self-containment** Internal refactor — `packages/manual` now
   has its own vitest setup, and the cross-SSOT character-equal guard tests
   (manual yaml symbols matching `shared/symbols.ts`) live in the manual
