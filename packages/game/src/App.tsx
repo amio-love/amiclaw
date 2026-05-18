@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import GamePage from './pages/GamePage'
 import ResultPage from './pages/ResultPage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import CompatibilityPage from './pages/CompatibilityPage'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/game" element={<GamePage />} />
         <Route path="/result" element={<ResultPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/compatibility" element={<CompatibilityPage />} />
       </Routes>
     </GameProvider>
   )
