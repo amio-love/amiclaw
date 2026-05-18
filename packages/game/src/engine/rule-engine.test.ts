@@ -3,9 +3,12 @@ import { matchValue, matchCondition } from './rule-engine'
 import type { SceneInfo } from '@shared/manual-schema'
 
 const sceneInfo: SceneInfo = {
-  serialNumber: 'A7K3B9',
+  sceneTongueTwister: '四是四十是十',
   batteryCount: 3,
-  indicators: [{ label: 'FRK', lit: true }, { label: 'CAR', lit: false }],
+  indicators: [
+    { label: 'FRK', lit: true },
+    { label: 'CAR', lit: false },
+  ],
 }
 
 describe('matchValue', () => {
@@ -37,8 +40,14 @@ describe('matchValue', () => {
 
 describe('matchCondition', () => {
   it('matches wire_count exactly', () => {
-    const config = { wires: [{ color: 'red', hasStripe: false }, { color: 'blue', hasStripe: false },
-      { color: 'yellow', hasStripe: false }, { color: 'green', hasStripe: false }] }
+    const config = {
+      wires: [
+        { color: 'red', hasStripe: false },
+        { color: 'blue', hasStripe: false },
+        { color: 'yellow', hasStripe: false },
+        { color: 'green', hasStripe: false },
+      ],
+    }
     expect(matchCondition({ wire_count: 4 }, config, sceneInfo)).toBe(true)
     expect(matchCondition({ wire_count: 5 }, config, sceneInfo)).toBe(false)
   })
@@ -56,18 +65,22 @@ describe('matchCondition', () => {
   })
 
   it('matches color_at_last', () => {
-    const config = { wires: [{ color: 'red', hasStripe: false }, { color: 'blue', hasStripe: false }] }
+    const config = {
+      wires: [
+        { color: 'red', hasStripe: false },
+        { color: 'blue', hasStripe: false },
+      ],
+    }
     expect(matchCondition({ color_at_last: 'blue' }, config, sceneInfo)).toBe(true)
-  })
-
-  it('matches serial_last_digit with {odd}', () => {
-    // serialNumber ends in '9' → odd
-    expect(matchCondition({ serial_last_digit: { odd: true } }, {}, sceneInfo)).toBe(true)
   })
 
   it('all conditions must match (AND logic)', () => {
     const config = { wires: Array(4).fill({ color: 'red', hasStripe: false }) }
-    expect(matchCondition({ wire_count: 4, battery_count: { gt: 2 } }, config, sceneInfo)).toBe(true)
-    expect(matchCondition({ wire_count: 4, battery_count: { gt: 5 } }, config, sceneInfo)).toBe(false)
+    expect(matchCondition({ wire_count: 4, battery_count: { gt: 2 } }, config, sceneInfo)).toBe(
+      true
+    )
+    expect(matchCondition({ wire_count: 4, battery_count: { gt: 5 } }, config, sceneInfo)).toBe(
+      false
+    )
   })
 })

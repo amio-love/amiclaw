@@ -14,7 +14,7 @@ const section = {
 }
 
 const sceneInfo: SceneInfo = {
-  serialNumber: 'A7K3B2',
+  sceneTongueTwister: '四是四十是十',
   batteryCount: 2,
   indicators: [],
 }

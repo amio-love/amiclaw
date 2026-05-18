@@ -7,16 +7,17 @@ interface SceneInfoBarProps {
 
 /**
  * Permanent HUD row showing the puzzle-global variables the player has to read
- * to their AI (serial number, battery count, and indicators with lit/unlit
- * state). Always visible — the earlier mobile collapse hid the single most
- * important piece of onboarding information behind an unlabelled chevron.
+ * to their AI (scene tongue-twister phrase, battery count, and indicators with
+ * lit/unlit state). Always visible — the earlier mobile collapse hid the
+ * single most important piece of onboarding information behind an unlabelled
+ * chevron.
  */
 export default function SceneInfoBar({ sceneInfo }: SceneInfoBarProps) {
   return (
     <div className={styles.bar} aria-label="场景信息栏">
       <span className={styles.field}>
-        <span className={styles.label}>序号：</span>
-        <span className={styles.value}>{sceneInfo.serialNumber}</span>
+        <span className={styles.label}>暗号：</span>
+        <span className={styles.value}>{sceneInfo.sceneTongueTwister}</span>
       </span>
       <span className={styles.field}>
         <span className={styles.label}>电池：</span>

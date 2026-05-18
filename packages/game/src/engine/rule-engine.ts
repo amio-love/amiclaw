@@ -26,7 +26,7 @@ export function matchValue(condition: unknown, actual: unknown): boolean {
 export function matchCondition(
   condition: Record<string, unknown>,
   config: Record<string, unknown>,
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): boolean {
   const context = buildContext(config, sceneInfo)
   return Object.entries(condition).every(([key, value]) => {
@@ -41,15 +41,12 @@ export function matchCondition(
  */
 function buildContext(
   config: Record<string, unknown>,
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): Record<string, unknown> {
   const ctx: Record<string, unknown> = { ...config }
 
   // Scene info fields
   ctx['battery_count'] = sceneInfo.batteryCount
-  ctx['serial_number'] = sceneInfo.serialNumber
-  ctx['serial_last_digit'] = parseInt(sceneInfo.serialNumber.slice(-1), 10) || 0
-  ctx['serial_has_vowel'] = /[AEIOU]/i.test(sceneInfo.serialNumber)
 
   // Indicator lookups: indicator_{label}_lit (e.g. indicator_FRK_lit)
   for (const ind of sceneInfo.indicators) {
@@ -64,7 +61,7 @@ function buildContext(
     ctx['color_at_first'] = wires[0]?.color
     // Count each color
     for (const color of ['red', 'blue', 'yellow', 'green', 'white', 'black']) {
-      ctx[`count_${color}`] = wires.filter(w => w.color === color).length
+      ctx[`count_${color}`] = wires.filter((w) => w.color === color).length
     }
   }
 

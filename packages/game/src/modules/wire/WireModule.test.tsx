@@ -11,7 +11,7 @@ const config = {
   ],
 }
 const answer = { type: 'wire' as const, cutPosition: 2 }
-const sceneInfo = { serialNumber: 'A7K3B2', batteryCount: 2, indicators: [] as [] }
+const sceneInfo = { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] as [] }
 
 describe('WireModule', () => {
   it('calls onComplete when correct wire is clicked', () => {
@@ -19,7 +19,13 @@ describe('WireModule', () => {
     const onComplete = vi.fn()
     const onError = vi.fn()
     render(
-      <WireModule config={config} answer={answer} onComplete={onComplete} onError={onError} sceneInfo={sceneInfo} />
+      <WireModule
+        config={config}
+        answer={answer}
+        onComplete={onComplete}
+        onError={onError}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('wire-2'))
     vi.advanceTimersByTime(800)
@@ -32,7 +38,13 @@ describe('WireModule', () => {
     const onComplete = vi.fn()
     const onError = vi.fn()
     render(
-      <WireModule config={config} answer={answer} onComplete={onComplete} onError={onError} sceneInfo={sceneInfo} />
+      <WireModule
+        config={config}
+        answer={answer}
+        onComplete={onComplete}
+        onError={onError}
+        sceneInfo={sceneInfo}
+      />
     )
     fireEvent.click(screen.getByTestId('wire-0'))
     expect(onError).toHaveBeenCalledOnce()
@@ -41,7 +53,13 @@ describe('WireModule', () => {
 
   it('renders correct number of wire hit targets', () => {
     render(
-      <WireModule config={config} answer={answer} onComplete={vi.fn()} onError={vi.fn()} sceneInfo={sceneInfo} />
+      <WireModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
     )
     expect(screen.getByTestId('wire-0')).toBeInTheDocument()
     expect(screen.getByTestId('wire-1')).toBeInTheDocument()

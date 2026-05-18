@@ -14,15 +14,25 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  /* min-width: 0 lets the value shrink past the intrinsic content size, so a
+     long tongue-twister phrase wraps inside the field instead of forcing the
+     whole HUD row to overflow on a 370 px viewport. */
+  min-width: 0;
 }
 
 .label {
   color: var(--color-text-muted);
+  /* Keep the label glued to its value on one line — only the phrase wraps. */
+  flex-shrink: 0;
 }
 
 .value {
   color: var(--color-text-primary);
   font-weight: bold;
+  /* Allow the Chinese phrase to wrap mid-character on narrow viewports so it
+     never pushes the indicator chips off-screen. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .indicator {

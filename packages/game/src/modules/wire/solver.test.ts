@@ -5,14 +5,22 @@ import { createRng } from '../../engine/rng'
 import type { SceneInfo, WireRule } from '@shared/manual-schema'
 
 const sceneInfo: SceneInfo = {
-  serialNumber: 'A7K3B9',
+  sceneTongueTwister: '四是四十是十',
   batteryCount: 3,
   indicators: [{ label: 'FRK', lit: true }],
 }
 
 const rules: WireRule[] = [
-  { condition: { wire_count: 4, color_at_last: 'red' }, action: 'cut_wire', target: { position: 'last' } },
-  { condition: { wire_count: 4, count_blue: { gt: 1 } }, action: 'cut_wire', target: { position: 'first', color: 'blue' } },
+  {
+    condition: { wire_count: 4, color_at_last: 'red' },
+    action: 'cut_wire',
+    target: { position: 'last' },
+  },
+  {
+    condition: { wire_count: 4, count_blue: { gt: 1 } },
+    action: 'cut_wire',
+    target: { position: 'first', color: 'blue' },
+  },
   { condition: { wire_count: 5 }, action: 'cut_wire', target: { position: 2 } },
   // Fallback
   { condition: {}, action: 'cut_wire', target: { position: 'first' } },
