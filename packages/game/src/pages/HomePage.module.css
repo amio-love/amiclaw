@@ -145,9 +145,55 @@
   min-width: 20px;
 }
 
+/* Pre-flight requirement callout — used on step 1 only.
+   Neon-cyan side accent flags the "voice AI must be open before you start"
+   requirement without bleeding the accent across the rest of the list. */
+.howToList li.stepRequired {
+  border-left: 2px solid var(--color-neon-cyan);
+  padding-left: 8px;
+}
+
 .footer {
   font-family: var(--font-sans);
   font-size: 0.75rem;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+/* Mobile breakpoint — phones in cold-shared link flow.
+   At <=480px the page switches to a top-anchored vertical stack so the
+   how-to guide and CTAs both stay visible on a 320 / 375 / 414 viewport. */
+@media (max-width: 480px) {
+  .page {
+    justify-content: flex-start;
+    padding: 24px 12px;
+    gap: 24px;
+  }
+
+  .title {
+    /* 0.15em letter-spacing tips BOMBSQUAD past 320px viewport width when
+       paired with the clamp() minimum font-size; tighten on small screens. */
+    letter-spacing: 0.08em;
+  }
+
+  .ctaRow {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .btnPrimary,
+  .btnSecondary {
+    width: 100%;
+  }
+
+  .howTo {
+    max-width: 100%;
+  }
+
+  .howToList li {
+    /* Floor at 14px so Chinese characters stay legible on phones. */
+    font-size: 0.875rem;
+  }
 }
