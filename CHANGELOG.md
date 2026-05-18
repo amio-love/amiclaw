@@ -7,6 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **Leaderboard nickname prompt** First time a player finishes a daily
+  challenge, the result page asks for a nickname (max 20 chars) before posting
+  the score. The value is stored in localStorage and reused on every later
+  daily run from the same device, so the leaderboard finally shows recognisable
+  names instead of a wall of "Anonymous". The prompt is required — submission
+  is blocked until a valid nickname is entered — and there is no edit-later
+  entry point in this release. Source task `add-leaderboard-anonymous-handle`.
 - **Audio + animation feedback** Every in-module click now gives a short
   pulse animation and a sound effect (confirm, wire-cut, dial-rotate,
   keypad-press, button-down/up). Solving or failing a module plays a soft
