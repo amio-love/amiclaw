@@ -160,7 +160,7 @@
   text-align: center;
 }
 
-/* Mobile breakpoint — phones in 朋友圈 cold-share flow.
+/* Mobile breakpoint — phones in cold-shared link flow.
    At <=480px the page switches to a top-anchored vertical stack so the
    how-to guide and CTAs both stay visible on a 320 / 375 / 414 viewport. */
 @media (max-width: 480px) {
