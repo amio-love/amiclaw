@@ -36,6 +36,32 @@ vi.mock('@/utils/leaderboard-api', () => ({
   submitScore: vi.fn(),
 }))
 
+// Mock the nickname module so `getStoredNickname()` returns a non-null value
+// on mount. Without this, ResultPage opens NicknameModal (gating logic added
+// in PR #76) and never invokes submitScore — the `await waitFor(/全球排名/)`
+// assertions in the daily-mode cases (a)/(b)/(d)/(e) below time out because
+// rankResult stays null. The jsdom localStorage stub in this workspace is
+// non-functional (see the device-fingerprint comment above), so seeding
+// `localStorage.setItem('bombsquad-nickname', ...)` is not a reliable
+// alternative. We include all four exports because NicknameModal imports
+// `NICKNAME_MAX_LENGTH`, `isValidNickname`, and `setStoredNickname` from the
+// same module; partial mocking would break the modal's render path even
+// when the gate is bypassed.
+vi.mock('@/utils/nickname', () => ({
+  NICKNAME_MAX_LENGTH: 20,
+  getStoredNickname: () => '测试玩家',
+  isValidNickname: (value: unknown): boolean => {
+    if (typeof value !== 'string') return false
+    const trimmed = value.trim()
+    return trimmed.length > 0 && trimmed.length <= 20
+  },
+  setStoredNickname: (value: unknown): boolean => {
+    if (typeof value !== 'string') return false
+    const trimmed = value.trim()
+    return trimmed.length > 0 && trimmed.length <= 20
+  },
+}))
+
 import ResultPage from './ResultPage'
 import { GameProvider, type GameState } from '@/store/game-context'
 import { submitScore } from '@/utils/leaderboard-api'
