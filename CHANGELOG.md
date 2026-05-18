@@ -23,6 +23,13 @@ Versions follow [Semantic Versioning](https://semver.org).
   names instead of a wall of "Anonymous". The prompt is required — submission
   is blocked until a valid nickname is entered — and there is no edit-later
   entry point in this release. Source task `add-leaderboard-anonymous-handle`.
+- **Voice AI compatibility reference** A new `/compatibility` page lists the
+  voice AIs that have been verified against the bomb (Claude today, with
+  ChatGPT and Gemini placeholders inviting player feedback) and surfaces a
+  ready-to-copy opening prompt the player can read to their AI partner before
+  handing over the manual URL. The prompt modal now carries a small "不确定用
+  哪个 AI？查看支持工具" link directly under its send-to-AI tip so the
+  reference is one click away from the moment the question typically arises.
 - **Audio + animation feedback** Every in-module click now gives a short
   pulse animation and a sound effect (confirm, wire-cut, dial-rotate,
   keypad-press, button-down/up). Solving or failing a module plays a soft

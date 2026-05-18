@@ -66,6 +66,27 @@
   margin: 0;
 }
 
+/* Discovery link to /compatibility — sits directly under the "send to AI"
+   tip so the cross-reference reads as a natural follow-up question without
+   competing with the primary 确认开始游戏 CTA. Small font keeps it from
+   pulling visual weight away from the URL box. */
+.compatLink {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--color-neon-cyan);
+  text-decoration: none;
+  align-self: flex-start;
+  padding: 4px 0;
+  letter-spacing: 0.02em;
+}
+
+.compatLink:hover,
+.compatLink:focus-visible {
+  text-decoration: underline;
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
 .urlBox {
   display: flex;
   align-items: center;

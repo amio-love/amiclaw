@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type MouseEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { copyToClipboard } from '@/utils/clipboard'
 import styles from './PromptModal.module.css'
 
@@ -69,6 +70,9 @@ export default function PromptModal({
           {title}
         </h2>
         <p className={styles.tip}>复制后发给你的 AI 助手</p>
+        <Link to="/compatibility" className={styles.compatLink}>
+          不确定用哪个 AI？查看支持工具
+        </Link>
 
         <div className={styles.urlBox}>
           <a className={styles.urlLink} href={manualUrl} target="_blank" rel="noopener noreferrer">
