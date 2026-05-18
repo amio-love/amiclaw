@@ -1,7 +1,11 @@
 import type { EventIngestionResponse, EventPayload } from '../../../../shared/event-types'
 import { validateEvent } from '../validation'
 
-const KV_TTL_SECONDS = 48 * 60 * 60 // 48 hours — mirrors leaderboard retention
+// 30 days — intentionally decoupled from leaderboard's 48h retention.
+// Extended on 2026-05-18 for the `add-beta-data-dashboard` task so the beta
+// dashboard at /api/dashboard can render the full 5/18 → 5/31 internal-beta
+// window cumulatively. Leaderboard retention (post-score.ts) stays 48h.
+const KV_TTL_SECONDS = 30 * 24 * 60 * 60
 const UNIQUE_SET_CAP = 10_000 // protect against KV value-size limit (25MB hard)
 
 const UNIQUE_SET_EVENTS = new Set<EventPayload['event']>(['game_start', 'game_complete'])

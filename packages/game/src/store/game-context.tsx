@@ -23,7 +23,7 @@ export interface ModuleStat {
   errorCount: number // number of wrong answers before solving
 }
 
-export type LoadErrorKind = 'not_published' | 'generic'
+export type LoadErrorKind = 'not_published' | 'generic' | 'yaml_parse' | 'network'
 
 export interface GameState {
   status: GameStatus
