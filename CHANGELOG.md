@@ -19,9 +19,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 - Frontend event logging for practice/daily games (game_start, module_solve, game_complete, game_abandon, manual_load_failed) — emitted via console.info with prefix [bombsquad-event] for manual analysis of completion rate
 - `replay_intent` console.info event emitted when the result-page "再来一局" button is clicked — enables manual estimation of replay-willingness (roadmap §Strategic Objectives Validation Criteria #3, 复玩意愿 ≥50%) from console logs
 - Backend event ingestion via Pages Function `/api/events` — five existing event types (game_start, module_solve, game_complete, game_abandon, manual_load_failed) plus replay_intent now POST to a Cloudflare Pages Function that writes per-event-name counters and unique-device sets to the LEADERBOARD KV namespace under `events:{date}:*` keys. Frontend `console.info` channel is replaced by fire-and-forget fetch; events include device_id (sourced from the same localStorage UUID used by leaderboard submissions) so both session-level and unique-player completion-rate can be computed.
+- Beta data dashboard at `/api/dashboard?token=xxx` showing daily game_start/complete/replay counts and completion rates against the 70%/50% north-star thresholds. Requires `DASHBOARD_TOKEN` Pages secret (set via `wrangler secret put DASHBOARD_TOKEN`).
 
 ### Improvements
 
+- **Beta data dashboard TTL** Event-ingestion KV TTL extended from 48 hours
+  to 30 days so the dashboard can show the full 5/18→5/31 internal-beta
+  window cumulatively. Leaderboard KV TTL unchanged (still 48h).
 - **Landing first impression** The home page now leads with the four-step
   "怎么开始" guide above the practice / daily CTAs, so visitors arriving from
   a cold-shared link see the voice-AI partner is a prerequisite before they

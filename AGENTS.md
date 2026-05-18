@@ -70,3 +70,16 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
   updates are auto-merged; major updates require manual review.
 - Security: CodeQL runs on supported languages, dependency review blocks high
   and critical CVEs in PRs, and the Security tab must stay clean.
+
+## Beta Data Dashboard
+
+A read-only HTML dashboard at `/api/dashboard?token=xxx` aggregates the
+`events:{date}:*` KV keys (written by `/api/events`) into a per-day table of
+game starts, completes, replay intents, and completion rates against the
+70%/50% north-star thresholds. Open the URL directly in a browser.
+
+- URL pattern: `https://bombsquad.amio.fans/api/dashboard?token=<secret>`
+- Set the token (Pages production environment):
+  `wrangler secret put DASHBOARD_TOKEN`
+- Source task: `add-beta-data-dashboard`.
+- Internal-beta concern; consider removing after 2026-05-31.
