@@ -168,6 +168,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Wires are easier to cut on a phone** Tapping a wire in the first game
+  module used to demand near-pixel accuracy on a narrow screen — the
+  clickable strip along each wire was under half the recommended touch
+  size, so a slightly-off tap cut the wrong wire and reset the module. Each
+  wire's tap area is now widened as far as it can go without overlapping the
+  next wire's, so cutting the wire you aimed at is far more forgiving on
+  mobile. The wires themselves look exactly the same.
 - **Leaderboard stays readable with long nicknames** A daily player can
   legally pick a 20-character nickname with no spaces — an unbroken English
   handle, for example. Such a nickname used to stretch the leaderboard's
