@@ -14,7 +14,12 @@ import type { GameState } from './game-context'
  * — but GameState never carries those.
  */
 
-const KEY = 'bombsquad:game-state:v1'
+// v2: the GameState shape gained `moduleSequence` / `strikeCount` /
+// `timeBudgetMs` / `outcome` in the game-modes rework. A v1 blob persisted by
+// the previous build lacks those fields and would crash the generalised
+// renderer on restore, so the key is bumped — a stale v1 entry is simply
+// ignored and the player gets a clean fresh run.
+const KEY = 'bombsquad:game-state:v2'
 
 export function loadPersistedState(): GameState | null {
   if (typeof sessionStorage === 'undefined') return null

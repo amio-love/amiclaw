@@ -13,9 +13,37 @@ export type GameStatus =
   | 'PLAYING'
   | 'MODULE_COMPLETE'
   | 'ALL_COMPLETE'
+  | 'EXPLODING'
   | 'RESULT'
 
 export type GameMode = 'practice' | 'daily'
+
+/** A module kind — drives the per-mode module sequence. */
+export type ModuleKind = 'wire' | 'dial' | 'button' | 'keypad'
+
+/**
+ * Terminal outcome of a run. The result page branches on this:
+ * - `defused`           daily: every module solved → success + leaderboard
+ * - `exploded`          daily: 3 strikes OR countdown hit zero → failure
+ * - `practice-cleared`  practice: every module solved → neutral success
+ * - `practice-timeout`  practice: countdown hit zero → neutral, no explosion
+ */
+export type GameOutcome = 'defused' | 'exploded' | 'practice-cleared' | 'practice-timeout'
+
+/** Ordered module kinds per mode. Length decides how many modules a run has. */
+export const MODULE_SEQUENCE: Record<GameMode, ModuleKind[]> = {
+  daily: ['wire', 'dial', 'button', 'keypad'],
+  practice: ['wire', 'keypad'],
+}
+
+/** Countdown budget per mode, in milliseconds. */
+export const TIME_BUDGET_MS: Record<GameMode, number> = {
+  daily: 600_000, // 10 minutes
+  practice: 300_000, // 5 minutes
+}
+
+/** Daily challenge detonates on the 3rd strike. */
+export const MAX_STRIKES = 3
 
 export interface ModuleStat {
   moduleType: string
@@ -31,18 +59,26 @@ export interface GameState {
   manual: Manual | null
   manualUrl: string | null
   sceneInfo: SceneInfo | null
-  moduleConfigs: (ModuleConfig | null)[] // length 4
-  moduleAnswers: (ModuleAnswer | null)[] // length 4
+  /** Module kinds for this run, in order. Derived from MODULE_SEQUENCE[mode]. */
+  moduleSequence: ModuleKind[]
+  moduleConfigs: (ModuleConfig | null)[] // length === moduleSequence.length
+  moduleAnswers: (ModuleAnswer | null)[] // length === moduleSequence.length
   currentModuleIndex: number
   moduleStats: ModuleStat[]
   /** Wall-clock timestamp (Date.now()) when the whole run started. */
   totalStartTime: number | null
-  /** Wall-clock timestamp (Date.now()) when the last module was solved. */
+  /** Wall-clock timestamp (Date.now()) when the run ended (won or lost). */
   totalEndTime: number | null
   /** Wall-clock timestamp when the current module entered PLAYING. */
   currentModuleStartTime: number | null
   /** How many wrong attempts the player has made on the current module. */
   currentModuleErrorCount: number
+  /** Daily-challenge cumulative wrong answers across the whole run. */
+  strikeCount: number
+  /** Countdown budget for this run, set on START_GAME from TIME_BUDGET_MS. */
+  timeBudgetMs: number
+  /** Terminal outcome, written when the run resolves. Null while in flight. */
+  outcome: GameOutcome | null
   errorMessage: string | null
   errorKind: LoadErrorKind | null
   attemptNumber: number
@@ -68,7 +104,9 @@ export type GameAction =
   | { type: 'MODULE_COMPLETE'; moduleType: string }
   | { type: 'NEXT_MODULE' }
   | { type: 'ALL_MODULES_COMPLETE' }
-  | { type: 'REGENERATE_MODULE'; config: ModuleConfig; answer: ModuleAnswer }
+  | { type: 'MODULE_ERROR' }
+  | { type: 'TIME_EXPIRED' }
+  | { type: 'EXPLOSION_DONE' }
   | { type: 'RESET' }
 
 // ---------------------------------------------------------------------------
@@ -81,14 +119,18 @@ const INITIAL_STATE: GameState = {
   manual: null,
   manualUrl: null,
   sceneInfo: null,
-  moduleConfigs: [null, null, null, null],
-  moduleAnswers: [null, null, null, null],
+  moduleSequence: [],
+  moduleConfigs: [],
+  moduleAnswers: [],
   currentModuleIndex: 0,
   moduleStats: [],
   totalStartTime: null,
   totalEndTime: null,
   currentModuleStartTime: null,
   currentModuleErrorCount: 0,
+  strikeCount: 0,
+  timeBudgetMs: 0,
+  outcome: null,
   errorMessage: null,
   errorKind: null,
   attemptNumber: 1,
@@ -99,16 +141,21 @@ const INITIAL_STATE: GameState = {
 // Reducer
 // ---------------------------------------------------------------------------
 
-function gameReducer(state: GameState, action: GameAction): GameState {
+export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
-    case 'START_LOADING':
+    case 'START_LOADING': {
+      const sequence = MODULE_SEQUENCE[action.mode]
       return {
         ...INITIAL_STATE,
         status: 'LOADING',
         mode: action.mode,
         manualUrl: action.manualUrl,
         attemptNumber: action.attemptNumber,
+        moduleSequence: sequence,
+        moduleConfigs: sequence.map(() => null),
+        moduleAnswers: sequence.map(() => null),
       }
+    }
 
     case 'MANUAL_LOADED':
       return {
@@ -167,10 +214,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         totalEndTime: null,
         currentModuleStartTime: now,
         currentModuleErrorCount: 0,
+        strikeCount: 0,
+        timeBudgetMs: TIME_BUDGET_MS[state.mode],
+        outcome: null,
       }
     }
 
     case 'MODULE_COMPLETE': {
+      // Terminal-state guard: only a live run can complete a module. Once the
+      // run has left PLAYING — EXPLODING after a 3rd strike or a countdown
+      // zero, or already at RESULT — a racing onComplete tap landing inside
+      // the 1.4s explosion-animation window must not revive an already-lost
+      // run into a win. Same guard shape as MODULE_ERROR / NEXT_MODULE.
+      if (state.status !== 'PLAYING') return state
       const now = Date.now()
       const startedAt = state.currentModuleStartTime ?? now
       const timeMs = now - startedAt
@@ -180,6 +236,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         timeMs,
         errorCount: state.currentModuleErrorCount,
       })
+      // Last-module win lock: the instant the final module is solved the run
+      // is won — stamp totalEndTime + outcome here, before the 800ms
+      // MODULE_COMPLETE → ALL_COMPLETE auto-advance window. A countdown that
+      // hits zero inside that window then cannot reclassify an already-won
+      // run as a loss (TIME_EXPIRED no-ops once totalEndTime / outcome is set,
+      // and the GamePage countdown effect is short-circuited by totalEndTime).
+      const isLastModule = state.currentModuleIndex >= state.moduleConfigs.length - 1
       return {
         ...state,
         status: 'MODULE_COMPLETE',
@@ -191,18 +254,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             errorCount: state.currentModuleErrorCount,
           },
         ],
+        totalEndTime: isLastModule ? now : state.totalEndTime,
+        outcome: isLastModule
+          ? state.mode === 'daily'
+            ? 'defused'
+            : 'practice-cleared'
+          : state.outcome,
       }
     }
 
     case 'NEXT_MODULE': {
+      // Defensive: NEXT_MODULE is only ever dispatched from the
+      // MODULE_COMPLETE 800ms auto-advance effect. Guarding the status keeps a
+      // stale dispatch from clobbering a terminal state (e.g. EXPLODING).
+      if (state.status !== 'MODULE_COMPLETE') return state
       const next = state.currentModuleIndex + 1
       const now = Date.now()
-      if (next >= 4) {
+      if (next >= state.moduleConfigs.length) {
         return {
           ...state,
           status: 'ALL_COMPLETE',
           currentModuleIndex: next,
-          totalEndTime: now,
+          // totalEndTime is already stamped by MODULE_COMPLETE on the last
+          // module; keep it rather than overwriting with a later timestamp.
+          totalEndTime: state.totalEndTime ?? now,
           currentModuleStartTime: null,
           currentModuleErrorCount: 0,
         }
@@ -229,21 +304,54 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         status: 'RESULT',
         totalEndTime: endedAt,
+        outcome: state.outcome ?? (state.mode === 'daily' ? 'defused' : 'practice-cleared'),
       }
     }
 
-    case 'REGENERATE_MODULE': {
-      const configs = [...state.moduleConfigs] as (ModuleConfig | null)[]
-      const answers = [...state.moduleAnswers] as (ModuleAnswer | null)[]
-      configs[state.currentModuleIndex] = action.config
-      answers[state.currentModuleIndex] = action.answer
+    case 'MODULE_ERROR': {
+      // Only meaningful during active play. Practice never fails: a wrong
+      // answer just bumps the per-module error count (kept for the recap),
+      // the puzzle is untouched, and the player retries in place. Daily
+      // accumulates strikes — the 3rd detonates the bomb.
+      if (state.status !== 'PLAYING') return state
+      if (state.mode === 'practice') {
+        return { ...state, currentModuleErrorCount: state.currentModuleErrorCount + 1 }
+      }
+      const nextStrikes = state.strikeCount + 1
+      if (nextStrikes >= MAX_STRIKES) {
+        return {
+          ...state,
+          status: 'EXPLODING',
+          strikeCount: nextStrikes,
+          currentModuleErrorCount: state.currentModuleErrorCount + 1,
+          totalEndTime: Date.now(),
+          outcome: 'exploded',
+        }
+      }
       return {
         ...state,
-        moduleConfigs: configs,
-        moduleAnswers: answers,
+        strikeCount: nextStrikes,
         currentModuleErrorCount: state.currentModuleErrorCount + 1,
       }
     }
+
+    case 'TIME_EXPIRED': {
+      // The countdown reached zero. No-op once the run is already resolved —
+      // this is what protects the MODULE_COMPLETE → ALL_COMPLETE auto-advance
+      // window of a freshly-won last module (see MODULE_COMPLETE above).
+      if (state.status !== 'PLAYING' && state.status !== 'MODULE_COMPLETE') return state
+      if (state.totalEndTime !== null || state.outcome !== null) return state
+      const now = Date.now()
+      if (state.mode === 'daily') {
+        return { ...state, status: 'EXPLODING', totalEndTime: now, outcome: 'exploded' }
+      }
+      // Practice never fails — running out of time gently ends the run.
+      return { ...state, status: 'RESULT', totalEndTime: now, outcome: 'practice-timeout' }
+    }
+
+    case 'EXPLOSION_DONE':
+      // The explosion animation finished; move to the failure result page.
+      return state.status === 'EXPLODING' ? { ...state, status: 'RESULT' } : state
 
     case 'RESET':
       return { ...INITIAL_STATE }
@@ -267,15 +375,16 @@ export const GameContext = createContext<GameContextValue | null>(null)
 /**
  * Statuses worth persisting across an accidental refresh. LOADING isn't —
  * the mount effect will simply reload — and RESULT can be regenerated from
- * the same session storage used by the submission retry flow. PLAYING and
- * MODULE_COMPLETE are the critical cases: those are where a dropped refresh
- * would cost the player their timer and per-module stats.
+ * the same session storage used by the submission retry flow. PLAYING,
+ * MODULE_COMPLETE and EXPLODING are the critical cases: those are where a
+ * dropped refresh would cost the player their timer and per-module stats.
  */
 const PERSISTABLE_STATUSES: GameStatus[] = [
   'READY',
   'PLAYING',
   'MODULE_COMPLETE',
   'ALL_COMPLETE',
+  'EXPLODING',
   'RESULT',
 ]
 

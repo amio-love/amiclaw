@@ -7,6 +7,23 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Changed
 
+- **Daily challenge now has real stakes** The daily timer counts down from a
+  10-minute budget, and a wrong answer finally costs something: three
+  mistakes across the run — or letting the countdown hit zero — detonate the
+  bomb with a full-screen explosion and a dedicated failure result page. The
+  first two strikes show as a visible pip counter so the pressure is legible.
+  A wrong answer no longer silently reshuffles the module — the puzzle stays
+  put and you retry it in place — and only a successful defuse posts to the
+  leaderboard. Stored completion times and ranking are unchanged.
+- **Practice mode is now a real on-ramp** Practice is no longer a shrunken
+  daily run. It runs just two modules (wire and keypad) and never fails: a
+  wrong answer just lets you retry the same puzzle in place, and running out
+  of its 5-minute countdown ends the session gently with a "modules
+  completed" recap instead of an explosion. There is no in-game tutorial
+  screen — learning the ropes is what your AI partner is for.
+- **Louder wrong-answer feedback** A wrong answer now pulses a bold red
+  border around the whole module panel, so a mistake is obvious at a glance
+  in both daily and practice mode — not just a faint flash inside the puzzle.
 - Replace the 6-character serial code in the SceneInfoBar with a Chinese
   tongue-twister phrase ("暗号"). The player now reads the phrase aloud to
   the AI partner — pronouncing it correctly becomes a small in-game challenge.
@@ -55,6 +72,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Bomb detonation sound** Failing a daily challenge now fires a dedicated
+  explosion sound effect under the full-screen detonation overlay — a sharp,
+  prominent boom — replacing the muffled module-failure thud reused as a
+  placeholder until now. The sample is a new CC0 asset from Kenney Sci-Fi
+  Sounds; no new runtime dependencies.
 - **Beta data dashboard TTL** Event-ingestion KV TTL extended from 48 hours
   to 30 days so the dashboard can show the full 5/18→5/31 internal-beta
   window cumulatively. Leaderboard KV TTL unchanged (still 48h).

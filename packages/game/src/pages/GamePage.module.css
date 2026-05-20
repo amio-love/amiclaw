@@ -15,6 +15,16 @@
   justify-content: space-between;
 }
 
+/* Left cluster of the topBar — countdown timer with the daily strike pips
+   stacked underneath. Grouped so the topBar keeps three flex children
+   (cluster / meta / actions) and the space-between layout is preserved. */
+.timerCluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .modeMeta {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -99,6 +109,7 @@
 }
 
 .moduleArea {
+  position: relative;
   width: 100%;
   max-width: 640px;
   flex: 1;
@@ -124,8 +135,68 @@
   align-items: center;
   justify-content: center;
   gap: 24px;
+  padding: 24px 16px;
+  overflow-y: auto;
   background: rgba(13, 13, 26, 0.92);
   z-index: 100;
+}
+
+/* Wrong-answer feedback for the whole module panel. A red border + glow
+   double-pulse fires on every wrong answer in both modes — far louder than
+   the brief flash inside the puzzle SVG. Absolutely positioned over the
+   module area, non-interactive, and remounted via a React `key` so the
+   animation restarts on each consecutive mistake. Game-event animation,
+   kept within the 600ms DesignSystem budget. */
+.errorPulse {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 3px solid var(--color-neon-red);
+  border-radius: 8px;
+  box-shadow:
+    0 0 24px 4px rgba(255, 7, 58, 0.55),
+    inset 0 0 32px 4px rgba(255, 7, 58, 0.35);
+  background: radial-gradient(circle at center, rgba(255, 7, 58, 0.12), transparent 70%);
+  opacity: 0;
+  animation: module-error-pulse 0.6s ease-out;
+}
+
+@keyframes module-error-pulse {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0.15;
+  }
+  64% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Mandatory reduced-motion fallback: drop the double-pulse rhythm for a
+   single calm fade so the wrong-answer cue still reads without flicker. */
+@media (prefers-reduced-motion: reduce) {
+  .errorPulse {
+    animation: module-error-pulse-reduced 0.6s ease-out;
+  }
+
+  @keyframes module-error-pulse-reduced {
+    0% {
+      opacity: 0;
+    }
+    20% {
+      opacity: 0.85;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
 }
 
 .defusedText {

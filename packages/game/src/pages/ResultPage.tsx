@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import NicknameModal from '@/components/NicknameModal'
-import { useGame } from '@/store/game-context'
+import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@/utils/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
+import { formatMs } from '@/utils/format-time'
 import { submitScore } from '@/utils/leaderboard-api'
 import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
@@ -13,13 +14,34 @@ import { buildRetroQuestions } from '@/utils/retro-questions'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
-const MODULE_LABELS = ['线路', '密码盘', '按钮', '键盘']
+// Module label keyed by module kind (the `moduleType` stored on each stat),
+// not by position — practice and daily run different module sequences.
+const MODULE_LABEL: Record<string, string> = {
+  wire: '线路',
+  dial: '密码盘',
+  button: '按钮',
+  keypad: '键盘',
+}
 
-function formatMs(ms: number): string {
-  const total = Math.floor(ms / 1000)
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+interface OutcomeView {
+  title: string
+  headerClass: string
+  /** Label used in the copyable recap summary's "结果：" line. */
+  summaryLabel: string
+}
+
+function outcomeView(outcome: GameOutcome): OutcomeView {
+  switch (outcome) {
+    case 'exploded':
+      return { title: '拆弹失败', headerClass: styles.headerExploded, summaryLabel: '失败 💥' }
+    case 'practice-cleared':
+      return { title: '练习完成', headerClass: styles.headerPractice, summaryLabel: '练习完成 ✅' }
+    case 'practice-timeout':
+      return { title: '时间到', headerClass: styles.headerPractice, summaryLabel: '时间到 ⏱' }
+    case 'defused':
+    default:
+      return { title: '拆弹成功', headerClass: styles.headerDefused, summaryLabel: '成功 ✅' }
+  }
 }
 
 export default function ResultPage() {
@@ -30,15 +52,25 @@ export default function ResultPage() {
   const [submitFailed, setSubmitFailed] = useState(false)
   const [retried, setRetried] = useState(false)
 
+  // Fall back to `defused` for any legacy RESULT state persisted before the
+  // game-modes rework added the `outcome` field.
+  const outcome: GameOutcome = state.outcome ?? 'defused'
+  const view = outcomeView(outcome)
+  const isExploded = outcome === 'exploded'
+
   const totalMs =
     state.totalStartTime !== null && state.totalEndTime !== null
       ? state.totalEndTime - state.totalStartTime
       : null
 
-  // Daily mode submits a score. Practice mode never submits and never asks
-  // for a nickname.
+  // Daily mode submits a score — but only on a successful defuse. An
+  // exploded run never submits and never asks for a nickname. Practice mode
+  // never submits in any case.
   const hasFinishedDailyRun =
-    state.mode === 'daily' && totalMs !== null && state.moduleStats.length > 0
+    state.mode === 'daily' &&
+    outcome === 'defused' &&
+    totalMs !== null &&
+    state.moduleStats.length > 0
 
   // Lazy initializers: read the stored nickname once on mount. Subsequent
   // useState calls reuse the captured value so the three pieces of mount
@@ -181,10 +213,9 @@ export default function ResultPage() {
     const timeStr = totalMs !== null ? formatMs(totalMs) : '--:--'
     const breakdown = state.moduleStats
       .map((s, i) => {
-        const name = MODULE_LABELS[i] ?? s.moduleType
+        const name = MODULE_LABEL[s.moduleType] ?? s.moduleType
         const t = formatMs(s.timeMs)
-        const resets = s.errorCount
-        return `${i + 1}. ${name}模块 - ${t} - 成功 (${resets} 次重置)`
+        return `${i + 1}. ${name}模块 - ${t} - 成功 (${s.errorCount} 次失误)`
       })
       .join('\n')
     const rankLine = rankResult ? `全球排名：#${rankResult.rank} / ${rankResult.total_players}` : ''
@@ -201,7 +232,7 @@ export default function ResultPage() {
     return `=== BombSquad 结果摘要 ===
 日期：${date}
 模式：${modeLabel}
-结果：成功 ✅
+结果：${view.summaryLabel}
 总用时：${timeStr}
 ${personalBestLine ? `${personalBestLine}\n` : ''}${rankLine ? `${rankLine}\n` : ''}
 模块详情：
@@ -209,7 +240,7 @@ ${breakdown}
 
 请和我一起复盘：
 ${retroQuestions}`
-  }, [state, totalMs, rankResult])
+  }, [state, totalMs, rankResult, view.summaryLabel])
 
   const handleCopySummary = async () => {
     const ok = await copyToClipboard(buildSummary())
@@ -219,7 +250,9 @@ ${retroQuestions}`
     }
   }
 
-  if (state.moduleStats.length === 0) {
+  // No game in memory at all — distinct from a finished run that solved zero
+  // modules (an exploded run, which still carries an `outcome`).
+  if (state.moduleStats.length === 0 && state.outcome === null) {
     return (
       <main className={styles.page}>
         <p className={styles.noData}>
@@ -234,7 +267,16 @@ ${retroQuestions}`
 
   return (
     <main className={styles.page}>
-      <h1 className={`${styles.header} ${styles.headerDefused}`}>拆弹成功</h1>
+      <h1 className={`${styles.header} ${view.headerClass}`}>{view.title}</h1>
+
+      {outcome === 'practice-timeout' && (
+        <p className={styles.subtitle}>本次完成 {state.moduleStats.length} 个模块</p>
+      )}
+      {isExploded && (
+        <p className={styles.failureReason}>
+          {state.strikeCount >= MAX_STRIKES ? '累计 3 次失误 —— 炸弹引爆' : '时间耗尽 —— 炸弹引爆'}
+        </p>
+      )}
 
       {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
@@ -242,7 +284,7 @@ ${retroQuestions}`
         {state.mode === 'daily' ? `每日挑战 — 第 ${state.attemptNumber} 次尝试` : '练习'}
       </p>
 
-      {state.mode === 'daily' && (
+      {state.mode === 'daily' && outcome === 'defused' && (
         <div className={styles.rankBlock}>
           {nicknameModalOpen && <span className={styles.rankMuted}>提交前请填写昵称</span>}
           {!nicknameModalOpen && submitting && (
@@ -269,29 +311,31 @@ ${retroQuestions}`
         </div>
       )}
 
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>模块用时</h2>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>模块</th>
-              <th>用时</th>
-              <th>重置</th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.moduleStats.map((stat, i) => (
-              <tr key={i}>
-                <td>{i + 1}</td>
-                <td>{MODULE_LABELS[i] ?? stat.moduleType}</td>
-                <td className={styles.timeCell}>{formatMs(stat.timeMs)}</td>
-                <td className={styles.errorCell}>{stat.errorCount}</td>
+      {state.moduleStats.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>模块用时</h2>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>模块</th>
+                <th>用时</th>
+                <th>失误</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {state.moduleStats.map((stat, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td>{MODULE_LABEL[stat.moduleType] ?? stat.moduleType}</td>
+                  <td className={styles.timeCell}>{formatMs(stat.timeMs)}</td>
+                  <td className={styles.errorCell}>{stat.errorCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <div className={styles.actions}>
         <button className={styles.btnPlayAgain} onClick={handlePlayAgain}>

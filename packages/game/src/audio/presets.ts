@@ -2,12 +2,15 @@
  * Per-operation sound presets — each SFX type maps to a base sample plus a
  * `playbackRate` (couples pitch + speed via Web Audio's
  * AudioBufferSourceNode.playbackRate) and a `gain` (0..1 linear amplitude
- * on the GainNode). Three base samples cover nine operations, giving
- * distinct but family-related feedback per action.
+ * on the GainNode). Three shared base samples cover nine UI operations,
+ * giving distinct but family-related feedback per action; the bomb
+ * detonation has its own dedicated sample.
  *
  * Gain convention: foreground action feedback at 1.0 (full sample
  * amplitude, no clipping risk); ambient stopwatch tick at 0.3 so it sits
- * clearly under click feedback in the mix.
+ * clearly under click feedback in the mix. The detonation also plays at
+ * 1.0 — the top of the no-clip range — so it lands as the loudest, most
+ * prominent cue, carried further by its intrinsically punchy sample.
  */
 
 import type { SampleName } from './audio-context'
@@ -22,6 +25,7 @@ export type SfxType =
   | 'module-success'
   | 'module-error'
   | 'stopwatch-tick'
+  | 'explosion'
 
 export interface SfxPreset {
   sample: SampleName
@@ -39,4 +43,5 @@ export const SFX_PRESETS: Record<SfxType, SfxPreset> = {
   'module-success': { sample: 'thunk', rate: 1.3, gain: 1.0 },
   'module-error': { sample: 'thunk', rate: 0.65, gain: 1.0 },
   'stopwatch-tick': { sample: 'tick', rate: 1.0, gain: 0.3 },
+  explosion: { sample: 'explosion', rate: 1.0, gain: 1.0 },
 }

@@ -49,16 +49,27 @@ describe('buildRetroQuestions', () => {
     expect(q1).not.toContain('重置')
   })
 
-  it('Q1 includes reset count when errorCount >= 1', () => {
-    const withReset: ModuleStat[] = [
+  it('Q1 includes error count when errorCount >= 1', () => {
+    const withErrors: ModuleStat[] = [
       stat('wire', 30_000),
-      stat('dial', 105_000, 2), // 2 resets
+      stat('dial', 105_000, 2), // 2 errors
       stat('button', 38_000),
       stat('keypad', 48_000),
     ]
-    const out = buildRetroQuestions(withReset, 1, 'practice')
+    const out = buildRetroQuestions(withErrors, 1, 'practice')
     const q1 = out.split('\n')[0]
-    expect(q1).toContain('耗时最长且重置 2 次')
+    expect(q1).toContain('耗时最长且失误 2 次')
+  })
+
+  it('labels the slowest module by its kind, not its list position', () => {
+    // Practice runs the reduced [wire, keypad] sequence — keypad at index 1.
+    // A positional lookup would mislabel index 1 as "密码盘"; the kind-keyed
+    // lookup must name it "键盘".
+    const practiceStats: ModuleStat[] = [stat('wire', 30_000), stat('keypad', 90_000)]
+    const out = buildRetroQuestions(practiceStats, 1, 'practice')
+    const q1 = out.split('\n')[0]
+    expect(q1).toContain('键盘模块耗时最长')
+    expect(q1).not.toContain('密码盘')
   })
 
   it('Q2 in daily mode with attemptNumber > 1 references the attempt number', () => {
