@@ -23,7 +23,6 @@ describe('DialModule', () => {
         onComplete={vi.fn()}
         onError={vi.fn()}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))
@@ -40,7 +39,6 @@ describe('DialModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))
@@ -60,7 +58,6 @@ describe('DialModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('dial-confirm'))
@@ -83,7 +80,6 @@ describe('DialModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('dial-0-right'))

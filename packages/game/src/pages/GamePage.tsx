@@ -23,7 +23,6 @@ import SceneInfoBar from '@/components/SceneInfoBar'
 import MuteButton from '@/components/MuteButton'
 import StrikeIndicator from '@/components/StrikeIndicator'
 import ExplosionOverlay from '@/components/ExplosionOverlay'
-import PracticeIntro from '@/components/PracticeIntro'
 import WireModule from '@/modules/wire/WireModule'
 import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
@@ -44,9 +43,6 @@ const MODULE_LABEL: Record<ModuleKind, string> = {
 // How long the CSS explosion plays before routing to the failure result
 // page — kept in step with the ExplosionOverlay keyframe durations.
 const EXPLOSION_DURATION_MS = 1400
-
-// Practice-mode inline error hint linger time after a wrong answer.
-const PRACTICE_ERROR_HINT_MS = 3500
 
 // Daily-challenge low-time warning threshold — timer turns red below this.
 const LOW_TIME_THRESHOLD_MS = 60_000
@@ -172,10 +168,10 @@ export default function GamePage() {
 
   const { state, dispatch } = useGame()
 
-  // Practice-only inline error hint: a wrong answer surfaces a short
-  // coaching line that auto-dismisses after a few seconds. Daily mode shows
-  // no such hint — the strike indicator carries the visible warning there.
-  const [practiceErrorVisible, setPracticeErrorVisible] = useState(false)
+  // A wrong answer pulses a red border around the whole module panel so the
+  // mistake is obvious at a glance in both modes. Incrementing this key
+  // remounts the pulse element, restarting the CSS animation on every error.
+  const [errorPulseKey, setErrorPulseKey] = useState(0)
 
   // Captured once on mount so it stays stable across re-renders. The player
   // can dismiss it; once dismissed it does not reappear for the lifetime of
@@ -379,13 +375,6 @@ export default function GamePage() {
     return () => clearTimeout(id)
   }, [state.status, dispatch])
 
-  // Auto-dismiss the practice error hint a few seconds after it appears.
-  useEffect(() => {
-    if (!practiceErrorVisible) return
-    const id = setTimeout(() => setPracticeErrorVisible(false), PRACTICE_ERROR_HINT_MS)
-    return () => clearTimeout(id)
-  }, [practiceErrorVisible])
-
   const handleModuleComplete = useCallback(() => {
     const moduleType = state.moduleSequence[state.currentModuleIndex] ?? 'unknown'
     // Reducer computes time from state.currentModuleStartTime (Date.now()
@@ -408,13 +397,12 @@ export default function GamePage() {
 
   // A wrong answer no longer regenerates the puzzle — the player retries the
   // same puzzle in place. The mode branch (strike vs. nothing) lives in the
-  // reducer's MODULE_ERROR handler; GamePage only surfaces the practice hint.
+  // reducer's MODULE_ERROR handler; GamePage only fires the module-area error
+  // pulse, shown identically in both modes.
   const handleModuleError = useCallback(() => {
     dispatch({ type: 'MODULE_ERROR' })
-    if (state.mode === 'practice') {
-      setPracticeErrorVisible(true)
-    }
-  }, [dispatch, state.mode])
+    setErrorPulseKey((key) => key + 1)
+  }, [dispatch])
 
   const renderModule = () => {
     const idx = state.currentModuleIndex
@@ -428,7 +416,6 @@ export default function GamePage() {
       onComplete: handleModuleComplete,
       onError: handleModuleError,
       sceneInfo,
-      mode: state.mode,
     }
 
     switch (kind) {
@@ -502,8 +489,9 @@ export default function GamePage() {
     )
   }
 
-  // READY state — waiting for the player to start. Practice gets a
-  // lightweight onboarding briefing; daily keeps the terse "ready?" prompt.
+  // READY state — waiting for the player to start. Both modes show the same
+  // terse "ready?" prompt; the game page never teaches the player — all
+  // guidance comes from the AI voice partner.
   if (state.status === 'READY') {
     // Unlock the shared AudioContext inside this user-gesture handler so iOS
     // Safari permits audio to start when the stopwatch loop begins (the
@@ -516,16 +504,10 @@ export default function GamePage() {
       <main className={styles.page}>
         {refreshBanner}
         <div className={styles.overlay}>
-          {state.mode === 'practice' ? (
-            <PracticeIntro onStart={handleStart} />
-          ) : (
-            <>
-              <p className={styles.readyText}>准备好了吗？</p>
-              <button className={styles.startBtn} onClick={handleStart}>
-                开始
-              </button>
-            </>
-          )}
+          <p className={styles.readyText}>准备好了吗？</p>
+          <button className={styles.startBtn} onClick={handleStart}>
+            开始
+          </button>
         </div>
       </main>
     )
@@ -534,12 +516,6 @@ export default function GamePage() {
   // PLAYING / MODULE_COMPLETE / EXPLODING states
   const currentKind = state.moduleSequence[state.currentModuleIndex]
   const moduleLabel = currentKind ? MODULE_LABEL[currentKind] : ''
-  const showFirstInteractionHint =
-    state.mode === 'practice' &&
-    state.status === 'PLAYING' &&
-    state.currentModuleIndex === 0 &&
-    state.currentModuleErrorCount === 0 &&
-    state.moduleStats.length === 0
 
   return (
     <main className={styles.page}>
@@ -569,18 +545,11 @@ export default function GamePage() {
       <div className={styles.moduleArea}>
         <div>
           <p className={styles.moduleLabel}>{moduleLabel}</p>
-          {showFirstInteractionHint && (
-            <p className={styles.firstInteractionHint}>
-              先把你看到的东西描述给 AI，等它查完手册给你指令，再动手。
-            </p>
-          )}
-          {state.mode === 'practice' && practiceErrorVisible && (
-            <p className={styles.practiceErrorHint} role="status">
-              答错了，别紧张 —— 再听一遍 AI 的指令，就在这道题上直接重试。
-            </p>
-          )}
           {renderModule()}
         </div>
+        {errorPulseKey > 0 && (
+          <div key={errorPulseKey} className={styles.errorPulse} aria-hidden="true" />
+        )}
       </div>
 
       <div className={styles.bottomArea}>

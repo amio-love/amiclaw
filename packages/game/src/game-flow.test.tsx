@@ -102,10 +102,11 @@ describe('full game flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /^练习$/ }))
     fireEvent.click(screen.getByRole('button', { name: /^确认开始游戏$/ }))
 
-    // Practice manual is inlined via ?raw — wait for the lightweight
-    // onboarding intro to render, then start the run.
-    await waitFor(() => expect(screen.getByText('练习模式')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /^开始练习$/ }))
+    // Practice manual is inlined via ?raw — wait for the standard ready
+    // prompt to render, then start the run. Both modes show the same
+    // "ready?" screen; the game page never onboards the player.
+    await waitFor(() => expect(screen.getByText('准备好了吗？')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /^开始$/ }))
 
     // Practice runs only the reduced 2-module sequence.
     await completeModules(PRACTICE_MODULE_TESTIDS)
@@ -125,8 +126,7 @@ describe('full game flow', () => {
       </MemoryRouter>
     )
 
-    // Daily skips the practice intro — the terse "ready?" prompt appears once
-    // the mocked manual resolves.
+    // The terse "ready?" prompt appears once the mocked manual resolves.
     await waitFor(() => expect(screen.getByText('准备好了吗？')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /^开始$/ }))
 

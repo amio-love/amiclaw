@@ -19,7 +19,6 @@ describe('ButtonModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     const btn = screen.getByTestId('big-button')
@@ -46,7 +45,6 @@ describe('ButtonModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     const btn = screen.getByTestId('big-button')
@@ -67,7 +65,6 @@ describe('ButtonModule', () => {
         onComplete={vi.fn()}
         onError={vi.fn()}
         sceneInfo={sceneInfo}
-        mode="daily"
       />
     )
     expect(screen.getByText('DETONATE')).toBeInTheDocument()

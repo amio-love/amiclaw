@@ -45,10 +45,10 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
   the run detonate the bomb, with the first two surfaced as a visible strike
   count. A wrong answer never resets the module — the same puzzle stays and
   the player retries it in place.
-- Practice mode never fails. A wrong answer only shows a hint and lets the
-  player retry; running out of time ends the run neutrally.
-- Practice runs a reduced 2-module set behind a lightweight onboarding
-  screen; the daily challenge runs the full 4 modules.
+- Practice mode never fails. A wrong answer just lets the player retry the
+  same puzzle in place; running out of time ends the run neutrally.
+- Practice runs a reduced 2-module set; the daily challenge runs the full 4
+  modules.
 - "Play Again" is the most prominent CTA on the results page.
 - The leaderboard shows time, attempt number, and the AI tool used when
   provided.

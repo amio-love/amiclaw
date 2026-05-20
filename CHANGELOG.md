@@ -16,11 +16,14 @@ Versions follow [Semantic Versioning](https://semver.org).
   put and you retry it in place — and only a successful defuse posts to the
   leaderboard. Stored completion times and ranking are unchanged.
 - **Practice mode is now a real on-ramp** Practice is no longer a shrunken
-  daily run. It opens with a one-screen briefing of the voice / manual / act
-  loop, runs just two modules (wire and keypad), and never fails: a wrong
-  answer only shows a hint and lets you retry, and running out of its
-  5-minute countdown ends the session gently with a "modules completed"
-  recap instead of an explosion.
+  daily run. It runs just two modules (wire and keypad) and never fails: a
+  wrong answer just lets you retry the same puzzle in place, and running out
+  of its 5-minute countdown ends the session gently with a "modules
+  completed" recap instead of an explosion. There is no in-game tutorial
+  screen — learning the ropes is what your AI partner is for.
+- **Louder wrong-answer feedback** A wrong answer now pulses a bold red
+  border around the whole module panel, so a mistake is obvious at a glance
+  in both daily and practice mode — not just a faint flash inside the puzzle.
 - Replace the 6-character serial code in the SceneInfoBar with a Chinese
   tongue-twister phrase ("暗号"). The player now reads the phrase aloud to
   the AI partner — pronouncing it correctly becomes a small in-game challenge.
