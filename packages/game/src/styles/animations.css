@@ -64,27 +64,74 @@
   }
 }
 
-/* Wire cut — top half falls up */
+/* Wire cut — top half snaps upward and stays visible */
 @keyframes wire-cut-top {
-  from {
-    transform: translateY(0) rotate(0);
-    opacity: 1;
+  0% {
+    transform: translate(0, 0) rotate(0);
   }
-  to {
-    transform: translateY(-20px) rotate(-5deg);
-    opacity: 0;
+  55% {
+    transform: translate(-1px, -10px) rotate(-4deg);
+  }
+  100% {
+    transform: translate(0, -7px) rotate(-3deg);
   }
 }
 
-/* Wire cut — bottom half falls down */
+/* Wire cut — bottom half snaps downward and stays visible */
 @keyframes wire-cut-bottom {
-  from {
-    transform: translateY(0) rotate(0);
-    opacity: 1;
+  0% {
+    transform: translate(0, 0) rotate(0);
   }
-  to {
-    transform: translateY(20px) rotate(5deg);
+  55% {
+    transform: translate(1px, 10px) rotate(4deg);
+  }
+  100% {
+    transform: translate(0, 7px) rotate(3deg);
+  }
+}
+
+/* Wire cut — severed ends glow, then decay */
+@keyframes wire-cut-glow {
+  0% {
+    filter: drop-shadow(0 0 3px var(--color-neon-cyan));
+  }
+  25% {
+    filter: drop-shadow(0 0 9px var(--color-neon-cyan));
+  }
+  100% {
+    filter: none;
+  }
+}
+
+/* Wire cut — spark core flash at the cut point */
+@keyframes wire-cut-spark {
+  0% {
     opacity: 0;
+    transform: scale(0.2);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+  45% {
+    opacity: 0.85;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+
+/* Wire cut — spark shockwave ring expanding outward */
+@keyframes wire-cut-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
   }
 }
 
@@ -183,19 +230,33 @@
     }
   }
   @keyframes wire-cut-top {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 1;
+    0%,
+    100% {
+      transform: none;
     }
   }
   @keyframes wire-cut-bottom {
-    from {
-      opacity: 1;
+    0%,
+    100% {
+      transform: none;
     }
-    to {
-      opacity: 1;
+  }
+  @keyframes wire-cut-glow {
+    0%,
+    100% {
+      filter: none;
+    }
+  }
+  @keyframes wire-cut-spark {
+    0%,
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes wire-cut-ring {
+    0%,
+    100% {
+      opacity: 0;
     }
   }
   @keyframes dial-slide-up {

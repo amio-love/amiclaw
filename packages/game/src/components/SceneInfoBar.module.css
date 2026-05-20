@@ -20,6 +20,21 @@
   min-width: 0;
 }
 
+/* Vertical divider + extra padding between adjacent HUD fields. Without it
+   the battery value sits flush against the indicator chips and players read
+   the chips as part of the battery count ("电池：2" then 3 chips). The rule
+   draws each field as a visibly separate, separately-labelled segment. */
+.field + .field {
+  padding-left: 12px;
+  border-left: 1px solid var(--color-border);
+}
+
+/* Indicator chips wrap as a group beneath their shared "指示灯：" label so a
+   narrow viewport never splits a chip onto its own line away from the label. */
+.indicators {
+  flex-wrap: wrap;
+}
+
 .label {
   color: var(--color-text-muted);
   /* Keep the label glued to its value on one line — only the phrase wraps. */

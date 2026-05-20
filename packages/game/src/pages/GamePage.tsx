@@ -19,12 +19,13 @@ import { generateKeypad } from '@/modules/keypad/generator'
 import Timer from '@/components/Timer'
 import ProgressBar from '@/components/ProgressBar'
 import SceneInfoBar from '@/components/SceneInfoBar'
+import MuteButton from '@/components/MuteButton'
 import WireModule from '@/modules/wire/WireModule'
 import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
-import { TONGUE_TWISTERS } from '@/data/tongue-twisters'
+import { generateSceneInfo } from '@/engine/scene-info'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext } from '@/audio/audio-context'
 import styles from './GamePage.module.css'
@@ -72,19 +73,6 @@ function detectRefresh(): boolean {
 /** Mark the refresh banner as consumed for the rest of this document's life. */
 function consumeRefreshBanner(): void {
   refreshBannerConsumed = true
-}
-
-const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']
-
-function generateSceneInfo(rng: Rng): SceneInfo {
-  const sceneTongueTwister = rng.pick(TONGUE_TWISTERS)
-  const batteryCount = rng.intBetween(1, 4)
-  const indicatorCount = rng.intBetween(0, 3)
-  const indicators = Array.from({ length: indicatorCount }, () => ({
-    label: rng.pick(INDICATOR_LABELS),
-    lit: rng.float() < 0.5,
-  }))
-  return { sceneTongueTwister, batteryCount, indicators }
 }
 
 function generateAllModules(
@@ -498,14 +486,17 @@ export default function GamePage() {
           <div>{mode === 'daily' ? '每日' : '练习'}</div>
           <div>{mode === 'daily' ? `第 ${state.attemptNumber} 次` : '本地练习'}</div>
         </div>
-        <button
-          type="button"
-          className={styles.exitBtn}
-          onClick={handleExitRun}
-          aria-label="退出当前关卡"
-        >
-          退出
-        </button>
+        <div className={styles.topBarActions}>
+          <MuteButton className={styles.muteBtn} />
+          <button
+            type="button"
+            className={styles.exitBtn}
+            onClick={handleExitRun}
+            aria-label="退出当前关卡"
+          >
+            退出
+          </button>
+        </div>
       </div>
 
       <div className={styles.moduleArea}>

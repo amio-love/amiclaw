@@ -145,14 +145,6 @@
   min-width: 20px;
 }
 
-/* Pre-flight requirement callout — used on step 1 only.
-   Neon-cyan side accent flags the "voice AI must be open before you start"
-   requirement without bleeding the accent across the rest of the list. */
-.howToList li.stepRequired {
-  border-left: 2px solid var(--color-neon-cyan);
-  padding-left: 8px;
-}
-
 .footer {
   font-family: var(--font-sans);
   font-size: 0.75rem;

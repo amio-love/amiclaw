@@ -5,10 +5,10 @@ import PromptModal, { type PromptMode } from '@/components/PromptModal'
 import styles from './HomePage.module.css'
 
 const HOW_TO_STEPS = [
-  '必备：在另一个窗口/设备打开你的 AI（Claude、ChatGPT、Gemini…）并切到语音模式。',
-  '点「练习」或「每日挑战」，把弹窗里的手册地址复制发给 AI。等它说读完手册了。',
-  '回到游戏页，按「确认开始游戏」。',
-  '描述你看到的场景，AI 会告诉你怎么操作。用时越短，排名越高。',
+  '点「练习」或「每日挑战」，复制弹窗里的手册链接。',
+  '打开 AI 并切到语音模式，把链接发给它，等它读完手册。',
+  '回游戏页，按「确认开始游戏」。',
+  '描述你看到的场景，照 AI 指引操作 —— 用时越短，排名越高。',
 ]
 
 interface ModalState {
@@ -53,7 +53,7 @@ export default function HomePage() {
         <h2 className={styles.howToTitle}>怎么开始</h2>
         <ol className={styles.howToList}>
           {HOW_TO_STEPS.map((step, i) => (
-            <li key={i} className={i === 0 ? styles.stepRequired : undefined}>
+            <li key={i}>
               <span className={styles.stepNum}>{i + 1}.</span>
               <span>{step}</span>
             </li>

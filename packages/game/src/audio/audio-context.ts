@@ -83,3 +83,44 @@ export function getBuffer(name: SampleName): Promise<AudioBuffer | null> {
   inflight.set(name, promise)
   return promise
 }
+
+let masterGain: GainNode | null = null
+let masterMuted = false
+
+/**
+ * Returns the shared master GainNode — the single node every SFX is routed
+ * through before reaching `ctx.destination`. Created lazily on first call and
+ * connected straight to the destination. Its gain encodes the mute state
+ * (0 when muted, 1 otherwise), so routing every sound through it means mute
+ * is enforced in exactly one place. Returns null when Web Audio is
+ * unavailable — callers fall back to connecting directly to the destination.
+ */
+export function getMasterGain(): GainNode | null {
+  const context = getAudioContext()
+  if (!context) return null
+  if (masterGain) return masterGain
+  try {
+    const gain = context.createGain()
+    gain.gain.value = masterMuted ? 0 : 1
+    gain.connect(context.destination)
+    masterGain = gain
+  } catch {
+    // createGain / connect can throw if the context was closed; silent-fail.
+    masterGain = null
+    return null
+  }
+  return masterGain
+}
+
+/**
+ * Sets whether the master GainNode silences all output. Updates the live node
+ * immediately when it exists, and records the value so a master gain created
+ * later (lazily, on first SFX) starts in the correct state. The mute feature's
+ * persistence + React layer (`mute.ts`) is the sole caller.
+ */
+export function setMasterMuted(muted: boolean): void {
+  masterMuted = muted
+  if (masterGain) {
+    masterGain.gain.value = muted ? 0 : 1
+  }
+}

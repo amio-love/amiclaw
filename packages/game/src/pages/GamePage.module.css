@@ -23,6 +23,15 @@
   line-height: 1.5;
 }
 
+/* Right-side topBar control cluster — mute toggle + exit. Grouped so the
+   topBar keeps three flex children (timer / meta / actions) and the existing
+   space-between layout is preserved. The exit button's own `margin-left`
+   spaces the two controls, so no gap is set here. */
+.topBarActions {
+  display: flex;
+  align-items: center;
+}
+
 .exitBtn {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -42,6 +51,47 @@
 
 .exitBtn:hover,
 .exitBtn:focus-visible {
+  color: var(--color-neon-red);
+  border-color: var(--color-neon-red);
+  outline: 2px solid var(--color-neon-red);
+  outline-offset: 2px;
+}
+
+/* Mute toggle — icon-only, so it carries an `aria-label`. Neutral muted-grey
+   when audio is on; flips to neon-red when muted so "sound is off" reads at a
+   glance, not only from the speaker glyph. */
+.muteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.muteBtn:hover,
+.muteBtn:focus-visible {
+  color: var(--color-neon-cyan);
+  border-color: var(--color-neon-cyan);
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 2px;
+}
+
+.muteBtn[aria-pressed='true'] {
+  color: var(--color-neon-red);
+  border-color: var(--color-neon-red);
+}
+
+.muteBtn[aria-pressed='true']:hover,
+.muteBtn[aria-pressed='true']:focus-visible {
   color: var(--color-neon-red);
   border-color: var(--color-neon-red);
   outline: 2px solid var(--color-neon-red);
