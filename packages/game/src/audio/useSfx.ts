@@ -16,7 +16,7 @@
  * design doc.
  */
 
-import { getAudioContext, getBuffer } from './audio-context'
+import { getAudioContext, getBuffer, getMasterGain } from './audio-context'
 import { SFX_PRESETS, type SfxType } from './presets'
 
 export function playSfx(type: SfxType): void {
@@ -37,7 +37,9 @@ export function playSfx(type: SfxType): void {
       const gain = ctx.createGain()
       gain.gain.value = preset.gain
       src.connect(gain)
-      gain.connect(ctx.destination)
+      // Route through the shared master gain so a single node enforces mute
+      // for every SFX; fall back to the raw destination if it can't be made.
+      gain.connect(getMasterGain() ?? ctx.destination)
       src.start(0)
     } catch {
       // Source node creation can throw if ctx was closed; safe to ignore.

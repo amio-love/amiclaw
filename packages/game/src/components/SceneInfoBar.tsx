@@ -23,15 +23,22 @@ export default function SceneInfoBar({ sceneInfo }: SceneInfoBarProps) {
         <span className={styles.label}>电池：</span>
         <span className={styles.value}>{sceneInfo.batteryCount}</span>
       </span>
-      {sceneInfo.indicators.map((ind, i) => (
-        <span
-          key={`${ind.label}-${i}`}
-          className={`${styles.indicator} ${ind.lit ? styles.lit : styles.unlit}`}
-          title={ind.lit ? `${ind.label}（亮）` : `${ind.label}（灭）`}
-        >
-          {ind.label}
-        </span>
-      ))}
+      <span className={`${styles.field} ${styles.indicators}`}>
+        <span className={styles.label}>指示灯：</span>
+        {sceneInfo.indicators.length > 0 ? (
+          sceneInfo.indicators.map((ind, i) => (
+            <span
+              key={`${ind.label}-${i}`}
+              className={`${styles.indicator} ${ind.lit ? styles.lit : styles.unlit}`}
+              title={ind.lit ? `${ind.label}（亮）` : `${ind.label}（灭）`}
+            >
+              {ind.label}
+            </span>
+          ))
+        ) : (
+          <span className={styles.value}>无</span>
+        )}
+      </span>
     </div>
   )
 }

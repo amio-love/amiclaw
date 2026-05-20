@@ -43,6 +43,9 @@ Versions follow [Semantic Versioning](https://semver.org).
 - `replay_intent` console.info event emitted when the result-page "再来一局" button is clicked — enables manual estimation of replay-willingness (roadmap §Strategic Objectives Validation Criteria #3, 复玩意愿 ≥50%) from console logs
 - Backend event ingestion via Pages Function `/api/events` — five existing event types (game_start, module_solve, game_complete, game_abandon, manual_load_failed) plus replay_intent now POST to a Cloudflare Pages Function that writes per-event-name counters and unique-device sets to the LEADERBOARD KV namespace under `events:{date}:*` keys. Frontend `console.info` channel is replaced by fire-and-forget fetch; events include device_id (sourced from the same localStorage UUID used by leaderboard submissions) so both session-level and unique-player completion-rate can be computed.
 - Beta data dashboard at `/api/dashboard?token=xxx` showing daily game_start/complete/replay counts and completion rates against the 70%/50% north-star thresholds. Requires `DASHBOARD_TOKEN` Pages secret (set via `wrangler secret put DASHBOARD_TOKEN`).
+- **Mute toggle** The game's top bar now has a mute button that silences every
+  sound effect. The setting is saved to localStorage, so the game stays muted —
+  or un-muted — across page reloads and later sessions.
 
 ### Improvements
 
@@ -52,8 +55,9 @@ Versions follow [Semantic Versioning](https://semver.org).
 - **Landing first impression** The home page now leads with the four-step
   "怎么开始" guide above the practice / daily CTAs, so visitors arriving from
   a cold-shared link see the voice-AI partner is a prerequisite before they
-  tap a button. Step 1 carries a neon-cyan side accent and a "必备：" prefix
-  to highlight the AI-must-be-running requirement, and a new `≤480px` mobile
+  tap a button. The four how-to lines are concise and follow the order
+  players actually work in — copy the manual link on the page first, then
+  open the voice AI and send it the link. A new `≤480px` mobile
   breakpoint stacks the CTAs vertically with full-width buttons, tightens the
   BOMBSQUAD title letter-spacing, and aligns home-page padding so 320 / 375 /
   414 viewports no longer overflow.
@@ -165,6 +169,19 @@ Versions follow [Semantic Versioning](https://semver.org).
   recorded in `wrangler.toml` and the binding is attached to the Pages project,
   so the daily leaderboard endpoints persist scores in production instead of
   returning a Workers runtime error.
+- **Spark-highlight wire cut** Cutting the correct wire now plays a reworked
+  success animation — a quick spark flash at the cut point, a brief glow on
+  the two severed ends, and the halves snapping apart fast. It is pure CSS,
+  and the reduced-motion fallback keeps both halves visible without motion.
+- **Clearer Scene Info bar** The indicator lights now have their own
+  "指示灯：" label, and a divider separates them from the battery count.
+  Previously the indicator chips sat flush against "电池：N" with no label of
+  their own and were easy to misread as battery symbols.
+- **Sharper AI partner guidance** The bomb manual now explicitly tells the AI
+  what it must not say to the player — no raw rule text or condition tables,
+  no hints that decoy modules exist, no manual structure — and to reply with
+  the conclusive action only, never its reasoning. The same two guardrails
+  are added to the standard AI prompt.
 
 ### Fixed
 
@@ -261,6 +278,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 - **Automation** Added the missing Dependabot labels and removed the repo-wide CODEOWNERS assignment so dependency PRs no longer auto-request `@byheaven` for review
 
 - **Docs** Removed the duplicate AI changelog guide and kept `docs/changelog-style-guide.md` as the single source of truth
+- **Indicator lights no longer repeat** Indicator lights could appear twice in
+  the same bomb (for example two "SND" chips), which also corrupted the
+  rule-engine state for that indicator since same-named lights overwrote each
+  other. Indicators are now sampled without replacement, so every indicator in
+  a bomb is unique.
 
 <!-- Add every change that will land on main directly below this header. -->
 <!-- Entries below are maintained manually -->

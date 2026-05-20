@@ -95,6 +95,9 @@ export default function WireModule({
                     fill="none"
                     strokeLinecap="round"
                   />
+                  {/* Spark highlight at the cut point */}
+                  <circle cx={midX} cy={startY} r={5} className={styles['wire-cut-spark-ring']} />
+                  <circle cx={midX} cy={startY} r={4} className={styles['wire-cut-spark-core']} />
                 </>
               ) : (
                 <path
