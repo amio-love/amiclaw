@@ -168,6 +168,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Leaderboard stays readable with long nicknames** A daily player can
+  legally pick a 20-character nickname with no spaces — an unbroken English
+  handle, for example. Such a nickname used to stretch the leaderboard's
+  nickname column wide enough to push the time and attempt columns off the
+  right edge on a narrow phone, where the page's overflow guard clipped them
+  with no way to scroll across. The nickname column now wraps long handles
+  onto multiple lines, so the time and attempt counts stay visible at any
+  viewport width.
 - **Daily challenge no longer crashes on missing dates** Every date for the
   next year now serves a real daily manual derived deterministically from
   the practice rulebook, so opening "每日挑战" on any date through

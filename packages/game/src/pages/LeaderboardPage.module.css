@@ -43,6 +43,12 @@
   padding: 10px 12px;
   color: var(--color-text-primary);
   border-bottom: 1px solid var(--color-border);
+  /* Wrap a long nickname (e.g. a 20-char no-space ASCII handle) inside the
+     nickname column. Without this, table-layout:auto widens that column to
+     the unbroken word and pushes the time / attempt columns past a 320px
+     viewport, where body{overflow-x:hidden} silently clips them. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .rank {
