@@ -11,13 +11,12 @@ import styles from './ExplosionOverlay.module.css'
  * the screen shake and the shockwave rings, keeping a single red flash and a
  * static "BOOM" so the failure still reads without vestibular motion.
  *
- * Sound: the SFX bank has no dedicated explosion sample yet, so the low
- * `module-error` thud is reused as a placeholder (a real explosion sample is
- * a followup). `playSfx` is silent-fail when audio is unavailable.
+ * Sound: a dedicated `explosion` detonation sample fires once on mount.
+ * `playSfx` is silent-fail when audio is unavailable.
  */
 export default function ExplosionOverlay() {
   useEffect(() => {
-    playSfx('module-error')
+    playSfx('explosion')
   }, [])
 
   return (

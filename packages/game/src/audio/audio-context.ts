@@ -7,16 +7,17 @@
  * pointer handler — and resume it once.
  *
  * Why a buffer cache: each AudioBufferSourceNode is single-use, but the
- * decoded AudioBuffer is reusable. We decode each of the 3 samples once,
+ * decoded AudioBuffer is reusable. We decode each of the 4 samples once,
  * lazily on first use, and hand out fresh source nodes per play.
  */
 
-export type SampleName = 'click' | 'tick' | 'thunk'
+export type SampleName = 'click' | 'tick' | 'thunk' | 'explosion'
 
 const SAMPLE_URLS: Record<SampleName, string> = {
   click: '/audio/click.ogg',
   tick: '/audio/tick.ogg',
   thunk: '/audio/thunk.ogg',
+  explosion: '/audio/explosion.ogg',
 }
 
 let ctx: AudioContext | null = null

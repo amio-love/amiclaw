@@ -5,12 +5,16 @@ All audio assets in this directory are licensed under
 and may be used in personal and commercial projects without attribution.
 Crediting the author (Kenney) is appreciated but not required.
 
-| File        | Source                                               | Original filename    | License | Downloaded |
-| ----------- | ---------------------------------------------------- | -------------------- | ------- | ---------- |
-| `click.ogg` | [Kenney UI Audio](https://kenney.nl/assets/ui-audio) | `Audio/click1.ogg`   | CC0 1.0 | 2026-05-12 |
-| `tick.ogg`  | [Kenney UI Audio](https://kenney.nl/assets/ui-audio) | `Audio/switch16.ogg` | CC0 1.0 | 2026-05-12 |
-| `thunk.ogg` | [Kenney UI Audio](https://kenney.nl/assets/ui-audio) | `Audio/switch33.ogg` | CC0 1.0 | 2026-05-12 |
+| File            | Source                                                         | Original filename               | License | Downloaded |
+| --------------- | -------------------------------------------------------------- | ------------------------------- | ------- | ---------- |
+| `click.ogg`     | [Kenney UI Audio](https://kenney.nl/assets/ui-audio)           | `Audio/click1.ogg`              | CC0 1.0 | 2026-05-12 |
+| `tick.ogg`      | [Kenney UI Audio](https://kenney.nl/assets/ui-audio)           | `Audio/switch16.ogg`            | CC0 1.0 | 2026-05-12 |
+| `thunk.ogg`     | [Kenney UI Audio](https://kenney.nl/assets/ui-audio)           | `Audio/switch33.ogg`            | CC0 1.0 | 2026-05-12 |
+| `explosion.ogg` | [Kenney Sci-Fi Sounds](https://kenney.nl/assets/sci-fi-sounds) | `Audio/explosionCrunch_002.ogg` | CC0 1.0 | 2026-05-20 |
 
 Author: Kenney Vleugels (<https://kenney.nl>).
 
-Source pack: <https://kenney.nl/assets/ui-audio>
+Source packs:
+
+- UI Audio: <https://kenney.nl/assets/ui-audio>
+- Sci-Fi Sounds: <https://kenney.nl/assets/sci-fi-sounds>

@@ -69,6 +69,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Improvements
 
+- **Bomb detonation sound** Failing a daily challenge now fires a dedicated
+  explosion sound effect under the full-screen detonation overlay — a sharp,
+  prominent boom — replacing the muffled module-failure thud reused as a
+  placeholder until now. The sample is a new CC0 asset from Kenney Sci-Fi
+  Sounds; no new runtime dependencies.
 - **Beta data dashboard TTL** Event-ingestion KV TTL extended from 48 hours
   to 30 days so the dashboard can show the full 5/18→5/31 internal-beta
   window cumulatively. Leaderboard KV TTL unchanged (still 48h).
