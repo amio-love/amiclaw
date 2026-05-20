@@ -1,7 +1,7 @@
 import styles from './ProgressBar.module.css'
 
 interface ProgressBarProps {
-  total: number // always 4 for MVP
+  total: number // module count for this run — mode-dependent (daily 4, practice 2)
   completed: number
   current: number // index of active module
 }

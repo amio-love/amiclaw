@@ -13,3 +13,30 @@
     0 0 6px var(--color-neon-cyan),
     0 0 20px var(--color-neon-cyan);
 }
+
+/* Daily-challenge low-time warning — under a minute left. Overrides the
+   cyan `.running` glow with neon-red and a gentle pulse. Practice never
+   sets this: running out of time there is harmless, so no red urgency. */
+.lowTime {
+  color: var(--color-neon-red);
+  text-shadow:
+    0 0 6px var(--color-neon-red),
+    0 0 20px var(--color-neon-red);
+  animation: timer-low 1s ease-in-out infinite;
+}
+
+@keyframes timer-low {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lowTime {
+    animation: none;
+  }
+}

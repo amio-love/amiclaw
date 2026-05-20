@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
-import { useGame } from '@/store/game-context'
+import { useGame, MODULE_SEQUENCE, type ModuleKind } from '@/store/game-context'
 import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
 import {
@@ -12,6 +12,7 @@ import {
   ManualParseError,
 } from '@/utils/yaml-loader'
 import { logEvent } from '@/utils/event-log'
+import { formatMs } from '@/utils/format-time'
 import { generateWire } from '@/modules/wire/generator'
 import { generateDial } from '@/modules/dial/generator'
 import { generateButton } from '@/modules/button/generator'
@@ -20,6 +21,9 @@ import Timer from '@/components/Timer'
 import ProgressBar from '@/components/ProgressBar'
 import SceneInfoBar from '@/components/SceneInfoBar'
 import MuteButton from '@/components/MuteButton'
+import StrikeIndicator from '@/components/StrikeIndicator'
+import ExplosionOverlay from '@/components/ExplosionOverlay'
+import PracticeIntro from '@/components/PracticeIntro'
 import WireModule from '@/modules/wire/WireModule'
 import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
@@ -30,7 +34,22 @@ import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext } from '@/audio/audio-context'
 import styles from './GamePage.module.css'
 
-const MODULE_NAMES = ['线路', '密码盘', '按钮', '键盘'] as const
+const MODULE_LABEL: Record<ModuleKind, string> = {
+  wire: '线路',
+  dial: '密码盘',
+  button: '按钮',
+  keypad: '键盘',
+}
+
+// How long the CSS explosion plays before routing to the failure result
+// page — kept in step with the ExplosionOverlay keyframe durations.
+const EXPLOSION_DURATION_MS = 1400
+
+// Practice-mode inline error hint linger time after a wrong answer.
+const PRACTICE_ERROR_HINT_MS = 3500
+
+// Daily-challenge low-time warning threshold — timer turns red below this.
+const LOW_TIME_THRESHOLD_MS = 60_000
 
 // Two-line diagnostic copy: line 1 names what just happened locally, line 2
 // names the AI partner's now-stale view. Kept as an array so the two lines
@@ -75,19 +94,40 @@ function consumeRefreshBanner(): void {
   refreshBannerConsumed = true
 }
 
-function generateAllModules(
+/** Generate a single module's `{ config, answer }` pair by its kind. */
+function generateModuleByKind(
+  kind: ModuleKind,
+  rng: Rng,
+  manual: Manual,
+  sceneInfo: SceneInfo
+): { config: ModuleConfig; answer: ModuleAnswer } {
+  switch (kind) {
+    case 'wire':
+      return generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
+    case 'dial':
+      return generateDial(rng, manual.modules.symbol_dial, sceneInfo)
+    case 'button':
+      return generateButton(rng, manual.modules.button.rules, sceneInfo)
+    case 'keypad':
+      return generateKeypad(rng, manual.modules.keypad, sceneInfo)
+  }
+}
+
+/** Generate puzzles for the run's module sequence, in order. */
+function generateSequence(
+  sequence: ModuleKind[],
   rng: Rng,
   manual: Manual,
   sceneInfo: SceneInfo
 ): { configs: ModuleConfig[]; answers: ModuleAnswer[] } {
-  const wire = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
-  const dial = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
-  const button = generateButton(rng, manual.modules.button.rules, sceneInfo)
-  const keypad = generateKeypad(rng, manual.modules.keypad, sceneInfo)
-  return {
-    configs: [wire.config, dial.config, button.config, keypad.config],
-    answers: [wire.answer, dial.answer, button.answer, keypad.answer],
+  const configs: ModuleConfig[] = []
+  const answers: ModuleAnswer[] = []
+  for (const kind of sequence) {
+    const { config, answer } = generateModuleByKind(kind, rng, manual, sceneInfo)
+    configs.push(config)
+    answers.push(answer)
   }
+  return { configs, answers }
 }
 
 /** Load a daily manual with sessionStorage fallback on network failure. */
@@ -131,7 +171,11 @@ export default function GamePage() {
   const customUrl = searchParams.get('url')
 
   const { state, dispatch } = useGame()
-  const rngRef = useRef<Rng | null>(null)
+
+  // Practice-only inline error hint: a wrong answer surfaces a short
+  // coaching line that auto-dismisses after a few seconds. Daily mode shows
+  // no such hint — the strike indicator carries the visible warning there.
+  const [practiceErrorVisible, setPracticeErrorVisible] = useState(false)
 
   // Captured once on mount so it stays stable across re-renders. The player
   // can dismiss it; once dismissed it does not reappear for the lifetime of
@@ -180,34 +224,36 @@ export default function GamePage() {
     </div>
   ) : null
 
-  const { display: timerDisplay } = useTimer(state.totalStartTime, state.totalEndTime)
+  // Countdown timer. `useTimer` still measures elapsed wall-clock time; the
+  // direction flip to "remaining" happens here, the single place it lives.
+  const { elapsedMs } = useTimer(state.totalStartTime, state.totalEndTime)
+  const remainingMs = Math.max(0, state.timeBudgetMs - elapsedMs)
+  const timerDisplay = formatMs(remainingMs)
   const isRunning = state.status === 'PLAYING' || state.status === 'MODULE_COMPLETE'
+  const lowTime = state.mode === 'daily' && isRunning && remainingMs < LOW_TIME_THRESHOLD_MS
 
   // Load the manual on mount — but skip the reload if the provider already
   // restored a live, in-progress run for this exact mode from sessionStorage.
   // Without that guard, an accidental F5 would replay START_LOADING, reset
-  // the timer, regenerate all 4 puzzles, and throw away the module stats the
-  // player had already earned.
+  // the timer, regenerate the run's puzzles, and throw away the module stats
+  // the player had already earned.
   useEffect(() => {
     const hasRestoredRun =
       state.mode === mode &&
       state.manual !== null &&
       state.sceneInfo !== null &&
+      state.moduleConfigs.length > 0 &&
       state.moduleConfigs.every((c) => c !== null) &&
-      ['READY', 'PLAYING', 'MODULE_COMPLETE', 'ALL_COMPLETE'].includes(state.status)
+      ['READY', 'PLAYING', 'MODULE_COMPLETE', 'ALL_COMPLETE', 'EXPLODING'].includes(state.status)
 
     if (hasRestoredRun) {
-      // Still need a working RNG for error-regeneration, but it can be a
-      // fresh one — regen just needs new random values, not reproducibility.
-      if (rngRef.current === null) {
-        rngRef.current = createRng(state.rngSeed || Date.now())
-      }
+      // The restored run already has its puzzles — nothing to load or
+      // regenerate. (Answers are never regenerated on error any more.)
       return
     }
 
     const seed = getRunSeed(mode)
     const rng = createRng(seed)
-    rngRef.current = rng
 
     // Always derive the manual URL from the current origin so whichever
     // domain is serving the game also serves the matching manual, and the
@@ -238,7 +284,7 @@ export default function GamePage() {
         let configs: ModuleConfig[]
         let answers: ModuleAnswer[]
         try {
-          const result = generateAllModules(rng, manual, sceneInfo)
+          const result = generateSequence(MODULE_SEQUENCE[mode], rng, manual, sceneInfo)
           configs = result.configs
           answers = result.answers
         } catch (genErr) {
@@ -312,85 +358,89 @@ export default function GamePage() {
     return () => clearTimeout(timeout)
   }, [state.status, dispatch])
 
+  // Countdown-zero detection. `remainingMs` is recomputed every animation
+  // frame by `useTimer`, so the frame the budget runs out this effect fires
+  // TIME_EXPIRED. Short-circuited once `totalEndTime` is set (run resolved),
+  // which also covers the last-module win lock — a daily run whose final
+  // module was just solved has `totalEndTime` stamped and is immune here.
+  useEffect(() => {
+    if (state.totalStartTime === null || state.totalEndTime !== null) return
+    if (state.status !== 'PLAYING' && state.status !== 'MODULE_COMPLETE') return
+    if (remainingMs > 0) return
+    dispatch({ type: 'TIME_EXPIRED' })
+  }, [remainingMs, state.status, state.totalStartTime, state.totalEndTime, dispatch])
+
+  // Auto-advance EXPLODING → RESULT once the explosion animation has played.
+  useEffect(() => {
+    if (state.status !== 'EXPLODING') return
+    const id = setTimeout(() => {
+      dispatch({ type: 'EXPLOSION_DONE' })
+    }, EXPLOSION_DURATION_MS)
+    return () => clearTimeout(id)
+  }, [state.status, dispatch])
+
+  // Auto-dismiss the practice error hint a few seconds after it appears.
+  useEffect(() => {
+    if (!practiceErrorVisible) return
+    const id = setTimeout(() => setPracticeErrorVisible(false), PRACTICE_ERROR_HINT_MS)
+    return () => clearTimeout(id)
+  }, [practiceErrorVisible])
+
   const handleModuleComplete = useCallback(() => {
-    const moduleType = ['wire', 'dial', 'button', 'keypad'][state.currentModuleIndex]
+    const moduleType = state.moduleSequence[state.currentModuleIndex] ?? 'unknown'
     // Reducer computes time from state.currentModuleStartTime (Date.now()
     // based), and reads state.currentModuleErrorCount. Keeping those in
     // state, not refs, is what makes refresh-resilience possible.
     dispatch({ type: 'MODULE_COMPLETE', moduleType })
-  }, [dispatch, state.currentModuleIndex])
+  }, [dispatch, state.moduleSequence, state.currentModuleIndex])
 
   const handleExitRun = useCallback(() => {
     if (!window.confirm('退出当前关卡？进度会清空。')) return
-    const elapsedMs = state.totalStartTime !== null ? Date.now() - state.totalStartTime : null
+    const elapsed = state.totalStartTime !== null ? Date.now() - state.totalStartTime : null
     logEvent('game_abandon', {
       currentModuleIndex: state.currentModuleIndex,
-      elapsedMs,
+      elapsedMs: elapsed,
       mode: state.mode,
     })
     dispatch({ type: 'RESET' })
     navigate('/')
   }, [dispatch, navigate, state.currentModuleIndex, state.mode, state.totalStartTime])
 
+  // A wrong answer no longer regenerates the puzzle — the player retries the
+  // same puzzle in place. The mode branch (strike vs. nothing) lives in the
+  // reducer's MODULE_ERROR handler; GamePage only surfaces the practice hint.
   const handleModuleError = useCallback(() => {
-    const rng = rngRef.current
-    const manual = state.manual
-    const sceneInfo = state.sceneInfo
-    if (!rng || !manual || !sceneInfo) return
-
-    try {
-      const idx = state.currentModuleIndex
-      let config: ModuleConfig
-      let answer: ModuleAnswer
-      if (idx === 0) {
-        const result = generateWire(rng, manual.modules.wire_routing.rules, sceneInfo)
-        config = result.config
-        answer = result.answer
-      } else if (idx === 1) {
-        const result = generateDial(rng, manual.modules.symbol_dial, sceneInfo)
-        config = result.config
-        answer = result.answer
-      } else if (idx === 2) {
-        const result = generateButton(rng, manual.modules.button.rules, sceneInfo)
-        config = result.config
-        answer = result.answer
-      } else {
-        const result = generateKeypad(rng, manual.modules.keypad, sceneInfo)
-        config = result.config
-        answer = result.answer
-      }
-      dispatch({ type: 'REGENERATE_MODULE', config, answer })
-    } catch (genErr) {
-      console.error('Generator exhaustion during error regeneration:', genErr)
-      dispatch({
-        type: 'LOAD_ERROR',
-        message: '谜题生成失败，请重新开始。',
-      })
+    dispatch({ type: 'MODULE_ERROR' })
+    if (state.mode === 'practice') {
+      setPracticeErrorVisible(true)
     }
-  }, [dispatch, state.currentModuleIndex, state.manual, state.sceneInfo])
+  }, [dispatch, state.mode])
 
   const renderModule = () => {
     const idx = state.currentModuleIndex
+    const kind = state.moduleSequence[idx]
     const config = state.moduleConfigs[idx]
     const answer = state.moduleAnswers[idx]
     const sceneInfo = state.sceneInfo
-    if (!config || !answer || !sceneInfo) return null
+    if (!kind || !config || !answer || !sceneInfo) return null
 
     const commonProps = {
       onComplete: handleModuleComplete,
       onError: handleModuleError,
       sceneInfo,
+      mode: state.mode,
     }
 
-    if (idx === 0)
-      return <WireModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 1)
-      return <DialModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 2)
-      return <ButtonModule config={config as never} answer={answer as never} {...commonProps} />
-    if (idx === 3)
-      return <KeypadModule config={config as never} answer={answer as never} {...commonProps} />
-    return null
+    switch (kind) {
+      case 'wire':
+        return <WireModule config={config as never} answer={answer as never} {...commonProps} />
+      case 'dial':
+        return <DialModule config={config as never} answer={answer as never} {...commonProps} />
+      case 'button':
+        return <ButtonModule config={config as never} answer={answer as never} {...commonProps} />
+      case 'keypad':
+        return <KeypadModule config={config as never} answer={answer as never} {...commonProps} />
+    }
   }
 
   // LOADING state
@@ -452,36 +502,53 @@ export default function GamePage() {
     )
   }
 
-  // READY state — waiting for player to click Start
+  // READY state — waiting for the player to start. Practice gets a
+  // lightweight onboarding briefing; daily keeps the terse "ready?" prompt.
   if (state.status === 'READY') {
+    // Unlock the shared AudioContext inside this user-gesture handler so iOS
+    // Safari permits audio to start when the stopwatch loop begins (the
+    // stopwatch effect itself runs outside a gesture).
+    const handleStart = () => {
+      getAudioContext()
+      dispatch({ type: 'START_GAME' })
+    }
     return (
       <main className={styles.page}>
         {refreshBanner}
         <div className={styles.overlay}>
-          <p className={styles.readyText}>准备好了吗？</p>
-          <button
-            className={styles.startBtn}
-            onClick={() => {
-              // Unlock the shared AudioContext inside this user-gesture handler
-              // so iOS Safari permits audio to start when the stopwatch loop
-              // begins (the stopwatch effect itself runs outside a gesture).
-              getAudioContext()
-              dispatch({ type: 'START_GAME' })
-            }}
-          >
-            开始
-          </button>
+          {state.mode === 'practice' ? (
+            <PracticeIntro onStart={handleStart} />
+          ) : (
+            <>
+              <p className={styles.readyText}>准备好了吗？</p>
+              <button className={styles.startBtn} onClick={handleStart}>
+                开始
+              </button>
+            </>
+          )}
         </div>
       </main>
     )
   }
 
-  // PLAYING / MODULE_COMPLETE states
+  // PLAYING / MODULE_COMPLETE / EXPLODING states
+  const currentKind = state.moduleSequence[state.currentModuleIndex]
+  const moduleLabel = currentKind ? MODULE_LABEL[currentKind] : ''
+  const showFirstInteractionHint =
+    state.mode === 'practice' &&
+    state.status === 'PLAYING' &&
+    state.currentModuleIndex === 0 &&
+    state.currentModuleErrorCount === 0 &&
+    state.moduleStats.length === 0
+
   return (
     <main className={styles.page}>
       {refreshBanner}
       <div className={styles.topBar}>
-        <Timer display={timerDisplay} isRunning={isRunning} />
+        <div className={styles.timerCluster}>
+          <Timer display={timerDisplay} isRunning={isRunning} lowTime={lowTime} />
+          {state.mode === 'daily' && <StrikeIndicator strikeCount={state.strikeCount} />}
+        </div>
         <div className={styles.modeMeta}>
           <div>{mode === 'daily' ? '每日' : '练习'}</div>
           <div>{mode === 'daily' ? `第 ${state.attemptNumber} 次` : '本地练习'}</div>
@@ -501,7 +568,17 @@ export default function GamePage() {
 
       <div className={styles.moduleArea}>
         <div>
-          <p className={styles.moduleLabel}>{MODULE_NAMES[state.currentModuleIndex]}</p>
+          <p className={styles.moduleLabel}>{moduleLabel}</p>
+          {showFirstInteractionHint && (
+            <p className={styles.firstInteractionHint}>
+              先把你看到的东西描述给 AI，等它查完手册给你指令，再动手。
+            </p>
+          )}
+          {state.mode === 'practice' && practiceErrorVisible && (
+            <p className={styles.practiceErrorHint} role="status">
+              答错了，别紧张 —— 再听一遍 AI 的指令，就在这道题上直接重试。
+            </p>
+          )}
           {renderModule()}
         </div>
       </div>
@@ -509,7 +586,7 @@ export default function GamePage() {
       <div className={styles.bottomArea}>
         {state.sceneInfo && <SceneInfoBar sceneInfo={state.sceneInfo} />}
         <ProgressBar
-          total={4}
+          total={state.moduleSequence.length}
           completed={state.currentModuleIndex}
           current={state.currentModuleIndex}
         />
@@ -520,6 +597,8 @@ export default function GamePage() {
           <p className={styles.defusedText}>拆除成功</p>
         </div>
       )}
+
+      {state.status === 'EXPLODING' && <ExplosionOverlay />}
     </main>
   )
 }

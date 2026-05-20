@@ -67,7 +67,7 @@ import { GameProvider, type GameState } from '@/store/game-context'
 import { submitScore } from '@/utils/leaderboard-api'
 import * as clipboardModule from '@/utils/clipboard'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v1'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
 
 function finishedPracticeState(): GameState {
   // Seed `attemptNumber` to a non-default value (7), distinct from
@@ -87,6 +87,7 @@ function finishedPracticeState(): GameState {
     manual: null,
     manualUrl: null,
     sceneInfo: null,
+    moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [null, null, null, null],
     moduleAnswers: [null, null, null, null],
     currentModuleIndex: 4,
@@ -100,6 +101,9 @@ function finishedPracticeState(): GameState {
     totalEndTime: 1_700_000_150_000,
     currentModuleStartTime: null,
     currentModuleErrorCount: 0,
+    strikeCount: 0,
+    timeBudgetMs: 300_000,
+    outcome: 'practice-cleared',
     errorMessage: null,
     errorKind: null,
     attemptNumber: 7,
@@ -184,6 +188,7 @@ function finishedDailyState(overrides: Partial<GameState> = {}): GameState {
     manual: null,
     manualUrl: null,
     sceneInfo: null,
+    moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [null, null, null, null],
     moduleAnswers: [null, null, null, null],
     currentModuleIndex: 4,
@@ -197,6 +202,9 @@ function finishedDailyState(overrides: Partial<GameState> = {}): GameState {
     totalEndTime: 1_700_000_221_000,
     currentModuleStartTime: null,
     currentModuleErrorCount: 0,
+    strikeCount: 0,
+    timeBudgetMs: 600_000,
+    outcome: 'defused',
     errorMessage: null,
     errorKind: null,
     attemptNumber: 3,

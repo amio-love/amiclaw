@@ -25,6 +25,7 @@ describe('WireModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('wire-2'))
@@ -44,6 +45,7 @@ describe('WireModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('wire-0'))
@@ -59,6 +61,7 @@ describe('WireModule', () => {
         onComplete={vi.fn()}
         onError={vi.fn()}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     expect(screen.getByTestId('wire-0')).toBeInTheDocument()

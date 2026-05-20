@@ -12,7 +12,6 @@
   font-size: clamp(2.5rem, 10vw, 5rem);
   font-weight: bold;
   text-align: center;
-  animation: success-flash 0.4s ease;
 }
 
 .headerDefused {
@@ -20,6 +19,40 @@
   text-shadow:
     0 0 10px var(--color-neon-green),
     0 0 40px var(--color-neon-green);
+  animation: success-flash 0.4s ease;
+}
+
+/* Failure header — red glow + a one-shot red flash. */
+.headerExploded {
+  color: var(--color-neon-red);
+  text-shadow:
+    0 0 10px var(--color-neon-red),
+    0 0 40px var(--color-neon-red);
+  animation: error-flash 0.4s ease;
+}
+
+/* Practice result header — neutral cyan, no triumphant flash. Covers both
+   `practice-cleared` and the gentle `practice-timeout` end. */
+.headerPractice {
+  color: var(--color-neon-cyan);
+  text-shadow: 0 0 10px var(--color-neon-cyan);
+}
+
+/* "本次完成 N 个模块" line under a practice-timeout header. */
+.subtitle {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+/* Failure-reason line under an exploded header. */
+.failureReason {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--color-neon-red);
+  text-align: center;
+  letter-spacing: 0.05em;
 }
 
 .totalTime {
@@ -106,7 +139,9 @@
   cursor: pointer;
   letter-spacing: 0.2em;
   box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
   min-height: var(--touch-target);
 }
 
@@ -148,7 +183,9 @@
   border-radius: 4px;
   cursor: pointer;
   letter-spacing: 0.05em;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
   min-height: var(--touch-target);
 }
 

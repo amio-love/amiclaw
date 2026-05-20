@@ -40,7 +40,7 @@ import ResultPage from './ResultPage'
 import { submitScore } from '@/utils/leaderboard-api'
 import { GameProvider, type GameState } from '@/store/game-context'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v1'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
 const NICKNAME_KEY = 'bombsquad-nickname'
 
 const mockedSubmit = vi.mocked(submitScore)
@@ -77,6 +77,7 @@ function finishedDailyState(): GameState {
     manual: null,
     manualUrl: null,
     sceneInfo: null,
+    moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [null, null, null, null],
     moduleAnswers: [null, null, null, null],
     currentModuleIndex: 4,
@@ -90,6 +91,9 @@ function finishedDailyState(): GameState {
     totalEndTime: 1_700_000_150_000,
     currentModuleStartTime: null,
     currentModuleErrorCount: 0,
+    strikeCount: 0,
+    timeBudgetMs: 600_000,
+    outcome: 'defused',
     errorMessage: null,
     errorKind: null,
     attemptNumber: 3,
@@ -98,7 +102,7 @@ function finishedDailyState(): GameState {
 }
 
 function finishedPracticeState(): GameState {
-  return { ...finishedDailyState(), mode: 'practice' }
+  return { ...finishedDailyState(), mode: 'practice', outcome: 'practice-cleared' }
 }
 
 function renderResultPage() {

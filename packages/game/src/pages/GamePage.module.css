@@ -15,6 +15,16 @@
   justify-content: space-between;
 }
 
+/* Left cluster of the topBar — countdown timer with the daily strike pips
+   stacked underneath. Grouped so the topBar keeps three flex children
+   (cluster / meta / actions) and the space-between layout is preserved. */
+.timerCluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .modeMeta {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -124,8 +134,37 @@
   align-items: center;
   justify-content: center;
   gap: 24px;
+  padding: 24px 16px;
+  overflow-y: auto;
   background: rgba(13, 13, 26, 0.92);
   z-index: 100;
+}
+
+/* Practice-mode module-area hints. The first-interaction hint nudges a
+   first-time player to describe before acting; the error hint reassures
+   after a wrong answer. Both are practice-only and transient. */
+.firstInteractionHint {
+  max-width: 420px;
+  margin: 0 auto 12px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--color-neon-cyan);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.practiceErrorHint {
+  max-width: 420px;
+  margin: 0 auto 12px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+  text-align: center;
+  line-height: 1.5;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neon-red);
+  border-radius: 4px;
 }
 
 .defusedText {

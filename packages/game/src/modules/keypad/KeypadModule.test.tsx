@@ -21,6 +21,7 @@ describe('KeypadModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('keypad-cell-0'))
@@ -46,6 +47,7 @@ describe('KeypadModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('keypad-cell-3'))
@@ -66,6 +68,7 @@ describe('KeypadModule', () => {
         onComplete={onComplete}
         onError={onError}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('keypad-cell-0'))
@@ -84,6 +87,7 @@ describe('KeypadModule', () => {
         onComplete={vi.fn()}
         onError={vi.fn()}
         sceneInfo={sceneInfo}
+        mode="daily"
       />
     )
     fireEvent.click(screen.getByTestId('keypad-cell-0'))
