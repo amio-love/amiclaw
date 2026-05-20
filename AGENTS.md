@@ -13,8 +13,9 @@ human player and an AI expert communicate only through voice.
 
 Key docs:
 
-- Game design and mechanics: `docs/AmiClaw_GameDesign.md`
-- MVP scope and requirements: `docs/AmiClaw_MVP.md`
+- System architecture (C4 model): `docs/architecture/architecture.md`
+- BombSquad gameplay, player guide: `docs/bombsquad-player-guide.md`
+- AmiClaw platform overview, player guide: `docs/amiclaw-platform-guide.md`
 - Design system: `docs/DesignSystem.md`
 - Changelog authoring guide: `docs/changelog-style-guide.md`
 
