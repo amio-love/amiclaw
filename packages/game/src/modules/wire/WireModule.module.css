@@ -15,7 +15,17 @@
 .wire-hit-target {
   cursor: crosshair;
   stroke: transparent;
-  stroke-width: 20;
+  /*
+   * Transparent click proxy layered over the visible wire (stroke-width 4).
+   * Widened from 20 to 28 to enlarge the mobile tap target (audit L3-1).
+   * Hard cap: wires sit 45 viewBox units apart, but adjacent curves bow
+   * toward each other, closing to a 30-unit minimum centerline gap at the
+   * curve midpoint. A stroke-width-W band reaches +/-W/2 around the wire,
+   * so W must stay <= 30 for zero overlap between neighbouring hit bands;
+   * 28 keeps a 2-unit safety margin. At a ~320px viewport (scale ~0.96)
+   * this renders an ~27px tap band, up from the previous ~19px.
+   */
+  stroke-width: 28;
   fill: none;
 }
 
