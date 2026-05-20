@@ -16,6 +16,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **PR preview deployments** Every pull request against `main` now builds
+  the site and deploys it to a Cloudflare Pages preview, then posts the
+  preview URL back to the PR as a single sticky comment that updates in
+  place on each later push. Reviewers can open the link on any device —
+  including a phone — to play-test the PR's exact build before it merges.
+  Source task `setup-amiclaw-pr-preview-deployments`.
 - **Leaderboard nickname prompt** First time a player finishes a daily
   challenge, the result page asks for a nickname (max 20 chars) before posting
   the score. The value is stored in localStorage and reused on every later
