@@ -65,7 +65,9 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
 - PRs: all pull requests must use the PR template
   (`.github/pull_request_template.md`). The `main` branch currently has no
   required review or required status check, so admins can fast-merge; PRs are
-  still preferred so CI runs and the diff is visible before it lands.
+  still preferred so CI runs and the diff is visible before it lands. Every PR
+  also gets an automatic Cloudflare Pages preview deployment, with the preview
+  URL posted back as a sticky comment for mobile review.
 - Dependencies: Dependabot opens PRs for updates automatically. Patch and minor
   updates are auto-merged; major updates require manual review.
 - Security: CodeQL runs on supported languages, dependency review blocks high
