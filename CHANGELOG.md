@@ -76,6 +76,9 @@ Versions follow [Semantic Versioning](https://semver.org).
 - **Mute toggle** The game's top bar now has a mute button that silences every
   sound effect. The setting is saved to localStorage, so the game stays muted —
   or un-muted — across page reloads and later sessions.
+- **CI** Added a `typecheck` step that runs the `api` package's `tsc --noEmit`
+  via a new root `pnpm typecheck` aggregate script, so type errors in the
+  leaderboard API now fail CI instead of merging silently.
 
 ### Improvements
 
