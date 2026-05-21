@@ -1,0 +1,42 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+}
+
+/* cyan — BombSquad featured-art chip (mono, neon cyan). */
+.cyan {
+  padding: 5px 11px;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  font-family: var(--amio-font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  color: rgba(0, 255, 255, 0.85);
+  letter-spacing: 0.08em;
+}
+
+/* soon / dev / live — game-tile status badges, shared base. */
+.soon,
+.dev,
+.live {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.soon {
+  color: var(--amio-yellow);
+  border: 1px solid rgba(255, 229, 62, 0.25);
+}
+
+.dev {
+  color: var(--amio-fg-3);
+}
+
+.live {
+  color: var(--positive);
+}

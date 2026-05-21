@@ -73,7 +73,7 @@ describe('LeaderboardPage optimistic flow', () => {
     // Beta (was 2, shifted to 3).
     await waitFor(() => {
       const rows = screen.getAllByRole('row')
-      // 1 thead row + 3 body rows
+      // 1 header row + 3 body rows
       expect(rows).toHaveLength(4)
     })
 
@@ -83,8 +83,9 @@ describe('LeaderboardPage optimistic flow', () => {
     expect(bodyRows[1]).toHaveAttribute('data-just-submitted', 'true')
     expect(bodyRows[2]).toHaveTextContent('Beta')
 
-    // Sanity: the optimistic row sits at position 2 in the rank column.
-    expect(bodyRows[1].textContent).toMatch(/#2/)
+    // Sanity: the optimistic row sits at position 2 in the rank column
+    // (Atlas list renders the rank 3-padded — `#002`).
+    expect(bodyRows[1].textContent).toMatch(/#0*2/)
   })
 
   it('drops the optimistic entry once the GET response includes it', async () => {
@@ -109,7 +110,7 @@ describe('LeaderboardPage optimistic flow', () => {
 
     await waitFor(() => {
       const rows = screen.getAllByRole('row')
-      expect(rows).toHaveLength(4) // 1 thead + 3 body
+      expect(rows).toHaveLength(4) // 1 header + 3 body
     })
 
     const bodyRows = screen.getAllByRole('row').slice(1)

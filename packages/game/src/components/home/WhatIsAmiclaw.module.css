@@ -1,0 +1,56 @@
+/* What-is-Amiclaw value props — handoff §6.5; pixel values mirror
+   prototype/atlas/atlas.html (.pitch-*). The cards consume the
+   GlassCard primitive — its base + `interactive` hover match the
+   prototype's .pitch-card exactly. The responsive @media tier (≤768px)
+   carries atlas.html's exact @media values. */
+
+.section {
+  margin: 0 0 72px;
+  padding: 60px 0 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.card {
+  padding: 28px;
+}
+
+.number {
+  font: 400 56px/0.9 var(--font-display);
+  font-style: italic;
+  letter-spacing: -0.04em;
+  color: var(--amio-yellow);
+}
+
+.cardTitle {
+  margin: 14px 0 8px;
+  font: 500 18px var(--font-display);
+  color: #fff;
+}
+
+.body {
+  margin: 0;
+  font: 400 14px/1.65 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html ≤768px — .pitch-grid collapses to one column, the giant
+   numbers shrink, the section gap tightens. */
+@media (max-width: 768px) {
+  .section {
+    margin-bottom: 52px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .number {
+    font-size: 44px;
+  }
+}

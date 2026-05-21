@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**AmiClaw platform homepage** — The site now opens on a full AmiClaw
+platform homepage instead of a bare BombSquad launcher. A four-tab shell
+(游戏 / 排行榜 / 社区 / 我的) frames the「星图 / Atlas」design: a signed-out
+visitor lands on a hero with a live daily-challenge countdown, a featured
+BombSquad section, and previews of upcoming games and the community feed,
+while a signed-in visitor sees a personal welcome strip in the hero's
+place. The existing BombSquad game flow is unchanged and stays reachable
+straight from the homepage CTAs.
+
 ### Changed
 
 - **Daily challenge now has real stakes** The daily timer counts down from a

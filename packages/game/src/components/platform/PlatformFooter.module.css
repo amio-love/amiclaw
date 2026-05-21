@@ -1,0 +1,43 @@
+/* Mirrors the .page content column (max-width 1240px, 28px gutters) so the
+   footer aligns with the page body; carries the bottom gutter for the
+   whole layout. */
+.footer {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px 80px;
+}
+
+.inner {
+  margin-top: 60px;
+  padding-top: 40px;
+  border-top: 1px solid var(--border-hairline);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.links {
+  display: flex;
+  gap: 22px;
+}
+
+.link {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html's mobile .page gutter is 0 16px. The bottom padding also
+   clears the fixed BottomNav (≈56px + safe-area) so the footer content is
+   never occluded by it — atlas itself has no bottom nav, so this clearance
+   is additive to atlas's 60px mobile gutter. */
+@media (max-width: 768px) {
+  .footer {
+    padding: 0 16px calc(80px + env(safe-area-inset-bottom));
+  }
+}

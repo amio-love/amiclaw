@@ -1,0 +1,34 @@
+.card {
+  background: var(--glass-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* interactive — lift + brighten on hover (pitch cards, game tiles). */
+.interactive {
+  transition: all 0.3s;
+}
+
+.interactive:hover {
+  transform: translateY(-4px);
+  background: var(--glass-card-strong);
+  border-color: var(--border-yellow-soft);
+}
+
+/* ----------  radius  ---------- */
+.radiusLg {
+  border-radius: var(--radius-lg);
+}
+
+.radiusXl {
+  border-radius: var(--radius-xl);
+}
+
+.radius2xl {
+  border-radius: var(--radius-2xl);
+}
+
+.radius3xl {
+  border-radius: var(--radius-3xl);
+}

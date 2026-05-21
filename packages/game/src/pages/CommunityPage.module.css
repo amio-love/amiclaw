@@ -1,0 +1,100 @@
+/* Community page — handoff §6.10; pixel values mirror
+   prototype/atlas/atlas.html (.screen-pad / .comm-*). The post cards
+   consume the GlassCard primitive (base surface, radius 2xl); this file
+   owns the page header, the 2-column grid, and the card internals.
+   Desktop layout only — responsive @media blocks land in Phase 9. */
+
+.page {
+  padding: 60px 0;
+}
+
+.title {
+  margin: 0;
+  font: 400 44px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.lead {
+  margin: 10px 0 36px;
+  max-width: 540px;
+  font: 400 16px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* §6.10 2-column post grid. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.post {
+  padding: 22px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font: 500 13px var(--font-body);
+  color: #fff;
+}
+
+.time {
+  margin-top: 2px;
+  font: 400 11px var(--font-body);
+  color: var(--text-4);
+}
+
+.body {
+  margin: 0;
+  font: 400 15px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Optional game-result img-block — BombSquad sub-brand cyan is
+   per-spec here (handoff §6.10): it surfaces a DEFUSED / EXPLODED
+   BombSquad outcome, not platform chrome. */
+.image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  margin-top: 14px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.3), transparent 55%), #0a0a1a;
+  font: 700 18px var(--amio-font-mono);
+  letter-spacing: 0.1em;
+  color: #00ffff;
+  text-shadow: 0 0 12px #00ffff;
+}
+
+.foot {
+  display: flex;
+  gap: 18px;
+  margin-top: 14px;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html .comm-grid collapses to a single column at ≤768px. */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
