@@ -1,0 +1,10 @@
+# Generated lockfile — pnpm owns its format
+pnpm-lock.yaml
+
+# Build and generated artifacts (mirrors .gitignore)
+dist/
+.output/
+.cache/
+.wrangler/
+coverage/
+*.tsbuildinfo

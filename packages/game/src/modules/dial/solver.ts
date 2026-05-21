@@ -8,15 +8,15 @@ import type { ManualModules } from '@shared/manual-schema'
 export function solveDial(
   config: DialConfig,
   section: ManualModules['symbol_dial'],
-  _sceneInfo: SceneInfo,
+  _sceneInfo: SceneInfo
 ): DialAnswer | null {
   const currentSymbols = config.dials.map((dial, i) => dial[config.currentPositions[i]])
 
   // Find a column that contains all 3 symbols
   for (const col of section.columns) {
-    if (currentSymbols.every(sym => col.includes(sym))) {
+    if (currentSymbols.every((sym) => col.includes(sym))) {
       // Target position for each dial = index of that symbol in this column
-      const positions = currentSymbols.map(sym => col.indexOf(sym))
+      const positions = currentSymbols.map((sym) => col.indexOf(sym))
       return { type: 'dial', positions }
     }
   }

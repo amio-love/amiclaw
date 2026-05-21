@@ -6,7 +6,7 @@ import { solveKeypad } from './solver'
 export function generateKeypad(
   rng: Rng,
   section: ManualModules['keypad'],
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): { config: KeypadConfig; answer: KeypadAnswer } {
   const allSymbols = [...new Set(section.sequences.flat())]
 

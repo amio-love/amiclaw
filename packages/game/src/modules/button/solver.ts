@@ -5,14 +5,10 @@ import { matchCondition } from '../../engine/rule-engine'
 export function solveButton(
   config: ButtonConfig,
   rules: ManualModules['button']['rules'],
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): ButtonAnswer | null {
   for (const rule of rules) {
-    if (matchCondition(
-      rule.condition,
-      config as unknown as Record<string, unknown>,
-      sceneInfo,
-    )) {
+    if (matchCondition(rule.condition, config as unknown as Record<string, unknown>, sceneInfo)) {
       return {
         type: 'button',
         action: rule.action.type,
