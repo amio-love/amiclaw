@@ -319,12 +319,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       const nextStrikes = state.strikeCount + 1
       if (nextStrikes >= MAX_STRIKES) {
+        // Third strike — the bomb detonates. Emit failure telemetry so the
+        // beta dashboard can tell a strike-out apart from a timeout. `now` is
+        // shared with `totalEndTime` below so the logged run duration matches
+        // the recorded run end exactly.
+        const now = Date.now()
+        const totalTimeMs = state.totalStartTime !== null ? now - state.totalStartTime : 0
+        logEvent('game_failed_strikeout', {
+          mode: state.mode,
+          totalTimeMs,
+          attemptNumber: state.attemptNumber,
+          strikeCount: nextStrikes,
+          moduleStats: state.moduleStats,
+          moduleIndex: state.currentModuleIndex,
+        })
         return {
           ...state,
           status: 'EXPLODING',
           strikeCount: nextStrikes,
           currentModuleErrorCount: state.currentModuleErrorCount + 1,
-          totalEndTime: Date.now(),
+          totalEndTime: now,
           outcome: 'exploded',
         }
       }
@@ -343,6 +357,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.totalEndTime !== null || state.outcome !== null) return state
       const now = Date.now()
       if (state.mode === 'daily') {
+        // Countdown hit zero on the daily challenge — the bomb detonates.
+        // This emit sits after the two terminal-state guards above, so a
+        // no-op TIME_EXPIRED never logs and a real transition logs exactly
+        // once.
+        const totalTimeMs = state.totalStartTime !== null ? now - state.totalStartTime : 0
+        logEvent('game_failed_timeout', {
+          mode: state.mode,
+          totalTimeMs,
+          attemptNumber: state.attemptNumber,
+          strikeCount: state.strikeCount,
+          moduleStats: state.moduleStats,
+          moduleIndex: state.currentModuleIndex,
+        })
         return { ...state, status: 'EXPLODING', totalEndTime: now, outcome: 'exploded' }
       }
       // Practice never fails — running out of time gently ends the run.

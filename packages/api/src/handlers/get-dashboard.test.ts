@@ -275,6 +275,35 @@ describe('handleGetDashboard', () => {
     }
   })
 
+  it('renders game_failed_strikeout / game_failed_timeout columns with per-day and totals values', async () => {
+    const store = {
+      'events:2026-05-18:game_start': { count: 10 },
+      'events:2026-05-18:game_failed_strikeout': { count: 3 },
+      'events:2026-05-18:game_failed_timeout': { count: 2 },
+      'events:2026-05-17:game_start': { count: 6 },
+      'events:2026-05-17:game_failed_strikeout': { count: 1 },
+      'events:2026-05-17:game_failed_timeout': { count: 4 },
+    }
+    const kv = makeKv(store)
+    const res = await handleGetDashboard(makeRequest('?token=t'), kv, 't')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+
+    // Both event names appear as their own column headers.
+    expect(html).toContain('<th class="num">game_failed_strikeout</th>')
+    expect(html).toContain('<th class="num">game_failed_timeout</th>')
+
+    // The two new columns are the last two cells of every row.
+    // 2026-05-18: strikeout 3, timeout 2.
+    expect(html).toContain('<td class="num">3</td>\n<td class="num">2</td>\n</tr>')
+    // 2026-05-17: strikeout 1, timeout 4.
+    expect(html).toContain('<td class="num">1</td>\n<td class="num">4</td>\n</tr>')
+
+    // Totals row sums both columns: strikeout 3+1=4, timeout 2+4=6.
+    const totalsRow = (html.match(/<tr class="totals">[\s\S]*?<\/tr>/g) ?? [])[0]
+    expect(totalsRow).toContain('<td class="num">4</td>\n<td class="num">6</td>\n</tr>')
+  })
+
   it('uses constant-time comparison — same-length wrong token still returns 401', async () => {
     // Sanity check that the equality is not a structural shortcut: a token
     // whose length matches but content differs must still fail.

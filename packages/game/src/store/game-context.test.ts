@@ -6,7 +6,7 @@
  * generalisation (practice runs fewer modules), and the last-module win lock
  * that protects an already-won daily run from a racing TIME_EXPIRED.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The reducer fires telemetry on several transitions; stub it so tests do not
 // attempt a real /api/events POST.
@@ -19,6 +19,7 @@ import {
   MAX_STRIKES,
   type GameState,
 } from './game-context'
+import { logEvent } from '@/utils/event-log'
 
 /** A PLAYING daily-run state; override per test. */
 function baseState(overrides: Partial<GameState> = {}): GameState {
@@ -267,5 +268,78 @@ describe('gameReducer — EXPLOSION_DONE / ALL_MODULES_COMPLETE', () => {
       { type: 'ALL_MODULES_COMPLETE' }
     )
     expect(practiceDone.outcome).toBe('practice-cleared')
+  })
+})
+
+describe('gameReducer — failure telemetry', () => {
+  // Calls to the mocked logEvent for a given event name. The mock accumulates
+  // across the whole file, so each test in this block clears it first.
+  const callsFor = (name: string) => vi.mocked(logEvent).mock.calls.filter((c) => c[0] === name)
+
+  beforeEach(() => {
+    vi.mocked(logEvent).mockClear()
+  })
+
+  it('daily: the 3rd MODULE_ERROR emits game_failed_strikeout exactly once', () => {
+    let s = baseState({ mode: 'daily', status: 'PLAYING' })
+
+    s = gameReducer(s, { type: 'MODULE_ERROR' })
+    s = gameReducer(s, { type: 'MODULE_ERROR' })
+    // The first two strikes do not detonate — no failure event yet.
+    expect(callsFor('game_failed_strikeout')).toHaveLength(0)
+
+    s = gameReducer(s, { type: 'MODULE_ERROR' })
+    expect(s.status).toBe('EXPLODING')
+    expect(callsFor('game_failed_strikeout')).toHaveLength(1)
+    expect(callsFor('game_failed_strikeout')[0][1]).toMatchObject({
+      mode: 'daily',
+      attemptNumber: 1,
+      strikeCount: MAX_STRIKES,
+      moduleIndex: 0,
+      moduleStats: [],
+    })
+  })
+
+  it('daily: TIME_EXPIRED emits game_failed_timeout exactly once', () => {
+    const s = baseState({ mode: 'daily', status: 'PLAYING' })
+    const after = gameReducer(s, { type: 'TIME_EXPIRED' })
+
+    expect(after.status).toBe('EXPLODING')
+    expect(callsFor('game_failed_timeout')).toHaveLength(1)
+    expect(callsFor('game_failed_timeout')[0][1]).toMatchObject({
+      mode: 'daily',
+      attemptNumber: 1,
+      strikeCount: 0,
+      moduleIndex: 0,
+    })
+  })
+
+  it('practice: TIME_EXPIRED emits neither failure event', () => {
+    const s = baseState({
+      mode: 'practice',
+      status: 'PLAYING',
+      moduleSequence: ['wire', 'keypad'],
+    })
+    gameReducer(s, { type: 'TIME_EXPIRED' })
+
+    expect(callsFor('game_failed_strikeout')).toHaveLength(0)
+    expect(callsFor('game_failed_timeout')).toHaveLength(0)
+  })
+
+  it('does not double-emit when an already-EXPLODING run is re-entered', () => {
+    // A racing MODULE_ERROR / TIME_EXPIRED landing after detonation hits the
+    // terminal-state guards and no-ops — it must not emit a second event.
+    const exploded = baseState({
+      mode: 'daily',
+      status: 'EXPLODING',
+      outcome: 'exploded',
+      strikeCount: MAX_STRIKES,
+      totalEndTime: 1_700_000_000_123,
+    })
+    gameReducer(exploded, { type: 'MODULE_ERROR' })
+    gameReducer(exploded, { type: 'TIME_EXPIRED' })
+
+    expect(callsFor('game_failed_strikeout')).toHaveLength(0)
+    expect(callsFor('game_failed_timeout')).toHaveLength(0)
   })
 })

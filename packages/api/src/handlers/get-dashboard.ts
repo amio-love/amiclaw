@@ -27,6 +27,8 @@ type CounterEvent =
   | 'module_solve'
   | 'manual_load_failed'
   | 'replay_intent'
+  | 'game_failed_strikeout'
+  | 'game_failed_timeout'
 
 interface DailyMetrics {
   date: string
@@ -36,6 +38,8 @@ interface DailyMetrics {
   module_solve: number
   manual_load_failed: number
   replay_intent: number
+  game_failed_strikeout: number
+  game_failed_timeout: number
   unique_starts: number
   unique_completes: number
 }
@@ -153,6 +157,8 @@ function ensureDate(map: Map<string, DailyMetrics>, date: string): DailyMetrics 
       module_solve: 0,
       manual_load_failed: 0,
       replay_intent: 0,
+      game_failed_strikeout: 0,
+      game_failed_timeout: 0,
       unique_starts: 0,
       unique_completes: 0,
     }
@@ -168,7 +174,9 @@ function isCounterEvent(suffix: string): suffix is CounterEvent {
     suffix === 'game_abandon' ||
     suffix === 'module_solve' ||
     suffix === 'manual_load_failed' ||
-    suffix === 'replay_intent'
+    suffix === 'replay_intent' ||
+    suffix === 'game_failed_strikeout' ||
+    suffix === 'game_failed_timeout'
   )
 }
 
@@ -312,6 +320,8 @@ function aggregateTotals(rows: DailyMetrics[]): DailyMetrics {
     module_solve: 0,
     manual_load_failed: 0,
     replay_intent: 0,
+    game_failed_strikeout: 0,
+    game_failed_timeout: 0,
     unique_starts: 0,
     unique_completes: 0,
   }
@@ -322,6 +332,8 @@ function aggregateTotals(rows: DailyMetrics[]): DailyMetrics {
     totals.module_solve += r.module_solve
     totals.manual_load_failed += r.manual_load_failed
     totals.replay_intent += r.replay_intent
+    totals.game_failed_strikeout += r.game_failed_strikeout
+    totals.game_failed_timeout += r.game_failed_timeout
     totals.unique_starts += r.unique_starts
     totals.unique_completes += r.unique_completes
   }
@@ -346,6 +358,8 @@ ${markerCell(uniqueRate)}
 <td class="num">${r.module_solve}</td>
 <td class="num">${r.game_abandon}</td>
 <td class="num">${r.manual_load_failed}</td>
+<td class="num">${r.game_failed_strikeout}</td>
+<td class="num">${r.game_failed_timeout}</td>
 </tr>`
 }
 
@@ -363,6 +377,8 @@ function renderTable(rows: DailyMetrics[]): string {
     'module_solve',
     'game_abandon',
     'manual_load_failed',
+    'game_failed_strikeout',
+    'game_failed_timeout',
   ]
   const headerRow = headers
     .map((h, i) => `<th${i === 0 ? '' : ' class="num"'}>${escapeHtml(h)}</th>`)
