@@ -44,6 +44,9 @@
 .value {
   color: var(--color-text-primary);
   font-weight: bold;
+  /* 14px floor: the 暗号 phrase is read aloud to the AI partner, so it must
+     stay legible — lifted off the bar's 0.85rem inherited size. */
+  font-size: 0.875rem;
   /* Allow the Chinese phrase to wrap mid-character on narrow viewports so it
      never pushes the indicator chips off-screen. */
   overflow-wrap: anywhere;

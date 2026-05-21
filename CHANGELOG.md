@@ -223,6 +223,20 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Mobile beta-flow polish** A pass over the phone experience makes the
+  daily beta path easier to use. Small text links and buttons that sat
+  below a comfortable finger size — the home page's leaderboard link, the
+  prompt dialog's close button and AI-compatibility link, the result
+  page's leaderboard / home links and its submit-retry button, and the
+  leaderboard's back-to-home link — now have full 44px tap areas, with no
+  change to how they look.
+  The in-game 暗号 code phrase you read aloud to your AI partner and the
+  result page's module-time table no longer render below 14px, so they
+  stay legible on small screens. The in-game exit button is no longer
+  narrower than it is tall, and the prompt and nickname dialogs gain a
+  scroll fallback so a short landscape viewport can no longer clip their
+  content with no way to reach the rest. The in-game error screens'
+  "← 返回首页" link also picks up the styling it was silently missing.
 - **Wires are easier to cut on a phone** Tapping a wire in the first game
   module used to demand near-pixel accuracy on a narrow screen — the
   clickable strip along each wire was under half the recommended touch

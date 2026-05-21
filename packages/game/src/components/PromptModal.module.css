@@ -13,6 +13,10 @@
   position: relative;
   width: 100%;
   max-width: 480px;
+  /* Scroll fallback so a short landscape viewport cannot clip the dialog
+     without an escape — leaves the 24px overlay padding top and bottom. */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-neon-cyan);
   border-radius: 6px;
@@ -27,8 +31,13 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 32px;
-  height: 32px;
+  /* 44x44 tap target; the glyph keeps its 1.4rem size and is centred by
+     flex so the larger hit area is invisible to the player. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
   font-family: var(--font-mono);
   font-size: 1.4rem;
   line-height: 1;
@@ -71,12 +80,16 @@
    competing with the primary 确认开始游戏 CTA. Small font keeps it from
    pulling visual weight away from the URL box. */
 .compatLink {
+  /* Text-link tap-target pattern (shared with the home / result /
+     leaderboard nav links): inline-block + padding + --touch-target. */
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
   font-family: var(--font-sans);
   font-size: 0.8rem;
   color: var(--color-neon-cyan);
   text-decoration: none;
   align-self: flex-start;
-  padding: 4px 0;
   letter-spacing: 0.02em;
 }
 
