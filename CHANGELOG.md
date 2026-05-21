@@ -230,9 +230,10 @@ Versions follow [Semantic Versioning](https://semver.org).
   page's leaderboard / home links and its submit-retry button, and the
   leaderboard's back-to-home link — now have full 44px tap areas, with no
   change to how they look.
-  The in-game 暗号 code phrase you read aloud to your AI partner and the
-  result page's module-time table no longer render below 14px, so they
-  stay legible on small screens. The in-game exit button is no longer
+  The in-game 暗号 code phrase you read aloud to your AI partner, the
+  result page's module-time table, and the in-game exit button label no
+  longer render below 14px, so they stay legible on small screens. The
+  in-game exit button is no longer
   narrower than it is tall, and the prompt and nickname dialogs gain a
   scroll fallback so a short landscape viewport can no longer clip their
   content with no way to reach the rest. The in-game error screens'
