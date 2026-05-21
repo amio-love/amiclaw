@@ -1,0 +1,94 @@
+/* Community feed carousel — handoff §6.7; pixel values mirror
+   prototype/atlas/atlas.html (.feed-*). The cards consume the GlassCard
+   primitive (base surface, radius xl); this file owns the carousel
+   track and the card internals. The responsive @media tier (≤768px)
+   carries atlas.html's exact @media values. */
+
+.section {
+  margin: 0 0 72px;
+}
+
+.track {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.card {
+  min-width: 280px;
+  max-width: 280px;
+  padding: 18px;
+  scroll-snap-align: start;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font: 500 13px var(--font-body);
+  color: #fff;
+}
+
+.time {
+  margin-top: 2px;
+  font: 400 11px var(--font-body);
+  color: var(--text-4);
+}
+
+.body {
+  font: 400 13px/1.5 var(--font-body);
+  color: var(--text-2);
+}
+
+.high {
+  font-weight: 600;
+  color: var(--amio-yellow);
+}
+
+.stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-hairline);
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ico {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html ≤768px only tightens the section gap (.section margin);
+   the carousel track stays a horizontal scroll-snap row at every tier. */
+@media (max-width: 768px) {
+  .section {
+    margin-bottom: 52px;
+  }
+}

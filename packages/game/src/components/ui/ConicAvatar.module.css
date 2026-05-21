@@ -1,0 +1,39 @@
+.ring {
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 180deg,
+    rgba(255, 229, 62, 0.7),
+    rgba(180, 120, 255, 0.55),
+    rgba(100, 200, 255, 0.55),
+    rgba(255, 229, 62, 0.7)
+  );
+}
+
+/* dim — lower-opacity ring for small feed / community avatars. */
+.dim {
+  background: conic-gradient(
+    from 180deg,
+    rgba(255, 229, 62, 0.5),
+    rgba(180, 120, 255, 0.4),
+    rgba(100, 200, 255, 0.4),
+    rgba(255, 229, 62, 0.5)
+  );
+}
+
+.spin {
+  animation: spin 20s linear infinite;
+}
+
+.inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #010100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--amio-yellow);
+}

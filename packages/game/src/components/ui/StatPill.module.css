@@ -1,0 +1,59 @@
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface-dark);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--amio-yellow);
+}
+
+.label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ----------  responsive  ----------
+   StatPill is consumed only by AnonHero's planet stage. The planet-stat
+   sizing from atlas.html's two @media blocks lives here because the
+   primitive's own classes (.pill / .value / .label) are not reachable from
+   AnonHero's CSS module. */
+@media (max-width: 1080px) {
+  .pill {
+    padding: 7px 10px;
+  }
+
+  .value {
+    font-size: 14px;
+  }
+
+  .label {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pill {
+    padding: 7px 11px;
+  }
+
+  .value {
+    font-size: 14px;
+  }
+
+  .label {
+    font-size: 10px;
+  }
+}

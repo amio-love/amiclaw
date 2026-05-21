@@ -89,18 +89,15 @@ describe('full game flow', () => {
   })
 
   it('practice run: 2 modules → result page shows 练习完成', async () => {
+    // Enter directly at the practice game route — symmetric with the daily
+    // test below. The homepage is now the GamesPage shell (no BombSquad
+    // entry point lives there); the homepage CTA → game path is covered
+    // separately by GamesPage.test.tsx.
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/game?mode=practice']}>
         <App />
       </MemoryRouter>
     )
-
-    expect(screen.getByText('BOMBSQUAD')).toBeInTheDocument()
-
-    // Clicking 练习 opens the prompt modal first; confirming inside the
-    // modal is what actually navigates into the game.
-    fireEvent.click(screen.getByRole('button', { name: /^练习$/ }))
-    fireEvent.click(screen.getByRole('button', { name: /^确认开始游戏$/ }))
 
     // Practice manual is inlined via ?raw — wait for the standard ready
     // prompt to render, then start the run. Both modes show the same

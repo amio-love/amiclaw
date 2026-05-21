@@ -1,0 +1,208 @@
+/* Account page — handoff §6.11; pixel values mirror
+   prototype/atlas/atlas.html (.screen-pad / .acct-*). The profile card,
+   run-table card, and badge card consume the GlassCard primitive (base
+   surface, radius 2xl); this file owns the page header, the 320px / 1fr
+   grid, and the card internals. Platform chrome is brand yellow; the one
+   exception is the recent-run icon, which carries BombSquad cyan as
+   gameplay content (see .runIcon). The responsive @media tier (≤768px)
+   carries atlas.html's exact @media values. */
+
+.page {
+  padding: 60px 0;
+}
+
+.title {
+  margin: 0;
+  font: 400 44px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.lead {
+  margin: 10px 0 36px;
+  max-width: 540px;
+  font: 400 16px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* §6.11 two-column layout — fixed profile card beside the detail column. */
+.grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 28px;
+}
+
+/* ----------  left — profile card  ---------- */
+.profile {
+  padding: 28px;
+}
+
+.avatar {
+  display: flex;
+  justify-content: center;
+}
+
+.name {
+  margin-top: 16px;
+  font: 400 24px var(--font-display);
+  color: #fff;
+  text-align: center;
+}
+
+.rank {
+  margin-top: 4px;
+  font: 500 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.stat {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+
+.statValue {
+  font: 400 22px var(--font-display);
+  font-style: italic;
+  color: var(--amio-yellow);
+}
+
+.statLabel {
+  margin-top: 4px;
+  font: 500 10px var(--font-body);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settingsBtn {
+  width: 100%;
+  margin-top: 22px;
+}
+
+/* ----------  right — recent runs + badges  ---------- */
+.section + .section {
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  font: 500 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.runCard {
+  padding: 6px;
+}
+
+.runs {
+  display: flex;
+  flex-direction: column;
+}
+
+.run {
+  display: grid;
+  grid-template-columns: 40px 1fr 80px 80px;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font: 500 13px var(--font-body);
+}
+
+.run:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Run badge — BombSquad cyan. A recent-run icon surfaces BombSquad
+   gameplay content (the same carve-out as the CommunityPage DEFUSED /
+   EXPLODED img-block), so the cyan-confinement rule does not exclude it. */
+.runIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.12);
+  font: 600 11px var(--amio-font-mono);
+  color: #00ffff;
+}
+
+.runGame {
+  font-family: var(--amio-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.runMode {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.runTime {
+  font-family: var(--amio-font-mono);
+  color: var(--amio-yellow);
+  text-align: right;
+}
+
+.runRank {
+  font-family: var(--amio-font-mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: right;
+}
+
+.badgeCard {
+  padding: 28px;
+}
+
+.badgeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.badgeStar {
+  font-size: 18px;
+}
+
+.badgeName {
+  margin-top: 8px;
+  font: 500 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html ≤768px — .acct-grid collapses to one column (profile card
+   stacks above the recent-runs / badges detail column). */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

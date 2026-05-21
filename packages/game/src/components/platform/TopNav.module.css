@@ -1,0 +1,115 @@
+.wrap {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(5, 5, 17, 0.55);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.nav {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* ---------- brand ---------- */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.brandMark {
+  font: 700 22px var(--font-display);
+  letter-spacing: 0.04em;
+  color: var(--amio-yellow);
+  text-shadow: 0 0 18px rgba(255, 229, 62, 0.35);
+}
+
+.dot {
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0 2px;
+  font-weight: 300;
+}
+
+/* ---------- center tabs ---------- */
+.links {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+
+.link {
+  position: relative;
+  font: 500 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 8px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.active {
+  color: #fff;
+}
+
+.active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -16px;
+  height: 2px;
+  background: var(--amio-yellow);
+  box-shadow: 0 0 12px rgba(255, 229, 62, 0.6);
+}
+
+/* ---------- right auth slot ---------- */
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.avatarLink {
+  display: flex;
+  border-radius: 50%;
+}
+
+/* ---------- mobile: simplify nav; BottomNav takes over the center tabs ---------- */
+@media (max-width: 768px) {
+  .nav {
+    padding: 12px 16px;
+    gap: 8px;
+  }
+
+  .links {
+    display: none;
+  }
+
+  .brandMark {
+    font-size: 19px;
+  }
+
+  /* the 登录 / 开始 button — atlas .signin-btn mobile size. .right button
+     (0,1,1) outranks Button's .sm / .primary (0,1,0). */
+  .right button {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+}

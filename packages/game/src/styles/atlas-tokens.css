@@ -1,0 +1,171 @@
+/* ============================================================
+   Amiclaw Atlas — Design Tokens
+   ============================================================
+   Additive design-token layer for the Atlas platform surface
+   (homepage / leaderboard / community / account). Custom-property
+   declarations ONLY — no base-element rules — so adding this file
+   to the global :root cannot restyle the existing BombSquad game
+   pages (custom properties are inert until a var() references them).
+
+   Sources: design_handoff_amiclaw_homepage README §4 +
+   prototype/shared/colors_and_type.css.
+
+   Naming note: the Atlas JetBrains Mono family is exposed as
+   --amio-font-mono, NOT --font-mono. The game's global.css already
+   defines --font-mono (Courier New) and loads after this file;
+   reusing the name would let the game token silently override the
+   Atlas one. Other Atlas tokens use namespaces that do not collide
+   with the game's --color-* / --font-sans / --touch-target set.
+   ============================================================ */
+
+:root {
+  /* ----------  BACKGROUND GRADIENT LAYERS  ---------- */
+  --bg-grad-start: #06060f;
+  --bg-grad-mid-1: #0b1232;
+  --bg-grad-mid-2: #0a0a1f;
+  --bg-grad-end: #050511;
+
+  /* ----------  TEXT LEVELS  ---------- */
+  --text-1: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.7);
+  --text-3: rgba(255, 255, 255, 0.55);
+  --text-4: rgba(255, 255, 255, 0.4);
+  --text-muted: rgba(255, 255, 255, 0.3);
+
+  /* ----------  BRAND — COSMIC BACKGROUNDS  ---------- */
+  --amio-void: #010100;
+  --amio-bg-app: #18181a;
+  --amio-bg-app-2: #1a1a1c;
+  --amio-surface-glass: rgba(41, 43, 45, 0.53);
+  --amio-surface-dark: rgba(0, 0, 0, 0.53);
+
+  /* ----------  BRAND — SIGNATURE YELLOW  ---------- */
+  --amio-yellow: #ffe53e;
+  --amio-yellow-glow-10: rgba(255, 229, 62, 0.1);
+  --amio-yellow-glow-30: rgba(255, 229, 62, 0.3);
+  --amio-yellow-glow-60: rgba(255, 229, 62, 0.6);
+
+  /* ----------  BRAND — NEUTRALS  ---------- */
+  --amio-white: #ffffff;
+  --amio-fg-1: rgba(255, 255, 255, 0.95);
+  --amio-fg-2: rgba(255, 255, 255, 0.7);
+  --amio-fg-3: rgba(255, 255, 255, 0.5);
+  --amio-fg-muted: rgba(255, 255, 255, 0.3);
+  --amio-fg-666: #666666;
+  --amio-fg-ababab: #ababab;
+
+  /* ----------  SEMANTIC  ---------- */
+  --amio-positive: #4bd266;
+  --amio-success: #48bb78;
+  --amio-warning: #f59e6b;
+  --amio-danger: rgba(255, 100, 100, 0.8);
+  --positive: #4bd266;
+  --accent-violet: #b478ff;
+  --accent-blue: #4a9eff;
+
+  /* ----------  OVERLAYS (hover / press tints)  ---------- */
+  --amio-overlay-hover: rgba(255, 255, 255, 0.05);
+  --amio-overlay-press: rgba(255, 255, 255, 0.1);
+
+  /* ----------  BOMBSQUAD SUB-BRAND  ----------
+     Used only inside BombSquad-related regions, never platform chrome. */
+  --bs-bg: #1a1a2e;
+  --bs-surface: #0d0d1a;
+  --bs-border: #1e2a4a;
+  --bs-text: #e0e0ff;
+  --bs-text-muted: #6b7299;
+  --bs-cyan: #00ffff;
+  --bs-cyan-glow: rgba(0, 255, 255, 0.4);
+  --bs-green: #39ff14;
+  --bs-red: #ff073a;
+
+  /* ----------  SURFACES (glass)  ---------- */
+  --glass-soft: rgba(255, 255, 255, 0.04);
+  --glass-card: rgba(41, 43, 45, 0.4);
+  --glass-card-strong: rgba(41, 43, 45, 0.55);
+  --surface-dark: rgba(0, 0, 0, 0.55);
+
+  /* ----------  BORDERS  ---------- */
+  --border-hairline: rgba(255, 255, 255, 0.06);
+  --border-soft: rgba(255, 255, 255, 0.1);
+  --border-yellow-soft: rgba(255, 229, 62, 0.18);
+
+  /* ----------  FONT FAMILIES  ---------- */
+  --font-display: 'ABeeZee', 'ZCOOL KuaiLe', 'Noto Sans SC', system-ui, sans-serif;
+  --font-body: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-numeric: 'MiSans', 'Inter', system-ui, sans-serif;
+  --amio-font-mono: 'JetBrains Mono', 'SF Mono', 'Courier New', monospace;
+
+  /* ----------  FONT SIZES (type ramp)  ---------- */
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+  --font-size-3xl: 40px;
+
+  /* ----------  LINE HEIGHTS  ---------- */
+  --lh-tight: 1.1;
+  --lh-snug: 1.2;
+  --lh-normal: 1.5;
+  --lh-loose: 1.6;
+
+  /* ----------  SEMANTIC TYPE ROLES  ---------- */
+  --type-display-2xl: 700 var(--font-size-3xl) / var(--lh-tight) var(--font-display);
+  --type-display-xl: 700 var(--font-size-2xl) / var(--lh-tight) var(--font-display);
+  --type-h1: 600 var(--font-size-xl) / var(--lh-snug) var(--font-display);
+  --type-h2: 600 var(--font-size-lg) / var(--lh-snug) var(--font-display);
+  --type-h3: 600 var(--font-size-md) / var(--lh-normal) var(--font-display);
+  --type-body: 400 var(--font-size-base) / var(--lh-loose) var(--font-body);
+  --type-body-sm: 400 var(--font-size-sm) / var(--lh-loose) var(--font-body);
+  --type-label: 500 var(--font-size-xs) / 1.4 var(--font-body);
+  --type-num-large: 400 var(--font-size-3xl) / var(--lh-tight) var(--font-display);
+  --type-num-stat: 600 20px / 24px var(--font-numeric);
+  --type-mono: 400 var(--font-size-base) / var(--lh-normal) var(--amio-font-mono);
+  --type-mono-caps: 500 var(--font-size-xs) / 1.4 var(--amio-font-mono);
+
+  /* ----------  SPACING (4px base)  ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ----------  RADII  ---------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 30px;
+  --radius-pill: 9999px;
+
+  /* ----------  SHADOWS / GLASS  ---------- */
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.16);
+  --shadow-yellow-ring: 0 0 0 2px var(--amio-yellow);
+  --glass-blur: blur(20px);
+  --glass-blur-heavy: blur(37.5px);
+
+  /* ----------  GLOWS  ---------- */
+  --glow-yellow: 0 0 22px rgba(255, 229, 62, 0.45);
+  --glow-yellow-strong: 0 0 32px rgba(255, 229, 62, 0.5);
+  --glow-cyan: 0 0 14px #00ffff, 0 0 50px rgba(0, 255, 255, 0.4);
+
+  /* ----------  MOTION  ---------- */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+  --transition-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --t-base: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --t-smooth: 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+  --t-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}

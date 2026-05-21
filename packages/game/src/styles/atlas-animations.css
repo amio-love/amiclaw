@@ -1,0 +1,81 @@
+/* ============================================================
+   Amiclaw Atlas — Global Keyframes
+   ============================================================
+   Named keyframes for the Atlas platform surface, with exact
+   definitions from prototype/atlas/atlas.html. These live in a
+   plain global stylesheet so the platform CSS Modules can
+   reference them by name (CSS Modules only rewrite animation
+   names that match a locally-defined @keyframes; these globals
+   pass through unchanged).
+
+   - float    5s ease-in-out infinite — planet vertical drift
+   - spin     linear infinite        — conic avatar ring / planet ring
+   - twinkle  ease-in-out infinite   — background star flicker
+   - pulse    2s ease-in-out infinite — online dot / live badge
+   ============================================================ */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion — neutralize the platform keyframes. Transform-driven
+   animations (float / spin) collapse to no movement; opacity pulses
+   (twinkle / pulse) flatten to a constant visible state. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes float {
+    0%,
+    100% {
+      transform: none;
+    }
+  }
+  @keyframes spin {
+    0%,
+    100% {
+      transform: none;
+    }
+  }
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+  }
+}

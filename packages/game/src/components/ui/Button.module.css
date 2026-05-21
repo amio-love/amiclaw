@@ -1,0 +1,60 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ----------  variants  ---------- */
+.primary {
+  background: var(--amio-yellow);
+  color: #000;
+  font-weight: 600;
+  transition: all 0.25s;
+}
+
+.primary:hover:not(:disabled) {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
+}
+
+.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ----------  sizes  ---------- */
+.md {
+  padding: 16px 28px;
+  font-size: 15px;
+}
+
+.sm {
+  padding: 13px 22px;
+  font-size: 14px;
+}
+
+/* Ghost buttons take 26px horizontal padding (atlas.html .btn-ghost);
+   the shared .md size is 28px, correct only for the primary button.
+   This compound selector restores the 2px difference for the ghost +
+   md pairing without touching primary. */
+.ghost.md {
+  padding: 16px 26px;
+}

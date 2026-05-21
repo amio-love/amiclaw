@@ -1,0 +1,98 @@
+/* Upcoming-games section — handoff §6.6; pixel values mirror
+   prototype/atlas/atlas.html (.game-*). The tiles use bespoke hover
+   (brighten, no lift, white border) rather than the GlassCard
+   `interactive` primitive — the prototype's .game-tile:hover differs
+   from .pitch-card:hover. The responsive @media tier (≤768px) carries
+   atlas.html's exact @media values. */
+
+.section {
+  margin: 0 0 72px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.tile {
+  position: relative;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-2xl);
+  background: rgba(41, 43, 45, 0.42);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.3s;
+}
+
+.tile:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(41, 43, 45, 0.6);
+}
+
+.art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.echo {
+  background:
+    radial-gradient(circle at 30% 40%, rgba(180, 120, 255, 0.45), transparent 55%),
+    radial-gradient(circle at 70% 70%, rgba(255, 107, 157, 0.25), transparent 55%), #0a0a1a;
+}
+
+.draw {
+  background:
+    radial-gradient(circle at 40% 50%, rgba(75, 210, 102, 0.4), transparent 55%),
+    radial-gradient(circle at 75% 30%, rgba(255, 229, 62, 0.2), transparent 55%), #0a0a1a;
+}
+
+.lab {
+  background: radial-gradient(circle at 50% 50%, rgba(255, 229, 62, 0.3), transparent 55%), #0a0a1a;
+}
+
+.artLabel {
+  font: 600 22px var(--font-display);
+  letter-spacing: 0.04em;
+  color: #fff;
+  mix-blend-mode: screen;
+}
+
+.artLabelCn {
+  font-family: 'Noto Sans SC', sans-serif;
+  font-weight: 700;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  font: 600 16px var(--font-display);
+  color: #fff;
+}
+
+.blurb {
+  margin: 6px 0 0;
+  font: 400 13px var(--font-body);
+  color: var(--text-3);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html ≤768px — .upcoming-grid collapses to one column, the
+   section gap tightens. */
+@media (max-width: 768px) {
+  .section {
+    margin-bottom: 52px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

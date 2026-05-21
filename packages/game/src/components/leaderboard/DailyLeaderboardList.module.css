@@ -1,0 +1,103 @@
+/* Shared grid-row leaderboard list — the real daily board and the
+   week / month / all-time mock boards render through identical markup.
+   Pixel values mirror prototype/atlas/atlas.html (.lb-mini-*); the
+   visual family matches FeaturedBombSquad's mini board. Needs no
+   responsive @media tier — atlas.html's two @media blocks carry no
+   .lb-* rules, and the fixed-track grid fits the ≤768px width. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Column grid is shared by the header and every row. Fixed track widths
+   (not the prototype's 36px / 70px) keep the header and rows aligned: each
+   row is its own grid container, so the rank track must fit a #1402-scale
+   rank and the score track the widest「用时 · 失误」value. */
+.headRow,
+.row {
+  display: grid;
+  grid-template-columns: 56px 1fr 112px;
+  gap: 8px;
+  align-items: center;
+}
+
+.headRow {
+  padding: 0 14px 8px;
+  border-bottom: 1px solid var(--border-hairline);
+  font: 500 10px var(--font-body);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.headScore {
+  text-align: right;
+}
+
+.row {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font: 500 13px var(--font-body);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rank {
+  font-family: var(--amio-font-mono);
+  color: var(--text-4);
+}
+
+.rowTop .rank {
+  color: var(--amio-yellow);
+}
+
+.name {
+  color: var(--text-1);
+  /* Wrap a long no-space nickname instead of widening the track and
+     pushing the score column off a narrow viewport. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.score {
+  font-family: var(--amio-font-mono);
+  text-align: right;
+  color: var(--text-1);
+}
+
+/* The signed-in player's own row — highlight, no hairline. */
+.rowYou {
+  border-color: transparent;
+  border-radius: 10px;
+  background: rgba(255, 229, 62, 0.06);
+}
+
+.rowYou .name {
+  color: var(--amio-yellow);
+}
+
+/* ----------  loading / error / empty states (daily tab only)  ---------- */
+.status {
+  padding: 32px;
+  font: 400 14px var(--font-body);
+  color: var(--text-3);
+  text-align: center;
+}
+
+.statusMuted {
+  font: 400 12px var(--font-body);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.errorBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}

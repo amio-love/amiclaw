@@ -1,0 +1,41 @@
+/* Cosmic gradient lives here, on the layout root — never on <body> — so
+   the BombSquad game routes keep global.css's #1a1a2e background. */
+.root {
+  min-height: 100vh;
+  background: linear-gradient(
+    180deg,
+    var(--bg-grad-start) 0%,
+    var(--bg-grad-mid-1) 38%,
+    var(--bg-grad-mid-2) 72%,
+    var(--bg-grad-end) 100%
+  );
+  color: var(--amio-fg-1);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+}
+
+/* Content column — sits above the fixed Scenery (z-index 0). */
+.page {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* Confine the global cyan :focus-visible ring (global.css) to the BombSquad
+   game pages. Inside the platform layout root every focus ring adopts brand
+   yellow, so platform chrome never shows BombSquad cyan. The selector's
+   specificity (0,2,0) outranks the global :focus-visible (0,1,0); it
+   overrides only outline-color, keeping the 2px solid width / style and the
+   2px offset. Game routes never mount PlatformLayout, so they keep cyan. */
+.root :focus-visible {
+  outline-color: var(--amio-yellow);
+}
+
+/* ----------  responsive: mobile  ---------- */
+@media (max-width: 768px) {
+  .page {
+    padding: 0 16px;
+  }
+}

@@ -1,0 +1,91 @@
+/* Signed-in welcome strip — replaces the anonymous hero on the logged-in
+   homepage. Handoff §6.2; pixel values mirror prototype/atlas/atlas.html.
+   The responsive @media tier (≤768px) carries atlas.html's exact values. */
+
+.strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 36px 0 24px;
+  margin-bottom: 56px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.greet {
+  font: 400 26px var(--font-display);
+  color: var(--text-1);
+}
+
+.name {
+  color: var(--amio-yellow);
+}
+
+.meta {
+  margin-top: 4px;
+  font: 400 13px var(--font-body);
+  letter-spacing: 0.02em;
+  color: var(--amio-fg-3);
+}
+
+.stats {
+  display: flex;
+  gap: 28px;
+}
+
+.stat {
+  text-align: right;
+}
+
+.value {
+  font: 400 32px var(--font-display);
+  line-height: 1;
+  color: var(--text-1);
+}
+
+.unit {
+  margin-left: 2px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.label {
+  margin-top: 6px;
+  font: 500 11px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+/* ----------  responsive: mobile  ----------
+   atlas.html ≤768px — the strip stacks: avatar/greet column above the
+   stat row, which spreads full-width. */
+@media (max-width: 768px) {
+  .strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    margin-bottom: 36px;
+    padding: 28px 0 20px;
+  }
+
+  .greet {
+    font-size: 22px;
+  }
+
+  .stats {
+    width: 100%;
+    gap: 14px;
+    justify-content: space-between;
+  }
+
+  .stat {
+    text-align: left;
+  }
+}

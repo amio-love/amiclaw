@@ -1,0 +1,230 @@
+/* Featured BombSquad section — handoff §6.4; pixel values mirror
+   prototype/atlas/atlas.html (.featured*). The left art panel is the
+   only cyan zone; the right leaderboard panel is platform chrome. The
+   responsive @media tiers (≤1080px / ≤768px) carry atlas.html's exact
+   @media values. */
+
+.section {
+  margin: 0 0 72px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 255, 0.12);
+  border-radius: var(--radius-3xl);
+  background: rgba(13, 13, 26, 0.6);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+/* ----------  left art panel — BombSquad zone  ---------- */
+.art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 460px;
+  padding: 40px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.25), transparent 55%),
+    radial-gradient(circle at 70% 80%, rgba(180, 120, 255, 0.15), transparent 55%), #050511;
+}
+
+/* 3px equidistant scanline overlay */
+.art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 3px,
+    rgba(255, 255, 255, 0.015) 3px,
+    rgba(255, 255, 255, 0.015) 4px
+  );
+  pointer-events: none;
+}
+
+.mark {
+  z-index: 1;
+  font: 700 11px var(--amio-font-mono);
+  letter-spacing: 0.3em;
+  color: rgba(0, 255, 255, 0.7);
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+}
+
+.bigTitle {
+  z-index: 1;
+  align-self: flex-start;
+  font: 700 84px/0.9 var(--amio-font-mono);
+  letter-spacing: 0.04em;
+  color: var(--bs-cyan);
+  text-shadow:
+    0 0 14px var(--bs-cyan),
+    0 0 40px var(--bs-cyan),
+    0 0 80px rgba(0, 255, 255, 0.35);
+}
+
+.meta {
+  z-index: 1;
+}
+
+.metaBlurb {
+  margin-bottom: 14px;
+  font: 400 16px var(--font-body);
+  color: rgba(224, 224, 255, 0.75);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ----------  right leaderboard panel — platform chrome  ---------- */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 36px 32px;
+}
+
+.sideTitle {
+  margin: 0;
+  font: 400 26px var(--font-display);
+  color: var(--text-1);
+}
+
+.sideBlurb {
+  margin: 8px 0 0;
+  font: 400 14px/1.7 var(--font-body);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.lbMini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lbHead {
+  display: grid;
+  grid-template-columns: 36px 1fr 70px;
+  gap: 8px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--border-hairline);
+  font: 500 10px var(--font-body);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.lbScoreHead {
+  text-align: right;
+}
+
+.lbRow {
+  display: grid;
+  grid-template-columns: 36px 1fr 70px;
+  gap: 8px;
+  align-items: center;
+  padding: 11px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font: 500 13px var(--font-body);
+}
+
+.lbRow:last-child {
+  border-bottom: none;
+}
+
+.rk {
+  font-family: var(--amio-font-mono);
+  color: var(--text-4);
+}
+
+.lbRowTop .rk {
+  color: var(--amio-yellow);
+}
+
+.nm {
+  color: var(--text-1);
+}
+
+.sc {
+  font-family: var(--amio-font-mono);
+  text-align: right;
+  color: var(--text-1);
+}
+
+.lbRowYou {
+  padding-right: 8px;
+  padding-left: 8px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: rgba(255, 229, 62, 0.06);
+}
+
+.lbRowYou .nm {
+  color: var(--amio-yellow);
+}
+
+/* ----------  CTA row  ---------- */
+.ctaRow {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.ctaPrimary {
+  flex: 1;
+}
+
+/* ----------  responsive: medium  ---------- */
+@media (max-width: 1080px) {
+  .card {
+    grid-template-columns: 1fr 320px;
+  }
+
+  .art {
+    min-height: 380px;
+    padding: 30px;
+  }
+
+  .bigTitle {
+    font-size: 62px;
+  }
+}
+
+/* ----------  responsive: mobile  ---------- */
+@media (max-width: 768px) {
+  .section {
+    margin-bottom: 52px;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+  }
+
+  .art {
+    min-height: 260px;
+    padding: 28px;
+  }
+
+  .bigTitle {
+    font-size: 50px;
+  }
+
+  .side {
+    padding: 24px;
+  }
+
+  /* atlas mobile .btn-primary,.btn-ghost flex:1 — both featured CTAs
+     split the row. .ctaPrimary already carries flex:1; this also covers
+     the ghost button. */
+  .ctaRow button {
+    flex: 1;
+  }
+}
