@@ -260,7 +260,7 @@ describe('handleGetDashboard', () => {
 
     const totalsRowMatches = html.match(/<tr class="totals">[\s\S]*?<\/tr>/g) ?? []
     expect(totalsRowMatches).toHaveLength(1)
-    const totalsRow = totalsRowMatches[0]
+    const totalsRow = totalsRowMatches[0]!
     expect(totalsRow).toContain('合计')
 
     // No numeric percentage anywhere in the totals row — every percent cell

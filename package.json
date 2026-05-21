@@ -11,6 +11,7 @@
     "gen:daily": "node scripts/generate-daily-from-practice.mjs",
     "test": "pnpm -r run test",
     "test:run": "pnpm -r run test:run",
+    "typecheck": "pnpm -r run typecheck",
     "prepare": "husky"
   },
   "lint-staged": {
