@@ -10,11 +10,24 @@
   line-height: 1.6;
 }
 
-.human-notice h1 { font-size: 20px; margin-bottom: 12px; }
-.human-notice a { color: #0066cc; }
+.human-notice h1 {
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+.human-notice a {
+  color: #0066cc;
+}
 
-.divider { margin: 16px auto; max-width: 600px; border-color: #ddd; }
-.divider-label { text-align: center; color: #999; font-size: 12px; }
+.divider {
+  margin: 16px auto;
+  max-width: 600px;
+  border-color: #ddd;
+}
+.divider-label {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+}
 
 /* Anti-human section — intentional WCAG violation (core game mechanic) */
 .anti-human {

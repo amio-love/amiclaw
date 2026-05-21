@@ -13,7 +13,7 @@ export function generateWire(
   rng: Rng,
   rules: ManualModules['wire_routing']['rules'],
   sceneInfo: SceneInfo,
-  wireCount: 4 | 5 = 4,
+  wireCount: 4 | 5 = 4
 ): { config: WireConfig; answer: WireAnswer } {
   for (let attempt = 0; attempt < 100; attempt++) {
     const wires = Array.from({ length: wireCount }, () => ({

@@ -8,14 +8,14 @@ import type { ManualModules } from '@shared/manual-schema'
 export function solveKeypad(
   config: KeypadConfig,
   section: ManualModules['keypad'],
-  _sceneInfo: SceneInfo,
+  _sceneInfo: SceneInfo
 ): KeypadAnswer | null {
   for (const seq of section.sequences) {
-    if (config.symbols.every(sym => seq.includes(sym))) {
+    if (config.symbols.every((sym) => seq.includes(sym))) {
       // Order symbols by their position in the sequence
       const sequence = [...config.symbols]
         .sort((a, b) => seq.indexOf(a) - seq.indexOf(b))
-        .map(sym => config.symbols.indexOf(sym))
+        .map((sym) => config.symbols.indexOf(sym))
       return { type: 'keypad', sequence }
     }
   }

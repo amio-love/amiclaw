@@ -4,10 +4,11 @@ import type {
   LeaderboardResponse,
 } from '@shared/leaderboard-types'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://bombsquad.amio.fans'
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://bombsquad.amio.fans'
 
 export async function submitScore(
-  submission: ScoreSubmission,
+  submission: ScoreSubmission
 ): Promise<ScoreSubmissionResponse | null> {
   try {
     const res = await fetch(`${API_BASE}/api/leaderboard`, {

@@ -1,12 +1,6 @@
-import type {
-  LeaderboardEntry,
-  LeaderboardResponse,
-} from '../../../../shared/leaderboard-types'
+import type { LeaderboardEntry, LeaderboardResponse } from '../../../../shared/leaderboard-types'
 
-export async function handleGetLeaderboard(
-  request: Request,
-  kv: KVNamespace,
-): Promise<Response> {
+export async function handleGetLeaderboard(request: Request, kv: KVNamespace): Promise<Response> {
   const url = new URL(request.url)
   const date = url.searchParams.get('date') ?? new Date().toISOString().slice(0, 10)
 
@@ -17,7 +11,7 @@ export async function handleGetLeaderboard(
     })
   }
 
-  const entries = (await kv.get(`leaderboard:${date}`, 'json') as LeaderboardEntry[] | null) ?? []
+  const entries = ((await kv.get(`leaderboard:${date}`, 'json')) as LeaderboardEntry[] | null) ?? []
 
   const response: LeaderboardResponse = { date, entries }
   return new Response(JSON.stringify(response), {

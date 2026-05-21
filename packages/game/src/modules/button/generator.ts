@@ -9,7 +9,7 @@ const LABELS = ['ABORT', 'DETONATE', 'HOLD', 'PRESS']
 export function generateButton(
   rng: Rng,
   rules: ManualModules['button']['rules'],
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): { config: ButtonConfig; answer: ButtonAnswer } {
   for (let attempt = 0; attempt < 100; attempt++) {
     const config: ButtonConfig = {

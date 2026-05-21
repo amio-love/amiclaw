@@ -14,7 +14,7 @@ export function getDailyAttemptKey(date = getTodayString()): string {
 
 export function readDailyAttemptCount(
   storage: Pick<Storage, 'getItem'> = sessionStorage,
-  date = getTodayString(),
+  date = getTodayString()
 ): number {
   const rawValue = storage.getItem(getDailyAttemptKey(date))
   const parsedValue = Number.parseInt(rawValue ?? '0', 10)
@@ -23,7 +23,7 @@ export function readDailyAttemptCount(
 
 export function reserveDailyAttempt(
   storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
-  date = getTodayString(),
+  date = getTodayString()
 ): number {
   const nextAttempt = readDailyAttemptCount(storage, date) + 1
   storage.setItem(getDailyAttemptKey(date), String(nextAttempt))
@@ -33,7 +33,7 @@ export function reserveDailyAttempt(
 export function getAttemptNumberForMode(
   mode: SessionMode,
   storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
-  date = getTodayString(),
+  date = getTodayString()
 ): number {
   return mode === 'daily' ? reserveDailyAttempt(storage, date) : 1
 }

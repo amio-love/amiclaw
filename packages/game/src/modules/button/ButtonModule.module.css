@@ -6,8 +6,14 @@
   animation: fade-in 300ms ease-out;
 }
 
-.container.error { animation: error-flash 600ms ease-out, shake 600ms ease-out; }
-.container.success { animation: success-flash 600ms ease-out; }
+.container.error {
+  animation:
+    error-flash 600ms ease-out,
+    shake 600ms ease-out;
+}
+.container.success {
+  animation: success-flash 600ms ease-out;
+}
 
 .big-button {
   width: 140px;
@@ -25,7 +31,9 @@
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
-  transition: filter 100ms, transform 100ms;
+  transition:
+    filter 100ms,
+    transform 100ms;
   min-width: var(--touch-target);
   min-height: var(--touch-target);
 }

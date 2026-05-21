@@ -9,7 +9,7 @@ import { matchCondition } from '../../engine/rule-engine'
 export function solveWire(
   config: WireConfig,
   rules: ManualModules['wire_routing']['rules'],
-  sceneInfo: SceneInfo,
+  sceneInfo: SceneInfo
 ): WireAnswer | null {
   for (const rule of rules) {
     if (matchCondition(rule.condition, config as unknown as Record<string, unknown>, sceneInfo)) {
@@ -23,12 +23,12 @@ export function solveWire(
 
 function resolvePosition(
   target: { position: 'first' | 'last' | number; color?: string },
-  config: WireConfig,
+  config: WireConfig
 ): number | null {
   const { wires } = config
   if (target.position === 'first') {
     if (target.color) {
-      const idx = wires.findIndex(w => w.color === target.color)
+      const idx = wires.findIndex((w) => w.color === target.color)
       return idx >= 0 ? idx : null
     }
     return 0

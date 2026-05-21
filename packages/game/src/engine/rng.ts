@@ -17,8 +17,7 @@ export function createRng(seed: number) {
     float: (): number => next(),
 
     /** Returns an integer in [min, max] inclusive */
-    intBetween: (min: number, max: number): number =>
-      Math.floor(next() * (max - min + 1)) + min,
+    intBetween: (min: number, max: number): number => Math.floor(next() * (max - min + 1)) + min,
 
     /** Picks a random element from an array */
     pick: <T>(arr: readonly T[]): T => arr[Math.floor(next() * arr.length)],
@@ -27,8 +26,8 @@ export function createRng(seed: number) {
     shuffle: <T>(arr: readonly T[]): T[] => {
       const result = [...arr]
       for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(next() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]]
+        const j = Math.floor(next() * (i + 1))
+        ;[result[i], result[j]] = [result[j], result[i]]
       }
       return result
     },
