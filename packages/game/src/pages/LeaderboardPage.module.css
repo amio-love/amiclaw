@@ -69,6 +69,11 @@
 }
 
 .link {
+  /* Text-link tap-target pattern (shared with the home / prompt-modal /
+     result-page nav links): inline-block + padding + --touch-target. */
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--color-text-muted);

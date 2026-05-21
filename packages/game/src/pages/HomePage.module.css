@@ -96,8 +96,13 @@
 }
 
 .leaderboardLink {
+  /* Text-link tap-target pattern: inline-block + padding + the shared
+     --touch-target floor lifts a bare text link to a 44px tap area. */
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--color-text-muted);
   text-decoration: none;
   letter-spacing: 0.05em;

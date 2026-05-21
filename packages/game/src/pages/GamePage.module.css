@@ -44,7 +44,7 @@
 
 .exitBtn {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.875rem;
   padding: 6px 12px;
   margin-left: 12px;
   background: transparent;
@@ -53,6 +53,9 @@
   border-radius: 3px;
   cursor: pointer;
   letter-spacing: 0.05em;
+  /* "退出" is only two mono glyphs; min-height alone left the rendered
+     width ~41px. Pin both axes to the 44px touch-target floor. */
+  min-width: var(--touch-target);
   min-height: var(--touch-target);
   transition:
     color 0.15s ease,
@@ -231,6 +234,25 @@
   text-align: center;
   max-width: 400px;
   line-height: 1.5;
+}
+
+/* "← 返回首页" link shown on the in-game error states. Mirrors the shared
+   text-link visual style used on the other pages plus the mobile
+   tap-target pattern (inline-block + padding + --touch-target floor). */
+.homeLink {
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+}
+
+.homeLink:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
 }
 
 .startBtn {

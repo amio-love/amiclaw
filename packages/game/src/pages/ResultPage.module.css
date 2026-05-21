@@ -88,7 +88,9 @@
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  /* 14px floor: the module-time table is the recap's main content the
+     player reads — keep it legible on small screens. */
+  font-size: 0.875rem;
 }
 
 .table th {
@@ -160,6 +162,11 @@
 }
 
 .link {
+  /* Text-link tap-target pattern (shared with the home / prompt-modal /
+     leaderboard nav links): inline-block + padding + --touch-target. */
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--color-text-muted);
@@ -219,6 +226,12 @@
 
 .retryBtn {
   margin-left: 10px;
+  /* Inline retry button on the submit-failure error state: keep the bare
+     link-like look (no background / border, inherited size) but lift the
+     tap area to the 44px touch-target floor — symmetric padding centres
+     the "重试" label within it. */
+  min-height: var(--touch-target);
+  padding: 14px 8px;
   background: none;
   border: none;
   color: var(--color-neon-cyan);
@@ -226,7 +239,6 @@
   font-size: inherit;
   cursor: pointer;
   text-decoration: underline;
-  padding: 0;
 }
 
 .retryBtn:hover {
