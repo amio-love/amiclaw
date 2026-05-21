@@ -17,6 +17,8 @@ export type EventName =
   | 'game_abandon'
   | 'manual_load_failed'
   | 'replay_intent'
+  | 'game_failed_strikeout'
+  | 'game_failed_timeout'
 
 export interface EventPayload {
   event: EventName

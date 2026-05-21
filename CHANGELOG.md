@@ -66,6 +66,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 - `replay_intent` console.info event emitted when the result-page "再来一局" button is clicked — enables manual estimation of replay-willingness (roadmap §Strategic Objectives Validation Criteria #3, 复玩意愿 ≥50%) from console logs
 - Backend event ingestion via Pages Function `/api/events` — five existing event types (game_start, module_solve, game_complete, game_abandon, manual_load_failed) plus replay_intent now POST to a Cloudflare Pages Function that writes per-event-name counters and unique-device sets to the LEADERBOARD KV namespace under `events:{date}:*` keys. Frontend `console.info` channel is replaced by fire-and-forget fetch; events include device_id (sourced from the same localStorage UUID used by leaderboard submissions) so both session-level and unique-player completion-rate can be computed.
 - Beta data dashboard at `/api/dashboard?token=xxx` showing daily game_start/complete/replay counts and completion rates against the 70%/50% north-star thresholds. Requires `DASHBOARD_TOKEN` Pages secret (set via `wrangler secret put DASHBOARD_TOKEN`).
+- `game_failed_strikeout` / `game_failed_timeout` telemetry events — a
+  daily challenge that detonates now emits one of two failure events that
+  distinguish the loss cause: three cumulative strikes (strike-out) versus
+  the countdown reaching zero (timeout). The beta data dashboard gains two
+  raw-count columns showing the per-day failure-mode split. Telemetry-only
+  with no player-visible change; practice mode never fails and emits
+  neither event.
 - **Mute toggle** The game's top bar now has a mute button that silences every
   sound effect. The setting is saved to localStorage, so the game stays muted —
   or un-muted — across page reloads and later sessions.

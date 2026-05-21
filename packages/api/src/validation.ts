@@ -12,6 +12,8 @@ const VALID_EVENT_NAMES: ReadonlySet<EventName> = new Set<EventName>([
   'game_abandon',
   'manual_load_failed',
   'replay_intent',
+  'game_failed_strikeout',
+  'game_failed_timeout',
 ])
 
 // UUID v4 shape — any 36-char canonical UUID matches; we deliberately do not

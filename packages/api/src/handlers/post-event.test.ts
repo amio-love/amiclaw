@@ -71,3 +71,34 @@ describe('handlePostEvent — KV TTL', () => {
     }
   })
 })
+
+describe('handlePostEvent — game-failed telemetry counters', () => {
+  it('writes a plain counter for the two game-failed events and creates no unique-device set', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-05-21T10:00:00.000Z'))
+      for (const event of ['game_failed_strikeout', 'game_failed_timeout'] as const) {
+        const { kv, puts } = makeKv()
+        const req = makeRequest({
+          event,
+          timestamp: '2026-05-21T09:59:00.000Z',
+          device_id: 'aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee',
+        })
+        const res = await handlePostEvent(req, kv)
+        expect(res.status).toBe(200)
+
+        // Ingestion is event-name-agnostic for counters — the failure events
+        // get the same `events:{date}:{name}` counter as any other event.
+        const counterPut = puts.find((p) => p.key === `events:2026-05-21:${event}`)
+        expect(counterPut).toBeDefined()
+        expect(counterPut?.value).toBe(JSON.stringify({ count: 1 }))
+
+        // Only game_start / game_complete maintain unique-device sets; the
+        // failure events must never produce a `unique_*` key.
+        expect(puts.some((p) => p.key.includes(':unique_'))).toBe(false)
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
