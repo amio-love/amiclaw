@@ -242,7 +242,7 @@ function loadPractice() {
   return yaml.load(text)
 }
 
-function dumpYaml(obj) {
+export function dumpYaml(obj) {
   // Use default block style for readability + git diffability; lineWidth -1
   // avoids YAML's 80-col line wrapping (matches build.ts conventions).
   return yaml.dump(obj, { lineWidth: -1 })
