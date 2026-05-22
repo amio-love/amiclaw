@@ -142,6 +142,17 @@ straight from the homepage CTAs.
   orphaned, duplicated, or untagged flow fails the build — and regenerates
   the golden `answers.json` fixture so a puzzle-generator change that would
   silently invalidate it is caught loudly.
+- **E2E dual-agent simulation layer** The second layer of the e2e
+  governance model. Six `@simulation` collaboration-usability scenarios
+  under `e2e/simulation/` — the four BombSquad modules in isolation plus
+  full practice and daily-challenge runs — drive an LLM-based dual-agent
+  test harness, where a player agent that only sees the screen and an
+  assistant agent that only reads the manual collaborate to defuse the
+  bomb. This layer is LLM-driven and run on demand; it is never a CI
+  check or a merge gate. A non-blocking `simulation-reminder` CI job
+  flags pushes touching `packages/game/` or `packages/manual/data/` as
+  candidates for a simulation run. Source task
+  `implement-e2e-dual-agent-simulation`.
 
 ### Improvements
 

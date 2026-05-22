@@ -1,0 +1,53 @@
+# Keypad module — collaborative defusal via the player-assistant voice channel.
+#
+# The keypad module displays 4 symbols in a 2x2 grid. The player describes all
+# four symbols; the assistant finds the sequence in the manual that contains all
+# four and tells the player to press them in the sequence's order. The known
+# structural risk: the symbol pool is shared across all sequences, so a given
+# 4-symbol subset may appear in multiple sequences — the assistant must verify
+# uniqueness or flag ambiguity rather than defaulting to the first match.
+# Failure modes this scenario can surface: subset ambiguity across sequences
+# (the original BLOCKER documented in the 2026-05-13 report), symbol-naming
+# confusion between visually similar glyphs, and incorrect press order if the
+# assistant reads the sequence index wrong.
+#
+# Runs in practice mode for clean isolation.
+
+Feature: Keypad module collaboration
+  As a BombSquad player who can only see the screen
+  And an AI assistant who can only read the manual
+  I want us to defuse the keypad module together through a message channel
+  So that the correct press sequence is identified even when the symbol subset is ambiguous
+
+  Background:
+    Given the coordinator has spawned player-agent and assistant-agent
+    And three-way isolation is enforced — the player cannot read the manual and the assistant cannot see the screen
+    And the assistant has loaded the practice manual from packages/manual/data/practice.yaml
+
+  # Module: keypad
+  # Mode: practice
+  @simulation
+  Scenario: Player and assistant collaboratively defuse the keypad module in practice mode
+    Given the player has started a practice-mode game
+    And the keypad module is the currently displayed module
+
+    When the player describes the four symbols visible on the 2x2 keypad grid
+    Then the player's description uses natural visual language to name each symbol
+    And the player reports all four symbols without omission
+
+    When the assistant receives the symbol descriptions
+    Then the assistant maps the player's visual descriptions to canonical symbol names
+    And the assistant checks ALL sequences in the manual — not just the first match
+    And the assistant determines how many sequences contain the reported four-symbol subset
+    And if only one sequence matches the assistant extracts the press order from that sequence
+    And if multiple sequences match the assistant either flags the ambiguity or uses a tiebreaker strategy
+
+    When the assistant sends the press-order instruction to the player
+    Then the instruction names the four symbols in the order they should be pressed
+    And the player presses each symbol in the instructed order
+
+    Then the keypad module is defused
+    And the coordinator records whether the four-symbol subset matched multiple sequences
+    And the coordinator records the assistant's resolution strategy if ambiguity was encountered
+    And the coordinator records the number of communication rounds
+    And the coordinator records the in-game time spent on this module

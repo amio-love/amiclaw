@@ -1,0 +1,59 @@
+# Button module — collaborative defusal via the player-assistant voice channel.
+#
+# The button module shows a single large button with a color and a label. The
+# assistant determines whether the player should tap or hold based on the
+# button's color, label, battery count, and indicator states. If the action is
+# hold, the player must press and hold until a cycling "side strip" light
+# reaches a specified color, then release. Failure modes this scenario can
+# surface: the hold-mode side strip is not explained in the manual (the player
+# does not know what UI element to watch), the "6" label renders too small or
+# too dim to read, tap vs hold confusion when the condition chain has multiple
+# similar-looking branches.
+#
+# Runs in practice mode for clean isolation.
+
+Feature: Button module collaboration
+  As a BombSquad player who can only see the screen
+  And an AI assistant who can only read the manual
+  I want us to defuse the button module together through a message channel
+  So that the tap-or-hold decision and the hold-release timing work correctly
+
+  Background:
+    Given the coordinator has spawned player-agent and assistant-agent
+    And three-way isolation is enforced — the player cannot read the manual and the assistant cannot see the screen
+    And the assistant has loaded the practice manual from packages/manual/data/practice.yaml
+
+  # Module: button
+  # Mode: practice
+  @simulation
+  Scenario: Player and assistant collaboratively defuse the button module in practice mode
+    Given the player has started a practice-mode game
+    And the button module is the currently displayed module
+
+    When the player describes the button module to the assistant
+    Then the player's description includes the button color
+    And the player's description includes the text label on the button
+    And the player's description includes the battery count shown in the SceneInfoBar
+    And the player's description includes which indicators are lit or unlit
+
+    When the assistant receives the button description
+    Then the assistant consults the button rules in the manual
+    And the assistant walks the condition chain top to bottom and identifies the first matching rule
+    And the assistant determines whether the action is tap or hold
+
+    When the action is tap
+    Then the assistant instructs the player to tap the button once
+    And the player taps the button
+    And the button module is defused
+
+    When the action is hold
+    Then the assistant instructs the player to press and hold the button
+    And the assistant tells the player which side-strip light color to watch for before releasing
+    And the player holds the button and watches for the specified light color
+    And the player releases when the side-strip light matches the target color
+    And the button module is defused
+
+    Then the coordinator records whether the action was tap or hold
+    And the coordinator records whether the player had difficulty identifying the side-strip light element
+    And the coordinator records the number of communication rounds
+    And the coordinator records the in-game time spent on this module
