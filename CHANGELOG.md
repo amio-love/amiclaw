@@ -200,6 +200,11 @@ straight from the homepage CTAs.
   package alongside the data they test. The game-package test file is back
   to schema-unit only, and root `pnpm test:run` runs both packages via
   `-r run` (CI inherits automatically).
+- **Daily-manual drift guard** Internal refactor — a new test in
+  `packages/manual` fails CI whenever a committed `data/daily/*.yaml` no longer
+  matches what the generator derives from the current `practice.yaml`, so
+  editing the practice rulebook without regenerating the daily manuals can no
+  longer drift silently into production.
 - **Post-refresh guidance** A short banner appears at the top of the game
   page after an accidental F5 / Cmd+R, diagnosing what just happened so the
   player can decide how to re-sync with their AI partner. The copy now
