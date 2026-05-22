@@ -56,10 +56,10 @@ Then('I see the total run time', async ({ page }) => {
   await expect(total).toHaveText(/\d+:\d\d/)
 })
 
-Then('the module-times table lists all 4 modules without horizontal overflow', async ({ page }) => {
-  const table = page.locator('table').first()
-  await expect(table).toBeVisible()
-  await expect(table.locator('tbody tr')).toHaveCount(4)
+Then('the module breakdown lists all 4 modules without horizontal overflow', async ({ page }) => {
+  // The Atlas result page renders the per-module breakdown as `bdRow` divs,
+  // not an HTML table — a defused daily run has 4 such rows.
+  await expect(page.locator('[class*="bdRow"]')).toHaveCount(4)
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth
   )
@@ -91,12 +91,10 @@ Then('the NicknameModal closes', async ({ page }) => {
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })
 
-Then('the result page shows the global rank line "全球排名：#"', async ({ page }) => {
-  await expect(page.getByText(/全球排名：/)).toBeVisible()
-})
-
-When('I tap the "排行榜" link', async ({ page }) => {
-  await page.getByRole('link', { name: '排行榜' }).first().click()
+Then('the result page shows my global rank', async ({ page }) => {
+  // The Atlas result page shows the rank in a card — a "全球排名" label cell
+  // and a "#N / total" value cell — rather than the old "全球排名：#N" line.
+  await expect(page.getByText('全球排名')).toBeVisible()
 })
 
 Then('the leaderboard table renders without horizontal overflow', async ({ page }) => {
@@ -141,7 +139,7 @@ When(
       personal_best_attempt: pbAttempt,
     }
     await fillNicknameAndConfirm(page)
-    await expect(page.getByText(/全球排名：/)).toBeVisible()
+    await expect(page.getByText('全球排名')).toBeVisible()
   }
 )
 
@@ -150,7 +148,7 @@ When(
   async ({ world, page }, rank: number, total: number, pbMs: number) => {
     world.leaderboard.postResponse = { rank, total_players: total, personal_best_ms: pbMs }
     await fillNicknameAndConfirm(page)
-    await expect(page.getByText(/全球排名：/)).toBeVisible()
+    await expect(page.getByText('全球排名')).toBeVisible()
   }
 )
 
@@ -221,8 +219,8 @@ Then(
     const firstBullet = (await readClipboard(page)).split('\n').find((l) => l.startsWith(prefix))
     expect(firstBullet, 'a bullet line exists').toBeDefined()
     // buildRetroQuestions() names the slowest module; assert the bullet leads
-    // with one of the four Chinese module labels.
-    expect(firstBullet).toMatch(/^- (线路|密码盘|按钮|键盘)模块/)
+    // with one of the four Atlas Chinese module labels.
+    expect(firstBullet).toMatch(/^- (光弦|星盘|按钮|星符)模块/)
   }
 )
 
@@ -272,18 +270,18 @@ Then('the system clipboard contains the recommended opening prompt text', async 
   expect(clipboard).toBe(promptText)
 })
 
-Then('I am back on the Amiclaw platform homepage', async ({ page }) => {
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/')
-  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
+Then('I am back on the BombSquad landing page', async ({ page }) => {
+  // The compatibility page's 返回 link lands on the BombSquad landing (/game),
+  // not the Amiclaw platform homepage — the landing carries the mode CTAs.
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect(page.getByRole('button', { name: '每日挑战 →' })).toBeVisible()
 })
 
 Then('the system clipboard contains the daily manual URL', async ({ page }) => {
-  const url = (
-    await page
-      .getByRole('dialog')
-      .getByRole('link', { name: /\/manual\// })
-      .innerText()
-  ).trim()
+  // The connect step-1 copy card shows the manual URL in its `copyCardUrl`
+  // cell; copying it puts that exact string on the clipboard.
+  const url = (await page.locator('[class*="copyCardUrl"]').first().innerText()).trim()
+  expect(url).toMatch(/\/manual\//)
   expect(await readClipboard(page)).toBe(url)
 })
 
@@ -434,17 +432,25 @@ Then("no wire's hit band overlaps an adjacent wire's hit band", async ({ page })
 Then(
   "tapping anywhere on a wire's hit band cuts that wire and never its neighbour",
   async ({ world, page }) => {
-    // Tap a wire's hit band — the module registers the tap on that wire.
+    // Tap a wire's hit band — the module registers the tap on that wire,
+    // playing either the cut animation (correct wire) or the module-area
+    // error pulse (wrong wire). Either proves the tap landed on the band.
     await page.getByTestId('wire-0').click()
-    await expect(page.locator('[class*="errorPulse"], [class*="wire-cut"]').first()).toBeVisible()
+    await expect(page.locator('[class*="errorPulse"], [class*="cutTop"]').first()).toBeVisible()
     await world.advance(900)
   }
 )
 
-Then('the visible wire stroke stays 4 units wide so the wires look unchanged', async ({ page }) => {
-  const strokeWidth = await page
-    .locator('[class*="wire-visual"]')
-    .first()
-    .evaluate((el) => parseFloat(getComputedStyle(el).strokeWidth))
-  expect(strokeWidth).toBeCloseTo(4, 0)
-})
+Then(
+  'the visible wire stroke stays a thin 3 units so the hit band stays hidden',
+  async ({ page }) => {
+    // The Atlas reskin draws each lit strand as the `strand` path at
+    // stroke-width 3 — far thinner than the 28-unit hit band, so the widened
+    // tap target stays invisible.
+    const strokeWidth = await page
+      .locator('[class*="strand"]')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).strokeWidth))
+    expect(strokeWidth).toBeCloseTo(3, 0)
+  }
+)

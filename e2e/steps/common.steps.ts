@@ -55,7 +55,11 @@ Then(/^I am navigated to the URL path (\/\S*)$/, async ({ page }, path: string) 
 Then(
   'the button label changes to {string} within {int} second',
   async ({ page }, label: string, seconds: number) => {
-    await expect(page.locator('[class*="copyBtn"]:visible')).toHaveText(label, {
+    // The compatibility page's copy control is `copyBtn`; the result page's
+    // post-game recap copy control is `copyLink` — match either.
+    await expect(
+      page.locator('[class*="copyBtn"]:visible, [class*="copyLink"]:visible')
+    ).toHaveText(label, {
       timeout: (seconds + 1) * 1000,
     })
   }

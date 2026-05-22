@@ -6,11 +6,16 @@
 # Restructured for the e2e harness: each scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
 # tag, and absolute URLs are normalized to relative paths. The original file's
-# landing-overflow, modal,
-# play-through, and recap-copy scenarios were merged into the landing-to-daily /
-# home-anonymous-hero / result-to-recap scenarios in their own files; what
-# remains here is the daily-win-to-leaderboard flow (the "result nickname
-# prompt" + "result to leaderboard row" scenarios merged into one journey).
+# landing-overflow, modal, play-through, and recap-copy scenarios were merged
+# into the landing-to-daily / home-anonymous-hero / result-to-recap scenarios in
+# their own files; what remains here is the daily-win-to-leaderboard flow (the
+# "result nickname prompt" + "result to leaderboard row" scenarios merged into
+# one journey).
+#
+# Aligned with the Atlas BombSquad redesign: the result-page module breakdown is
+# a per-module panel, not an HTML table, the global rank shows in a rank card
+# rather than a "全球排名：#N" line, and the leaderboard is reached through the
+# BombSquad landing page (回主页 → 排行榜) rather than a direct result-page link.
 
 Feature: Mobile internal-beta daily win to leaderboard
   As a friend who received the BombSquad link in a group chat
@@ -29,17 +34,19 @@ Feature: Mobile internal-beta daily win to leaderboard
     And no nickname is stored on this device
     Then I see the heading "拆弹成功"
     And I see the total run time
-    And the module-times table lists all 4 modules without horizontal overflow
+    And the module breakdown lists all 4 modules without horizontal overflow
     And the NicknameModal is open and covers the screen
     And the NicknameModal has no close button and cannot be dismissed by tapping the backdrop
 
     When I type a nickname into the NicknameModal input
     And I tap "确认"
     Then the NicknameModal closes
-    And the result page shows the global rank line "全球排名：#"
+    And the result page shows my global rank
     And the leaderboard submission carries a plausible time
 
-    When I tap the "排行榜" link
+    When I tap "回主页"
+    Then I am back on the BombSquad landing page
+    When I tap "排行榜"
     Then the URL path is /leaderboard
     And I see the heading "排行榜"
     And the leaderboard table renders without horizontal overflow

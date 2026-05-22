@@ -1,16 +1,19 @@
 # Voice-AI compatibility page — the /compatibility reference page reached from
-# the PromptModal discovery link: the Claude=已验证 marker, the recommended
-# opening-prompt block with copy-to-clipboard feedback, and the return-home link.
+# the connect-AI flow's first step: the Claude=已验证 marker, the recommended
+# opening-prompt block with copy-to-clipboard feedback, and the return link.
 #
 # Restructured for the e2e harness: the scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
-# tag, and the absolute URL is normalized to a relative path. The final step's
-# stale "BOMBSQUAD home page" wording is reconciled to the post-Atlas platform
-# homepage.
+# tag, and the absolute URL is normalized to a relative path.
+#
+# Aligned with the Atlas BombSquad redesign: the old PromptModal is gone — its
+# "不确定用哪个 AI？" discovery link now lives in connect step 1 ("把手册发给
+# AI"). The compatibility page's "返回 BombSquad 首页" link now lands on the
+# BombSquad landing page (/game), so the link text and its target finally agree.
 
 Feature: Voice AI compatibility reference page
   As a new BombSquad player who is unsure which AI to use
-  I want a one-click path from the prompt modal to a list of supported AIs
+  I want a one-click path from the connect-AI flow to a list of supported AIs
   And a copy-ready opening prompt to send my AI partner
   So that I can pick a voice AI and brief it without guessing
 
@@ -19,9 +22,9 @@ Feature: Voice AI compatibility reference page
 
   # Source: prompt-modal-to-compatibility
   @playwright
-  Scenario: Player discovers the compatibility page from the prompt modal and copies the opening prompt
-    When I tap "练习"
-    Then the prompt modal opens with the practice manual URL
+  Scenario: Player discovers the compatibility page from the connect flow and copies the opening prompt
+    When I enter practice mode from the homepage
+    Then the connect-AI flow opens at step 1
     And I see the link "不确定用哪个 AI？查看支持工具"
 
     When I click "不确定用哪个 AI？查看支持工具"
@@ -43,5 +46,5 @@ Feature: Voice AI compatibility reference page
     And the system clipboard contains the recommended opening prompt text
 
     When I click "← 返回 BombSquad 首页"
-    Then the URL path is /
-    And I am back on the Amiclaw platform homepage
+    Then the URL path is /game
+    And I am back on the BombSquad landing page
