@@ -19,6 +19,9 @@ export default tseslint.config(
       '**/.wrangler/**',
       'packages/game/src/**/*.js',
       'packages/game/src/**/*.jsx',
+      // Playwright-bdd generated specs + the .gherkin -> .feature mirror.
+      '.features-gen/',
+      '.features-mirror/',
     ],
   },
   js.configs.recommended,
@@ -54,7 +57,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['*.config.{js,mjs,cjs,ts}', 'scripts/**/*.{js,mjs,cjs,ts}', 'packages/manual/build.ts'],
+    files: [
+      '*.config.{js,mjs,cjs,ts}',
+      'scripts/**/*.{js,mjs,cjs,ts}',
+      'packages/manual/build.ts',
+      'e2e/fixtures/**/*.mts',
+    ],
     rules: {
       'no-console': 'off',
     },

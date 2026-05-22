@@ -1,0 +1,4 @@
+{
+  "note": "Route-mock variant — the POST /api/leaderboard request is aborted, so submitScore() resolves to null and the result page never gets a rank. Drives the recap 'submission has not resolved' case.",
+  "abortPost": true
+}

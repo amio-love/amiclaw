@@ -1,0 +1,83 @@
+# Amiclaw platform homepage — the `/` route is a 4-tab platform shell
+# (游戏 / 排行榜 / 社区 / 我的). It shows an anonymous hero or a signed-in welcome
+# strip per login state, a live daily-challenge countdown, and the featured
+# BombSquad section whose CTAs enter the BombSquad game flow.
+#
+# Restructured for the e2e harness: each scenario carries a per-scenario
+# flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
+# tag, and absolute URLs are normalized to harness-baseURL-relative paths. The
+# original home-anonymous-hero claim was duplicated by mobile-beta-flow's
+# landing-overflow scenario; the mobile no-horizontal-overflow check is merged
+# into the hero scenario below.
+
+Feature: Amiclaw platform homepage
+  As a visitor to claw.amio.fans
+  I want the homepage to present Amiclaw as a multi-game platform
+  And let me reach the BombSquad game and the other platform tabs
+  So that I understand the platform vision and can start playing
+
+  Background:
+    Given I open /
+
+  # Source: home-anonymous-hero
+  @playwright
+  Scenario: An anonymous visitor lands on the Atlas homepage
+    Given I am not signed in
+    When the `/` route renders
+    Then I see the anonymous hero with the「开启旅程 →」and「看看 BombSquad」CTAs
+    And I see the daily-challenge section
+    And I see the featured BombSquad section
+    And I see the "什么是 Amiclaw" section
+    And I see the upcoming-games section
+    And I see the community-feed section
+    And I see the registration footer pitch
+    And the page is dark-only with no light-mode variant
+    And the homepage does not scroll horizontally at a 375-pixel phone viewport
+
+  # Source: platform-tab-navigation
+  @playwright
+  Scenario: The top navigation routes to the four platform tabs
+    Given I am on the homepage
+    Then the top navigation shows the tabs 游戏, 排行榜, 社区, and 我的
+    And the 游戏 tab is marked active
+
+    When I click the 排行榜 tab
+    Then the URL path is /leaderboard
+    And the leaderboard page renders inside the platform shell
+
+    When I click the 社区 tab
+    Then the URL path is /community
+    And the community page renders inside the platform shell
+
+    When I click the 我的 tab
+    Then the URL path is /me
+    And the account page renders inside the platform shell
+
+    When I click the 游戏 tab
+    Then the URL path is /
+    And the homepage renders again
+
+  # Source: daily-countdown-display
+  @playwright
+  Scenario: The daily challenge shows a live countdown to the next reset
+    Given I am on the homepage
+    Then the daily-challenge section shows a countdown in 时 / 分 / 秒
+    And the countdown counts down toward the next UTC 00:00 reset
+
+  # Source: home-signed-in-welcome
+  @playwright
+  Scenario: A signed-in visitor sees the welcome strip instead of the hero
+    Given I am signed in
+    When the `/` route renders
+    Then I see the welcome strip greeting me by name
+    And the welcome strip shows my streak, completed count, and weekly rank
+    And the anonymous hero is not shown
+    And the "什么是 Amiclaw" section and the footer pitch are not shown
+    And I can still reach the daily challenge and the featured BombSquad section
+
+  # Source: bombsquad-zone-styling
+  @playwright
+  Scenario: BombSquad cyan stays inside the BombSquad zone
+    Given I am on the homepage
+    Then the BombSquad cyan accent appears only in the featured BombSquad art panel
+    And the platform chrome — top navigation, footer, daily-challenge card — uses no cyan

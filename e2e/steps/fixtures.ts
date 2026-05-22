@@ -1,0 +1,311 @@
+/**
+ * Shared playwright-bdd fixtures for the amiclaw e2e harness.
+ *
+ * Implements the verified 6-D harness-side determinism design — zero
+ * `packages/game` product changes. Three mechanisms live here:
+ *
+ *  1. Controlled clock — `pinClockOnLanding` runs the canonical
+ *     `clock.install({time:T-BUF})` -> `goto('/')` -> `clock.pauseAt(T)`
+ *     recipe so the daily run-seed (`getRunSeed('daily')` === `Date.now()`)
+ *     is pinned to exactly `T`. The seed-reading `/game` route is reached by
+ *     in-app client-side navigation, so `GamePage` mounts under an
+ *     already-frozen clock. `advance` / `fastForwardPast` step the clock.
+ *  2. Route mocking — the manual, leaderboard and events network routes are
+ *     intercepted so the static-build gate never makes a live call. The
+ *     leaderboard POST handler captures submission bodies for assertions.
+ *  3. Golden answers — `answers.json` (built by build-answers.mts) carries the
+ *     mechanical answer for every module at seed `T`, so the harness plays a
+ *     real, full play-through.
+ */
+import { test as base, createBdd } from 'playwright-bdd'
+import type { Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+// --- Fixture data ------------------------------------------------------------
+
+export type ModuleKind = 'wire' | 'dial' | 'button' | 'keypad'
+
+interface WireAnswer {
+  type: 'wire'
+  cutPosition: number
+}
+interface DialAnswer {
+  type: 'dial'
+  positions: number[]
+}
+interface ButtonAnswer {
+  type: 'button'
+  action: 'tap' | 'hold'
+  releaseOnColor?: string
+}
+interface KeypadAnswer {
+  type: 'keypad'
+  sequence: number[]
+}
+export type ModuleAnswer = WireAnswer | DialAnswer | ButtonAnswer | KeypadAnswer
+
+interface ModuleAnswerEntry {
+  kind: ModuleKind
+  answer: ModuleAnswer
+}
+interface RunScene {
+  sceneTongueTwister: string
+  batteryCount: number
+  indicators: { label: string; lit: boolean }[]
+}
+interface RunFixture {
+  scene: RunScene
+  answers: ModuleAnswerEntry[]
+}
+interface AnswersFile {
+  seed: number
+  tonguePool: string[]
+  daily: RunFixture
+  practice: RunFixture
+}
+
+interface LeaderboardEntry {
+  rank: number
+  nickname: string
+  time_ms: number
+  attempt_number: number
+  ai_tool?: string
+}
+interface LeaderboardGetResponse {
+  date: string
+  entries: LeaderboardEntry[]
+}
+interface SubmitResponse {
+  rank: number
+  total_players: number
+  personal_best_ms?: number
+  personal_best_attempt?: number
+}
+
+const FIXTURES_DIR = resolve(process.cwd(), 'e2e/fixtures')
+
+function readJson<T>(name: string): T {
+  return JSON.parse(readFileSync(resolve(FIXTURES_DIR, name), 'utf8')) as T
+}
+
+const ANSWERS: AnswersFile = readJson('answers.json')
+const MANUAL_YAML = readFileSync(resolve(FIXTURES_DIR, 'daily-manual.yaml'), 'utf8')
+const LEADERBOARD_DEFAULT = readJson<{ get: LeaderboardGetResponse; post: SubmitResponse }>(
+  'leaderboard-default.json'
+)
+
+/** Buffer that comfortably exceeds the install -> goto -> pauseAt latency. */
+const CLOCK_BUFFER_MS = 60_000
+/** Countdown budgets — verbatim from store/game-context.tsx TIME_BUDGET_MS. */
+export const TIME_BUDGET_MS = { daily: 600_000, practice: 300_000 } as const
+
+// --- Leaderboard route state -------------------------------------------------
+
+interface LeaderboardState {
+  getResponse: LeaderboardGetResponse
+  postResponse: SubmitResponse
+  abortPost: boolean
+  submissions: Record<string, unknown>[]
+}
+
+// --- World -------------------------------------------------------------------
+
+/** Per-test shared state + run-driving helpers. */
+export class World {
+  readonly page: Page
+  readonly answers = ANSWERS
+  readonly seedT = ANSWERS.seed
+  readonly leaderboard: LeaderboardState
+  runMode: 'daily' | 'practice' = 'daily'
+  private clockInstalled = false
+
+  constructor(page: Page) {
+    this.page = page
+    this.leaderboard = {
+      getResponse: structuredClone(LEADERBOARD_DEFAULT.get),
+      postResponse: structuredClone(LEADERBOARD_DEFAULT.post),
+      abortPost: false,
+      submissions: [],
+    }
+  }
+
+  /** Canonical seed-pinning recipe: install before goto, pauseAt after. */
+  async openPath(path: string): Promise<void> {
+    if (!this.clockInstalled) {
+      await this.page.clock.install({ time: this.seedT - CLOCK_BUFFER_MS })
+      this.clockInstalled = true
+    }
+    await this.page.goto(path)
+    await this.page.clock.pauseAt(this.seedT)
+  }
+
+  /** Advance the controlled clock, firing every timer due in the window. */
+  async advance(ms: number): Promise<void> {
+    await this.page.clock.runFor(ms)
+  }
+
+  /** Jump the controlled clock forward, firing each due timer at most once. */
+  async fastForwardPast(ms: number): Promise<void> {
+    await this.page.clock.fastForward(ms)
+  }
+
+  scene(): RunScene {
+    return this.answers[this.runMode].scene
+  }
+
+  answerFor(kind: ModuleKind): ModuleAnswer {
+    const entry = this.answers[this.runMode].answers.find((a) => a.kind === kind)
+    if (!entry) throw new Error(`No ${kind} answer for ${this.runMode} run in answers.json`)
+    return entry.answer
+  }
+
+  // --- Run-entry helpers -----------------------------------------------------
+
+  async openDailyModal(): Promise<void> {
+    this.runMode = 'daily'
+    await this.page.getByRole('button', { name: '立即挑战 →' }).click()
+  }
+
+  async openPracticeModal(): Promise<void> {
+    this.runMode = 'practice'
+    await this.page.getByRole('button', { name: '练习', exact: true }).click()
+  }
+
+  async confirmModal(): Promise<void> {
+    await this.page.getByRole('button', { name: '确认开始游戏' }).click()
+  }
+
+  /** READY -> PLAYING. The 开始 button waits out the route-mocked manual load. */
+  async pressStart(): Promise<void> {
+    await this.page.getByRole('button', { name: '开始', exact: true }).click()
+  }
+
+  async startDailyRun(): Promise<void> {
+    await this.openDailyModal()
+    await this.confirmModal()
+    await this.pressStart()
+  }
+
+  async startPracticeRun(): Promise<void> {
+    await this.openPracticeModal()
+    await this.confirmModal()
+    await this.pressStart()
+  }
+
+  // --- Module solving --------------------------------------------------------
+
+  /**
+   * Solve one module with its golden answer, then drive the controlled clock
+   * through the `onComplete` (<=800ms) and `NEXT_MODULE` (800ms) timers. The
+   * `拆除成功` overlay between the two `runFor`s confirms React has committed
+   * the MODULE_COMPLETE render, so the NEXT_MODULE timer is registered before
+   * the second advance. After the last module the same chain reaches /result.
+   */
+  async solveModule(kind: ModuleKind): Promise<void> {
+    const answer = this.answerFor(kind)
+    if (answer.type === 'wire') {
+      await this.page.getByTestId(`wire-${answer.cutPosition}`).click()
+    } else if (answer.type === 'dial') {
+      for (let dial = 0; dial < answer.positions.length; dial++) {
+        for (let click = 0; click < answer.positions[dial]; click++) {
+          await this.page.getByTestId(`dial-${dial}-right`).click()
+        }
+      }
+      await this.page.getByTestId('dial-confirm').click()
+    } else if (answer.type === 'button') {
+      // build-answers pins T so the daily button resolves to a plain tap.
+      await this.page.getByTestId('big-button').click()
+    } else {
+      for (const cell of answer.sequence) {
+        await this.page.getByTestId(`keypad-cell-${cell}`).click()
+      }
+    }
+    await this.advance(1200)
+    await this.page.getByText('拆除成功').waitFor({ state: 'visible', timeout: 8000 })
+    await this.advance(1200)
+  }
+
+  /** Click a deliberately wrong wire (the wire module is module 0 both modes). */
+  async submitWrongWire(): Promise<void> {
+    const answer = this.answerFor('wire')
+    const correct = answer.type === 'wire' ? answer.cutPosition : 0
+    const wrong = (correct + 1) % 4
+    await this.page.getByTestId(`wire-${wrong}`).click()
+  }
+
+  async driveDailyToResult(): Promise<void> {
+    await this.startDailyRun()
+    await this.solveModule('wire')
+    await this.solveModule('dial')
+    await this.solveModule('button')
+    await this.solveModule('keypad')
+    await this.page.waitForURL(/\/result/, { timeout: 10_000 })
+  }
+
+  async drivePracticeToResult(): Promise<void> {
+    await this.startPracticeRun()
+    await this.solveModule('wire')
+    await this.solveModule('keypad')
+    await this.page.waitForURL(/\/result/, { timeout: 10_000 })
+  }
+}
+
+// --- Fixture wiring ----------------------------------------------------------
+
+export const test = base.extend<{ world: World }>({
+  // `auto` so route mocks + clipboard permissions are always installed before
+  // the first step (hence before the first goto).
+  world: [
+    async ({ page, context }, use) => {
+      const world = new World(page)
+
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+
+      // Daily/practice manual fetch -> fixture YAML.
+      await page.route('**/manual/**', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'text/yaml', body: MANUAL_YAML })
+      })
+
+      // Fire-and-forget telemetry -> 200 stub.
+      await page.route('**/api/events*', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })
+      })
+
+      // Leaderboard — GET returns fixture entries; POST captures the body and
+      // returns the configured rank response (or aborts for the unresolved case).
+      // The body is captured BEFORE a possible abort: an aborted POST was still
+      // a real, plausible submission — only the response failed to resolve.
+      await page.route('**/api/leaderboard*', async (route) => {
+        const request = route.request()
+        if (request.method() === 'POST') {
+          try {
+            world.leaderboard.submissions.push(request.postDataJSON())
+          } catch {
+            /* body not JSON — ignore */
+          }
+          if (world.leaderboard.abortPost) {
+            await route.abort()
+            return
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(world.leaderboard.postResponse),
+          })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(world.leaderboard.getResponse),
+        })
+      })
+
+      await use(world)
+    },
+    { auto: true },
+  ],
+})
+
+export const { Given, When, Then } = createBdd(test)

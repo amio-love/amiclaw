@@ -1,0 +1,39 @@
+# Post-game recap copy — the result page's 复制赛后摘要 action produces a plain-text
+# recap (no HTML formatting) for the player to paste to their AI partner. The
+# recap content varies by mode and score-submission state: daily runs render
+# 今日最佳 / 全球排名 lines (when the submission resolved); practice runs render
+# neither; every run gets the three retrospective-question bullets.
+#
+# Restructured for the e2e harness: the four recap scenarios plus mobile-beta's
+# "copy recap plain text" scenario are collapsed into one Scenario Outline
+# claiming result-to-recap, with the mode / submission-state variants pushed
+# into the Examples table. It carries a per-scenario flow-source comment and a
+# consumption-layer tag.
+
+Feature: Post-game recap copy
+  As a BombSquad player
+  I want the post-game copy-summary text to match my mode and score state
+  So that I can paste an accurate recap into my AI partner for a debrief
+
+  # Source: result-to-recap
+  @playwright
+  Scenario Outline: Copy the post-game recap as plain text per mode and submission state
+    Given I have finished a "<mode>" run and the result page is open
+    And the score submission <submission>
+    When I tap "复制赛后摘要"
+    Then the button label changes to "已复制！" within 1 second
+    And the system clipboard holds plain text with no HTML formatting
+    And the clipboard text contains the line "总用时："
+    And the recap text <today-best-check>
+    And the recap text <rank-check>
+    And the recap places any "今日最佳：" line between "总用时：" and "全球排名："
+    And the clipboard text ends with three lines each starting with "- "
+    And the first "- " bullet names the slowest module by its Chinese label
+    And the leaderboard submission <leaderboard>
+
+    Examples:
+      | mode     | submission                                                        | today-best-check                                               | rank-check                            | leaderboard              |
+      | daily    | resolves with rank 5 of 100 and personal best 195000ms attempt 2  | contains the line "今日最佳：03:15（第 2 次）"                   | contains the line "全球排名：#5 / 100" | carries a plausible time |
+      | daily    | resolves with rank 5 of 100 and a legacy personal best 195000ms   | contains the exact line "今日最佳：03:15" with no attempt suffix | contains the line "全球排名：#5 / 100" | carries a plausible time |
+      | daily    | has not resolved                                                  | contains no "今日最佳：" line                                   | contains no "全球排名：" line          | carries a plausible time |
+      | practice | is never sent                                                     | contains no "今日最佳：" line                                   | contains no "全球排名：" line          | is never sent            |

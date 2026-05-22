@@ -12,6 +12,9 @@
     "test": "pnpm -r run test",
     "test:run": "pnpm -r run test:run",
     "typecheck": "pnpm -r run typecheck",
+    "test:e2e": "bddgen && playwright test",
+    "e2e:audit": "node e2e/scripts/audit-coverage.mjs",
+    "e2e:build-answers": "tsx e2e/fixtures/build-answers.mts",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -38,15 +41,21 @@
   "devDependencies": {
     "@commitlint/cli": "^21.0.1",
     "@commitlint/config-conventional": "^21.0.1",
+    "@cucumber/gherkin": "^39.1.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
+    "@types/js-yaml": "^4.0.9",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
+    "js-yaml": "^4.1.1",
     "lint-staged": "^17.0.5",
     "markdownlint-cli2": "^0.22.1",
+    "playwright-bdd": "^8.5.1",
     "prettier": "^3.8.3",
+    "tsx": "^4.22.3",
     "typescript-eslint": "^8.59.3",
     "wrangler": "^4.92.0"
   }

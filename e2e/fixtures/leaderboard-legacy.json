@@ -1,0 +1,8 @@
+{
+  "note": "POST response variant — a legacy KV record that carries a personal best with no attempt number. Drives the recap '今日最佳：03:15' line with no attempt suffix.",
+  "post": {
+    "rank": 5,
+    "total_players": 100,
+    "personal_best_ms": 195000
+  }
+}

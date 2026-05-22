@@ -1,0 +1,125 @@
+# BombSquad game modes — the daily challenge (4 modules, 3-strike fail rule,
+# 10:00 countdown, bomb explosion on failure) and practice mode (2 modules,
+# never-fails, 05:00 countdown). Also carries the two homepage-originated game
+# entry flows.
+#
+# Restructured for the e2e harness: each scenario carries a per-scenario
+# flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
+# tag, and absolute URLs are normalized to relative paths. Duplicate / cross-file
+# flow claims were merged so each active flow is claimed by exactly one scenario:
+#   - landing-to-daily absorbs homepage "CTA enters daily game" + "game flow
+#     stays reachable", mobile-beta "copy manual URL + modal" + "play 4 modules",
+#     and the old "daily 4 modules win" + "both modes timer counts down".
+#   - landing-to-practice absorbs homepage "featured starts practice", the two
+#     practice scenarios, and all three serial-tongue-twister scenarios (the
+#     tongue-twister phrase renders during a practice run).
+#   - daily-fail-strikeout merges the "first two wrong" and "third strike"
+#     scenarios into one strike-out journey.
+# The "daily final-module win-lock edge" scenario is retired to the vitest layer
+# (game-context.test.ts) — see e2e/flow-inventory.yaml.
+
+Feature: BombSquad daily challenge and practice mode
+  As a BombSquad player
+  I want the daily challenge to carry real failure stakes
+  And practice mode to gently teach me the core loop
+  So that the daily run feels tense and a first-time player is not lost
+
+  Background:
+    Given I open /
+
+  # Source: landing-to-daily
+  @playwright
+  Scenario: Enter the daily challenge from the homepage and defuse all four modules
+    Given my viewport width is 375 pixels
+    When I click a daily-challenge CTA
+    Then a prompt modal opens with the daily manual URL
+    And the modal stays within the viewport without horizontal overflow
+    And I see the tip "复制后发给你的 AI 助手"
+    When I tap "复制"
+    Then the button label changes to "已复制！" within 1 second
+    And the system clipboard contains the daily manual URL
+    When I confirm the modal with "确认开始游戏"
+    Then the URL path is /game
+    And the query string carries "mode=daily"
+    And the immersive game flow renders without the platform shell
+    And I see the prompt "准备好了吗？"
+    When I tap "开始"
+    Then the timer starts at the daily budget 10:00 and counts down toward 00:00
+    And the SceneInfoBar shows the "暗号：" and "电池：" fields
+    And the module progress bar shows 4 segments
+    When I solve the 线路 module correctly
+    Then the module progress bar advances to the 密码盘 module
+    When I solve the 密码盘 module correctly
+    Then the module progress bar advances to the 按钮 module
+    When I solve the 按钮 module correctly
+    Then the module progress bar advances to the 键盘 module
+    When I solve the 键盘 module correctly
+    Then I am navigated to the URL path /result
+    And the result page shows the heading "拆弹成功"
+    And the leaderboard submission carries a plausible time
+
+  # Source: landing-to-practice
+  @playwright
+  Scenario: Enter practice mode from the homepage and complete a two-module run
+    When I click the featured BombSquad "练习" CTA
+    Then a prompt modal opens for practice mode
+    When I confirm the modal with "确认开始游戏"
+    Then the URL path is /game
+    And the query string carries "mode=practice"
+    When I tap "开始"
+    Then the timer starts at the practice budget 05:00 and counts down toward 00:00
+    And the SceneInfoBar shows the "暗号：" field with a non-empty Chinese phrase
+    And the "暗号：" value is one of the entries from the curated tongue-twister pool
+    And the "暗号：" value does not match the pattern /^[A-Z0-9]{6}$/
+    And the "暗号：" value contains no alphanumeric ASCII characters
+    And the SceneInfoBar shows the "电池：" field with a number between 1 and 4
+    Given my viewport width is 370 pixels
+    Then the tongue-twister phrase wraps inside the SceneInfoBar without overflowing the bar
+    And the "电池：" field and indicator chips remain visible on screen
+    And the module progress bar shows exactly 2 segments
+    When I submit a wrong answer on the current module
+    Then a red error pulse plays over the module panel
+    And no strike is counted and the run does not fail
+    And I can immediately retry the same puzzle in place
+    When I solve the 线路 module correctly
+    And I solve the 键盘 module correctly
+    Then I am navigated to the URL path /result
+    And the run is recorded as a successful completion
+
+  # Source: daily-fail-strikeout
+  @playwright
+  Scenario: Three wrong answers in a daily run detonate the bomb
+    Given I have started a daily challenge run
+    When I submit a wrong answer on the current module
+    Then one pip of the strike indicator lights up
+    And a red error pulse plays over the module panel
+    And the current module is not reset — the same puzzle stays on screen
+    And the run continues in the PLAYING state
+    When I submit a second wrong answer
+    Then a second strike pip lights up
+    And the run still continues
+    When I submit a third wrong answer
+    Then a full-screen explosion animation plays over the bomb panel
+    And the result page opens with the heading "拆弹失败"
+    And the failure reason reads "累计 3 次失误 —— 炸弹引爆"
+    And no nickname modal appears
+    And no score is submitted to the leaderboard
+
+  # Source: daily-fail-timeout
+  @playwright
+  Scenario: The daily countdown reaching zero detonates the bomb
+    Given I have started a daily challenge run
+    When the countdown timer reaches 00:00
+    Then a full-screen explosion animation plays
+    And the result page opens with the heading "拆弹失败"
+    And the failure reason reads "时间耗尽 —— 炸弹引爆"
+
+  # Source: practice-timeout
+  @playwright
+  Scenario: The practice countdown reaching zero ends the run gently
+    Given I have started a practice run
+    When the countdown timer reaches 00:00
+    Then no explosion animation plays
+    And the result page opens with the heading "时间到"
+    And it shows how many modules were completed this run
+    And the "再来一局" action is available
