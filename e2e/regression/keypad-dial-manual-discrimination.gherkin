@@ -1,0 +1,50 @@
+# Regression guards for the keypad / symbol-dial manual set-discrimination fix
+# (task fix-keypad-manual-sequence-ambiguity, 2026-05-22).
+#
+# Regression scenarios trace to fixed bugs, not flow-inventory flows — they
+# carry per-scenario bug / fix / retire-when labels instead of a flow-source
+# comment, and are all @playwright (deterministic assertions). The coverage
+# audit excludes regression/ from the journey bijection check.
+
+Feature: Keypad and symbol-dial manual set-discrimination
+  As an AI partner who can only read the bomb manual
+  I want each player-visible symbol subset to map to exactly one manual row
+  So that the keypad and symbol-dial modules have a unique, reproducible solution
+
+  Background:
+    Given the practice manual and a sample of daily manuals are loaded
+
+  # bug: keypad #1 BLOCKER — first found by the 2026-05-13 e2e report and
+  #   re-confirmed by the 2026-05-22 dual-agent shakedown. All 6 keypad
+  #   sequences were permutations of one shared 6-symbol alphabet, so every
+  #   4-symbol subset appeared in all 6 sequences. The manual rule "find the
+  #   sequence containing all 4 visible symbols" had no unique solution and an
+  #   AI partner reading the manual could not disambiguate — players drawing
+  #   the keypad module got stuck.
+  # fix: keypad.sequences rebuilt over an 11-symbol pool so any two sequences
+  #   share at most 3 symbols; solveKeypad returns null unless exactly one
+  #   sequence matches (0 = unsolvable, >1 = ambiguous — both fail loud).
+  # retire-when: packages/manual/data-validation.test.ts guards the
+  #   pairwise-intersection invariant over practice.yaml + every daily file
+  #   (review-gated — replacement coverage evidence required if that test is
+  #   removed or the keypad manual schema is reworked).
+  @playwright
+  Scenario: Every keypad 4-symbol subset resolves to exactly one sequence
+    Then any two keypad sequences in each loaded manual share at most 3 symbols
+    And every 4-symbol subset of a keypad sequence matches exactly one sequence
+
+  # bug: symbol_dial same-origin defect, confirmed alongside the keypad bug on
+  #   2026-05-22. Practice columns 1/3/4/6 shared an identical symbol set, so a
+  #   3-symbol subset without trident matched multiple columns and the AI
+  #   partner could not locate a unique column.
+  # fix: symbol_dial.columns rebuilt as 6 columns of 5 symbols over the same
+  #   11-symbol pool so any two columns share at most 2 symbols; solveDial
+  #   returns null unless exactly one column matches.
+  # retire-when: packages/manual/data-validation.test.ts guards the
+  #   pairwise-intersection invariant over practice.yaml + every daily file
+  #   (review-gated — replacement coverage evidence required if that test is
+  #   removed or the symbol-dial manual schema is reworked).
+  @playwright
+  Scenario: Every symbol-dial 3-symbol subset resolves to exactly one column
+    Then any two symbol-dial columns in each loaded manual share at most 2 symbols
+    And every 3-symbol subset of a symbol-dial column matches exactly one column

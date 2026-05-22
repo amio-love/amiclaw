@@ -104,60 +104,51 @@ modules:
           position: first
   symbol_dial:
     columns:
-      - - star
-        - xi
-        - psi
-        - omega
-        - delta
-        - diamond
-      - - omega
+      - - psi
+        - hourglass
         - star
         - xi
-        - diamond
-        - delta
-        - psi
-      - - delta
-        - trident
-        - star
-        - xi
-        - psi
-        - omega
+        - crescent
       - - xi
-        - psi
+        - diamond
+        - cross
+        - omega
+        - hourglass
+      - - psi
+        - star
+        - delta
+        - spiral
+        - omega
+      - - spiral
+        - crescent
+        - omega
+        - trident
+        - diamond
+      - - hourglass
+        - crescent
+        - delta
+        - spiral
+        - cross
+      - - cross
+        - trident
         - delta
         - diamond
         - star
-        - omega
-      - - trident
-        - diamond
-        - omega
-        - xi
-        - delta
-        - psi
-      - - omega
-        - star
-        - psi
-        - xi
-        - diamond
-        - delta
-    rule: 玩家报 3 个轮盘当前显示的符号 S1、S2、S3（都在位置 0）—— 生成器保证这 3 个起始符号互不相同，你可以信任玩家的描述。在下方 columns 里找那条同时包含 S1、S2、S3 的列。对第 i 个轮盘，目标位置 = S_i 在命中列中的 index（0=最上，5=最下）。指示玩家把每个轮盘从位置 0 按右箭头到达该 index 即可，不要说"让轮盘显示某个符号"——每个轮盘有自己独立的 6 符号池，跨轮盘不通用。
+    rule: 玩家报 3 个轮盘当前显示的符号 S1、S2、S3（都在位置 0）—— 生成器保证这 3 个起始符号互不相同，你可以信任玩家的描述。在下方 columns 里找那条同时包含 S1、S2、S3 的列。6 条列的符号集合两两交集不超过 2 个，因此 3 个起始符号必定恰好命中唯一一条列，不存在歧义。对第 i 个轮盘，目标位置 = S_i 在命中列中的 index（0=最上，4=最下）。指示玩家把每个轮盘从位置 0 按右箭头到达该 index 即可，不要说"让轮盘显示某个符号"——每个轮盘有自己独立的 6 符号池，跨轮盘不通用。
   button:
     rules:
       - condition:
-          color: yellow
-          battery_count:
-            gt: 2
+          label: ABORT
         action:
           type: hold
-          release_on_light: yellow
-      - condition:
-          color: red
-          label: HOLD
-        action:
-          type: tap
+          release_on_light: white
       - condition:
           color: red
           indicator_FRK_lit: true
+        action:
+          type: tap
+      - condition:
+          color: white
         action:
           type: tap
       - condition:
@@ -167,20 +158,7 @@ modules:
           type: hold
           release_on_light: red
       - condition:
-          color: yellow
-        action:
-          type: tap
-      - condition:
-          battery_count:
-            gt: 2
-          label: DETONATE
-        action:
-          type: tap
-      - condition:
-          color: white
-        action:
-          type: tap
-      - condition:
+          color: blue
           label: ABORT
         action:
           type: hold
@@ -192,58 +170,74 @@ modules:
           type: hold
           release_on_light: blue
       - condition:
-          color: blue
+          battery_count:
+            gt: 2
           label: DETONATE
         action:
           type: tap
       - condition:
-          color: blue
-          label: ABORT
+          color: yellow
+        action:
+          type: tap
+      - condition:
+          color: red
+          label: HOLD
+        action:
+          type: tap
+      - condition:
+          color: yellow
+          battery_count:
+            gt: 2
         action:
           type: hold
-          release_on_light: white
+          release_on_light: yellow
+      - condition:
+          color: blue
+          label: DETONATE
+        action:
+          type: tap
       - condition: {}
         action:
           type: tap
   keypad:
     sequences:
-      - - star
-        - omega
-        - psi
-        - xi
+      - - xi
         - diamond
         - delta
+        - crescent
+        - spiral
+        - omega
+      - - cross
+        - delta
+        - crescent
+        - trident
+        - star
+        - xi
+      - - trident
+        - diamond
+        - omega
+        - xi
+        - cross
+        - hourglass
+      - - omega
+        - delta
+        - cross
+        - diamond
+        - psi
+        - star
       - - xi
         - psi
-        - diamond
+        - spiral
         - omega
         - star
-        - delta
+        - trident
       - - delta
-        - psi
         - diamond
-        - xi
-        - omega
+        - spiral
         - star
-      - - star
-        - omega
-        - xi
-        - diamond
-        - psi
-        - delta
-      - - psi
-        - delta
-        - star
-        - xi
-        - diamond
-        - omega
-      - - xi
-        - psi
-        - delta
-        - omega
-        - diamond
-        - star
-    rule: 键盘 2×2 共 4 个格子，符号全部可见。在下方 sequences 里找那条同时包含这 4 个符号的序列；让玩家按该序列里出现的先后顺序点击它们（玩家不需要理解"位置"，只需要说"点某某符号"即可）。
+        - hourglass
+        - trident
+    rule: 键盘 2×2 共 4 个格子，符号全部可见。在下方 sequences 里找那条同时包含这 4 个符号的序列；让玩家按该序列里出现的先后顺序点击它们（玩家不需要理解"位置"，只需要说"点某某符号"即可）。6 条 sequence 的符号集合两两交集不超过 3 个，因此 4 个可见符号必定恰好命中唯一一条 sequence，不存在歧义。
 decoy_modules:
   morse_code:
     rules:

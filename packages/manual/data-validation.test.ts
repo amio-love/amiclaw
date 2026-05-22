@@ -146,3 +146,52 @@ describe('manual HTML embedded yaml descriptions match shared/symbols.ts SSOT', 
     expect(errors, `\n${errors.join('\n')}`).toEqual([])
   })
 })
+
+describe('manual set-discrimination invariant', () => {
+  // A keypad sequence is solvable from the manual only if any player-visible
+  // 4-symbol subset attributes to exactly one sequence. That holds iff any two
+  // sequences share at most 3 symbols — a shared 4-symbol subset would force a
+  // pairwise intersection of >=4. Likewise dial columns must pairwise share at
+  // most 2 symbols so any 3-symbol subset attributes to exactly one column.
+  // The pairwise-intersection bound IS the subset-uniqueness proof, so this
+  // check over practice.yaml + every daily file is the exhaustive guard for
+  // Acceptance Scenario 1 of fix-keypad-manual-sequence-ambiguity.
+  function loadManual(path: string): Manual {
+    return yaml.load(readFileSync(path, 'utf8')) as Manual
+  }
+
+  function maxPairwiseIntersection(rows: string[][]): number {
+    let max = 0
+    for (let i = 0; i < rows.length; i++) {
+      const a = new Set(rows[i])
+      for (let j = i + 1; j < rows.length; j++) {
+        const shared = rows[j].reduce((n, s) => n + (a.has(s) ? 1 : 0), 0)
+        if (shared > max) max = shared
+      }
+    }
+    return max
+  }
+
+  function assertDiscriminating(label: string, manual: Manual): void {
+    expect(
+      maxPairwiseIntersection(manual.modules.keypad.sequences),
+      `${label}: two keypad sequences share >3 symbols — a 4-symbol subset would be ambiguous`
+    ).toBeLessThanOrEqual(3)
+    expect(
+      maxPairwiseIntersection(manual.modules.symbol_dial.columns),
+      `${label}: two dial columns share >2 symbols — a 3-symbol subset would be ambiguous`
+    ).toBeLessThanOrEqual(2)
+  }
+
+  it('practice.yaml keypad sequences and dial columns are set-discriminating', () => {
+    assertDiscriminating('practice.yaml', loadManual(PRACTICE_YAML))
+  })
+
+  it('every daily YAML keypad sequences and dial columns are set-discriminating', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      assertDiscriminating(file, loadManual(join(DAILY_DIR, file)))
+    }
+  })
+})

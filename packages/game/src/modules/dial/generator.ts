@@ -4,14 +4,17 @@ import type { Rng } from '../../engine/rng'
 import { solveDial } from './solver'
 
 /**
- * Build a dial puzzle such that the three dials show THREE DISTINCT symbols
- * at position 0. The earlier generator shuffled each dial independently,
- * which occasionally produced two or three dials sharing the same starting
- * symbol. That is technically solvable (the solver just computes duplicate
- * target indices), but any reasonable LLM reading the manual will conclude
- * "a column contains each symbol at most once, so you cannot describe two
- * dials with the same symbol" and refuse to proceed. Guaranteeing distinct
- * starts removes the entire class of confusion without changing gameplay.
+ * Build a dial puzzle by picking a manual column, then drawing 3 distinct
+ * starting symbols from it. Each physical dial is `[start, ...5 fillers]` —
+ * still 6 symbols, so the DialModule UI is unchanged — but only the position-0
+ * (current) symbol is meaningful to `solveDial`; the fillers are decoration.
+ *
+ * Because any two columns share at most 2 symbols, a 3-symbol subset of one
+ * column cannot be a subset of another, so the three starts map back to
+ * exactly one column. The three starts are pairwise distinct (drawn from a
+ * column, which has no repeats), which lets an AI partner trust "I see
+ * S1, S2, S3" as three distinct readings. The retry loop is a defensive
+ * guard; with discriminating columns the first attempt already succeeds.
  */
 export function generateDial(
   rng: Rng,
@@ -21,9 +24,10 @@ export function generateDial(
   const allSymbols = [...new Set(section.columns.flat())]
 
   for (let attempt = 0; attempt < 100; attempt++) {
-    // Pick 3 distinct starting symbols; each dial holds its start at index 0
-    // followed by 5 other symbols drawn from the remaining pool.
-    const startingSymbols = rng.shuffle(allSymbols).slice(0, 3)
+    // Pick 3 distinct starting symbols from one column; each dial holds its
+    // start at index 0 followed by 5 fillers drawn from the remaining pool.
+    const column = rng.pick(section.columns)
+    const startingSymbols = rng.shuffle(column).slice(0, 3)
     const dials = startingSymbols.map((start) => {
       const rest = rng.shuffle(allSymbols.filter((s) => s !== start)).slice(0, 5)
       return [start, ...rest]
