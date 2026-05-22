@@ -28,6 +28,12 @@ dist/
 # Testing
 coverage/
 
+# Playwright e2e harness — generated dirs
+.features-gen/
+.features-mirror/
+playwright-report/
+test-results/
+
 # Logs
 *.log
 npm-debug.log*

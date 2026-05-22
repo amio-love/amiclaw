@@ -88,6 +88,15 @@ straight from the homepage CTAs.
 - **CI** Added a `typecheck` step that runs the `api` package's `tsc --noEmit`
   via a new root `pnpm typecheck` aggregate script, so type errors in the
   leaderboard API now fail CI instead of merging silently.
+- **CI** Added an end-to-end test harness that runs as two new per-PR
+  checks. The `e2e` job builds the site and drives full BombSquad
+  play-throughs in a real browser with Playwright + playwright-bdd, under
+  a pinned fake clock so every daily run is deterministic and exactly
+  reproducible. The `e2e-audit` job reconciles the Gherkin scenario suite
+  against the `e2e/flow-inventory.yaml` flow registry — a missing,
+  orphaned, duplicated, or untagged flow fails the build — and regenerates
+  the golden `answers.json` fixture so a puzzle-generator change that would
+  silently invalidate it is caught loudly.
 
 ### Improvements
 

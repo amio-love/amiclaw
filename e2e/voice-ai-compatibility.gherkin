@@ -1,0 +1,47 @@
+# Voice-AI compatibility page — the /compatibility reference page reached from
+# the PromptModal discovery link: the Claude=已验证 marker, the recommended
+# opening-prompt block with copy-to-clipboard feedback, and the return-home link.
+#
+# Restructured for the e2e harness: the scenario carries a per-scenario
+# flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
+# tag, and the absolute URL is normalized to a relative path. The final step's
+# stale "BOMBSQUAD home page" wording is reconciled to the post-Atlas platform
+# homepage.
+
+Feature: Voice AI compatibility reference page
+  As a new BombSquad player who is unsure which AI to use
+  I want a one-click path from the prompt modal to a list of supported AIs
+  And a copy-ready opening prompt to send my AI partner
+  So that I can pick a voice AI and brief it without guessing
+
+  Background:
+    Given I open /
+
+  # Source: prompt-modal-to-compatibility
+  @playwright
+  Scenario: Player discovers the compatibility page from the prompt modal and copies the opening prompt
+    When I tap "练习"
+    Then the prompt modal opens with the practice manual URL
+    And I see the link "不确定用哪个 AI？查看支持工具"
+
+    When I click "不确定用哪个 AI？查看支持工具"
+    Then the URL path is /compatibility
+    And I see a heading "支持的 AI 工具"
+    And I see the subtitle "BombSquad 不集成任何 AI 接口，你可以选择任意支持语音对话的 AI 与你协作。"
+
+    And the AI tool list shows the row "Claude" marked "已验证 ✓"
+    And the AI tool list shows the row "ChatGPT" marked "未测试 · 邀请反馈"
+    And the AI tool list shows the row "Gemini" marked "未测试 · 邀请反馈"
+    And no row mentions a required browser or "Clipboard API"
+
+    And I see a heading "告诉 AI 该怎么做"
+    And the recommended opening prompt contains "等会儿我会发你一个 URL"
+    And the recommended opening prompt contains "每次只回复一步指令"
+
+    When I tap "复制开场白"
+    Then the button label changes to "已复制！" within 1 second
+    And the system clipboard contains the recommended opening prompt text
+
+    When I click "← 返回 BombSquad 首页"
+    Then the URL path is /
+    And I am back on the Amiclaw platform homepage

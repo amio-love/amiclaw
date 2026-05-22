@@ -1,0 +1,69 @@
+# Regression guards from the BombSquad mobile internal-beta audit (2026-05-20).
+# Regression scenarios trace to fixed bugs, not flow-inventory flows — they
+# carry per-scenario bug / fix / retire-when labels instead of a flow-source
+# comment, and are all @playwright (deterministic assertions). The coverage
+# audit excludes regression/ from the journey bijection check.
+#
+# The two original single-scenario Feature blocks are merged into one Feature
+# (one Feature per file is required by the Gherkin parser); the shared 320px
+# viewport stays in Background and each scenario keeps its own setup Given.
+
+Feature: Mobile internal-beta layout regression guards
+  As a BombSquad internal-beta visitor on a narrow phone
+  I want long nicknames and wire hit targets to stay within their bounds
+  So that no leaderboard column is clipped and no wire is mis-cut
+
+  Background:
+    Given my viewport width is 320 pixels
+
+  # bug: L5-1 — a fully legal 20-character no-space ASCII nickname
+  #   (NICKNAME_MAX_LENGTH is 20, validation accepts any characters) widened
+  #   the leaderboard nickname column under table-layout:auto until the 用时 /
+  #   次数 columns were pushed past a 320px viewport, where body{overflow-x:hidden}
+  #   clipped them with no scrollbar — every leaderboard visitor lost the time /
+  #   attempt data and the bad nickname stayed KV-persisted.
+  # fix: LeaderboardPage.module.css .table td gains overflow-wrap:anywhere +
+  #   word-break:break-word so a long nickname wraps inside its own column
+  #   instead of widening it.
+  # retire-when: a journey scenario asserts leaderboard column integrity at a
+  #   <=320px viewport, OR a vitest/component test guards .table td wrapping in
+  #   LeaderboardPage.module.css (review-gated — replacement coverage evidence
+  #   required if the leaderboard table CSS is rewritten).
+  @playwright
+  Scenario: A 20-character no-space ASCII nickname does not clip other columns
+    Given the daily leaderboard has at least one submitted score
+    And a leaderboard row whose nickname is "SuperBombDefuserPro1"
+    And that nickname is 20 ASCII characters long with no spaces
+    When I open /leaderboard
+    Then the nickname wraps onto multiple lines inside the "玩家" column
+    And the rendered table width does not exceed the 320px viewport
+    And the "用时 · 失误" column header and every time and attempt value stay fully visible
+    And no horizontal scrolling and no silently clipped column occurs
+
+  # bug: L3-1 — WireModule's transparent .wire-hit-target click proxy had
+  #   stroke-width:20, which a ~320px viewport scales (~0.96) down to a ~19px
+  #   tap band — under half the 44px touch-target guideline. Cutting a wire is
+  #   the only interaction in the first module and a mis-cut resets the module,
+  #   so the narrow band made mobile mis-cuts easy.
+  # fix: .wire-hit-target stroke-width widens to 28 viewBox units — the widest
+  #   band that still leaves a safety margin inside the 30-unit minimum
+  #   centerline gap, so no two adjacent hit bands overlap. The visible wire
+  #   stroke (width 4) is untouched, so the wires look identical.
+  # retire-when: a vitest/component test guards the .wire-hit-target stroke-width
+  #   and the adjacent-band non-overlap geometry, OR WireModule's hit-target
+  #   rendering is rewritten (review-gated — replacement coverage evidence
+  #   required, since a rewrite may reintroduce the same class of defect).
+  @playwright
+  Scenario: Each wire has a widened, non-overlapping hit band
+    Given the wire module is showing with at least two adjacent wires
+    And the wire module renders its wires in a 300-unit-wide SVG viewBox
+    When I inspect the .wire-hit-target click proxy for every wire
+    Then its stroke-width is 28 viewBox units, up from the pre-fix 20
+    And the rendered hit band is roughly 27 pixels tall at a 320px viewport
+    And the hit band is far wider than the pre-fix ~19px band and as close to the 44px touch-target guideline as the zero-overlap constraint allows
+    # Adjacent wire centerlines sit ~45 units apart and never closer than a
+    # 30-unit minimum gap at the curve midpoint, so a 28-unit hit band
+    # (+/-14 units) always leaves clear air between neighbouring bands.
+    And no wire's hit band overlaps an adjacent wire's hit band
+    And tapping anywhere on a wire's hit band cuts that wire and never its neighbour
+    And the visible wire stroke stays 4 units wide so the wires look unchanged

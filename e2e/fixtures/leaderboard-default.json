@@ -1,0 +1,24 @@
+{
+  "note": "Default route-mock data for **/api/leaderboard*. `get` is the GET response (LeaderboardResponse); `post` is the POST response (ScoreSubmissionResponse) for a plain daily-win submission.",
+  "get": {
+    "date": "2026-05-22",
+    "entries": [
+      {
+        "rank": 1,
+        "nickname": "拆弹快手",
+        "time_ms": 92000,
+        "attempt_number": 1,
+        "ai_tool": "claude"
+      },
+      { "rank": 2, "nickname": "MidnightDefuser", "time_ms": 118500, "attempt_number": 2 },
+      {
+        "rank": 3,
+        "nickname": "小林同学",
+        "time_ms": 134000,
+        "attempt_number": 1,
+        "ai_tool": "gemini"
+      }
+    ]
+  },
+  "post": { "rank": 5, "total_players": 100 }
+}

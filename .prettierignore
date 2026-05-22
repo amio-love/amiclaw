@@ -1,6 +1,13 @@
 # Generated lockfile — pnpm owns its format
 pnpm-lock.yaml
 
+# Generated golden fixture — build-answers.mjs owns its format
+e2e/fixtures/answers.json
+
+# Playwright-bdd generated dirs (mirror .gitignore)
+.features-gen/
+.features-mirror/
+
 # Build and generated artifacts (mirrors .gitignore)
 dist/
 .output/

@@ -1,0 +1,9 @@
+{
+  "note": "POST response variant — a resolved daily submission carrying a personal best with an attempt number. Drives the recap '今日最佳：03:15（第 2 次）' line.",
+  "post": {
+    "rank": 5,
+    "total_players": 100,
+    "personal_best_ms": 195000,
+    "personal_best_attempt": 2
+  }
+}
