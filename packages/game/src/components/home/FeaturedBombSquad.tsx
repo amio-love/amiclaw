@@ -10,13 +10,12 @@ import styles from './FeaturedBombSquad.module.css'
 const AI_CHIPS = ['CLAUDE', 'CHATGPT', 'GEMINI', 'VOICE_MODE']
 
 interface FeaturedBombSquadProps {
-  /* Opens the daily PromptModal — the「开始一局」CTA. */
+  /* Routes to the BombSquad landing page (/game) — the「开始一局」CTA. */
   onStartDaily: () => void
-  /* Opens the practice PromptModal — the「练习」CTA. */
+  /* Routes to the BombSquad landing page (/game) — the「练习」CTA. */
   onStartPractice: () => void
-  /* Opens the daily PromptModal — the section header's「游戏页 →」action.
-     No dedicated BombSquad page exists, so this is the canonical
-     "play BombSquad" action. */
+  /* Routes to the BombSquad landing page (/game) — the section header's
+     「游戏页 →」action. The landing page owns the daily / practice choice. */
   onOpenGamePage: () => void
 }
 

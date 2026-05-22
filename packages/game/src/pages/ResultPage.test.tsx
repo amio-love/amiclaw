@@ -180,7 +180,7 @@ describe('ResultPage replay_intent logging', () => {
 
 function finishedDailyState(overrides: Partial<GameState> = {}): GameState {
   // Module times here are tuned so the slowest module is index 1 (dial,
-  // "密码盘"), matching the directive's case (e) "Q1 names slowest module"
+  // "星盘"), matching the directive's case (e) "Q1 names slowest module"
   // wire-up assertion. totalEndTime - totalStartTime = 221_000 ms → 03:41.
   return {
     status: 'RESULT',
@@ -352,7 +352,7 @@ describe('ResultPage buildSummary recap format', () => {
     expect(text).not.toContain('全球排名：')
   })
 
-  it('(e) Q1 names the slowest module ("密码盘") end-to-end', async () => {
+  it('(e) Q1 names the slowest module ("星盘") end-to-end', async () => {
     sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
     vi.mocked(submitScore).mockResolvedValueOnce({
       rank: 5,
@@ -378,6 +378,6 @@ describe('ResultPage buildSummary recap format', () => {
     const text = getCopiedText()
     const bulletLines = text.split('\n').filter((l) => l.startsWith('- '))
     expect(bulletLines).toHaveLength(3)
-    expect(bulletLines[0]).toContain('密码盘模块耗时最长')
+    expect(bulletLines[0]).toContain('星盘模块耗时最长')
   })
 })

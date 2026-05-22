@@ -26,7 +26,7 @@ describe('buildRetroQuestions', () => {
   it('Q1 names the slowest module by Chinese label (single longest)', () => {
     const out = buildRetroQuestions(baseStats, 1, 'practice')
     const q1 = out.split('\n')[0]
-    expect(q1).toContain('密码盘模块耗时最长')
+    expect(q1).toContain('星盘模块耗时最长')
   })
 
   it('on time ties, Q1 picks the lower-index module (stable)', () => {
@@ -38,8 +38,8 @@ describe('buildRetroQuestions', () => {
     ]
     const out = buildRetroQuestions(tied, 1, 'practice')
     const q1 = out.split('\n')[0]
-    expect(q1).toContain('线路模块耗时最长')
-    expect(q1).not.toContain('密码盘模块耗时最长')
+    expect(q1).toContain('光弦模块耗时最长')
+    expect(q1).not.toContain('星盘模块耗时最长')
   })
 
   it('Q1 omits reset count when errorCount is 0', () => {
@@ -63,13 +63,13 @@ describe('buildRetroQuestions', () => {
 
   it('labels the slowest module by its kind, not its list position', () => {
     // Practice runs the reduced [wire, keypad] sequence — keypad at index 1.
-    // A positional lookup would mislabel index 1 as "密码盘"; the kind-keyed
-    // lookup must name it "键盘".
+    // A positional lookup would mislabel index 1 as "星盘"; the kind-keyed
+    // lookup must name it "星符".
     const practiceStats: ModuleStat[] = [stat('wire', 30_000), stat('keypad', 90_000)]
     const out = buildRetroQuestions(practiceStats, 1, 'practice')
     const q1 = out.split('\n')[0]
-    expect(q1).toContain('键盘模块耗时最长')
-    expect(q1).not.toContain('密码盘')
+    expect(q1).toContain('星符模块耗时最长')
+    expect(q1).not.toContain('星盘')
   })
 
   it('Q2 in daily mode with attemptNumber > 1 references the attempt number', () => {

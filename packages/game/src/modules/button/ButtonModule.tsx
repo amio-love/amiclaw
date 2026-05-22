@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
 import type { ButtonConfig, ButtonAnswer } from '@shared/manual-schema'
 import type { ModuleProps } from '../types'
 import { playSfx } from '@/audio/useSfx'
 import styles from './ButtonModule.module.css'
+
+/* Button module — no dedicated handoff spec; restyled to the Atlas
+   star-chart visual language by analogy with the three specced
+   modules: a glass stage, a soft glow vocabulary, and the yellow
+   accent. Gameplay (tap vs. hold-and-release-on-color) is unchanged. */
 
 const INDICATOR_COLORS = ['white', 'yellow', 'blue', 'red']
 const HOLD_THRESHOLD_MS = 500
@@ -93,37 +98,67 @@ export default function ButtonModule({
     []
   )
 
+  // Keyboard parity for the press-and-hold mechanic: Enter / Space map to
+  // the same press / release the pointer path uses, so the button module is
+  // fully operable without a pointer. `e.repeat` filters the OS key-repeat
+  // that fires while a key is held, so a hold registers as one press.
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    if (e.repeat) return
+    handlePointerDown()
+  }
+
+  const handleKeyUp = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    handlePointerUp()
+  }
+
   const indicatorColor = CSS_COLORS[INDICATOR_COLORS[indicatorColorIdx]] ?? '#888'
   const buttonBg = CSS_COLORS[config.color] ?? '#444'
+  const isPressed = buttonState === 'pressed' || buttonState === 'holding'
 
   return (
     <div
-      className={`${styles.container} ${buttonState === 'error' ? styles.error : ''} ${buttonState === 'success' ? styles.success : ''}`}
+      className={`${styles.wrapper} ${buttonState === 'error' ? styles.error : ''} ${buttonState === 'success' ? styles.success : ''}`}
       data-testid="button-module"
     >
-      <div
-        className={styles.indicator}
-        style={{
-          backgroundColor:
-            buttonState === 'holding'
-              ? indicatorColor
-              : (CSS_COLORS[config.indicatorColor] ?? '#888'),
-        }}
-        data-testid="button-indicator"
-      />
-      <button
-        className={`${styles['big-button']} ${buttonState === 'pressed' || buttonState === 'holding' ? styles.pressed : ''}`}
-        style={{ backgroundColor: buttonBg, color: '#fff' }}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        data-testid="big-button"
-        aria-label={`${config.label} button`}
-      >
-        {config.label}
-      </button>
-      <div className={styles.display} data-testid="button-display">
-        {config.displayNumber}
+      <div className={styles.stage}>
+        <div
+          className={styles.indicator}
+          style={{
+            backgroundColor:
+              buttonState === 'holding'
+                ? indicatorColor
+                : (CSS_COLORS[config.indicatorColor] ?? '#888'),
+            boxShadow: `0 0 14px ${
+              buttonState === 'holding'
+                ? indicatorColor
+                : (CSS_COLORS[config.indicatorColor] ?? '#888')
+            }`,
+          }}
+          data-testid="button-indicator"
+        />
+        <div className={styles.buttonOrbit}>
+          <button
+            type="button"
+            className={`${styles.bigButton} ${isPressed ? styles.pressed : ''}`}
+            style={{ backgroundColor: buttonBg, color: '#fff' }}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            data-testid="big-button"
+            aria-label={`${config.label} button`}
+          >
+            {config.label}
+          </button>
+        </div>
+        <div className={styles.display} data-testid="button-display">
+          {config.displayNumber}
+        </div>
       </div>
     </div>
   )

@@ -2,11 +2,13 @@ import type { GameMode, ModuleStat } from '@/store/game-context'
 
 // Label keyed by module kind, not list position — practice and daily run
 // different module sequences, so a positional lookup would mislabel practice.
+// Atlas redesign names (design_handoff_bombsquad README §1): 线路→光弦,
+// 密码盘→星盘, 键盘→星符; the button module keeps 按钮.
 const MODULE_LABEL: Record<string, string> = {
-  wire: '线路',
-  dial: '密码盘',
+  wire: '光弦',
+  dial: '星盘',
   button: '按钮',
-  keypad: '键盘',
+  keypad: '星符',
 }
 
 /**

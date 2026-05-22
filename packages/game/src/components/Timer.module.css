@@ -1,27 +1,26 @@
+/* Run countdown timer — Atlas star-chart visual language: a large
+   display-font readout with a soft yellow glow (handoff README §5.3). */
 .timer {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-weight: bold;
-  color: var(--color-text-muted);
-  letter-spacing: 0.1em;
+  font: 400 2rem/1 var(--font-display);
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
   transition: color 0.2s ease;
 }
 
 .running {
-  color: var(--color-neon-cyan);
-  text-shadow:
-    0 0 6px var(--color-neon-cyan),
-    0 0 20px var(--color-neon-cyan);
+  color: #fff;
+  text-shadow: 0 0 20px var(--y-glow-25);
 }
 
-/* Daily-challenge low-time warning — under a minute left. Overrides the
-   cyan `.running` glow with neon-red and a gentle pulse. Practice never
+/* Daily-challenge low-time warning — under a minute left. Switches the
+   readout to the rose error color with a gentle pulse. Practice never
    sets this: running out of time there is harmless, so no red urgency. */
 .lowTime {
-  color: var(--color-neon-red);
+  color: var(--rose);
   text-shadow:
-    0 0 6px var(--color-neon-red),
-    0 0 20px var(--color-neon-red);
+    0 0 6px rgba(255, 107, 157, 0.6),
+    0 0 20px rgba(255, 107, 157, 0.4);
   animation: timer-low 1s ease-in-out infinite;
 }
 

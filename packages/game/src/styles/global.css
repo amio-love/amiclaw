@@ -41,9 +41,11 @@ body {
   min-height: 100%;
 }
 
-/* Focus rings */
+/* Focus rings — AMIO-yellow per the Atlas design system (handoff
+   README §10 step 8). The 2px outline-offset lifts the ring clear of
+   the element so it stays visible even on a yellow-filled control. */
 :focus-visible {
-  outline: 2px solid var(--color-neon-cyan);
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 

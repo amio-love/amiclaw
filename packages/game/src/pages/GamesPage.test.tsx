@@ -3,16 +3,20 @@
  *
  * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
- *   2. the daily-challenge CTA opens the daily PromptModal
- *   3. confirming the daily modal navigates to /game?mode=daily
- *   4. the featured-BombSquad「开始一局」CTA opens the daily PromptModal
- *   5. the featured-BombSquad「练习」CTA opens the practice modal and
- *      confirming navigates to /game?mode=practice
+ *   2. the daily-challenge CTA routes to the BombSquad landing (/game)
+ *   3. the featured-BombSquad「开始一局」CTA routes to /game
+ *   4. the featured-BombSquad「练习」CTA routes to /game
+ *   5. the anonymous hero「开启旅程」CTA routes to /game
  *   6. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
  *
- * Follows the LeaderboardPage.test.tsx pattern: render the page directly
- * inside a MemoryRouter. A sibling `/game` route renders a location probe so
- * the post-confirm navigation target is assertable without a real GamePage.
+ * Every BombSquad CTA on the homepage now routes to the BombSquad landing
+ * page; the landing owns the daily/practice choice and the connect-AI
+ * flow, so the homepage no longer opens a pre-game modal. The
+ * landing → connect → run path is covered by the screen tests.
+ *
+ * Render the page directly inside a MemoryRouter. A sibling `/game` route
+ * renders a location probe so the navigation target is assertable without
+ * mounting the real BombSquad landing page.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -25,8 +29,8 @@ vi.mock('@/hooks/useDailyCountdown', () => ({
   useDailyCountdown: () => ['12', '00', '00'],
 }))
 
-/* Renders the current location so the navigation target after a modal
-   confirmation is assertable without mounting the real GamePage. */
+/* Renders the current location so the navigation target after a CTA
+   click is assertable without mounting the real landing page. */
 function LocationProbe() {
   const location = useLocation()
   return <div data-testid="location">{location.pathname + location.search}</div>
@@ -67,52 +71,36 @@ describe('GamesPage homepage', () => {
     expect(screen.queryByText('星海')).not.toBeInTheDocument()
   })
 
-  it('opens the daily PromptModal when the daily-challenge CTA is clicked', () => {
-    renderHomepage('/')
-
-    // No modal is mounted before the CTA is clicked.
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /立即挑战/ }))
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('每日 Prompt')).toBeInTheDocument()
-  })
-
-  it('navigates to /game?mode=daily after confirming the daily modal', () => {
+  it('routes to the BombSquad landing when the daily-challenge CTA is clicked', () => {
     renderHomepage('/')
 
     fireEvent.click(screen.getByRole('button', { name: /立即挑战/ }))
-    fireEvent.click(screen.getByRole('button', { name: '确认开始游戏' }))
 
-    const location = screen.getByTestId('location').textContent ?? ''
-    expect(location).toContain('/game')
-    expect(location).toContain('mode=daily')
+    expect(screen.getByTestId('location').textContent).toBe('/game')
   })
 
-  it('opens the daily PromptModal from the featured-BombSquad「开始一局」CTA', () => {
+  it('routes to the BombSquad landing from the featured「开始一局」CTA', () => {
     renderHomepage('/')
 
     fireEvent.click(screen.getByRole('button', { name: '开始一局' }))
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('每日 Prompt')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/game')
   })
 
-  it('navigates to /game?mode=practice after confirming the featured practice modal', () => {
+  it('routes to the BombSquad landing from the featured「练习」CTA', () => {
     renderHomepage('/')
 
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
 
-    // The practice CTA opens the practice-variant modal.
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('练习 Prompt')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/game')
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: '确认开始游戏' }))
+  it('routes to the BombSquad landing from the anonymous hero「开启旅程」CTA', () => {
+    renderHomepage('/')
 
-    const location = screen.getByTestId('location').textContent ?? ''
-    expect(location).toContain('/game')
-    expect(location).toContain('mode=practice')
+    fireEvent.click(screen.getByRole('button', { name: /开启旅程/ }))
+
+    expect(screen.getByTestId('location').textContent).toBe('/game')
   })
 
   it('renders the WelcomeStrip instead of the hero for a signed-in visitor', () => {

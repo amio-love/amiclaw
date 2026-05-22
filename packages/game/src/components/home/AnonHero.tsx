@@ -4,7 +4,7 @@ import StatPill from '@/components/ui/StatPill'
 import styles from './AnonHero.module.css'
 
 interface AnonHeroProps {
-  /* Opens the daily-challenge PromptModal — the primary「开启旅程」CTA. */
+  /* Routes to the BombSquad landing page (/game) — the primary「开启旅程」CTA. */
   onStart: () => void
   /* Scrolls to the FeaturedBombSquad section — the ghost「看看 BombSquad」CTA. */
   onSeeBombSquad: () => void

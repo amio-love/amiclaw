@@ -79,7 +79,7 @@ describe('GamePage countdown timer', () => {
 
   it('counts down from the time budget toward zero', async () => {
     render(
-      <MemoryRouter initialEntries={['/game?mode=practice']}>
+      <MemoryRouter initialEntries={['/game/run?mode=practice']}>
         <GameProvider>
           <GamePage />
         </GameProvider>

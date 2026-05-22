@@ -4,7 +4,7 @@
  * daily manual loader (so the daily run resolves a manual without a network).
  *
  * Covers two runs:
- *   1. practice → START → 2 module completions → result page (练习完成)
+ *   1. practice → START → 2 module completions → result page (拆弹成功)
  *   2. daily    → START → 4 module completions → result page (拆弹成功)
  *
  * Practice runs a reduced 2-module sequence (wire + keypad); daily runs the
@@ -88,13 +88,13 @@ describe('full game flow', () => {
     sessionStorage.clear()
   })
 
-  it('practice run: 2 modules → result page shows 练习完成', async () => {
-    // Enter directly at the practice game route — symmetric with the daily
-    // test below. The homepage is now the GamesPage shell (no BombSquad
-    // entry point lives there); the homepage CTA → game path is covered
-    // separately by GamesPage.test.tsx.
+  it('practice run: 2 modules → result page shows 拆弹成功', async () => {
+    // Enter directly at the practice run route (/game/run) — symmetric
+    // with the daily test below. This deliberately skips the landing →
+    // connect screens; the homepage CTA → landing → connect → run path is
+    // covered separately by GamesPage.test.tsx and the screen tests.
     render(
-      <MemoryRouter initialEntries={['/game?mode=practice']}>
+      <MemoryRouter initialEntries={['/game/run?mode=practice']}>
         <App />
       </MemoryRouter>
     )
@@ -109,7 +109,7 @@ describe('full game flow', () => {
     await completeModules(PRACTICE_MODULE_TESTIDS)
 
     await waitFor(
-      () => expect(screen.getByRole('heading', { name: /练习完成/ })).toBeInTheDocument(),
+      () => expect(screen.getByRole('heading', { name: /拆弹成功/ })).toBeInTheDocument(),
       { timeout: 5000 }
     )
   }, 12000)
@@ -118,7 +118,7 @@ describe('full game flow', () => {
     vi.mocked(loadManual).mockResolvedValue(yaml.load(practiceYamlRaw) as Manual)
 
     render(
-      <MemoryRouter initialEntries={['/game?mode=daily']}>
+      <MemoryRouter initialEntries={['/game/run?mode=daily']}>
         <App />
       </MemoryRouter>
     )

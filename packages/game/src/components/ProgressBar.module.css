@@ -1,3 +1,6 @@
+/* Module progress bar — Atlas star-chart visual language: thin bars,
+   green for cleared, pulsing yellow for the active module, dim
+   hairline for the rest (handoff README §6.3 progress dots). */
 .bar {
   display: flex;
   gap: 6px;
@@ -6,23 +9,23 @@
 
 .segment {
   flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--color-border);
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
   transition:
     background 0.3s ease,
     box-shadow 0.3s ease;
 }
 
 .filled {
-  background: var(--color-neon-green);
-  box-shadow: 0 0 8px var(--color-neon-green);
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }
 
 .active {
-  background: var(--color-neon-cyan);
-  box-shadow: 0 0 8px var(--color-neon-cyan);
-  animation: pulse 1.2s ease-in-out infinite;
+  background: var(--y);
+  box-shadow: 0 0 6px var(--y);
+  animation: pulse 2s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

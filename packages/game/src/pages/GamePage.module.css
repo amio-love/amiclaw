@@ -1,118 +1,145 @@
+/* In-run game screen — Atlas star-chart visual language
+   (design_handoff_bombsquad README §5 / §6.3-6.5). Cosmic gradient
+   surface, glass chrome, AMIO-yellow accent. Presentation only —
+   gameplay, state flow, and timing are unchanged. */
+
 .page {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
   gap: 16px;
+  padding: 20px 16px 24px;
+  background: linear-gradient(
+    180deg,
+    var(--bg-1) 0%,
+    var(--bg-2) 38%,
+    var(--bg-3) 72%,
+    var(--bg-4) 100%
+  );
+  color: #fff;
+  font-family: var(--font-body);
 }
 
+/* ----------  in-run header  ---------- */
 .topBar {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 640px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
-/* Left cluster of the topBar — countdown timer with the daily strike pips
-   stacked underneath. Grouped so the topBar keeps three flex children
-   (cluster / meta / actions) and the space-between layout is preserved. */
 .timerCluster {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 }
 
 .modeMeta {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  text-align: right;
-  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
 }
 
-/* Right-side topBar control cluster — mute toggle + exit. Grouped so the
-   topBar keeps three flex children (timer / meta / actions) and the existing
-   space-between layout is preserved. The exit button's own `margin-left`
-   spaces the two controls, so no gap is set here. */
+.modeMeta > div:first-child {
+  font: 500 12px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.modeMeta > div:last-child {
+  margin-top: 3px;
+  font: 400 11px var(--font-body);
+  color: var(--soft);
+}
+
 .topBarActions {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .exitBtn {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  padding: 6px 12px;
-  margin-left: 12px;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  cursor: pointer;
-  letter-spacing: 0.05em;
-  /* "退出" is only two mono glyphs; min-height alone left the rendered
-     width ~41px. Pin both axes to the 44px touch-target floor. */
   min-width: var(--touch-target);
   min-height: var(--touch-target);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
   transition:
     color 0.15s ease,
+    background 0.15s ease,
     border-color 0.15s ease;
 }
 
 .exitBtn:hover,
 .exitBtn:focus-visible {
-  color: var(--color-neon-red);
-  border-color: var(--color-neon-red);
-  outline: 2px solid var(--color-neon-red);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+.exitBtn:focus-visible {
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 
-/* Mute toggle — icon-only, so it carries an `aria-label`. Neutral muted-grey
-   when audio is on; flips to neon-red when muted so "sound is off" reads at a
-   glance, not only from the speaker glyph. */
 .muteBtn {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: var(--touch-target);
   min-height: var(--touch-target);
+  width: var(--touch-target);
+  height: var(--touch-target);
   padding: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--soft);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
   cursor: pointer;
   transition:
     color 0.15s ease,
+    background 0.15s ease,
     border-color 0.15s ease;
 }
 
 .muteBtn:hover,
 .muteBtn:focus-visible {
-  color: var(--color-neon-cyan);
-  border-color: var(--color-neon-cyan);
-  outline: 2px solid var(--color-neon-cyan);
+  color: var(--y);
+  background: rgba(255, 229, 62, 0.1);
+  border-color: rgba(255, 229, 62, 0.35);
+  outline: none;
+}
+
+.muteBtn:focus-visible {
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 
 .muteBtn[aria-pressed='true'] {
-  color: var(--color-neon-red);
-  border-color: var(--color-neon-red);
+  color: var(--rose);
+  border-color: rgba(255, 107, 157, 0.4);
 }
 
-.muteBtn[aria-pressed='true']:hover,
-.muteBtn[aria-pressed='true']:focus-visible {
-  color: var(--color-neon-red);
-  border-color: var(--color-neon-red);
-  outline: 2px solid var(--color-neon-red);
-  outline-offset: 2px;
-}
-
+/* ----------  module area  ---------- */
 .moduleArea {
   position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 640px;
   flex: 1;
@@ -121,18 +148,34 @@
   justify-content: center;
 }
 
+.modulePanel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modLabelRow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
 .bottomArea {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* Overlay states */
+/* ----------  overlay states (LOADING / READY / MODULE_COMPLETE)  ---------- */
 .overlay {
   position: fixed;
   inset: 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -140,26 +183,25 @@
   gap: 24px;
   padding: 24px 16px;
   overflow-y: auto;
-  background: rgba(13, 13, 26, 0.92);
-  z-index: 100;
+  background: rgba(5, 5, 17, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
-/* Wrong-answer feedback for the whole module panel. A red border + glow
-   double-pulse fires on every wrong answer in both modes — far louder than
-   the brief flash inside the puzzle SVG. Absolutely positioned over the
-   module area, non-interactive, and remounted via a React `key` so the
-   animation restarts on each consecutive mistake. Game-event animation,
-   kept within the 600ms DesignSystem budget. */
+/* Wrong-answer feedback for the whole module panel — a rose border +
+   glow double-pulse. Absolutely positioned over the module area,
+   non-interactive, remounted via a React `key` so the animation
+   restarts on each consecutive mistake. Within the 600ms budget. */
 .errorPulse {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  border: 3px solid var(--color-neon-red);
-  border-radius: 8px;
+  border: 2px solid var(--rose);
+  border-radius: var(--radius-2xl);
   box-shadow:
-    0 0 24px 4px rgba(255, 7, 58, 0.55),
-    inset 0 0 32px 4px rgba(255, 7, 58, 0.35);
-  background: radial-gradient(circle at center, rgba(255, 7, 58, 0.12), transparent 70%);
+    0 0 24px 4px rgba(255, 107, 157, 0.45),
+    inset 0 0 32px 4px rgba(255, 107, 157, 0.28);
+  background: radial-gradient(circle at center, rgba(255, 107, 157, 0.1), transparent 70%);
   opacity: 0;
   animation: module-error-pulse 0.6s ease-out;
 }
@@ -182,11 +224,13 @@
   }
 }
 
-/* Mandatory reduced-motion fallback: drop the double-pulse rhythm for a
-   single calm fade so the wrong-answer cue still reads without flicker. */
 @media (prefers-reduced-motion: reduce) {
   .errorPulse {
     animation: module-error-pulse-reduced 0.6s ease-out;
+  }
+
+  .defusedText {
+    animation: none;
   }
 
   @keyframes module-error-pulse-reduced {
@@ -203,116 +247,115 @@
 }
 
 .defusedText {
-  font-family: var(--font-mono);
-  font-size: clamp(3rem, 12vw, 6rem);
-  font-weight: bold;
-  color: var(--color-neon-green);
+  font: 400 clamp(2.6rem, 11vw, 4.4rem) var(--font-display);
+  font-style: italic;
+  color: var(--green);
   text-shadow:
-    0 0 10px var(--color-neon-green),
-    0 0 40px var(--color-neon-green);
-  animation: success-flash 0.4s ease;
+    0 0 14px rgba(75, 210, 102, 0.5),
+    0 0 40px rgba(75, 210, 102, 0.3);
+  animation: defused-in 0.4s ease;
+}
+
+@keyframes defused-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .readyText {
-  font-family: var(--font-mono);
-  font-size: clamp(1.5rem, 6vw, 3rem);
-  color: var(--color-neon-cyan);
-  text-shadow: 0 0 10px var(--color-neon-cyan);
+  font: 400 clamp(1.6rem, 6vw, 2.4rem) var(--font-display);
+  color: #fff;
+  text-shadow: 0 0 20px var(--y-glow-25);
 }
 
 .loadingText {
-  font-family: var(--font-mono);
-  font-size: 1.2rem;
-  color: var(--color-text-muted);
+  font: 400 1.1rem var(--font-body);
+  color: var(--soft);
   animation: fade-in 0.3s ease;
 }
 
 .errorText {
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  color: var(--color-neon-red);
+  font: 400 1rem/1.55 var(--font-body);
+  color: #fff;
   text-align: center;
-  max-width: 400px;
-  line-height: 1.5;
+  max-width: 420px;
 }
 
-/* "← 返回首页" link shown on the in-game error states. Mirrors the shared
-   text-link visual style used on the other pages plus the mobile
-   tap-target pattern (inline-block + padding + --touch-target floor). */
-.homeLink {
-  display: inline-block;
-  min-height: var(--touch-target);
-  padding: 14px 8px;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  letter-spacing: 0.05em;
-}
-
-.homeLink:hover {
-  color: var(--color-text-primary);
-  text-decoration: underline;
-}
-
+/* ----------  overlay buttons  ---------- */
 .startBtn {
-  font-family: var(--font-mono);
-  font-size: 1.2rem;
-  font-weight: bold;
-  padding: 16px 48px;
-  background: transparent;
-  color: var(--color-neon-cyan);
-  border: 2px solid var(--color-neon-cyan);
-  border-radius: 4px;
+  padding: 16px 52px;
+  background: var(--y);
+  color: #050511;
+  border: none;
+  border-radius: var(--radius-pill);
+  font: 600 16px var(--font-body);
+  letter-spacing: 0.04em;
   cursor: pointer;
-  letter-spacing: 0.15em;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
-  transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease;
   min-height: var(--touch-target);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .startBtn:hover,
 .startBtn:focus-visible {
-  background: rgba(0, 255, 255, 0.1);
-  box-shadow: 0 0 40px rgba(0, 255, 255, 0.5);
-  outline: 2px solid var(--color-neon-cyan);
-  outline-offset: 2px;
+  box-shadow: 0 0 28px var(--y-glow-50);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.startBtn:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 3px;
 }
 
 .retryBtn {
-  font-family: var(--font-mono);
-  font-size: 1rem;
   padding: 12px 32px;
-  background: transparent;
-  color: var(--color-neon-red);
-  border: 1px solid var(--color-neon-red);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
+  font: 500 15px var(--font-body);
   cursor: pointer;
-  letter-spacing: 0.1em;
   min-height: var(--touch-target);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .retryBtn:hover,
 .retryBtn:focus-visible {
-  background: rgba(255, 7, 58, 0.08);
-  outline: 2px solid var(--color-neon-red);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+.retryBtn:focus-visible {
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 
-.moduleLabel {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  letter-spacing: 0.15em;
-  text-align: center;
-  text-transform: uppercase;
+.homeLink {
+  display: inline-block;
+  min-height: var(--touch-target);
+  padding: 14px 8px;
+  font: 500 0.9rem var(--font-body);
+  color: var(--soft);
+  text-decoration: none;
 }
 
-/* Refresh guidance banner — surfaced once when the page was reloaded mid-run
-   so the player remembers to re-sync verbally with their AI partner. Sits on
-   top of the `.overlay` z-index in LOADING / READY states. */
+.homeLink:hover,
+.homeLink:focus-visible {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* ----------  refresh guidance banner  ---------- */
 .refreshBanner {
   position: relative;
   z-index: 101;
@@ -322,17 +365,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  padding: 12px 16px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 229, 62, 0.22);
+  border-radius: var(--radius-lg);
 }
 
 .refreshBannerText {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--color-text-primary);
-  line-height: 1.4;
+  font: 400 0.85rem/1.45 var(--font-body);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .refreshBannerDismiss {
@@ -344,8 +387,7 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
+  color: var(--soft);
   font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
@@ -355,7 +397,17 @@
 
 .refreshBannerDismiss:hover,
 .refreshBannerDismiss:focus-visible {
-  color: var(--color-text-primary);
-  outline: 2px solid var(--color-neon-cyan);
+  color: #fff;
+  outline: none;
+}
+
+.refreshBannerDismiss:focus-visible {
+  outline: 2px solid var(--y);
   outline-offset: 2px;
+}
+
+@media (min-width: 600px) {
+  .page {
+    padding: 28px 24px 32px;
+  }
 }

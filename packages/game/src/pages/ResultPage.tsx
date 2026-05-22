@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import NicknameModal from '@/components/NicknameModal'
+import Scenery from '@/components/platform/Scenery'
+import Button from '@/components/bombsquad/Button'
+import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@/utils/date'
@@ -16,32 +19,63 @@ import styles from './ResultPage.module.css'
 
 // Module label keyed by module kind (the `moduleType` stored on each stat),
 // not by position — practice and daily run different module sequences.
+// Atlas redesign names (design_handoff_bombsquad README §1): 线路→光弦,
+// 密码盘→星盘, 键盘→星符; the button module keeps 按钮.
 const MODULE_LABEL: Record<string, string> = {
-  wire: '线路',
-  dial: '密码盘',
+  wire: '光弦',
+  dial: '星盘',
   button: '按钮',
-  keypad: '键盘',
+  keypad: '星符',
 }
 
-interface OutcomeView {
-  title: string
-  headerClass: string
-  /** Label used in the copyable recap summary's "结果：" line. */
-  summaryLabel: string
+// Decorative celestial glyph per module kind, shown in the result-screen
+// breakdown rows. Chosen by metaphor: 光弦 → 弦 (bowstring), 星盘 → 极 (the
+// pole star the dial aligns to, README §6.3), 按钮 → 钟 (rhythm), 星符 → 月.
+const MODULE_GLYPH: Record<string, GlyphKey> = {
+  wire: 'xian',
+  dial: 'ji',
+  button: 'zhong',
+  keypad: 'yue',
 }
 
-function outcomeView(outcome: GameOutcome): OutcomeView {
+/** The result screen has two visual variants (handoff README §6.6 / §6.7). */
+type ResultVariant = 'success' | 'failure'
+
+/**
+ * Map a frozen game outcome to a result variant. `defused` and
+ * `practice-cleared` are runs that finished every module → success;
+ * `exploded` and `practice-timeout` are runs that stopped short → failure.
+ * The outcome LOGIC is unchanged — only the displayed grouping is.
+ */
+function resultVariant(outcome: GameOutcome): ResultVariant {
+  return outcome === 'exploded' || outcome === 'practice-timeout' ? 'failure' : 'success'
+}
+
+/** Label used in the copyable recap summary's "结果：" line. Kept four-way
+ *  (distinct from the two-way heading) so the plain-text recap still tells a
+ *  practice end apart from a daily defuse. */
+function summaryLabel(outcome: GameOutcome): string {
   switch (outcome) {
     case 'exploded':
-      return { title: '拆弹失败', headerClass: styles.headerExploded, summaryLabel: '失败 💥' }
+      return '失败 💥'
     case 'practice-cleared':
-      return { title: '练习完成', headerClass: styles.headerPractice, summaryLabel: '练习完成 ✅' }
+      return '练习完成 ✅'
     case 'practice-timeout':
-      return { title: '时间到', headerClass: styles.headerPractice, summaryLabel: '时间到 ⏱' }
+      return '时间到 ⏱'
     case 'defused':
     default:
-      return { title: '拆弹成功', headerClass: styles.headerDefused, summaryLabel: '成功 ✅' }
+      return '成功 ✅'
   }
+}
+
+/** AI-voiced consolation line on the failure screen (handoff README §6.7).
+ *  Static, non-punishing copy keyed on the real failure cause — no fabricated
+ *  per-run advice. */
+function consolationText(outcome: GameOutcome, strikeCount: number): string {
+  if (outcome === 'exploded' && strikeCount >= MAX_STRIKES) {
+    return '三次失误就到这了 —— 下一局遇到拿不准的地方，先让我把手册多读两遍，别急着动手。'
+  }
+  return '时间走得比想象中快 —— 下一局我们先盯住最耗时的那个模块，慢一点反而更稳。'
 }
 
 export default function ResultPage() {
@@ -55,8 +89,7 @@ export default function ResultPage() {
   // Fall back to `defused` for any legacy RESULT state persisted before the
   // game-modes rework added the `outcome` field.
   const outcome: GameOutcome = state.outcome ?? 'defused'
-  const view = outcomeView(outcome)
-  const isExploded = outcome === 'exploded'
+  const variant = resultVariant(outcome)
 
   const totalMs =
     state.totalStartTime !== null && state.totalEndTime !== null
@@ -203,7 +236,7 @@ export default function ResultPage() {
       attemptNumber: state.attemptNumber,
     })
     dispatch({ type: 'RESET' })
-    navigate(`/game?mode=${state.mode}`)
+    navigate(`/game/run?mode=${state.mode}`)
   }
 
   const buildSummary = useCallback(() => {
@@ -232,7 +265,7 @@ export default function ResultPage() {
     return `=== BombSquad 结果摘要 ===
 日期：${date}
 模式：${modeLabel}
-结果：${view.summaryLabel}
+结果：${summaryLabel(outcome)}
 总用时：${timeStr}
 ${personalBestLine ? `${personalBestLine}\n` : ''}${rankLine ? `${rankLine}\n` : ''}
 模块详情：
@@ -240,7 +273,7 @@ ${breakdown}
 
 请和我一起复盘：
 ${retroQuestions}`
-  }, [state, totalMs, rankResult, view.summaryLabel])
+  }, [state, totalMs, rankResult, outcome])
 
   const handleCopySummary = async () => {
     const ok = await copyToClipboard(buildSummary())
@@ -255,105 +288,174 @@ ${retroQuestions}`
   if (state.moduleStats.length === 0 && state.outcome === null) {
     return (
       <main className={styles.page}>
-        <p className={styles.noData}>
-          暂无数据。{' '}
-          <Link to="/" className={styles.link}>
-            返回首页
-          </Link>
-        </p>
+        <Scenery accent="yellow" />
+        <div className={styles.stage}>
+          <p className={styles.noData}>
+            暂无数据。{' '}
+            <Link to="/game" className={styles.noDataLink}>
+              返回主页
+            </Link>
+          </p>
+        </div>
       </main>
     )
   }
 
+  const heading = variant === 'success' ? '拆弹成功' : '差一点'
+  const burstGlyph: GlyphKey = variant === 'success' ? 'ji' : 'yi'
+  const accentColor = variant === 'success' ? 'var(--green)' : 'var(--rose)'
+
+  // Failure subtitle names the module the run stopped on (handoff §6.7
+  // 「卡在星符」) — real data: the next un-played module in the sequence.
+  const stuckKind =
+    variant === 'failure' ? state.moduleSequence[state.moduleStats.length] : undefined
+  const modeMeta = state.mode === 'daily' ? `每日挑战 · 第 ${state.attemptNumber} 次尝试` : '练习'
+  const subtitle =
+    stuckKind !== undefined ? `${modeMeta} · 卡在${MODULE_LABEL[stuckKind] ?? stuckKind}` : modeMeta
+
+  const showRankCard = variant === 'success' && state.mode === 'daily' && outcome === 'defused'
+  const showBreakdown = state.moduleStats.length > 0
+  const breakdownTitle = variant === 'success' ? '模块用时' : '本局回顾'
+  const okMarker = variant === 'success' ? '— —' : '✓'
+
   return (
     <main className={styles.page}>
-      <h1 className={`${styles.header} ${view.headerClass}`}>{view.title}</h1>
+      <Scenery accent={variant === 'success' ? 'green' : 'rose'} />
+      <div className={styles.stage}>
+        <div className={styles.result} data-variant={variant}>
+          <div className={styles.burst}>
+            <Glyph
+              name={burstGlyph}
+              size={variant === 'success' ? 88 : 92}
+              glow={false}
+              color={accentColor}
+              className={styles.burstGlyph}
+            />
+          </div>
 
-      {outcome === 'practice-timeout' && (
-        <p className={styles.subtitle}>本次完成 {state.moduleStats.length} 个模块</p>
-      )}
-      {isExploded && (
-        <p className={styles.failureReason}>
-          {state.strikeCount >= MAX_STRIKES ? '累计 3 次失误 —— 炸弹引爆' : '时间耗尽 —— 炸弹引爆'}
-        </p>
-      )}
+          <h1 className={styles.heading}>{heading}</h1>
 
-      {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
+          {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
-      <p className={styles.meta}>
-        {state.mode === 'daily' ? `每日挑战 — 第 ${state.attemptNumber} 次尝试` : '练习'}
-      </p>
+          <p className={styles.subtitle}>{subtitle}</p>
 
-      {state.mode === 'daily' && outcome === 'defused' && (
-        <div className={styles.rankBlock}>
-          {nicknameModalOpen && <span className={styles.rankMuted}>提交前请填写昵称</span>}
-          {!nicknameModalOpen && submitting && (
-            <span className={styles.rankMuted}>提交成绩中…</span>
+          {showRankCard && (
+            <div className={styles.rankCard}>
+              {rankResult ? (
+                <>
+                  <div className={styles.rankCell}>
+                    <div className={styles.rankLabel}>全球排名</div>
+                    <div className={styles.rankValue}>
+                      #{rankResult.rank}
+                      <span className={styles.rankOf}> / {rankResult.total_players}</span>
+                    </div>
+                  </div>
+                  {rankResult.personal_best_ms !== undefined && (
+                    <div className={`${styles.rankCell} ${styles.rankCellRight}`}>
+                      <div className={styles.rankLabel}>今日最佳</div>
+                      <div className={styles.rankValue}>
+                        {formatMs(rankResult.personal_best_ms)}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className={styles.rankCell}>
+                  <div className={styles.rankPending}>
+                    {nicknameModalOpen && '提交前请填写昵称'}
+                    {!nicknameModalOpen && submitting && '提交成绩中…'}
+                    {!nicknameModalOpen &&
+                      !submitting &&
+                      submitFailed &&
+                      (retried ? (
+                        '网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com'
+                      ) : (
+                        <>
+                          提交失败（可能离线）
+                          <button className={styles.retryBtn} onClick={handleRetrySubmit}>
+                            重试
+                          </button>
+                        </>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
-          {rankResult && (
-            <span className={styles.rankValue}>
-              全球排名：<strong>#{rankResult.rank}</strong> / {rankResult.total_players}
-            </span>
+
+          {variant === 'failure' && (
+            <div className={styles.quote}>
+              <div className={styles.quoteLabel}>AI 说</div>
+              <p className={styles.quoteBody}>「{consolationText(outcome, state.strikeCount)}」</p>
+            </div>
           )}
-          {submitFailed &&
-            (retried ? (
-              <span className={styles.rankMuted}>
-                网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com
-              </span>
-            ) : (
-              <span className={styles.rankMuted}>
-                提交失败（可能离线）
-                <button className={styles.retryBtn} onClick={handleRetrySubmit}>
-                  重试
-                </button>
-              </span>
-            ))}
-        </div>
-      )}
 
-      {state.moduleStats.length > 0 && (
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>模块用时</h2>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>模块</th>
-                <th>用时</th>
-                <th>失误</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.moduleStats.map((stat, i) => (
-                <tr key={i}>
-                  <td>{i + 1}</td>
-                  <td>{MODULE_LABEL[stat.moduleType] ?? stat.moduleType}</td>
-                  <td className={styles.timeCell}>{formatMs(stat.timeMs)}</td>
-                  <td className={styles.errorCell}>{stat.errorCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+          {showBreakdown && (
+            <div className={styles.breakdown}>
+              <div className={styles.breakdownHead}>{breakdownTitle}</div>
+              {state.moduleSequence.map((kind, i) => {
+                const stat = state.moduleStats[i]
+                const rowState: 'done' | 'failed' | 'todo' =
+                  i < state.moduleStats.length
+                    ? 'done'
+                    : i === state.moduleStats.length
+                      ? 'failed'
+                      : 'todo'
+                const glyphColor =
+                  rowState === 'failed'
+                    ? 'var(--rose)'
+                    : rowState === 'todo'
+                      ? 'rgba(255, 255, 255, 0.3)'
+                      : 'rgba(255, 255, 255, 0.7)'
+                const statusText =
+                  rowState === 'failed'
+                    ? '未完成'
+                    : rowState === 'todo'
+                      ? '未开始'
+                      : stat && stat.errorCount > 0
+                        ? `${stat.errorCount} 失误`
+                        : okMarker
+                const rowClass = [
+                  styles.bdRow,
+                  rowState === 'failed' && styles.bdRowFailed,
+                  rowState === 'todo' && styles.bdRowTodo,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                return (
+                  <div key={i} className={rowClass}>
+                    <span className={styles.bdIcon}>
+                      <Glyph
+                        name={MODULE_GLYPH[kind] ?? 'ji'}
+                        size={20}
+                        glow={false}
+                        color={glyphColor}
+                      />
+                    </span>
+                    <span className={styles.bdName}>{MODULE_LABEL[kind] ?? kind}</span>
+                    <span className={styles.bdTime}>{stat ? formatMs(stat.timeMs) : '— —'}</span>
+                    <span className={styles.bdStatus}>{statusText}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-      <div className={styles.actions}>
-        <button className={styles.btnPlayAgain} onClick={handlePlayAgain}>
-          再来一局
-        </button>
-        <button
-          className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
-          onClick={handleCopySummary}
-        >
-          {copied ? '已复制！' : '复制赛后摘要'}
-        </button>
-        <div className={styles.secondaryLinks}>
-          <Link to="/leaderboard" className={styles.link}>
-            排行榜
-          </Link>
-          <Link to="/" className={styles.link}>
-            首页
-          </Link>
+          <div className={styles.cta}>
+            <Button variant="primary" full onClick={handlePlayAgain}>
+              再来一局<span aria-hidden="true"> →</span>
+            </Button>
+            <Button variant="ghost" full onClick={() => navigate('/game')}>
+              回主页
+            </Button>
+          </div>
+
+          <button
+            className={`${styles.copyLink} ${copied ? styles.copyLinkCopied : ''}`}
+            onClick={handleCopySummary}
+          >
+            {copied ? '已复制！' : '复制赛后摘要'}
+          </button>
         </div>
       </div>
 
