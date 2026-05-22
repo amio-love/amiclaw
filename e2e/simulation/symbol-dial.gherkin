@@ -40,7 +40,9 @@ Feature: Symbol-dial module collaboration
 
     When the assistant receives the symbol descriptions
     Then the assistant maps the player's visual descriptions to canonical symbol names
-    And the assistant searches the columns table for the column containing all three symbols
+    And exactly one column in the table contains all three symbols
+    And the assistant locates that unique column
+    And a triple matching zero or several columns never occurs — the set-discrimination invariant guarantees a single match
     And the assistant determines the target index for each dial within that column
     And the assistant formulates rotation instructions as a number of right-arrow presses per dial
     And the assistant's instruction does not say "rotate until you see symbol X" — it says "press right N times"

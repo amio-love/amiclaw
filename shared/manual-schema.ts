@@ -92,7 +92,7 @@ export interface ButtonRule {
 }
 
 export interface DialManualSection {
-  columns: string[][] // 6 columns × 6 symbol ids each
+  columns: string[][] // 6 columns × 5 symbol ids each
   rule: string // human-readable description (for reference)
 }
 

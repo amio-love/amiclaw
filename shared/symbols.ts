@@ -79,13 +79,14 @@ export const SYMBOLS: readonly Symbol[] = [
   {
     id: 'spiral',
     name: 'Spiral',
-    description: 'spiral coiling inward',
+    description:
+      "从中心向外一圈圈盘旋的螺旋线 / 漩涡形,线条绕中心展开、首尾不闭合,容易被误描述为'圆圈'",
     path: 'M50 50 C50 30 65 20 75 25 C90 32 90 55 75 65 C60 75 35 70 25 55 C12 37 20 15 38 10 C58 4 80 15 85 38',
   },
   {
     id: 'cross',
     name: 'Cross',
-    description: 'plus sign or cross',
+    description: '一条竖线与一条横线在正中垂直交叉,组成加号 / 十字形,四条臂等长,横平竖直不倾斜',
     path: 'M50 10 L50 90 M10 50 L90 50',
   },
   {
@@ -103,7 +104,8 @@ export const SYMBOLS: readonly Symbol[] = [
   {
     id: 'hourglass',
     name: 'Hourglass',
-    description: 'two triangles touching at their points',
+    description:
+      "上下两个三角形在正中顶点相触,组成沙漏形,上下两端宽、中间收窄成一点,容易被误描述为'三角形'",
     path: 'M10 10 L90 10 L50 50 L90 90 L10 90 L50 50 Z',
   },
   {

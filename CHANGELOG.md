@@ -307,6 +307,16 @@ straight from the homepage CTAs.
 
 ### Fixed
 
+- **Keypad and symbol-dial puzzles are solvable from the manual again**
+  Both modules listed several manual rows — keypad sequences and dial
+  columns — built from one shared symbol set, so the rule "find the row
+  containing all your visible symbols" had no unique answer. An AI
+  partner reading the manual could not tell the player which row to use,
+  and players who drew the keypad or symbol-dial module got stuck. The
+  keypad sequences and symbol-dial columns are rebuilt over a wider
+  symbol pool so any set of visible symbols now matches exactly one row,
+  and all 366 daily manuals are regenerated to match. The modules play
+  exactly as before — only the underlying symbol sets changed.
 - **Atlas-consistency leftovers from the BombSquad redesign** A small
   cleanup pass clears the last traces of the old terminal look downstream
   of the redesign. The community feed's two sample run-result cards now

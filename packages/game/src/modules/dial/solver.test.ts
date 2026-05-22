@@ -5,13 +5,26 @@ import { createRng } from '../../engine/rng'
 import type { DialConfig, SceneInfo } from '@shared/manual-schema'
 import type { ManualModules } from '@shared/manual-schema'
 
+// Discriminating columns: 5 symbols each, any two share at most 2 symbols, so
+// every 3-symbol subset belongs to exactly one column. Drawn from the verified
+// practice.yaml set.
 const section: ManualModules['symbol_dial'] = {
   columns: [
-    ['omega', 'psi', 'star', 'delta', 'xi', 'diamond'],
-    ['psi', 'diamond', 'omega', 'star', 'xi', 'delta'],
-    ['star', 'xi', 'delta', 'psi', 'diamond', 'omega'],
+    ['delta', 'star', 'diamond', 'trident', 'cross'],
+    ['omega', 'xi', 'diamond', 'cross', 'hourglass'],
+    ['psi', 'star', 'xi', 'crescent', 'hourglass'],
   ],
-  rule: 'Find column containing all 3 symbols',
+  rule: 'Find the one column containing all 3 symbols',
+}
+
+// The pre-fix ambiguous shape: two columns over one shared symbol set, so a
+// 3-symbol subset is contained in both. The hardened solver must fail loud.
+const ambiguousColumns: ManualModules['symbol_dial'] = {
+  columns: [
+    ['delta', 'star', 'diamond', 'trident', 'cross'],
+    ['cross', 'trident', 'diamond', 'star', 'delta'],
+  ],
+  rule: 'Two columns over one shared symbol set',
 }
 
 const sceneInfo: SceneInfo = {
@@ -22,13 +35,13 @@ const sceneInfo: SceneInfo = {
 
 describe('solveDial', () => {
   it('finds the correct column and returns target positions', () => {
-    // Config with symbols: omega (at 0), psi (at 0), star (at 0)
-    // All three symbols are in column 0, at indices 0, 1, 2
+    // Current symbols (position 0 of each dial): delta, star, diamond — a
+    // subset of column 0 only, at indices 0, 1, 2.
     const config: DialConfig = {
       dials: [
-        ['omega', 'delta', 'psi', 'xi', 'diamond', 'star'],
-        ['psi', 'star', 'diamond', 'omega', 'xi', 'delta'],
-        ['star', 'diamond', 'omega', 'psi', 'xi', 'delta'],
+        ['delta', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
+        ['star', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
+        ['diamond', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
       ],
       currentPositions: [0, 0, 0],
     }
@@ -41,17 +54,32 @@ describe('solveDial', () => {
   })
 
   it('returns null when no column contains all 3 symbols', () => {
-    // 'trident' does not appear in any of the 3 test columns → no match
+    // 'spiral' does not appear in any of the 3 test columns → no match.
     const config: DialConfig = {
       dials: [
-        ['omega', 'delta', 'psi', 'xi', 'diamond', 'star'],
-        ['psi', 'star', 'diamond', 'omega', 'xi', 'delta'],
-        ['trident', 'crescent', 'spiral', 'cross', 'eye', 'lambda'],
+        ['delta', 'omega', 'psi', 'xi', 'crescent', 'cross'],
+        ['star', 'omega', 'psi', 'xi', 'crescent', 'cross'],
+        ['spiral', 'omega', 'psi', 'xi', 'crescent', 'cross'],
       ],
       currentPositions: [0, 0, 0],
     }
 
     const answer = solveDial(config, section, sceneInfo)
+    expect(answer).toBeNull()
+  })
+
+  it('returns null when more than one column matches (ambiguous → fail loud)', () => {
+    // {delta, star, diamond} is a subset of BOTH ambiguous columns.
+    const config: DialConfig = {
+      dials: [
+        ['delta', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
+        ['star', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
+        ['diamond', 'omega', 'psi', 'xi', 'crescent', 'spiral'],
+      ],
+      currentPositions: [0, 0, 0],
+    }
+
+    const answer = solveDial(config, ambiguousColumns, sceneInfo)
     expect(answer).toBeNull()
   })
 })
@@ -86,6 +114,16 @@ describe('generateDial', () => {
       const { config } = generateDial(rng, section, sceneInfo)
       const starts = config.dials.map((dial, d) => dial[config.currentPositions[d]])
       expect(new Set(starts).size).toBe(3)
+    }
+  })
+
+  it('every generated config maps to exactly one column', () => {
+    const rng = createRng(7)
+    for (let i = 0; i < 200; i++) {
+      const { config } = generateDial(rng, section, sceneInfo)
+      const starts = config.dials.map((dial, d) => dial[config.currentPositions[d]])
+      const matches = section.columns.filter((col) => starts.every((sym) => col.includes(sym)))
+      expect(matches).toHaveLength(1)
     }
   })
 })

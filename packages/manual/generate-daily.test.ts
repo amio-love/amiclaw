@@ -147,7 +147,7 @@ describe('daily generator — deriveDailyManual', () => {
     const m = deriveDailyManual(practice, '2026-05-12') as Manual
     expect(m.modules.symbol_dial.columns.length).toBe(practice.modules.symbol_dial.columns.length)
     for (const col of m.modules.symbol_dial.columns) {
-      expect(col.length).toBe(6)
+      expect(col.length).toBe(5)
     }
   })
 
