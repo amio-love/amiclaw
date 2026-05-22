@@ -118,3 +118,59 @@ jobs:
 
       - name: Check golden answers fixture is in sync
         run: git diff --exit-code e2e/fixtures/answers.json
+
+  # Non-blocking reminder: the dual-agent simulation is an LLM-agent workload
+  # that cannot run in GitHub Actions, so it is never a CI check or merge gate.
+  # This job only prints a reminder when game logic / manual data changed. Its
+  # single meaningful step always exits 0 and is also marked `continue-on-error`,
+  # so this job's conclusion is always success even if the reminder logic breaks.
+  simulation-reminder:
+    name: E2E Simulation Reminder
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so the diff base (PR base SHA / push "before" SHA) is
+          # available locally for the changed-file check below.
+          fetch-depth: 0
+
+      - name: Remind about e2e dual-agent simulation on game / manual changes
+        # Insurance: even if the script below were edited into a failing state,
+        # this keeps the job green. The simulation must never gate a PR.
+        continue-on-error: true
+        # Pass workflow context through env vars (the documented injection-safe
+        # pattern) rather than interpolating ${{ }} directly into the script.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          # Resolve the diff base for both push and pull_request events.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$PUSH_BEFORE_SHA"
+          fi
+
+          # Collect the changed file set. Every failure mode (missing base SHA,
+          # first push, shallow fetch, fork PR) falls back to an empty set so
+          # this step can never error out.
+          changed=""
+          if [ -n "$base" ] \
+            && [ "$base" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$base" HEAD 2>/dev/null || true)"
+          fi
+
+          if printf '%s\n' "$changed" | grep -Eq '^(packages/game/|packages/manual/data/)'; then
+            echo "NOTE: game logic / manual data changed — consider running an e2e dual-agent simulation."
+            echo "NOTE: playbook: ~/.claude/scheduled-tasks/e2e-test"
+            echo "NOTE: this is a reminder only and never gates the build."
+            echo "::notice title=E2E dual-agent simulation::game logic / manual data changed — consider running an e2e dual-agent simulation (see ~/.claude/scheduled-tasks/e2e-test). Reminder only; not a merge gate."
+          else
+            echo "No packages/game or packages/manual/data changes detected — e2e simulation reminder not applicable."
+          fi
+
+          # Belt-and-suspenders: always succeed regardless of the above.
+          exit 0

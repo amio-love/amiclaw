@@ -1,0 +1,59 @@
+# Symbol-dial module — collaborative defusal via the player-assistant voice
+# channel.
+#
+# The symbol-dial module is the most counter-intuitive collaboration. Three
+# dials each display a symbol at position 0. The player reports the three
+# visible symbols; the assistant finds the column in the manual that contains
+# all three, then tells the player how many times to press the right arrow on
+# each dial to reach the target index. The critical semantic trap: the symbol
+# displayed AFTER rotation is from the dial's own symbol pool and will NOT
+# match the column symbol at that index — this is correct behavior, not a bug.
+# Failure modes this scenario can surface: the player expects the rotated
+# symbol to match the column entry and second-guesses the instruction, the
+# assistant confuses "rotate to show symbol X" with "rotate to index N",
+# symbol-naming ambiguity between visually similar glyphs (psi vs trident,
+# omega vs horseshoe).
+#
+# Runs in practice mode for clean isolation.
+
+Feature: Symbol-dial module collaboration
+  As a BombSquad player who can only see the screen
+  And an AI assistant who can only read the manual
+  I want us to defuse the symbol-dial module together through a message channel
+  So that the index-based rotation logic is communicated without semantic confusion
+
+  Background:
+    Given the coordinator has spawned player-agent and assistant-agent
+    And three-way isolation is enforced — the player cannot read the manual and the assistant cannot see the screen
+    And the assistant has loaded the practice manual from packages/manual/data/practice.yaml
+
+  # Module: symbol-dial
+  # Mode: practice
+  @simulation
+  Scenario: Player and assistant collaboratively defuse the symbol-dial module in practice mode
+    Given the player has started a practice-mode game
+    And the symbol-dial module is the currently displayed module
+
+    When the player describes the three symbols currently shown on the dials
+    Then the player's description uses natural visual language to name each symbol
+    And the player reports the symbols in order from left to right
+
+    When the assistant receives the symbol descriptions
+    Then the assistant maps the player's visual descriptions to canonical symbol names
+    And the assistant searches the columns table for the column containing all three symbols
+    And the assistant determines the target index for each dial within that column
+    And the assistant formulates rotation instructions as a number of right-arrow presses per dial
+    And the assistant's instruction does not say "rotate until you see symbol X" — it says "press right N times"
+
+    When the assistant sends the rotation instructions to the player
+    Then the player executes the right-arrow presses on each dial
+
+    When the player reports what the dials now show after rotation
+    Then the displayed symbols may differ from the column entries at those indices — this is expected
+    And the assistant confirms the rotation count was correct regardless of the displayed symbols
+
+    When the player presses confirm
+    Then the symbol-dial module is defused
+    And the coordinator records whether the player questioned the mismatch between displayed and expected symbols
+    And the coordinator records the number of communication rounds
+    And the coordinator records the in-game time spent on this module

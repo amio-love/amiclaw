@@ -1,0 +1,107 @@
+# Full-run scenarios — end-to-end collaboration across all modules in both game
+# modes.
+#
+# Practice mode runs 2 modules with a 05:00 timer; wrong answers never fail
+# the run. Daily-challenge mode runs 4 modules with a 10:00 timer; three
+# strikes detonate the bomb and the run fails. The daily-challenge scenario
+# explicitly tests the "decline submission" path: the player completes the run
+# but does NOT submit a score — the NicknameModal is left unfilled. This
+# prevents leaderboard pollution from simulation runs (per the Design proposal
+# Area 3 decision: fresh browser profile, no saved nickname, decline
+# submission).
+#
+# These scenarios exercise the full collaboration arc: game entry, module
+# sequencing, cross-module time pressure, mode-specific end conditions, and
+# the result page. They complement the per-module isolation scenarios by
+# testing how multi-module runs interact with the timer budget and strike
+# mechanic.
+
+Feature: Full game run collaboration
+  As a BombSquad player who can only see the screen
+  And an AI assistant who can only read the manual
+  I want us to defuse the entire bomb together through a message channel
+  So that a complete run succeeds under realistic time pressure
+
+  Background:
+    Given the coordinator has spawned player-agent and assistant-agent
+    And three-way isolation is enforced — the player cannot read the manual and the assistant cannot see the screen
+
+  # Mode: practice
+  @simulation
+  Scenario: Player and assistant complete a full practice run collaborating through the message channel
+    Given the assistant has loaded the practice manual from packages/manual/data/practice.yaml
+    And the player opens a practice-mode game from the homepage
+    And the player confirms the prompt modal and starts the game
+
+    When the game starts
+    Then the timer begins counting down from 05:00
+    And the module progress bar shows 2 segments
+
+    When the first module appears
+    Then the player describes the module state to the assistant
+    And the assistant identifies the module type and consults the relevant manual section
+    And the assistant gives step-by-step instructions
+    And the player executes the instructions and reports the result
+    And the first module is defused
+
+    When the second module appears
+    Then the player describes the module state to the assistant
+    And the assistant identifies the module type and consults the relevant manual section
+    And the assistant gives step-by-step instructions
+    And the player executes the instructions and reports the result
+    And the second module is defused
+
+    Then the result page shows a successful completion
+    And the coordinator records the total in-game time
+    And the coordinator records the total number of communication rounds across all modules
+    And the coordinator records per-module breakdown of time and communication rounds
+    And the coordinator records any collaboration friction points observed during the run
+
+  # Mode: daily-challenge
+  @simulation
+  Scenario: Player and assistant complete a full daily-challenge run and decline score submission
+    Given the assistant has loaded the daily manual from packages/manual/data/daily/
+    And the player uses a fresh browser profile with no saved nickname
+    And the player opens a daily-challenge game from the homepage
+    And the player confirms the prompt modal and starts the game
+
+    When the game starts
+    Then the timer begins counting down from 10:00
+    And the module progress bar shows 4 segments
+
+    When the first module appears
+    Then the player describes the module state to the assistant
+    And the assistant identifies the module type and consults the relevant manual section
+    And the assistant gives step-by-step instructions
+    And the player executes the instructions and reports the result
+    And the first module is defused
+
+    When the second module appears
+    Then the player describes the module state to the assistant
+    And the assistant consults the manual and gives instructions
+    And the player executes and reports
+    And the second module is defused
+
+    When the third module appears
+    Then the player describes the module state to the assistant
+    And the assistant consults the manual and gives instructions
+    And the player executes and reports
+    And the third module is defused
+
+    When the fourth module appears
+    Then the player describes the module state to the assistant
+    And the assistant consults the manual and gives instructions
+    And the player executes and reports
+    And the fourth module is defused
+
+    Then the result page shows the heading for a successful daily defusal
+    And the NicknameModal appears because no nickname is stored on this fresh profile
+    And the player does NOT fill in the NicknameModal — the submission is declined
+    And no score is submitted to the leaderboard
+
+    Then the coordinator records the total in-game time
+    And the coordinator records the total number of communication rounds across all modules
+    And the coordinator records per-module breakdown of time and communication rounds
+    And the coordinator records whether any wrong answers triggered the strike mechanic
+    And the coordinator records that leaderboard submission was declined
+    And the coordinator records any collaboration friction points observed during the run

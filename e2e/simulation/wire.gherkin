@@ -1,0 +1,53 @@
+# Wire module — collaborative defusal via the player-assistant voice channel.
+#
+# The wire module is the simplest collaboration loop: the player describes the
+# wire count, their colors (top to bottom), the last wire's color, plus bomb
+# metadata (battery count, indicator states). The assistant matches the first
+# applicable wire_routing rule in the manual and tells the player which wire to
+# cut. Failure modes this scenario can surface: color-description ambiguity
+# (hex colors that look different from their canonical name, e.g. dark grey
+# rendered as "black"), missing metadata in the player's initial description
+# forcing an extra clarification round, and the yellow-rule fallback gap
+# (4 wires + last yellow + 0 red wires = no valid target).
+#
+# Runs in practice mode for clean isolation — no strike mechanic, no
+# leaderboard, no fail condition.
+
+Feature: Wire module collaboration
+  As a BombSquad player who can only see the screen
+  And an AI assistant who can only read the manual
+  I want us to defuse the wire module together through a message channel
+  So that the collaboration loop for wire-cutting works end to end
+
+  Background:
+    Given the coordinator has spawned player-agent and assistant-agent
+    And three-way isolation is enforced — the player cannot read the manual and the assistant cannot see the screen
+    And the assistant has loaded the practice manual from packages/manual/data/practice.yaml
+
+  # Module: wire
+  # Mode: practice
+  @simulation
+  Scenario: Player and assistant collaboratively defuse the wire module in practice mode
+    Given the player has started a practice-mode game
+    And the wire module is the currently displayed module
+
+    When the player describes the wire module to the assistant
+    Then the player's description includes the total number of wires
+    And the player's description includes the color of each wire from top to bottom
+    And the player's description includes the color of the last wire explicitly
+    And the player's description includes the battery count shown in the SceneInfoBar
+    And the player's description includes which indicators are lit or unlit
+
+    When the assistant receives the wire description
+    Then the assistant consults the wire_routing rules in the manual
+    And the assistant identifies the first rule whose condition matches the described state
+    And the assistant formulates a specific cut instruction naming the target wire by position or color
+
+    When the assistant sends the cut instruction to the player
+    Then the player locates the specified wire on screen
+    And the player cuts the wire
+
+    Then the wire module is defused
+    And the coordinator records the number of communication rounds
+    And the coordinator records whether any clarification exchanges were needed
+    And the coordinator records the in-game time spent on this module
