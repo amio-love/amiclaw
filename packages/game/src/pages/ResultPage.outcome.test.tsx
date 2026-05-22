@@ -18,6 +18,12 @@ vi.mock('@/utils/leaderboard-api', () => ({
   submitScore: vi.fn(),
 }))
 vi.mock('@/utils/event-log', () => ({ logEvent: vi.fn() }))
+// Pin the survey as already answered — these tests cover outcome branching,
+// not the survey modal (see `ResultPage.survey.test.tsx` for that).
+vi.mock('@/utils/survey', () => ({
+  hasAnsweredSurvey: () => true,
+  markSurveyAnswered: vi.fn(),
+}))
 vi.mock('@/utils/nickname', () => ({
   NICKNAME_MAX_LENGTH: 20,
   getStoredNickname: () => '测试玩家',

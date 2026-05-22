@@ -14,6 +14,7 @@ const VALID_EVENT_NAMES: ReadonlySet<EventName> = new Set<EventName>([
   'replay_intent',
   'game_failed_strikeout',
   'game_failed_timeout',
+  'survey_submit',
 ])
 
 // UUID v4 shape — any 36-char canonical UUID matches; we deliberately do not
@@ -124,6 +125,16 @@ export function validateEvent(payload: unknown): ValidationResult {
       }
     } catch {
       return fail('data not serializable')
+    }
+  }
+
+  // A `survey_submit` event with no answers is malformed. Other events may
+  // legitimately omit `data`, so this gate is specific to `survey_submit`.
+  // A present `data` has already passed the object / non-null / non-array
+  // checks above, so an empty-object test is sufficient here.
+  if (p.event === 'survey_submit') {
+    if (p.data === undefined || Object.keys(p.data as Record<string, unknown>).length === 0) {
+      return fail('survey_submit requires answer data')
     }
   }
 

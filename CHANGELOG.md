@@ -79,6 +79,16 @@ straight from the homepage CTAs.
 
 ### Added
 
+- **Endgame survey** After any game ends — win, loss, timeout, practice or
+  daily — the result page now shows a one-time, four-question survey: which AI
+  tool you played with, how fun and how hard the run felt, and an optional
+  free-text note on the biggest problem working with the AI. It rides inside
+  the existing post-game modal instead of stacking a second dialog: on a first
+  daily win the nickname prompt and the survey share one modal. The survey is
+  always optional — it can be skipped, and confirming the merged modal needs
+  only a valid nickname — and it appears just once per device. Answers are
+  POSTed to `/api/events` and surface in the beta data dashboard. Source task
+  `add-amiclaw-endgame-survey`.
 - **BombSquad gets its own landing page and a connect-AI on-ramp** Choosing
   BombSquad from the homepage no longer drops straight into a run. It now
   opens a dedicated BombSquad landing — a glowing planet hero, a live

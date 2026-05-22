@@ -1,0 +1,297 @@
+/* PostGameModal — unified post-game modal (nickname gate + endgame
+   survey) in the Atlas star-chart visual language.
+
+   A glass-card dialog floating on a dimmed cosmic backdrop. AMIO-yellow
+   is the only accent; the retired CRT / terminal / neon-cyan aesthetic
+   is not reproduced. Styling is derived by analogy from the redesigned
+   ResultPage glass cards (`.rankCard` / `.breakdown`) and the token
+   reference in docs/DesignSystem.md. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Deep-space dim — lets the page's star field bleed faintly through. */
+  background: rgba(5, 5, 17, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1100;
+}
+
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  /* Scroll fallback so a short landscape viewport cannot clip the dialog
+     without an escape — leaves the 24px overlay padding top and bottom. */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  /* Glass card recipe — game glass (cooler blue tint) + hairline border. */
+  background: var(--glass-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-2xl);
+  padding: 32px 24px 24px;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-4);
+  font-size: 1rem;
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+
+.closeBtn:hover,
+.closeBtn:focus-visible {
+  color: var(--y);
+  background: var(--amio-yellow-glow-10);
+}
+
+.title {
+  margin: 0;
+  padding-right: 32px;
+  font: 400 24px var(--font-display);
+  font-style: italic;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.tip {
+  margin: 0;
+  font: 400 13px/1.55 var(--font-body);
+  color: var(--soft);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.divider {
+  width: 100%;
+  height: 1px;
+  border: none;
+  margin: 0;
+  background: var(--hairline);
+}
+
+.surveyIntro {
+  margin: 0;
+  font: 400 13px/1.55 var(--font-body);
+  color: var(--soft);
+}
+
+/* --- Nickname section ------------------------------------------------- */
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labelText {
+  font: 500 10px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.input {
+  font: 400 15px var(--font-body);
+  color: var(--text-1);
+  background: var(--glass-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  min-height: 44px;
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--y);
+  box-shadow: 0 0 0 3px var(--y-glow-25);
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 1.2em;
+  gap: 12px;
+  font: 400 12px var(--amio-font-mono);
+  color: var(--text-4);
+}
+
+.counter {
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.error {
+  color: var(--rose);
+  text-align: right;
+}
+
+/* --- Survey section --------------------------------------------------- */
+
+.question {
+  /* Reset the fieldset's native chrome — it is only used for grouping
+     semantics around each survey question. */
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.questionLabel {
+  /* `legend` needs an explicit reset to behave like a block label. */
+  display: block;
+  width: 100%;
+  padding: 0;
+  font: 500 14px/1.4 var(--font-body);
+  color: var(--text-1);
+}
+
+.questionHint {
+  margin: 0;
+  font: 400 12px var(--font-body);
+  color: var(--soft);
+}
+
+/* Q4 — softly haloed in yellow so the optional free-text answer (the
+   most useful one) draws the eye without a hard border. */
+.questionHighlight {
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.optionBtn,
+.ratingBtn {
+  font: 500 14px var(--font-body);
+  color: var(--text-2);
+  background: var(--glass-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-height: 44px;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    box-shadow var(--t-fast),
+    color var(--t-fast);
+}
+
+.optionBtn {
+  flex: 1 1 auto;
+  min-width: 72px;
+  padding: 8px 12px;
+}
+
+.ratingBtn {
+  flex: 1 1 0;
+  min-width: 44px;
+  padding: 8px 0;
+  font: 600 15px var(--amio-font-mono);
+}
+
+.optionBtn:hover,
+.ratingBtn:hover,
+.optionBtn:focus-visible,
+.ratingBtn:focus-visible {
+  border-color: var(--border-yellow-soft);
+  color: var(--text-1);
+  outline: none;
+}
+
+.optionSelected,
+.optionSelected:hover {
+  color: var(--y);
+  border-color: var(--y);
+  background: var(--amio-yellow-glow-10);
+  box-shadow: 0 0 16px var(--y-glow-25);
+}
+
+.textarea {
+  font: 400 14px/1.55 var(--font-body);
+  color: var(--text-1);
+  background: var(--glass-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  resize: vertical;
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--y);
+  box-shadow: 0 0 0 3px var(--y-glow-25);
+}
+
+.questionHighlight .counter {
+  align-self: flex-end;
+  color: var(--text-4);
+}
+
+/* --- Footer ----------------------------------------------------------- */
+
+/* Confirm + skip use the shared BombSquad pill Button; this only stacks
+   them — primary on top, the skip ghost beneath it when dismissable. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}

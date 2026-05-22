@@ -21,8 +21,8 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 13 active flows <-> 13 journey
-# scenarios, the initial regression size budget is 26 (2026-05-22). Crossing
+# 2 x the journey-scenario count. With 14 active flows <-> 14 journey
+# scenarios, the regression size budget is 28 (2026-05-22). Crossing
 # it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -93,6 +93,17 @@ flows:
       to paste to their AI partner; the recap content varies by mode and score
       submission state.
     steps: [result, copy-recap, clipboard-plaintext]
+    status: active
+
+  - id: result-page-survey
+    name: Result-page endgame survey
+    description: >-
+      After any game outcome the result page shows a once-per-device endgame
+      survey — a dismissable survey-only modal on a practice run, or merged with
+      the nickname gate into one dialog on a first daily win. Submitting posts a
+      survey_submit event; submitting or skipping both retire the survey for the
+      device.
+    steps: [game-end, result, post-game-survey-modal, survey-submit-or-skip]
     status: active
 
   # The flow id is kept stable across the Atlas redesign (renaming it would

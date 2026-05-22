@@ -19,12 +19,31 @@ export type EventName =
   | 'replay_intent'
   | 'game_failed_strikeout'
   | 'game_failed_timeout'
+  | 'survey_submit'
 
 export interface EventPayload {
   event: EventName
   timestamp: string // ISO 8601 UTC, emitted by the client
   device_id: string // UUID v4 from localStorage (shared with leaderboard)
   data?: Record<string, unknown>
+}
+
+/**
+ * Endgame-survey answers, carried as `EventPayload.data` on a `survey_submit`
+ * event. The client shows the survey once per device, so the server persists
+ * exactly one `SurveyAnswers` object per device per day (KV key
+ * `events:{date}:survey:{device_id}`) — no accumulation, no read-modify-write.
+ *
+ * Field-level caps (`ai_tool` ≤ 40 chars, `ai_issue` ≤ 200 chars) are enforced
+ * client-side. The server enforces only the generic 1KB `data` byte cap and a
+ * non-empty-object check (see `validateEvent`); it does not re-validate the
+ * shape, so dashboard rendering treats every field defensively.
+ */
+export interface SurveyAnswers {
+  ai_tool: string // 'claude' | 'chatgpt' | 'gemini' | free text; client caps at 40 chars
+  fun: number // integer 1-5
+  difficulty: 'too-hard' | 'just-right' | 'too-easy'
+  ai_issue?: string // optional free text, client caps at 200 chars
 }
 
 /**
