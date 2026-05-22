@@ -84,6 +84,10 @@
   border: 1px dashed rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 40px rgba(255, 229, 62, 0.08);
   animation: spin 50s linear infinite;
+  /* Decorative orbit ring — it is absolutely positioned over the button, so
+     without this it would hit-test above .bigButton and swallow every press,
+     leaving the press-and-hold button impossible to operate by pointer. */
+  pointer-events: none;
 }
 
 .bigButton {
