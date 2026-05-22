@@ -157,7 +157,6 @@
   /* ----------  GLOWS  ---------- */
   --glow-yellow: 0 0 22px rgba(255, 229, 62, 0.45);
   --glow-yellow-strong: 0 0 32px rgba(255, 229, 62, 0.5);
-  --glow-cyan: 0 0 14px #00ffff, 0 0 50px rgba(0, 255, 255, 0.4);
 
   /* ----------  MOTION  ---------- */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
