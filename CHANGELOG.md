@@ -286,6 +286,16 @@ straight from the homepage CTAs.
 
 ### Fixed
 
+- **Atlas-consistency leftovers from the BombSquad redesign** A small
+  cleanup pass clears the last traces of the old terminal look downstream
+  of the redesign. The community feed's two sample run-result cards now
+  read 拆弹成功 / 差一点 to match the result screens, in place of the retired
+  DEFUSED / EXPLODED wording. The AI-compatibility page's "返回 BombSquad
+  首页" link now actually lands on the BombSquad landing page instead of the
+  AmiClaw platform homepage, so the link text and where it goes finally
+  agree. The nickname dialog and the AI-compatibility page also switch from
+  the retired CRT-cyan accent to the AMIO-yellow brand accent, so every
+  screen shares one palette.
 - **Mobile beta-flow polish** A pass over the phone experience makes the
   daily beta path easier to use. Small text links and buttons that sat
   below a comfortable finger size — the home page's leaderboard link, the
