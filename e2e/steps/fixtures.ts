@@ -2,7 +2,7 @@
  * Shared playwright-bdd fixtures for the amiclaw e2e harness.
  *
  * Implements the verified 6-D harness-side determinism design — zero
- * `packages/game` product changes. Three mechanisms live here:
+ * `packages/game` product changes. Four mechanisms live here:
  *
  *  1. Controlled clock — `pinClockOnLanding` runs the canonical
  *     `clock.install({time:T-BUF})` -> `goto('/')` -> `clock.pauseAt(T)`
@@ -12,10 +12,14 @@
  *     already-frozen clock. `advance` / `fastForwardPast` step the clock.
  *  2. Route mocking — the manual, leaderboard and events network routes are
  *     intercepted so the static-build gate never makes a live call. The
- *     leaderboard POST handler captures submission bodies for assertions.
+ *     leaderboard and events POST handlers capture request bodies for
+ *     assertions.
  *  3. Golden answers — `answers.json` (built by build-answers.mts) carries the
  *     mechanical answer for every module at seed `T`, so the harness plays a
  *     real, full play-through.
+ *  4. Survey gating — the once-per-device PostGameModal survey flag is seeded
+ *     as already-answered for every scenario except the `@survey-fresh` one,
+ *     so the modal never interferes with non-survey result-page journeys.
  */
 import { test as base, createBdd } from 'playwright-bdd'
 import type { Page } from '@playwright/test'
@@ -117,6 +121,8 @@ export class World {
   readonly answers = ANSWERS
   readonly seedT = ANSWERS.seed
   readonly leaderboard: LeaderboardState
+  /** Captured `/api/events` POST bodies — `survey_submit` and friends. */
+  readonly events: Record<string, unknown>[] = []
   runMode: 'daily' | 'practice' = 'daily'
   private clockInstalled = false
 
@@ -297,18 +303,46 @@ export const test = base.extend<{ world: World }>({
   // `auto` so route mocks + clipboard permissions are always installed before
   // the first step (hence before the first goto).
   world: [
-    async ({ page, context }, use) => {
+    async ({ page, context }, use, testInfo) => {
       const world = new World(page)
 
       await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+
+      // Endgame-survey gating. PostGameModal shows a once-per-device survey on
+      // the first result-page visit, gated by the `bombsquad-survey-answered`
+      // localStorage flag (the exact key from packages/game/src/utils/
+      // survey.ts). Every journey scenario that reaches /result would otherwise
+      // trip the modal on its first game-end, so the flag is seeded as
+      // already-answered by default. The dedicated result-page-survey scenario
+      // carries the @survey-fresh tag to opt out of the seed so the modal
+      // actually appears for it.
+      if (!testInfo.tags.includes('@survey-fresh')) {
+        await page.addInitScript(() => {
+          try {
+            window.localStorage.setItem('bombsquad-survey-answered', 'true')
+          } catch {
+            /* localStorage unavailable (private mode) — modal may show; rare in e2e */
+          }
+        })
+      }
 
       // Daily/practice manual fetch -> fixture YAML.
       await page.route('**/manual/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'text/yaml', body: MANUAL_YAML })
       })
 
-      // Fire-and-forget telemetry -> 200 stub.
+      // Fire-and-forget telemetry -> 200 stub. POST bodies are captured first
+      // so scenarios can assert on emitted events (e.g. `survey_submit`); the
+      // capture mirrors the leaderboard POST handler below.
       await page.route('**/api/events*', async (route) => {
+        const request = route.request()
+        if (request.method() === 'POST') {
+          try {
+            world.events.push(request.postDataJSON())
+          } catch {
+            /* body not JSON — ignore */
+          }
+        }
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })
       })
 

@@ -65,6 +65,20 @@ export async function handlePostEvent(request: Request, kv: KVNamespace): Promis
     }
   }
 
+  // Survey responses get a third special-case branch: in addition to the
+  // counter above, the full answer object is persisted to a per-device key
+  // so /api/dashboard can read individual responses back. `validateEvent`
+  // guarantees a `survey_submit` carries non-empty `data`; the truthiness
+  // check below also narrows the optional `data` type for the put call.
+  if (payload.event === 'survey_submit' && payload.data) {
+    // One write per device per day — the client shows the survey only once,
+    // so there is no read-modify-write race and no array accumulation.
+    const surveyKey = `events:${date}:survey:${payload.device_id}`
+    await kv.put(surveyKey, JSON.stringify(payload.data), {
+      expirationTtl: KV_TTL_SECONDS,
+    })
+  }
+
   const response: EventIngestionResponse = { ok: true }
   return jsonResponse(response, 200)
 }

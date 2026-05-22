@@ -2,10 +2,11 @@
  * Player nickname collection for the daily leaderboard.
  *
  * The first time a player reaches ResultPage on a daily run with no stored
- * nickname, NicknameModal is shown and submission is blocked until they enter
- * a valid value. Subsequent daily runs on the same device reuse the stored
- * value. Validation matches the server-side cap in `shared/leaderboard-types.ts`
- * (max 20 chars after trim, non-empty, whitespace-only rejected).
+ * nickname, PostGameModal's nickname section is shown and submission is
+ * blocked until they enter a valid value. Subsequent daily runs on the same
+ * device reuse the stored value. Validation matches the server-side cap in
+ * `shared/leaderboard-types.ts` (max 20 chars after trim, non-empty,
+ * whitespace-only rejected).
  */
 
 const NICKNAME_KEY = 'bombsquad-nickname'
@@ -41,7 +42,7 @@ export function getStoredNickname(): string | null {
 /**
  * Validates, trims, and writes the value. Returns true on success, false on
  * either validation failure or storage failure (quota exceeded, private mode).
- * Caller (NicknameModal) keeps the modal open and surfaces a brief error if
+ * Caller (PostGameModal) keeps the modal open and surfaces a brief error if
  * false is returned.
  */
 export function setStoredNickname(value: string): boolean {
