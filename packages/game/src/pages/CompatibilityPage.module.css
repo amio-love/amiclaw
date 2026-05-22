@@ -173,8 +173,8 @@
 }
 
 .copied {
-  color: var(--color-neon-green);
-  border-color: var(--color-neon-green);
+  color: var(--positive);
+  border-color: var(--positive);
 }
 
 .homeLink {

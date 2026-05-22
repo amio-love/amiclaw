@@ -101,7 +101,7 @@
 }
 
 .error {
-  color: var(--color-neon-red);
+  color: var(--amio-danger);
   text-align: right;
 }
 
