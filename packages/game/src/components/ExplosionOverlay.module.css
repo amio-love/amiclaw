@@ -27,7 +27,7 @@
     circle at center,
     #ffee00 0%,
     #ff7b00 28%,
-    var(--color-neon-red) 55%,
+    var(--bs-red) 55%,
     rgba(255, 7, 58, 0) 80%
   );
   opacity: 0;
@@ -47,7 +47,7 @@
 }
 
 .shockwaveDelayed {
-  border-color: var(--color-neon-red);
+  border-color: var(--bs-red);
   animation-delay: 0.18s;
 }
 
@@ -61,8 +61,8 @@
   letter-spacing: 0.12em;
   text-shadow:
     0 0 12px #ffee00,
-    0 0 36px var(--color-neon-red),
-    0 0 72px var(--color-neon-red);
+    0 0 36px var(--bs-red),
+    0 0 72px var(--bs-red);
   animation: explosion-boom 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 

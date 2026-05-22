@@ -142,7 +142,7 @@
   border-radius: 8px;
   background: rgba(0, 255, 255, 0.12);
   font: 600 11px var(--amio-font-mono);
-  color: #00ffff;
+  color: var(--bs-cyan);
 }
 
 .runGame {

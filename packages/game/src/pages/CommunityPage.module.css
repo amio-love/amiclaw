@@ -79,8 +79,8 @@
   background: radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.3), transparent 55%), #0a0a1a;
   font: 700 18px var(--amio-font-mono);
   letter-spacing: 0.1em;
-  color: #00ffff;
-  text-shadow: 0 0 12px #00ffff;
+  color: var(--bs-cyan);
+  text-shadow: 0 0 12px var(--bs-cyan);
 }
 
 .foot {
