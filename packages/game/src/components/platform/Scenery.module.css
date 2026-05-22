@@ -49,3 +49,42 @@
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
   animation: twinkle 3.4s ease-in-out infinite;
 }
+
+/* ============================================================
+   BombSquad game-stage variant — set via the `accent` prop.
+   Sits above the stage gradient (z-index 1) with viewport-sized
+   glows; glow colors are supplied inline per accent. README §5.1.
+   ============================================================ */
+.game {
+  z-index: 1;
+}
+
+.gameGlow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+}
+
+.gg1 {
+  width: 380px;
+  height: 380px;
+  left: -80px;
+  top: -60px;
+  opacity: 0.9;
+}
+
+.gg2 {
+  width: 360px;
+  height: 360px;
+  right: -100px;
+  top: 280px;
+  opacity: 0.8;
+}
+
+.gg3 {
+  width: 480px;
+  height: 480px;
+  left: 20%;
+  bottom: -200px;
+  opacity: 0.85;
+}

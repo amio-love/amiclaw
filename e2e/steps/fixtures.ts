@@ -161,19 +161,59 @@ export class World {
   }
 
   // --- Run-entry helpers -----------------------------------------------------
+  //
+  // The redesign replaced the old single PromptModal with a routed flow:
+  //   platform homepage `/` → BombSquad landing `/game` → connect-AI flow
+  //   `/game/connect` (three in-place steps) → run `/game/run`.
+  // Every homepage BombSquad CTA shares one mode-agnostic target (`/game`);
+  // the daily / practice choice is made on the BombSquad landing page.
 
-  async openDailyModal(): Promise<void> {
-    this.runMode = 'daily'
+  /** Homepage `/` → BombSquad landing `/game` via a homepage BombSquad CTA. */
+  async enterBombSquadLanding(): Promise<void> {
     await this.page.getByRole('button', { name: '立即挑战 →' }).click()
+    await this.page.waitForURL((url) => new URL(url).pathname === '/game', { timeout: 12_000 })
   }
 
-  async openPracticeModal(): Promise<void> {
-    this.runMode = 'practice'
-    await this.page.getByRole('button', { name: '练习', exact: true }).click()
+  /** BombSquad landing `/game` → connect-AI flow `/game/connect?mode=…`. */
+  async openConnect(mode: 'daily' | 'practice'): Promise<void> {
+    this.runMode = mode
+    const label = mode === 'daily' ? '每日挑战 →' : '练习'
+    await this.page.getByRole('button', { name: label, exact: true }).click()
+    await this.page.waitForURL((url) => new URL(url).pathname === '/game/connect', {
+      timeout: 12_000,
+    })
   }
 
-  async confirmModal(): Promise<void> {
-    await this.page.getByRole('button', { name: '确认开始游戏' }).click()
+  /** Homepage `/` → connect-AI flow `/game/connect?mode=…` in one hop. */
+  async enterConnect(mode: 'daily' | 'practice'): Promise<void> {
+    await this.enterBombSquadLanding()
+    await this.openConnect(mode)
+  }
+
+  /** Connect step 1 — click the copy card and wait for its copied state. */
+  async copyManualLink(): Promise<void> {
+    await this.page.locator('button[class*="copyCard"]').first().click()
+    await this.page.getByText('已复制到剪贴板').first().waitFor()
+  }
+
+  /**
+   * Connect steps 1→2→3→run. The controlled clock is paused, so the post-copy
+   * 700ms auto-advance never fires — every step is advanced by an explicit
+   * 下一步 click instead. Assumes the manual link is already copied.
+   */
+  async finishConnectFlow(): Promise<void> {
+    await this.page.getByRole('button', { name: '下一步 →' }).click()
+    await this.page.getByText('第 2/3 步').first().waitFor()
+    await this.page.getByRole('button', { name: '下一步 →' }).click()
+    await this.page.getByText('第 3/3 步').first().waitFor()
+    await this.page.getByRole('button', { name: '确认开始游戏 →' }).click()
+    await this.page.waitForURL((url) => new URL(url).pathname === '/game/run', { timeout: 12_000 })
+  }
+
+  /** Walk the whole connect-AI flow: copy the manual link, then hand off. */
+  async runConnectFlow(): Promise<void> {
+    await this.copyManualLink()
+    await this.finishConnectFlow()
   }
 
   /** READY -> PLAYING. The 开始 button waits out the route-mocked manual load. */
@@ -182,14 +222,14 @@ export class World {
   }
 
   async startDailyRun(): Promise<void> {
-    await this.openDailyModal()
-    await this.confirmModal()
+    await this.enterConnect('daily')
+    await this.runConnectFlow()
     await this.pressStart()
   }
 
   async startPracticeRun(): Promise<void> {
-    await this.openPracticeModal()
-    await this.confirmModal()
+    await this.enterConnect('practice')
+    await this.runConnectFlow()
     await this.pressStart()
   }
 

@@ -2,8 +2,8 @@ import Button from '@/components/ui/Button'
 import styles from './FooterPitch.module.css'
 
 interface FooterPitchProps {
-  /* Opens the daily PromptModal — the「注册 · 30 秒」CTA. There is no
-     real auth yet, so registration routes into the daily challenge,
+  /* Routes to the BombSquad landing page (/game) — the「注册 · 30 秒」CTA.
+     There is no real auth yet, so registration routes into BombSquad,
      consistent with the other anonymous-homepage CTAs. */
   onRegister: () => void
 }

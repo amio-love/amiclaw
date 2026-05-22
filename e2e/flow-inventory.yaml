@@ -38,19 +38,19 @@ flows:
   - id: landing-to-practice
     name: Landing to practice mode
     description: >-
-      A first-time visitor enters practice mode from the platform homepage —
-      the featured BombSquad 练习 CTA opens the prompt modal and confirming it
-      starts a 2-module practice run.
-    steps: [landing, cta-practice, prompt-modal, confirm-start, game-practice, result]
+      A first-time visitor enters practice mode — a homepage BombSquad CTA
+      opens the BombSquad landing page, its 练习 CTA enters the connect-AI flow,
+      and finishing that three-step flow starts a 2-module practice run.
+    steps: [landing, bombsquad-landing, cta-practice, connect-flow, game-practice, result]
     status: active
 
   - id: landing-to-daily
     name: Landing to daily challenge
     description: >-
-      A player enters the daily challenge from the platform homepage — a daily
-      CTA opens the prompt modal with the daily manual URL and confirming it
-      starts the 4-module daily run.
-    steps: [landing, cta-daily, prompt-modal, confirm-start, game-daily, result]
+      A player enters the daily challenge — a homepage BombSquad CTA opens the
+      BombSquad landing page, its 每日挑战 CTA enters the connect-AI flow with
+      the daily manual URL, and finishing that flow starts the 4-module run.
+    steps: [landing, bombsquad-landing, cta-daily, connect-flow, game-daily, result]
     status: active
 
   - id: daily-win-to-leaderboard
@@ -95,12 +95,18 @@ flows:
     steps: [result, copy-recap, clipboard-plaintext]
     status: active
 
+  # The flow id is kept stable across the Atlas redesign (renaming it would
+  # ripple to the journey scenario's `# Source:` comment for no governance
+  # gain); the redesign moved the discovery link from the retired PromptModal
+  # into the connect-AI flow's first step.
   - id: prompt-modal-to-compatibility
-    name: Prompt modal to compatibility page
+    name: Connect flow to compatibility page
     description: >-
-      From the prompt modal a new player opens the voice-AI compatibility page,
-      copies the recommended opening prompt, and returns to the homepage.
-    steps: [prompt-modal, compatibility-link, compatibility-page, copy-opening-prompt, back-home]
+      From the connect-AI flow's first step a new player opens the voice-AI
+      compatibility page, copies the recommended opening prompt, and returns to
+      the BombSquad landing page.
+    steps:
+      [connect-step-1, compatibility-link, compatibility-page, copy-opening-prompt, back-to-landing]
     status: active
 
   # === Atlas platform-shell flows =============================================

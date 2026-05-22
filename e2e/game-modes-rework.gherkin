@@ -8,7 +8,7 @@
 # tag, and absolute URLs are normalized to relative paths. Duplicate / cross-file
 # flow claims were merged so each active flow is claimed by exactly one scenario:
 #   - landing-to-daily absorbs homepage "CTA enters daily game" + "game flow
-#     stays reachable", mobile-beta "copy manual URL + modal" + "play 4 modules",
+#     stays reachable", mobile-beta "copy manual URL" + "play 4 modules",
 #     and the old "daily 4 modules win" + "both modes timer counts down".
 #   - landing-to-practice absorbs homepage "featured starts practice", the two
 #     practice scenarios, and all three serial-tongue-twister scenarios (the
@@ -17,6 +17,11 @@
 #     scenarios into one strike-out journey.
 # The "daily final-module win-lock edge" scenario is retired to the vitest layer
 # (game-context.test.ts) — see e2e/flow-inventory.yaml.
+#
+# Aligned with the Atlas BombSquad redesign: the old PromptModal is replaced by
+# the routed connect-AI flow (/game → /game/connect → /game/run); the four
+# puzzles read by their Atlas names (光弦 / 星盘 / 按钮 / 星符); the failure
+# result heading is the gentler 差一点.
 
 Feature: BombSquad daily challenge and practice mode
   As a BombSquad player
@@ -31,15 +36,16 @@ Feature: BombSquad daily challenge and practice mode
   @playwright
   Scenario: Enter the daily challenge from the homepage and defuse all four modules
     Given my viewport width is 375 pixels
-    When I click a daily-challenge CTA
-    Then a prompt modal opens with the daily manual URL
-    And the modal stays within the viewport without horizontal overflow
-    And I see the tip "复制后发给你的 AI 助手"
-    When I tap "复制"
-    Then the button label changes to "已复制！" within 1 second
+    When I enter the daily challenge from the homepage
+    Then the connect-AI flow opens at step 1
+    And the copy card shows the daily manual URL
+    And the connect screen has no horizontal overflow
+    And I see the tip "粘贴到你常用的 AI"
+    When I copy the manual link
+    Then I see the tip "已复制到剪贴板"
     And the system clipboard contains the daily manual URL
-    When I confirm the modal with "确认开始游戏"
-    Then the URL path is /game
+    When I finish the connect-AI flow
+    Then the URL path is /game/run
     And the query string carries "mode=daily"
     And the immersive game flow renders without the platform shell
     And I see the prompt "准备好了吗？"
@@ -47,13 +53,13 @@ Feature: BombSquad daily challenge and practice mode
     Then the timer starts at the daily budget 10:00 and counts down toward 00:00
     And the SceneInfoBar shows the "暗号：" and "电池：" fields
     And the module progress bar shows 4 segments
-    When I solve the 线路 module correctly
-    Then the module progress bar advances to the 密码盘 module
-    When I solve the 密码盘 module correctly
+    When I solve the 光弦 module correctly
+    Then the module progress bar advances to the 星盘 module
+    When I solve the 星盘 module correctly
     Then the module progress bar advances to the 按钮 module
     When I solve the 按钮 module correctly
-    Then the module progress bar advances to the 键盘 module
-    When I solve the 键盘 module correctly
+    Then the module progress bar advances to the 星符 module
+    When I solve the 星符 module correctly
     Then I am navigated to the URL path /result
     And the result page shows the heading "拆弹成功"
     And the leaderboard submission carries a plausible time
@@ -61,10 +67,11 @@ Feature: BombSquad daily challenge and practice mode
   # Source: landing-to-practice
   @playwright
   Scenario: Enter practice mode from the homepage and complete a two-module run
-    When I click the featured BombSquad "练习" CTA
-    Then a prompt modal opens for practice mode
-    When I confirm the modal with "确认开始游戏"
-    Then the URL path is /game
+    When I enter practice mode from the homepage
+    Then the connect-AI flow opens at step 1
+    And the copy card shows the practice manual URL
+    When I complete the connect-AI flow
+    Then the URL path is /game/run
     And the query string carries "mode=practice"
     When I tap "开始"
     Then the timer starts at the practice budget 05:00 and counts down toward 00:00
@@ -81,10 +88,10 @@ Feature: BombSquad daily challenge and practice mode
     Then a red error pulse plays over the module panel
     And no strike is counted and the run does not fail
     And I can immediately retry the same puzzle in place
-    When I solve the 线路 module correctly
-    And I solve the 键盘 module correctly
+    When I solve the 光弦 module correctly
+    And I solve the 星符 module correctly
     Then I am navigated to the URL path /result
-    And the run is recorded as a successful completion
+    And the result page shows the heading "拆弹成功"
 
   # Source: daily-fail-strikeout
   @playwright
@@ -100,8 +107,8 @@ Feature: BombSquad daily challenge and practice mode
     And the run still continues
     When I submit a third wrong answer
     Then a full-screen explosion animation plays over the bomb panel
-    And the result page opens with the heading "拆弹失败"
-    And the failure reason reads "累计 3 次失误 —— 炸弹引爆"
+    And the result page opens with the heading "差一点"
+    And the failure reason reads "三次失误就到这了"
     And no nickname modal appears
     And no score is submitted to the leaderboard
 
@@ -111,8 +118,8 @@ Feature: BombSquad daily challenge and practice mode
     Given I have started a daily challenge run
     When the countdown timer reaches 00:00
     Then a full-screen explosion animation plays
-    And the result page opens with the heading "拆弹失败"
-    And the failure reason reads "时间耗尽 —— 炸弹引爆"
+    And the result page opens with the heading "差一点"
+    And the failure reason reads "时间走得比想象中快"
 
   # Source: practice-timeout
   @playwright
@@ -120,6 +127,6 @@ Feature: BombSquad daily challenge and practice mode
     Given I have started a practice run
     When the countdown timer reaches 00:00
     Then no explosion animation plays
-    And the result page opens with the heading "时间到"
-    And it shows how many modules were completed this run
+    And the result page opens with the heading "差一点"
+    And I see the subtitle "练习 · 卡在光弦"
     And the "再来一局" action is available

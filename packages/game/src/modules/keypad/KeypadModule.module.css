@@ -1,71 +1,157 @@
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  width: fit-content;
+/* Constellation — Atlas star-chart visual language
+   (design_handoff_bombsquad README §6.5). Four symbol stars
+   scattered on a glass star map; taps draw a path between them. */
+
+.wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  animation: fade-in 300ms ease-out;
 }
 
-.grid.error {
+.wrapper.error {
   animation:
-    error-flash 600ms ease-out,
+    keypad-error-flash 600ms ease-out,
     shake 600ms ease-out;
 }
-.grid.success {
-  animation: success-flash 600ms ease-out;
+
+.wrapper.success {
+  animation: keypad-success-flash 600ms ease-out;
 }
 
-.cell {
-  width: 120px;
-  height: 120px;
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  cursor: pointer;
+@keyframes keypad-error-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(255, 107, 157, 0.18);
+  }
+}
+
+@keyframes keypad-success-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(75, 210, 102, 0.18);
+  }
+}
+
+/* Square glass star map. */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--hairline);
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 229, 62, 0.05), transparent 70%),
+    rgba(5, 5, 17, 0.5);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.netLine {
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 0.2;
+}
+
+.path {
+  fill: none;
+  stroke: var(--y);
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1px var(--y));
+}
+
+/* ----------  symbol stars  ---------- */
+.star {
+  position: absolute;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  transition: border-color 150ms;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.cell:hover {
-  border-color: var(--color-neon-cyan);
+.star:hover {
+  transform: translate(-50%, -50%) scale(1.07);
 }
 
-.cell.selected {
-  border-color: var(--color-neon-cyan);
+.star.tapped {
+  background: rgba(255, 229, 62, 0.07);
+  border-color: rgba(255, 229, 62, 0.28);
 }
 
 .symbol {
-  width: 80px;
-  height: 80px;
-  stroke: var(--color-text-primary);
+  width: 38px;
+  height: 38px;
   fill: none;
-  stroke-width: 3;
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 3.4;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition:
+    stroke 0.2s ease,
+    filter 0.2s ease;
 }
 
-.cell.selected .symbol {
-  stroke: var(--color-neon-cyan);
+.star.tapped .symbol {
+  stroke: var(--y);
+  filter: drop-shadow(0 0 6px var(--y-glow-50));
 }
 
+.wrapper.success .star.tapped .symbol {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 7px rgba(75, 210, 102, 0.6));
+}
+
+/* Tap-order badge. */
 .badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--color-neon-cyan);
-  color: var(--color-bg);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: bold;
+  top: -3px;
+  right: -3px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--y);
+  color: #050511;
+  font: 700 11px var(--font-display);
+  box-shadow: 0 0 12px var(--y-glow-50);
 }
 
-.cell.clicking {
-  animation: click-pulse 200ms ease-out;
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .wrapper.error,
+  .wrapper.success {
+    animation: none;
+  }
+  .star,
+  .symbol {
+    transition: none;
+  }
+  .star:hover {
+    transform: translate(-50%, -50%);
+  }
 }

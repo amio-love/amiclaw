@@ -1,115 +1,257 @@
+/* Astrolabe dials — Atlas star-chart visual language
+   (design_handoff_bombsquad README §6.3). Three glass dial faces,
+   each with a spring-settled needle and a center symbol well. */
+
 .wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 22px;
   animation: fade-in 300ms ease-out;
 }
 
 .wrapper.error {
   animation:
-    error-flash 600ms ease-out,
+    dial-error-flash 600ms ease-out,
     shake 600ms ease-out;
 }
+
 .wrapper.success {
-  animation: success-flash 800ms ease-out;
+  animation: dial-success-flash 800ms ease-out;
 }
 
-.dials-container {
+@keyframes dial-error-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(255, 107, 157, 0.18);
+  }
+}
+
+@keyframes dial-success-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(75, 210, 102, 0.18);
+  }
+}
+
+.dials {
   display: flex;
-  gap: 24px;
-  justify-content: center;
-  align-items: flex-start;
   flex-wrap: wrap;
-}
-
-@media (max-width: 360px) {
-  .dials-container {
-    gap: 12px;
-  }
-  .dial-window {
-    width: 64px;
-    height: 64px;
-  }
-  .symbol-svg {
-    width: 48px;
-    height: 48px;
-  }
+  justify-content: center;
+  gap: 20px;
 }
 
 .dial {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
 }
 
-.dial-window {
+/* ----------  dial face  ---------- */
+.face {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 229, 62, 0.05), transparent 62%),
+    radial-gradient(circle at 30% 28%, rgba(180, 120, 255, 0.1), transparent 60%), #08081a;
+  border: 1px solid rgba(255, 229, 62, 0.18);
+  box-shadow:
+    inset 0 0 36px rgba(255, 229, 62, 0.06),
+    0 0 26px rgba(0, 0, 0, 0.45);
+}
+
+/* Slowly rotating dashed orbit ring (`spin` is a global keyframe). */
+.ring {
+  position: absolute;
+  inset: -11px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  animation: spin 60s linear infinite;
+}
+
+/* Six rotational position ticks around the face. */
+.tick {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  transition:
+    background 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.tick[data-on='true'] {
+  background: var(--y);
+  box-shadow: 0 0 8px var(--y-glow-70);
+}
+
+/* Needle — settles to the current 60° position with a slight spring. */
+.needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 58px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--y), rgba(255, 229, 62, 0.18));
+  transform-origin: 50% 100%;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 10px var(--y-glow-50);
+}
+
+.needleTip {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 50%;
+  background: var(--y);
+  box-shadow:
+    0 0 12px var(--y),
+    0 0 26px var(--y-glow-50);
+}
+
+/* Center well — holds the live symbol. */
+.well {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 80px;
   height: 80px;
-  border: 2px solid var(--color-border);
-  background: var(--color-surface);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 229, 62, 0.12), transparent 60%), #050511;
+  border: 1px solid var(--hairline);
+  box-shadow:
+    inset 0 0 26px rgba(0, 0, 0, 0.6),
+    inset 0 0 12px rgba(255, 229, 62, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  position: relative;
 }
 
-.symbol-svg {
-  width: 60px;
-  height: 60px;
-  stroke: var(--color-neon-cyan);
+.symbol {
+  width: 48px;
+  height: 48px;
   fill: none;
-  stroke-width: 3;
+  stroke: var(--y);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px var(--y-glow-50));
 }
 
-.arrow-btn {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  width: var(--touch-target);
-  height: var(--touch-target);
+.wrapper.success .symbol {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 7px rgba(75, 210, 102, 0.6));
+}
+
+.symbolFallback {
+  font: 500 12px var(--amio-font-mono);
+  color: var(--soft);
+}
+
+/* ----------  rotate knobs  ---------- */
+.knobs {
+  display: flex;
+  gap: 12px;
+}
+
+.knob {
+  width: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-}
-
-.arrow-btn:hover {
-  border-color: var(--color-neon-cyan);
-  color: var(--color-neon-cyan);
-}
-
-.confirm-btn {
-  margin-top: 16px;
-  padding: 12px 32px;
-  background: none;
-  border: 2px solid var(--color-neon-cyan);
-  color: var(--color-neon-cyan);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  letter-spacing: 2px;
+  border-radius: 50%;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--hairline);
+  color: #fff;
   cursor: pointer;
-  min-height: var(--touch-target);
-  text-transform: uppercase;
+  transition: all 0.2s;
 }
 
-.confirm-btn:hover {
-  background: rgba(0, 255, 255, 0.1);
+.knob:hover {
+  background: rgba(255, 229, 62, 0.1);
+  border-color: rgba(255, 229, 62, 0.35);
+  color: var(--y);
 }
 
-.slide-up {
-  animation: dial-slide-up 150ms ease-out forwards;
-}
-.slide-down {
-  animation: dial-slide-down 150ms ease-out forwards;
+.knob:active {
+  transform: scale(0.93);
 }
 
-.arrow-btn.clicking {
-  animation: click-pulse 200ms ease-out;
+/* ----------  confirm CTA  ---------- */
+.confirm {
+  min-width: 180px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--y);
+  color: #050511;
+  font: 600 15px var(--font-body);
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.confirm-btn.confirm-clicking {
-  animation: confirm-pulse 300ms ease-out;
+
+.confirm:hover {
+  box-shadow: 0 0 28px var(--y-glow-50);
+  transform: translateY(-1px);
+}
+
+.confirm:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 360px) {
+  .face {
+    width: 124px;
+    height: 124px;
+  }
+  .well {
+    width: 66px;
+    height: 66px;
+  }
+  .symbol {
+    width: 40px;
+    height: 40px;
+  }
+  .needle {
+    height: 47px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .wrapper.error,
+  .wrapper.success {
+    animation: none;
+  }
+  .ring {
+    animation: none;
+  }
+  .needle {
+    transition: none;
+  }
+  .tick {
+    transition: none;
+  }
 }

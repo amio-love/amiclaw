@@ -1,77 +1,143 @@
-.container {
+/* Light strings — Atlas star-chart visual language
+   (design_handoff_bombsquad README §6.4). Glowing strands cross a
+   glass stage; the player cuts one. */
+
+.wrapper {
+  width: 100%;
   animation: fade-in 300ms ease-out;
 }
 
-.container.error {
+.wrapper.error {
   animation:
-    error-flash 600ms ease-out,
+    wire-error-flash 600ms ease-out,
     shake 600ms ease-out;
 }
 
-.container.success {
-  animation: success-flash 800ms ease-out;
+.wrapper.success {
+  animation: wire-success-flash 800ms ease-out;
 }
 
-.wire-hit-target {
+@keyframes wire-error-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(255, 107, 157, 0.18);
+  }
+}
+
+@keyframes wire-success-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(75, 210, 102, 0.18);
+  }
+}
+
+/* Glass stage holding the strands. */
+.stage {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px 14px;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--hairline);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.02), transparent 70%),
+    rgba(5, 5, 17, 0.5);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.svg {
+  display: block;
+}
+
+.strand {
+  transition: opacity 100ms;
+}
+
+.halo {
+  pointer-events: none;
+}
+
+.pin {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2;
+  transition: opacity 0.3s;
+}
+
+/* Transparent click proxy layered over the visible strand.
+   Width is held at 28 — wires sit 45 viewBox units apart but adjacent
+   curves bow to a ~30-unit minimum centerline gap, so a 28-wide band
+   keeps a 2-unit safety margin against neighbouring hit bands. */
+.hitTarget {
   cursor: crosshair;
   stroke: transparent;
-  /*
-   * Transparent click proxy layered over the visible wire (stroke-width 4).
-   * Widened from 20 to 28 to enlarge the mobile tap target (audit L3-1).
-   * Hard cap: wires sit 45 viewBox units apart, but adjacent curves bow
-   * toward each other, closing to a 30-unit minimum centerline gap at the
-   * curve midpoint. A stroke-width-W band reaches +/-W/2 around the wire,
-   * so W must stay <= 30 for zero overlap between neighbouring hit bands;
-   * 28 keeps a 2-unit safety margin. At a ~320px viewport (scale ~0.96)
-   * this renders an ~27px tap band, up from the previous ~19px.
-   */
   stroke-width: 28;
   fill: none;
 }
 
-.wire-hit-target:hover {
-  stroke: rgba(255, 255, 255, 0.1);
+.hitTarget:hover {
+  stroke: rgba(255, 255, 255, 0.08);
 }
 
-.wire-visual {
-  stroke-width: 4;
-  fill: none;
-  stroke-linecap: round;
-  transition: opacity 100ms;
+/* The hit target is an SVG path; a box outline would frame the whole
+   curve's bounding rect, so focus is shown as a yellow band tracing the
+   strand instead. */
+.hitTarget:focus-visible {
+  stroke: var(--y-glow-50);
+  outline: none;
 }
 
-.wire-cut-top,
-.wire-cut-bottom {
+/* Severed strand halves — transform keyframes are global; the glow
+   decay is local so it tints yellow rather than the legacy cyan. */
+.cutTop,
+.cutBottom {
   transform-box: fill-box;
   transform-origin: center;
 }
 
-.wire-cut-top {
+.cutTop {
   animation:
     wire-cut-top 220ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards,
-    wire-cut-glow 520ms ease-out forwards;
+    wire-cut-glow-y 520ms ease-out forwards;
 }
 
-.wire-cut-bottom {
+.cutBottom {
   animation:
     wire-cut-bottom 220ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards,
-    wire-cut-glow 520ms ease-out forwards;
+    wire-cut-glow-y 520ms ease-out forwards;
 }
 
-/* Spark highlight — bright core flash at the cut point */
-.wire-cut-spark-core {
-  fill: var(--color-neon-cyan);
-  filter: drop-shadow(0 0 6px var(--color-neon-cyan));
+@keyframes wire-cut-glow-y {
+  0% {
+    filter: drop-shadow(0 0 3px var(--y));
+  }
+  25% {
+    filter: drop-shadow(0 0 9px var(--y));
+  }
+  100% {
+    filter: none;
+  }
+}
+
+/* Spark at the cut point — recolored to the AMIO yellow accent. */
+.sparkCore {
+  fill: var(--y);
+  filter: drop-shadow(0 0 6px var(--y));
   transform-box: fill-box;
   transform-origin: center;
   pointer-events: none;
   animation: wire-cut-spark 280ms ease-out forwards;
 }
 
-/* Spark highlight — shockwave ring radiating from the cut point */
-.wire-cut-spark-ring {
+.sparkRing {
   fill: none;
-  stroke: var(--color-neon-cyan);
+  stroke: var(--y);
   stroke-width: 2;
   transform-box: fill-box;
   transform-origin: center;
@@ -79,6 +145,19 @@
   animation: wire-cut-ring 320ms ease-out forwards;
 }
 
-.wire-hit-target.clicking {
-  animation: click-pulse 200ms ease-out;
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .wrapper.error,
+  .wrapper.success {
+    animation: none;
+  }
+  .cutTop,
+  .cutBottom {
+    animation: none;
+  }
+  .sparkCore,
+  .sparkRing {
+    animation: none;
+    opacity: 0;
+  }
 }

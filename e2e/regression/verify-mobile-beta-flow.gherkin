@@ -66,4 +66,4 @@ Feature: Mobile internal-beta layout regression guards
     # (+/-14 units) always leaves clear air between neighbouring bands.
     And no wire's hit band overlaps an adjacent wire's hit band
     And tapping anywhere on a wire's hit band cuts that wire and never its neighbour
-    And the visible wire stroke stays 4 units wide so the wires look unchanged
+    And the visible wire stroke stays a thin 3 units so the hit band stays hidden

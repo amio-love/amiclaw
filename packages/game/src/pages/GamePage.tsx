@@ -23,6 +23,8 @@ import SceneInfoBar from '@/components/SceneInfoBar'
 import MuteButton from '@/components/MuteButton'
 import StrikeIndicator from '@/components/StrikeIndicator'
 import ExplosionOverlay from '@/components/ExplosionOverlay'
+import Scenery from '@/components/platform/Scenery'
+import Eyebrow from '@/components/bombsquad/Eyebrow'
 import WireModule from '@/modules/wire/WireModule'
 import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
@@ -33,11 +35,15 @@ import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext } from '@/audio/audio-context'
 import styles from './GamePage.module.css'
 
+// Module display labels — the Atlas redesign renames three of the four
+// puzzles (design_handoff_bombsquad README §1): 线路→光弦, 密码盘→星盘,
+// 键盘→星符. The button module has no handoff name and keeps 按钮. The
+// internal ModuleKind identifiers (wire/dial/button/keypad) are unchanged.
 const MODULE_LABEL: Record<ModuleKind, string> = {
-  wire: '线路',
-  dial: '密码盘',
+  wire: '光弦',
+  dial: '星盘',
   button: '按钮',
-  keypad: '键盘',
+  keypad: '星符',
 }
 
 // How long the CSS explosion plays before routing to the failure result
@@ -446,7 +452,7 @@ export default function GamePage() {
                 </p>
                 <button
                   className={styles.startBtn}
-                  onClick={() => navigate('/game?mode=practice', { replace: true })}
+                  onClick={() => navigate('/game/run?mode=practice', { replace: true })}
                 >
                   去练习
                 </button>
@@ -519,6 +525,7 @@ export default function GamePage() {
 
   return (
     <main className={styles.page}>
+      <Scenery accent="yellow" />
       {refreshBanner}
       <div className={styles.topBar}>
         <div className={styles.timerCluster}>
@@ -543,8 +550,12 @@ export default function GamePage() {
       </div>
 
       <div className={styles.moduleArea}>
-        <div>
-          <p className={styles.moduleLabel}>{moduleLabel}</p>
+        <div className={styles.modulePanel}>
+          <div className={styles.modLabelRow}>
+            <Eyebrow dot>
+              模块 {state.currentModuleIndex + 1}/{state.moduleSequence.length} · {moduleLabel}
+            </Eyebrow>
+          </div>
           {renderModule()}
         </div>
         {errorPulseKey > 0 && (

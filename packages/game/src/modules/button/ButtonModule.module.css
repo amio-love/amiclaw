@@ -1,63 +1,144 @@
-.container {
+/* Button module — Atlas star-chart visual language, restyled by
+   analogy with the three specced modules (no dedicated handoff
+   spec): a glass stage, a slow orbit ring, and the yellow accent. */
+
+.wrapper {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+  justify-content: center;
+  width: 100%;
   animation: fade-in 300ms ease-out;
 }
 
-.container.error {
+.wrapper.error {
   animation:
-    error-flash 600ms ease-out,
+    button-error-flash 600ms ease-out,
     shake 600ms ease-out;
 }
-.container.success {
-  animation: success-flash 600ms ease-out;
+
+.wrapper.success {
+  animation: button-success-flash 600ms ease-out;
 }
 
-.big-button {
-  width: 140px;
-  height: 140px;
+@keyframes button-error-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(255, 107, 157, 0.18);
+  }
+}
+
+@keyframes button-success-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  22% {
+    background-color: rgba(75, 210, 102, 0.18);
+  }
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  padding: 32px 28px;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--hairline);
+  background:
+    radial-gradient(circle at 50% 36%, rgba(255, 229, 62, 0.06), transparent 62%),
+    rgba(5, 5, 17, 0.5);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+/* Status indicator pip — color + glow are supplied inline. */
+.indicator {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 4px solid rgba(0, 0, 0, 0.3);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: bold;
-  letter-spacing: 2px;
-  touch-action: none;
-  user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+/* Button cradle — a slow dashed orbit ring rendered as a pseudo
+   element so the button itself never rotates (`spin` is global). */
+.buttonOrbit {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 188px;
+  height: 188px;
+}
+
+.buttonOrbit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 40px rgba(255, 229, 62, 0.08);
+  animation: spin 50s linear infinite;
+  /* Decorative orbit ring — it is absolutely positioned over the button, so
+     without this it would hit-test above .bigButton and swallow every press,
+     leaving the press-and-hold button impossible to operate by pointer. */
+  pointer-events: none;
+}
+
+.bigButton {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 4px solid rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 16px var(--font-body);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  box-shadow:
+    inset -8px -12px 30px rgba(0, 0, 0, 0.45),
+    inset 8px 10px 22px rgba(255, 255, 255, 0.14),
+    0 0 32px rgba(0, 0, 0, 0.4);
   transition:
     filter 100ms,
     transform 100ms;
-  min-width: var(--touch-target);
-  min-height: var(--touch-target);
 }
 
-.big-button:active,
-.big-button.pressed {
+.bigButton:active,
+.bigButton.pressed {
   transform: scale(0.95);
   filter: brightness(0.85);
 }
 
-.indicator {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  transition: background-color 200ms;
+.display {
+  min-width: 64px;
+  padding: 8px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hairline);
+  background: var(--glass);
+  font: 400 22px var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 0 14px var(--y-glow-25);
 }
 
-.display {
-  font-family: var(--font-mono);
-  font-size: 24px;
-  color: var(--color-neon-cyan);
-  border: 1px solid var(--color-border);
-  padding: 8px 16px;
-  min-width: 60px;
-  text-align: center;
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .wrapper.error,
+  .wrapper.success {
+    animation: none;
+  }
+  .buttonOrbit::before {
+    animation: none;
+  }
 }

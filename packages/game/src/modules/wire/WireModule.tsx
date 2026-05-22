@@ -4,7 +4,11 @@ import type { ModuleProps } from '../types'
 import { playSfx } from '@/audio/useSfx'
 import styles from './WireModule.module.css'
 
-const CLICK_PULSE_MS = 200
+/* Light strings — Atlas-styled reskin of the wire module
+   (design_handoff_bombsquad README §6.4). Gameplay is unchanged:
+   the player cuts exactly one wire and it is judged on the spot.
+   Each strand is drawn as a glowing light string crossing a glass
+   stage, with colored anchor pins at both ends. */
 
 const COLOR_MAP: Record<string, string> = {
   red: '#ff073a',
@@ -25,16 +29,11 @@ export default function WireModule({
 }: ModuleProps<WireConfig, WireAnswer>) {
   const [state, setState] = useState<WireState>('idle')
   const [cutIndex, setCutIndex] = useState<number | null>(null)
-  const [pulsingWire, setPulsingWire] = useState<number | null>(null)
 
   const handleClick = useCallback(
     (index: number) => {
       if (state !== 'idle') return
       playSfx('wire-cut')
-      setPulsingWire(index)
-      setTimeout(() => {
-        setPulsingWire((curr) => (curr === index ? null : curr))
-      }, CLICK_PULSE_MS)
       if (index === answer.cutPosition) {
         setCutIndex(index)
         setState('cut')
@@ -57,73 +56,111 @@ export default function WireModule({
 
   return (
     <div
-      className={`${styles.container} ${state === 'error' ? styles.error : ''} ${state === 'cut' ? styles.success : ''}`}
+      className={`${styles.wrapper} ${state === 'error' ? styles.error : ''} ${state === 'cut' ? styles.success : ''}`}
     >
-      <svg
-        viewBox={`0 0 300 ${svgHeight}`}
-        width="100%"
-        style={{ maxWidth: 400, display: 'block', margin: '0 auto' }}
-        aria-label="Wire routing panel"
-      >
-        {config.wires.map((wire, i) => {
-          const startY = 40 + i * 45
-          const midX = 150
-          const midY = startY + (i % 2 === 0 ? 15 : -15)
-          const d = `M 20 ${startY} Q ${midX} ${midY} 280 ${startY}`
-          const isCut = cutIndex === i
+      <div className={styles.stage}>
+        <svg
+          viewBox={`0 0 300 ${svgHeight}`}
+          width="100%"
+          className={styles.svg}
+          aria-label="Wire routing panel"
+        >
+          <defs>
+            <filter id="wire-glow" x="-20%" y="-40%" width="140%" height="180%">
+              <feGaussianBlur stdDeviation="2.6" />
+            </filter>
+          </defs>
+          {config.wires.map((wire, i) => {
+            const startY = 40 + i * 45
+            const midX = 150
+            const midY = startY + (i % 2 === 0 ? 15 : -15)
+            const d = `M 20 ${startY} Q ${midX} ${midY} 280 ${startY}`
+            const color = COLOR_MAP[wire.color] ?? '#888'
+            const isCut = cutIndex === i
 
-          return (
-            <g key={i}>
-              {/* Visual wire */}
-              {isCut ? (
-                <>
-                  {/* Top half */}
+            return (
+              <g key={i}>
+                {/* Glow halo — only while the strand is lit. */}
+                {!isCut && (
                   <path
-                    d={`M 20 ${startY} Q ${midX * 0.6} ${midY} ${midX - 10} ${startY}`}
-                    stroke={COLOR_MAP[wire.color] ?? '#888'}
-                    className={styles['wire-cut-top']}
-                    strokeWidth={4}
+                    d={d}
+                    stroke={color}
+                    strokeWidth={9}
+                    fill="none"
+                    opacity={0.32}
+                    filter="url(#wire-glow)"
+                    className={styles.halo}
+                  />
+                )}
+                {isCut ? (
+                  <>
+                    <path
+                      d={`M 20 ${startY} Q ${midX * 0.6} ${midY} ${midX - 10} ${startY}`}
+                      stroke={color}
+                      className={styles.cutTop}
+                      strokeWidth={4}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d={`M ${midX + 10} ${startY} Q ${midX * 1.4} ${midY} 280 ${startY}`}
+                      stroke={color}
+                      className={styles.cutBottom}
+                      strokeWidth={4}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                    <circle cx={midX} cy={startY} r={5} className={styles.sparkRing} />
+                    <circle cx={midX} cy={startY} r={4} className={styles.sparkCore} />
+                  </>
+                ) : (
+                  <path
+                    d={d}
+                    stroke={color}
+                    className={styles.strand}
+                    strokeWidth={3}
                     fill="none"
                     strokeLinecap="round"
                   />
-                  {/* Bottom half */}
-                  <path
-                    d={`M ${midX + 10} ${startY} Q ${midX * 1.4} ${midY} 280 ${startY}`}
-                    stroke={COLOR_MAP[wire.color] ?? '#888'}
-                    className={styles['wire-cut-bottom']}
-                    strokeWidth={4}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                  {/* Spark highlight at the cut point */}
-                  <circle cx={midX} cy={startY} r={5} className={styles['wire-cut-spark-ring']} />
-                  <circle cx={midX} cy={startY} r={4} className={styles['wire-cut-spark-core']} />
-                </>
-              ) : (
+                )}
+                {/* Anchor pins at both ends. */}
+                <circle
+                  cx={20}
+                  cy={startY}
+                  r={5.5}
+                  fill={color}
+                  className={styles.pin}
+                  opacity={isCut ? 0.3 : 1}
+                />
+                <circle
+                  cx={280}
+                  cy={startY}
+                  r={5.5}
+                  fill={color}
+                  className={styles.pin}
+                  opacity={isCut ? 0.3 : 1}
+                />
+                {/* Invisible hit target. */}
                 <path
                   d={d}
-                  stroke={COLOR_MAP[wire.color] ?? '#888'}
-                  className={styles['wire-visual']}
-                  strokeWidth={4}
-                  fill="none"
-                  strokeLinecap="round"
+                  className={styles.hitTarget}
+                  onClick={() => handleClick(i)}
+                  data-testid={`wire-${i}`}
+                  aria-label={`Cut wire ${i + 1} (${wire.color})`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleClick(i)
+                    }
+                  }}
                 />
-              )}
-              {/* Invisible hit target */}
-              <path
-                d={d}
-                className={`${styles['wire-hit-target']} ${pulsingWire === i ? styles.clicking : ''}`}
-                onClick={() => handleClick(i)}
-                data-testid={`wire-${i}`}
-                aria-label={`Cut wire ${i + 1} (${wire.color})`}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleClick(i)}
-              />
-            </g>
-          )
-        })}
-      </svg>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
     </div>
   )
 }

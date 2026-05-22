@@ -2,6 +2,8 @@ import { Routes, Route } from 'react-router-dom'
 import { GameProvider } from './store/game-context'
 import PlatformLayout from './components/platform/PlatformLayout'
 import GamesPage from './pages/GamesPage'
+import BombSquadLandingPage from './pages/BombSquadLandingPage'
+import ConnectPage from './pages/ConnectPage'
 import GamePage from './pages/GamePage'
 import ResultPage from './pages/ResultPage'
 import LeaderboardPage from './pages/LeaderboardPage'
@@ -20,8 +22,13 @@ export default function App() {
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/me" element={<AccountPage />} />
         </Route>
-        {/* Immersive BombSquad game flow — no platform shell. */}
-        <Route path="/game" element={<GamePage />} />
+        {/* Immersive BombSquad game flow — no platform shell. The flow is
+            landing (/game) → connect (/game/connect) → run (/game/run) →
+            result (/result). The platform homepage's BombSquad CTAs enter at
+            the landing; the run keeps the ?mode= / ?url= query params. */}
+        <Route path="/game" element={<BombSquadLandingPage />} />
+        <Route path="/game/connect" element={<ConnectPage />} />
+        <Route path="/game/run" element={<GamePage />} />
         <Route path="/result" element={<ResultPage />} />
         <Route path="/compatibility" element={<CompatibilityPage />} />
       </Routes>

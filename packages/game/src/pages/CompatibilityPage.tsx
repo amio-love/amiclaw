@@ -108,7 +108,7 @@ export default function CompatibilityPage() {
         </div>
       </section>
 
-      <Link to="/" className={styles.homeLink}>
+      <Link to="/game" className={styles.homeLink}>
         ← 返回 BombSquad 首页
       </Link>
     </main>

@@ -18,10 +18,10 @@
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   background: var(--color-surface);
-  border: 1px solid var(--color-neon-cyan);
+  border: 1px solid var(--y);
   border-radius: 6px;
   padding: 32px 24px 24px;
-  box-shadow: 0 0 30px rgba(0, 255, 255, 0.25);
+  box-shadow: 0 0 30px var(--y-glow-25);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -31,7 +31,7 @@
   font-family: var(--font-mono);
   font-size: 1.1rem;
   font-weight: bold;
-  color: var(--color-neon-cyan);
+  color: var(--y);
   letter-spacing: 0.1em;
   margin: 0;
 }
@@ -80,8 +80,8 @@
 
 .input:focus-visible {
   outline: none;
-  border-color: var(--color-neon-cyan);
-  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+  border-color: var(--y);
+  box-shadow: 0 0 8px rgba(255, 229, 62, 0.3);
 }
 
 .meta {
@@ -111,13 +111,13 @@
   font-weight: bold;
   padding: 12px 24px;
   background: transparent;
-  color: var(--color-neon-cyan);
-  border: 2px solid var(--color-neon-cyan);
+  color: var(--y);
+  border: 2px solid var(--y);
   border-radius: 4px;
   cursor: pointer;
   letter-spacing: 0.1em;
   min-height: var(--touch-target);
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+  box-shadow: 0 0 10px rgba(255, 229, 62, 0.2);
   transition:
     background 0.15s ease,
     box-shadow 0.15s ease,
@@ -126,9 +126,9 @@
 
 .confirmBtn:hover:not(:disabled),
 .confirmBtn:focus-visible:not(:disabled) {
-  background: rgba(0, 255, 255, 0.08);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-  outline: 2px solid var(--color-neon-cyan);
+  background: rgba(255, 229, 62, 0.08);
+  box-shadow: 0 0 20px var(--y-glow-50);
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 

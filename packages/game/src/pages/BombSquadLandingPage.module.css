@@ -1,0 +1,474 @@
+/* BombSquad game landing page — Atlas star-chart visual language
+   (design_handoff_bombsquad README §6.1). Mobile single-column stack;
+   desktop (≥900px) two-column card stage. Pixel values ported from
+   prototype/bombsquad/styles.css `.home*`. */
+
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    180deg,
+    var(--bg-1) 0%,
+    var(--bg-2) 38%,
+    var(--bg-3) 72%,
+    var(--bg-4) 100%
+  );
+  color: #fff;
+  font-family: var(--font-body);
+}
+
+/* Content container — full-bleed on mobile, a glass card on desktop. */
+.stage {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* safe-area-inset-* lets the real device status bar pass through
+     (README §12 — no phone status-bar simulation in production). */
+  padding: max(14px, env(safe-area-inset-top)) 24px max(40px, env(safe-area-inset-bottom));
+}
+
+/* ----------  top strip  ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.iconBtn:hover,
+.iconBtn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
+/* ----------  planet hero  ---------- */
+.hero {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.planet {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 18px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: floatHero 5s ease-in-out infinite;
+}
+
+.core {
+  position: relative;
+  z-index: 2;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 229, 62, 0.55), transparent 50%),
+    radial-gradient(circle at 70% 65%, rgba(180, 120, 255, 0.35), transparent 60%),
+    radial-gradient(circle at 50% 50%, #1a1530, #050511 80%);
+  box-shadow:
+    inset -10px -16px 40px rgba(0, 0, 0, 0.6),
+    inset 10px 16px 30px rgba(255, 229, 62, 0.18),
+    0 0 60px var(--y-glow-25);
+}
+
+/* The hero glyph carries a wider 24px halo than Glyph's built-in glow,
+   so it is rendered with glow={false} and the halo set here instead. */
+.heroGlyph {
+  filter: drop-shadow(0 0 24px var(--y-glow-70));
+}
+
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ring1 {
+  width: 200px;
+  height: 200px;
+  transform: rotate(-15deg) skewY(15deg);
+  animation: spin 40s linear infinite;
+}
+
+.ring2 {
+  width: 220px;
+  height: 220px;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.06);
+  transform: rotate(20deg) skewY(-10deg);
+}
+
+.orbitDot {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.dot1 {
+  width: 10px;
+  height: 10px;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--y);
+  box-shadow: 0 0 14px var(--y);
+}
+
+.dot2 {
+  width: 6px;
+  height: 6px;
+  bottom: 22px;
+  right: 30px;
+  background: var(--violet);
+  box-shadow: 0 0 10px var(--violet);
+}
+
+/* ----------  title block  ---------- */
+.title {
+  margin: 0;
+  font: 700 44px var(--font-display);
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.titleAccent {
+  color: var(--y);
+  text-shadow: 0 0 20px var(--y-glow-50);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  padding-left: 0.8em;
+  font: 500 14px var(--font-body);
+  letter-spacing: 0.8em;
+  color: var(--y);
+}
+
+.desc {
+  margin: 16px 0 0;
+  font: 400 13px var(--font-body);
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ----------  right column  ----------
+   `display: contents` keeps the children in the page's flex flow on
+   mobile (no wrapper box); the desktop breakpoint promotes it to a
+   real 2nd column (README §8). */
+.rightCol {
+  display: contents;
+}
+
+/* ----------  daily countdown card  ---------- */
+.daily {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 229, 62, 0.08), rgba(180, 120, 255, 0.04));
+  border: 1px solid rgba(255, 229, 62, 0.18);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dailyLabel {
+  font: 500 10px var(--amio-font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--y);
+}
+
+.countdown {
+  margin-top: 4px;
+  font: 400 26px/1 var(--font-display);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.sep {
+  margin: 0 2px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.dailyRight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+
+.dailyRank {
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dailyRank strong {
+  margin-left: 4px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* ----------  CTAs  ---------- */
+.ctas {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ----------  leaderboard text link  ---------- */
+.lbLink {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font: 500 13px var(--font-body);
+  color: rgba(255, 255, 255, 0.65);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.lbLink:hover,
+.lbLink:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.lbLink:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 3px;
+}
+
+/* ----------  AI-support chips  ---------- */
+.chips {
+  margin-top: auto;
+  padding-top: 14px;
+  font: 400 11px var(--font-body);
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.chips span {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* `floatHero` is BombSquad-specific (the README §6.1 planet drifts 8px,
+   vs. the platform `float` global's 12px); CSS Modules scopes it. */
+@keyframes floatHero {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planet,
+  .ring1 {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — TABLET (≥ 600px): centered single column.
+   ============================================================ */
+@media (min-width: 600px) {
+  .stage {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .home {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  .title {
+    font-size: 56px;
+  }
+
+  .desc {
+    font-size: 15px;
+  }
+
+  .planet {
+    width: 240px;
+    height: 240px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — DESKTOP (≥ 900px): 2-column card stage.
+   ============================================================ */
+@media (min-width: 900px) {
+  .page {
+    padding: 40px 24px;
+  }
+
+  .stage {
+    max-width: 1100px;
+    min-height: calc(100vh - 80px);
+    background: rgba(8, 8, 22, 0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--hairline);
+    border-radius: var(--bs-radius-panel);
+    box-shadow: 0 60px 120px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .home {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'top  top'
+      'hero right';
+    gap: 28px 48px;
+    padding: 28px 48px 60px;
+    align-items: stretch;
+  }
+
+  .top {
+    grid-area: top;
+  }
+
+  .hero {
+    grid-area: hero;
+    align-self: center;
+    text-align: left;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .rightCol {
+    grid-area: right;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .planet {
+    margin: 0 0 28px;
+    width: 240px;
+    height: 240px;
+  }
+
+  .core {
+    width: 160px;
+    height: 160px;
+  }
+
+  .ring1 {
+    width: 220px;
+    height: 220px;
+  }
+
+  .ring2 {
+    width: 240px;
+    height: 240px;
+  }
+
+  .title {
+    font-size: clamp(46px, 6.5vw, 72px);
+    letter-spacing: 0.06em;
+  }
+
+  .subtitle {
+    font-size: 15px;
+  }
+
+  .desc {
+    margin-top: 18px;
+    max-width: 380px;
+    font-size: 15px;
+  }
+
+  .daily {
+    padding: 20px 22px;
+  }
+
+  .countdown {
+    font-size: 32px;
+  }
+
+  .chips {
+    margin-top: 0;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — WIDE DESKTOP (≥ 1280px): larger planet + title.
+   ============================================================ */
+@media (min-width: 1280px) {
+  .planet {
+    width: 320px;
+    height: 320px;
+  }
+
+  .core {
+    width: 200px;
+    height: 200px;
+  }
+
+  .ring1 {
+    width: 280px;
+    height: 280px;
+  }
+
+  .ring2 {
+    width: 320px;
+    height: 320px;
+  }
+
+  .title {
+    font-size: 84px;
+  }
+}

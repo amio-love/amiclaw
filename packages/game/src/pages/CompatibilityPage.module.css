@@ -20,11 +20,11 @@
   font-family: var(--font-mono);
   font-size: clamp(1.6rem, 5vw, 2.2rem);
   font-weight: bold;
-  color: var(--color-neon-cyan);
+  color: var(--y);
   letter-spacing: 0.08em;
   text-shadow:
-    0 0 8px rgba(0, 255, 255, 0.45),
-    0 0 24px rgba(0, 255, 255, 0.2);
+    0 0 8px rgba(255, 229, 62, 0.45),
+    0 0 24px rgba(255, 229, 62, 0.2);
 }
 
 .subtitle {
@@ -58,10 +58,10 @@
 }
 
 /* Verified row earns the neon — only the AI we have actually validated gets
-   the cyan border accent, per DesignSystem "Earn the neon" principle. */
+   the yellow border accent, per DesignSystem "Earn the neon" principle. */
 .toolCard.toolCardVerified {
-  border-left: 2px solid var(--color-neon-cyan);
-  box-shadow: 0 0 12px rgba(0, 255, 255, 0.08);
+  border-left: 2px solid var(--y);
+  box-shadow: 0 0 12px rgba(255, 229, 62, 0.08);
 }
 
 .toolHeader {
@@ -91,8 +91,8 @@
 }
 
 .statusBadge.statusVerified {
-  color: var(--color-neon-cyan);
-  background: rgba(0, 255, 255, 0.08);
+  color: var(--y);
+  background: rgba(255, 229, 62, 0.08);
 }
 
 .statusBadge.statusUntested {
@@ -132,7 +132,7 @@
 .promptBox {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-left: 2px solid var(--color-neon-cyan);
+  border-left: 2px solid var(--y);
   border-radius: 4px;
   padding: 14px 16px;
   display: flex;
@@ -156,8 +156,8 @@
   font-size: 0.8rem;
   padding: 8px 16px;
   background: transparent;
-  color: var(--color-neon-cyan);
-  border: 1px solid var(--color-neon-cyan);
+  color: var(--y);
+  border: 1px solid var(--y);
   border-radius: 3px;
   cursor: pointer;
   letter-spacing: 0.05em;
@@ -167,8 +167,8 @@
 
 .copyBtn:hover,
 .copyBtn:focus-visible {
-  background: rgba(0, 255, 255, 0.08);
-  outline: 2px solid var(--color-neon-cyan);
+  background: rgba(255, 229, 62, 0.08);
+  outline: 2px solid var(--y);
   outline-offset: 2px;
 }
 
@@ -192,7 +192,7 @@
 
 .homeLink:hover,
 .homeLink:focus-visible {
-  color: var(--color-neon-cyan);
+  color: var(--y);
   text-decoration: underline;
 }
 

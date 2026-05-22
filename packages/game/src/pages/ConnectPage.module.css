@@ -1,0 +1,474 @@
+/* Connect-AI flow — Atlas star-chart visual language
+   (design_handoff_bombsquad README §6.2). Three steps swap in place.
+   Pixel values ported from prototype/bombsquad/styles.css `.connect*`. */
+
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    180deg,
+    var(--bg-1) 0%,
+    var(--bg-2) 38%,
+    var(--bg-3) 72%,
+    var(--bg-4) 100%
+  );
+  color: #fff;
+  font-family: var(--font-body);
+}
+
+.stage {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* ----------  header — back arrow + centered mode meta  ---------- */
+.header {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  gap: 12px;
+  align-items: center;
+  padding: max(20px, env(safe-area-inset-top)) 22px 12px;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.iconBtn:hover,
+.iconBtn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
+.headerMeta {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.headerMode {
+  font: 500 12px var(--amio-font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--y);
+}
+
+.headerSub {
+  margin-top: 2px;
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.headerSpacer {
+  width: 36px;
+}
+
+/* ----------  connect body  ---------- */
+.connect {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 24px max(28px, env(safe-area-inset-bottom));
+}
+
+.title {
+  margin: 4px 0 0;
+  font: 400 34px/1.1 var(--font-display);
+  color: #fff;
+}
+
+.titleAccent {
+  color: var(--y);
+  font-style: italic;
+}
+
+/* ----------  player ↔ AI visualization  ---------- */
+.vis {
+  margin: 14px 0;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.visSide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.visLabel {
+  font: 500 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.aiAvatar {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.aiPulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 229, 62, 0.4);
+  pointer-events: none;
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.thread {
+  position: relative;
+  height: 80px;
+}
+
+.thread svg {
+  width: 100%;
+  height: 100%;
+}
+
+.threadDraw {
+  transition: stroke-dashoffset 0.8s ease;
+  filter: drop-shadow(0 0 4px rgba(255, 229, 62, 0.6));
+}
+
+.spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  color: var(--y);
+  text-shadow:
+    0 0 18px var(--y),
+    0 0 38px var(--y-glow-50);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+/* ----------  step action area  ---------- */
+.action {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ----------  copy / voice-mode card  ---------- */
+.copyCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--hairline);
+  font-family: var(--font-body);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copyCard:hover {
+  background: var(--glass-strong);
+  border-color: rgba(255, 229, 62, 0.3);
+}
+
+.copyCard:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
+/* done — the card turns green the moment the link is copied. */
+.copyCardDone,
+.copyCardDone:hover {
+  background: rgba(20, 30, 22, 0.6);
+  border-color: rgba(75, 210, 102, 0.4);
+}
+
+.copyCardText {
+  flex: 1;
+  min-width: 0;
+}
+
+.copyCardLabel {
+  font: 500 11px var(--amio-font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--y);
+}
+
+.copyCardDone .copyCardLabel {
+  color: var(--green);
+}
+
+.copyCardUrl {
+  margin-top: 4px;
+  font: 500 15px var(--amio-font-mono);
+  color: #fff;
+  word-break: break-all;
+}
+
+.copyCardIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 229, 62, 0.12);
+  color: var(--y);
+}
+
+.copyCardDone .copyCardIcon {
+  background: rgba(75, 210, 102, 0.15);
+  color: var(--green);
+}
+
+.hint {
+  margin: 12px 0 0;
+  font: 400 13px/1.55 var(--font-body);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.hintCenter {
+  margin-top: 18px;
+  text-align: center;
+}
+
+/* ----------  compatibility discovery link  ---------- */
+/* Re-homes the /compatibility entry point removed with PromptModal —
+   a subtle text link sitting directly under the step-1 send-to-AI hint. */
+.compatLink {
+  align-self: flex-start;
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  font: 500 13px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.compatLink:hover,
+.compatLink:focus-visible {
+  color: var(--y);
+  outline: none;
+}
+
+.compatLink:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ----------  step 3 — ready pulse  ---------- */
+.readyPulse {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.readyCore {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--y), rgba(255, 229, 62, 0.3) 60%, transparent);
+  box-shadow: 0 0 40px var(--y-glow-50);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.readyRing {
+  position: absolute;
+  border: 1px solid rgba(255, 229, 62, 0.3);
+  border-radius: 50%;
+  animation: ringExpand 3s ease-out infinite;
+}
+
+.readyRing:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.readyRing:nth-child(2) {
+  animation-delay: 1s;
+}
+
+.readyRing:nth-child(3) {
+  animation-delay: 2s;
+}
+
+/* ----------  bottom CTA  ---------- */
+.cta {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* `breathe` and `ringExpand` are BombSquad-specific (not in
+   atlas-animations.css); CSS Modules scopes them to this file. */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
+@keyframes ringExpand {
+  0% {
+    width: 70px;
+    height: 70px;
+    opacity: 1;
+  }
+  100% {
+    width: 200px;
+    height: 200px;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiPulse,
+  .spark,
+  .readyCore,
+  .readyRing {
+    animation: none;
+  }
+
+  .threadDraw {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — TABLET (≥ 600px): centered single column.
+   ============================================================ */
+@media (min-width: 600px) {
+  .stage {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .header {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  .connect {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — DESKTOP (≥ 900px): wider card stage.
+   ============================================================ */
+@media (min-width: 900px) {
+  .page {
+    padding: 40px 24px;
+  }
+
+  .stage {
+    max-width: 720px;
+    min-height: calc(100vh - 80px);
+    background: rgba(8, 8, 22, 0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--hairline);
+    border-radius: var(--bs-radius-panel);
+    box-shadow: 0 60px 120px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .header {
+    padding: 28px 40px 18px;
+  }
+
+  .connect {
+    gap: 22px;
+    padding: 12px 48px 40px;
+  }
+
+  .title {
+    font-size: 44px;
+  }
+
+  .vis {
+    margin: 22px 0;
+  }
+
+  .thread {
+    height: 100px;
+  }
+
+  .spark {
+    font-size: 28px;
+  }
+
+  .copyCard {
+    padding: 22px 26px;
+  }
+
+  .copyCardUrl {
+    font-size: 17px;
+  }
+
+  .readyPulse {
+    width: 260px;
+    height: 260px;
+  }
+
+  .readyCore {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* The rings expand to the larger desktop pulse footprint. */
+  @keyframes ringExpand {
+    0% {
+      width: 80px;
+      height: 80px;
+      opacity: 1;
+    }
+    100% {
+      width: 260px;
+      height: 260px;
+      opacity: 0;
+    }
+  }
+}

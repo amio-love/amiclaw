@@ -1,14 +1,16 @@
-/** BombSquad game-flow steps — prompt modal, HUD, module solving, failure. */
+/** BombSquad game-flow steps — connect-AI flow, HUD, module solving, failure. */
 import { expect, type Locator } from '@playwright/test'
 import { Given, When, Then } from './fixtures'
 import type { ModuleKind } from './fixtures'
 
 const SCENE_BAR = '[aria-label="场景信息栏"]'
+// Atlas redesign module display names — 线路→光弦, 密码盘→星盘, 键盘→星符;
+// the button module keeps 按钮. The internal ModuleKind ids are unchanged.
 const MODULE_LABEL: Record<string, ModuleKind> = {
-  线路: 'wire',
-  密码盘: 'dial',
+  光弦: 'wire',
+  星盘: 'dial',
   按钮: 'button',
-  键盘: 'keypad',
+  星符: 'keypad',
 }
 
 function mmssToSeconds(text: string): number {
@@ -21,56 +23,52 @@ function sceneValue(page: import('@playwright/test').Page, index: number): Locat
   return page.locator(`${SCENE_BAR} [class*="value"]`).nth(index)
 }
 
-// --- Prompt modal entry ------------------------------------------------------
+// --- Connect-AI flow entry ---------------------------------------------------
 
-When('I click a daily-challenge CTA', async ({ world }) => {
-  await world.openDailyModal()
+When('I enter the daily challenge from the homepage', async ({ world }) => {
+  await world.enterConnect('daily')
 })
 
-When('I click the featured BombSquad "练习" CTA', async ({ world }) => {
-  await world.openPracticeModal()
+When('I enter practice mode from the homepage', async ({ world }) => {
+  await world.enterConnect('practice')
 })
 
-Then('a prompt modal opens with the daily manual URL', async ({ page }) => {
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByText(/\/manual\//)).toBeVisible()
+Then('the connect-AI flow opens at step 1', async ({ page }) => {
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/connect')
+  await expect(page.getByText('第 1/3 步').first()).toBeVisible()
 })
 
-Then('the prompt modal opens with the practice manual URL', async ({ page }) => {
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByText(/\/manual\/practice/)).toBeVisible()
+Then('the copy card shows the daily manual URL', async ({ page }) => {
+  await expect(page.locator('[class*="copyCardUrl"]').first()).toContainText(/\/manual\//)
 })
 
-Then('a prompt modal opens for practice mode', async ({ page }) => {
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('练习 Prompt')).toBeVisible()
+Then('the copy card shows the practice manual URL', async ({ page }) => {
+  await expect(page.locator('[class*="copyCardUrl"]').first()).toContainText('/manual/practice')
 })
 
-Then('the modal stays within the viewport without horizontal overflow', async ({ page }) => {
-  const box = await page.getByRole('dialog').boundingBox()
-  const width = page.viewportSize()?.width ?? 0
-  expect(box).not.toBeNull()
-  if (box) {
-    expect(box.x).toBeGreaterThanOrEqual(-1)
-    expect(box.x + box.width).toBeLessThanOrEqual(width + 1)
-  }
+Then('the connect screen has no horizontal overflow', async ({ page }) => {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth
   )
   expect(overflow).toBeLessThanOrEqual(1)
 })
 
-When('I confirm the modal with "确认开始游戏"', async ({ world }) => {
-  await world.confirmModal()
+When('I copy the manual link', async ({ world }) => {
+  await world.copyManualLink()
+})
+
+When('I finish the connect-AI flow', async ({ world }) => {
+  await world.finishConnectFlow()
+})
+
+When('I complete the connect-AI flow', async ({ world }) => {
+  await world.runConnectFlow()
 })
 
 // --- Game HUD ----------------------------------------------------------------
 
 Then('the immersive game flow renders without the platform shell', async ({ page }) => {
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
   await expect(page.getByRole('navigation', { name: '主导航' })).toHaveCount(0)
 })
 
@@ -171,25 +169,22 @@ Then('the module progress bar shows exactly {int} segments', async ({ page }, co
 
 // --- Module solving ----------------------------------------------------------
 
-When(/^I solve the (线路|密码盘|按钮|键盘) module correctly$/, async ({ world }, label: string) => {
+When(/^I solve the (光弦|星盘|按钮|星符) module correctly$/, async ({ world }, label: string) => {
   await world.solveModule(MODULE_LABEL[label])
 })
 
 Then(
-  /^the module progress bar advances to the (线路|密码盘|按钮|键盘) module$/,
+  /^the module progress bar advances to the (光弦|星盘|按钮|星符) module$/,
   async ({ page }, label: string) => {
-    await expect(page.getByText(label, { exact: true })).toBeVisible()
+    // The active module's name is shown in the GamePage module-label eyebrow
+    // ("模块 2/4 · 星盘"); assert the eyebrow now carries the expected name.
+    await expect(page.getByText(`· ${label}`).first()).toBeVisible()
   }
 )
 
 Then('the result page shows the heading {string}', async ({ page }, text: string) => {
   await page.waitForURL(/\/result/, { timeout: 10_000 })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(text)
-})
-
-Then('the run is recorded as a successful completion', async ({ page }) => {
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/result')
-  await expect(page.getByRole('heading', { name: '练习完成' })).toBeVisible()
 })
 
 // --- Failure paths -----------------------------------------------------------
@@ -229,7 +224,7 @@ Then('a red error pulse plays over the module panel', async ({ page }) => {
 Then('no strike is counted and the run does not fail', async ({ page }) => {
   await expect(page.getByTestId('strike-pip')).toHaveCount(0)
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
 })
 
 Then('I can immediately retry the same puzzle in place', async ({ page }) => {
@@ -250,12 +245,12 @@ Then('the current module is not reset — the same puzzle stays on screen', asyn
 
 Then('the run continues in the PLAYING state', async ({ page }) => {
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
 })
 
 Then('the run still continues', async ({ page }) => {
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
 })
 
 When('the countdown timer reaches 00:00', async ({ world }) => {
@@ -292,10 +287,6 @@ Then('no nickname modal appears', async ({ page }) => {
 
 Then('no score is submitted to the leaderboard', async ({ world }) => {
   expect(world.leaderboard.submissions).toHaveLength(0)
-})
-
-Then('it shows how many modules were completed this run', async ({ page }) => {
-  await expect(page.getByText(/本次完成 \d+ 个模块/)).toBeVisible()
 })
 
 Then('the "再来一局" action is available', async ({ page }) => {

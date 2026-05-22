@@ -98,8 +98,8 @@ describe('ResultPage outcome branches', () => {
       })
     )
 
-    expect(screen.getByRole('heading', { name: '拆弹失败' })).toBeInTheDocument()
-    expect(screen.getByText('累计 3 次失误 —— 炸弹引爆')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
+    expect(screen.getByText(/三次失误就到这了/)).toBeInTheDocument()
     expect(screen.queryByText(/全球排名/)).not.toBeInTheDocument()
     expect(submitScore).not.toHaveBeenCalled()
   })
@@ -114,20 +114,20 @@ describe('ResultPage outcome branches', () => {
       })
     )
 
-    expect(screen.getByRole('heading', { name: '拆弹失败' })).toBeInTheDocument()
-    expect(screen.getByText('时间耗尽 —— 炸弹引爆')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
+    expect(screen.getByText(/时间走得比想象中快/)).toBeInTheDocument()
   })
 
   it('exploded with zero solved modules: still a failure page, not "暂无数据"', () => {
     renderResult(finishedState({ mode: 'daily', outcome: 'exploded', strikeCount: 3 }))
 
-    expect(screen.getByRole('heading', { name: '拆弹失败' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
     expect(screen.queryByText(/暂无数据/)).not.toBeInTheDocument()
-    // No module-times table when nothing was solved.
-    expect(screen.queryByText('模块用时')).not.toBeInTheDocument()
+    // No breakdown table when nothing was solved.
+    expect(screen.queryByText('本局回顾')).not.toBeInTheDocument()
   })
 
-  it('practice-timeout: neutral end page with module count, no failure framing', () => {
+  it('practice-timeout: failure variant, names the stuck module', () => {
     renderResult(
       finishedState({
         mode: 'practice',
@@ -136,12 +136,16 @@ describe('ResultPage outcome branches', () => {
       })
     )
 
-    expect(screen.getByRole('heading', { name: '时间到' })).toBeInTheDocument()
-    expect(screen.getByText('本次完成 1 个模块')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '拆弹失败' })).not.toBeInTheDocument()
+    // practice-timeout maps to the failure variant — gentle 差一点 heading,
+    // the subtitle naming the module the run stopped on (keypad → 星符), and
+    // the this-run review table.
+    expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
+    expect(screen.getByText(/卡在星符/)).toBeInTheDocument()
+    expect(screen.getByText('本局回顾')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '拆弹成功' })).not.toBeInTheDocument()
   })
 
-  it('practice-cleared: neutral success header', () => {
+  it('practice-cleared: success-variant heading', () => {
     renderResult(
       finishedState({
         mode: 'practice',
@@ -153,7 +157,7 @@ describe('ResultPage outcome branches', () => {
       })
     )
 
-    expect(screen.getByRole('heading', { name: '练习完成' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '拆弹成功' })).toBeInTheDocument()
     expect(submitScore).not.toHaveBeenCalled()
   })
 
@@ -173,7 +177,7 @@ describe('ResultPage outcome branches', () => {
     expect(copySpy).toHaveBeenCalledTimes(1)
     const summary = copySpy.mock.calls[0][0] as string
     expect(summary).toContain('结果：失败 💥')
-    expect(summary).toContain('1. 线路模块')
+    expect(summary).toContain('1. 光弦模块')
     expect(summary).toContain('1 次失误')
     copySpy.mockRestore()
   })

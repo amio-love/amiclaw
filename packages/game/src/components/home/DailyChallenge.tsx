@@ -4,7 +4,7 @@ import { useDailyCountdown } from '@/hooks/useDailyCountdown'
 import styles from './DailyChallenge.module.css'
 
 interface DailyChallengeProps {
-  /* Opens the daily-challenge PromptModal — the「立即挑战」CTA. */
+  /* Routes to the BombSquad landing page (/game) — the「立即挑战」CTA. */
   onChallenge: () => void
 }
 

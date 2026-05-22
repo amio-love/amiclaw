@@ -1,19 +1,23 @@
+/* Scene info HUD row — Atlas star-chart visual language: a glass
+   bar carrying the puzzle-global variables the player reads to
+   their AI partner. */
 .bar {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
+  padding: 10px 14px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  font: 400 0.85rem var(--font-body);
 }
 
 .field {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   /* min-width: 0 lets the value shrink past the intrinsic content size, so a
      long tongue-twister phrase wraps inside the field instead of forcing the
      whole HUD row to overflow on a 370 px viewport. */
@@ -26,7 +30,7 @@
    draws each field as a visibly separate, separately-labelled segment. */
 .field + .field {
   padding-left: 12px;
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--hairline);
 }
 
 /* Indicator chips wrap as a group beneath their shared "指示灯：" label so a
@@ -36,14 +40,17 @@
 }
 
 .label {
-  color: var(--color-text-muted);
+  font: 500 0.7rem var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   /* Keep the label glued to its value on one line — only the phrase wraps. */
   flex-shrink: 0;
 }
 
 .value {
-  color: var(--color-text-primary);
-  font-weight: bold;
+  color: #fff;
+  font-weight: 600;
   /* 14px floor: the 暗号 phrase is read aloud to the AI partner, so it must
      stay legible — lifted off the bar's 0.85rem inherited size. */
   font-size: 0.875rem;
@@ -54,20 +61,20 @@
 }
 
 .indicator {
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 0.75rem;
-  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font: 600 0.72rem var(--amio-font-mono);
   letter-spacing: 0.05em;
 }
 
 .lit {
-  background: var(--color-neon-cyan);
-  color: #000;
-  box-shadow: 0 0 6px var(--color-neon-cyan);
+  background: var(--y);
+  color: #050511;
+  box-shadow: 0 0 8px var(--y-glow-50);
 }
 
 .unlit {
-  background: var(--color-border);
-  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--soft);
+  border: 1px solid var(--hairline);
 }

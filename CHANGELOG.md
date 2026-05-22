@@ -16,6 +16,43 @@ straight from the homepage CTAs.
 
 ### Changed
 
+- **BombSquad landing and connect screens get the Atlas look** Entering
+  BombSquad from the homepage now opens BombSquad's own landing page in the
+  「星图 / Atlas」cosmic style — a floating planet hero, the BOMBSQUAD
+  wordmark, a live daily-reset countdown, and separate 每日挑战 / 练习 CTAs.
+  Picking a mode opens a three-step connect-AI flow — copy the manual link,
+  switch the AI to voice mode, then a breathing "ready" pulse — that replaces
+  the old single copy-prompt modal before handing off to the run. The
+  platform homepage's BombSquad CTAs route to this landing page instead of
+  straight into a run; the daily / practice choice and the manual-link
+  handoff to the AI partner are unchanged in substance. The connect flow's
+  first step also carries forward the discovery link to the voice-AI
+  compatibility guide that the old modal held, so players unsure which AI to
+  use can still reach the supported-tools page.
+- **BombSquad in-run screens get the Atlas look** The four puzzle modules and
+  the screen around them — timer, module label, scene info, and progress — are
+  reskinned from the old terminal aesthetic to the「星图 / Atlas」cosmic visual
+  language: a deep-space gradient, glass panels, glowing glyphs, and the
+  AMIO-yellow accent. The dial becomes a row of glowing astrolabes, the wires
+  become glowing light strings, and the keypad becomes a tappable
+  constellation; the modules are renamed 星盘 / 光弦 / 星符 to match. Puzzle
+  rules, timing, and difficulty are untouched — only the presentation changes.
+- **BombSquad result screens get the Atlas look** The end-of-run screens are
+  rebuilt in the「星图 / Atlas」cosmic visual language to match the rest of the
+  game. A cleared run shows a green star-burst, a 拆弹成功 banner, the run
+  time, global ranking, and a per-module breakdown; a run that fell short
+  shows a rose ripple, a gentler 差一点 banner (replacing the old 拆弹失败 /
+  时间到 wording), an AI consolation note, and a this-run review that marks
+  where the run stopped. The four puzzles read by their Atlas names
+  (光弦 / 星盘 / 按钮 / 星符) on the result page and in the copyable recap. The
+  copyable plain-text summary and the replay flow are unchanged.
+- **BombSquad redesign accessibility pass** The reskinned BombSquad screens
+  get a keyboard and focus polish. Every control — dial knobs, light
+  strings, constellation stars, the press-and-hold button, and all CTAs —
+  is now fully operable from the keyboard and shows a clear yellow focus
+  ring when tabbed to. The game landing screen's top-right control now uses
+  an exit icon instead of a settings gear, so it matches what it does:
+  leaving the game for the AmiClaw homepage.
 - **Daily challenge now has real stakes** The daily timer counts down from a
   10-minute budget, and a wrong answer finally costs something: three
   mistakes across the run — or letting the countdown hit zero — detonate the
@@ -42,6 +79,14 @@ straight from the homepage CTAs.
 
 ### Added
 
+- **BombSquad gets its own landing page and a connect-AI on-ramp** Choosing
+  BombSquad from the homepage no longer drops straight into a run. It now
+  opens a dedicated BombSquad landing — a glowing planet hero, a live
+  daily-reset countdown, and 每日挑战 / 练习 CTAs — followed by a three-step
+  「对接 AI」flow that walks the player through copying the manual link to
+  their AI, switching it to voice mode, and a breathing "ready" beat before
+  the run begins. Both screens are built in the「星图 / Atlas」cosmic visual
+  language.
 - **PR preview deployments** Every pull request against `main` now builds
   the site and deploys it to a Cloudflare Pages preview, then posts the
   preview URL back to the PR as a single sticky comment that updates in
@@ -241,6 +286,16 @@ straight from the homepage CTAs.
 
 ### Fixed
 
+- **Atlas-consistency leftovers from the BombSquad redesign** A small
+  cleanup pass clears the last traces of the old terminal look downstream
+  of the redesign. The community feed's two sample run-result cards now
+  read 拆弹成功 / 差一点 to match the result screens, in place of the retired
+  DEFUSED / EXPLODED wording. The AI-compatibility page's "返回 BombSquad
+  首页" link now actually lands on the BombSquad landing page instead of the
+  AmiClaw platform homepage, so the link text and where it goes finally
+  agree. The nickname dialog and the AI-compatibility page also switch from
+  the retired CRT-cyan accent to the AMIO-yellow brand accent, so every
+  screen shares one palette.
 - **Mobile beta-flow polish** A pass over the phone experience makes the
   daily beta path easier to use. Small text links and buttons that sat
   below a comfortable finger size — the home page's leaderboard link, the
