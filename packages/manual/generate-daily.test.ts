@@ -8,11 +8,12 @@
  */
 import { afterAll, describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import {
   deriveDailyManual,
+  dumpYaml,
   fnv1a32,
   mulberry32,
   seededShuffle,
@@ -147,7 +148,7 @@ describe('daily generator — deriveDailyManual', () => {
     const m = deriveDailyManual(practice, '2026-05-12') as Manual
     expect(m.modules.symbol_dial.columns.length).toBe(practice.modules.symbol_dial.columns.length)
     for (const col of m.modules.symbol_dial.columns) {
-      expect(col.length).toBe(6)
+      expect(col.length).toBe(5)
     }
   })
 
@@ -218,5 +219,43 @@ describe('daily generator — writeDailyIfChanged idempotency', () => {
     expect(() => writeDailyIfChanged(date, 'new: content\n', dir)).toThrow(/Refusing to overwrite/)
     // File on disk must remain the original — abort, do not overwrite.
     expect(readFileSync(target, 'utf8')).toBe('old: content\n')
+  })
+})
+
+describe('daily generator — committed daily manuals stay in sync (drift guard)', () => {
+  // Drift guard: every committed `data/daily/<date>.yaml` must byte-equal what
+  // the generator emits today. Without this, editing `practice.yaml` without
+  // regenerating the derived daily manuals drifts silently. The comparison
+  // uses the generator's own exported `dumpYaml`, so the guard tracks the
+  // generator's exact serialization config (`lineWidth: -1`) with zero
+  // replication — if those options ever change, the guard follows.
+  const DAILY_DIR = resolve(__dirname, 'data/daily')
+
+  it('every data/daily/*.yaml byte-equals the regenerated output', () => {
+    // Load practice once and reuse across all dates (deriveDailyManual does
+    // not mutate its input — see the test above).
+    const practice = loadPractice()
+    // Enumerate dynamically — the daily set grows over time, so a hardcoded
+    // count would rot. Sorted for a deterministic failure message.
+    const dailyFiles = readdirSync(DAILY_DIR)
+      .filter((f) => f.endsWith('.yaml'))
+      .sort()
+    // An accidental empty glob must not let the guard pass vacuously.
+    expect(dailyFiles.length).toBeGreaterThanOrEqual(1)
+
+    const drifted: string[] = []
+    for (const file of dailyFiles) {
+      const date = file.slice(0, -'.yaml'.length)
+      const committed = readFileSync(join(DAILY_DIR, file), 'utf8')
+      const regenerated = dumpYaml(deriveDailyManual(practice, date))
+      if (committed !== regenerated) drifted.push(date)
+    }
+
+    // Surface every drifted date at once, not just the first mismatch.
+    const regenCmd = 'node scripts/generate-daily-from-practice.mjs'
+    expect(
+      drifted,
+      `${drifted.length} daily manual(s) no longer match the generator — regenerate with \`${regenCmd}\`: ${drifted.join(', ')}`
+    ).toEqual([])
   })
 })

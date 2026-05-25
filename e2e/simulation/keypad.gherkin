@@ -2,14 +2,13 @@
 #
 # The keypad module displays 4 symbols in a 2x2 grid. The player describes all
 # four symbols; the assistant finds the sequence in the manual that contains all
-# four and tells the player to press them in the sequence's order. The known
-# structural risk: the symbol pool is shared across all sequences, so a given
-# 4-symbol subset may appear in multiple sequences — the assistant must verify
-# uniqueness or flag ambiguity rather than defaulting to the first match.
-# Failure modes this scenario can surface: subset ambiguity across sequences
-# (the original BLOCKER documented in the 2026-05-13 report), symbol-naming
-# confusion between visually similar glyphs, and incorrect press order if the
-# assistant reads the sequence index wrong.
+# four and tells the player to press them in the sequence's order. The keypad
+# sequences are built so any two share at most 3 symbols, so a 4-symbol subset
+# belongs to exactly one sequence — the assistant always resolves a unique
+# match (the 2026-05-13 BLOCKER, where every 4-symbol subset matched all 6
+# sequences over one shared alphabet, is fixed). Failure modes this scenario
+# can surface: symbol-naming confusion between visually similar glyphs, and
+# incorrect press order if the assistant reads the sequence index wrong.
 #
 # Runs in practice mode for clean isolation.
 
@@ -17,7 +16,7 @@ Feature: Keypad module collaboration
   As a BombSquad player who can only see the screen
   And an AI assistant who can only read the manual
   I want us to defuse the keypad module together through a message channel
-  So that the correct press sequence is identified even when the symbol subset is ambiguous
+  So that the correct press sequence is identified from the unique matching sequence
 
   Background:
     Given the coordinator has spawned player-agent and assistant-agent
@@ -38,16 +37,15 @@ Feature: Keypad module collaboration
     When the assistant receives the symbol descriptions
     Then the assistant maps the player's visual descriptions to canonical symbol names
     And the assistant checks ALL sequences in the manual — not just the first match
-    And the assistant determines how many sequences contain the reported four-symbol subset
-    And if only one sequence matches the assistant extracts the press order from that sequence
-    And if multiple sequences match the assistant either flags the ambiguity or uses a tiebreaker strategy
+    And exactly one sequence contains the reported four-symbol subset
+    And the assistant extracts the press order from that unique sequence
+    And a subset matching zero or several sequences never occurs — the set-discrimination invariant guarantees a single match
 
     When the assistant sends the press-order instruction to the player
     Then the instruction names the four symbols in the order they should be pressed
     And the player presses each symbol in the instructed order
 
     Then the keypad module is defused
-    And the coordinator records whether the four-symbol subset matched multiple sequences
-    And the coordinator records the assistant's resolution strategy if ambiguity was encountered
+    And the coordinator records that the four-symbol subset matched exactly one sequence
     And the coordinator records the number of communication rounds
     And the coordinator records the in-game time spent on this module

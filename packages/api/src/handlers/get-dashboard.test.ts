@@ -311,4 +311,56 @@ describe('handleGetDashboard', () => {
     const res = await handleGetDashboard(makeRequest('?token=AAAAAAAA'), kv, 'BBBBBBBB')
     expect(res.status).toBe(401)
   })
+
+  it('renders a survey responses section listing each device answers', async () => {
+    const store = {
+      'events:2026-05-22:game_start': { count: 5 },
+      // The `survey_submit` counter is a known-but-undisplayed suffix — it
+      // must not break or appear in the main metrics table.
+      'events:2026-05-22:survey_submit': { count: 2 },
+      'events:2026-05-22:survey:aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee': {
+        ai_tool: 'claude',
+        fun: 5,
+        difficulty: 'just-right',
+        ai_issue: 'voice lag near the end',
+      },
+      'events:2026-05-22:survey:bbbbbbbb-cccc-4ddd-9eee-ffffffffffff': {
+        ai_tool: 'chatgpt',
+        fun: 3,
+        difficulty: 'too-hard',
+      },
+    }
+    const kv = makeKv(store)
+    const res = await handleGetDashboard(makeRequest('?token=t'), kv, 't')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+
+    // The survey section heading reports the response count.
+    expect(html).toContain('Survey Responses (2)')
+
+    // Both devices' answers are rendered.
+    expect(html).toContain('claude')
+    expect(html).toContain('just-right')
+    expect(html).toContain('voice lag near the end')
+    expect(html).toContain('chatgpt')
+    expect(html).toContain('too-hard')
+
+    // The optional ai_issue is absent for the second device — renders em dash.
+    expect(html).toContain('—')
+
+    // The main metrics table is unaffected: game_start still renders 5.
+    expect(html).toContain('<td class="num">5</td>')
+  })
+
+  it('shows the empty-state survey message when no survey keys exist', async () => {
+    const store = {
+      'events:2026-05-22:game_start': { count: 3 },
+    }
+    const kv = makeKv(store)
+    const res = await handleGetDashboard(makeRequest('?token=t'), kv, 't')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('Survey Responses (0)')
+    expect(html).toContain('No survey responses yet')
+  })
 })

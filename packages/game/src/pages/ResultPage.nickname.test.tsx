@@ -2,9 +2,9 @@
  * ResultPage nickname-gate integration tests.
  *
  * Covers the three branches of the daily-mode submission flow:
- *   1. First-visit daily run, localStorage empty → NicknameModal renders, the
- *      score is NOT submitted, and submission only fires after the player
- *      types a valid nickname and confirms.
+ *   1. First-visit daily run, localStorage empty → PostGameModal renders the
+ *      nickname section, the score is NOT submitted, and submission only fires
+ *      after the player types a valid nickname and confirms.
  *   2. Returning daily run, localStorage already has a nickname → no modal,
  *      the score is submitted immediately with the cached nickname.
  *   3. Practice mode → no modal, no submit (practice never posts a score).
@@ -34,6 +34,16 @@ vi.mock('@/utils/leaderboard-api', () => ({
 // so we don't need a global fetch stub and the tests stay focused on submit.
 vi.mock('@/utils/event-log', () => ({
   logEvent: vi.fn(),
+}))
+
+// The post-game modal now also carries a once-per-device survey section.
+// These tests exercise only the nickname gate, so pin the survey as already
+// answered — otherwise the survey section would render alongside the nickname
+// section and the confirm button would gate on the survey too. The merged
+// nickname+survey path has its own coverage in `ResultPage.survey.test.tsx`.
+vi.mock('@/utils/survey', () => ({
+  hasAnsweredSurvey: () => true,
+  markSurveyAnswered: vi.fn(),
 }))
 
 import ResultPage from './ResultPage'

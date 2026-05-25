@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import NicknameModal from '@/components/NicknameModal'
+import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import Scenery from '@/components/platform/Scenery'
 import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
@@ -14,6 +14,7 @@ import { submitScore } from '@/utils/leaderboard-api'
 import { saveOptimisticEntry } from '@/utils/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
 import { buildRetroQuestions } from '@/utils/retro-questions'
+import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
@@ -109,14 +110,24 @@ export default function ResultPage() {
   // useState calls reuse the captured value so the three pieces of mount
   // state stay consistent without triple-reading localStorage.
   const [nickname, setNickname] = useState<string | null>(() => getStoredNickname())
-  const [nicknameModalOpen, setNicknameModalOpen] = useState(
-    () => hasFinishedDailyRun && nickname === null
-  )
+
+  // The unified post-game modal composes two optional sections. The nickname
+  // section is the existing daily-leaderboard gate; the survey section is
+  // shown once per device after any outcome. The modal opens when either is
+  // needed — never as two stacked dialogs. Both `need*` flags are captured
+  // once on mount; the modal closes on confirm/skip rather than re-deriving.
+  const [needNickname] = useState(() => hasFinishedDailyRun && nickname === null)
+  const [needSurvey] = useState(() => !hasAnsweredSurvey())
+  const [modalOpen, setModalOpen] = useState(() => needNickname || needSurvey)
   // Initialize submitting=true only when the effect below will actually fire a
   // request, so we avoid a synchronous setState in the effect body
   // (react-hooks/set-state-in-effect). First-visit daily runs wait for the
   // modal confirmation before flipping submitting=true.
   const [submitting, setSubmitting] = useState(() => hasFinishedDailyRun && nickname !== null)
+
+  // The daily score is still gated on the nickname while the modal is open
+  // with the nickname section present.
+  const nicknamePending = needNickname && modalOpen
 
   const buildSubmission = useCallback(
     (nicknameValue: string): ScoreSubmission | null => {
@@ -191,15 +202,36 @@ export default function ResultPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleNicknameConfirm = useCallback(
-    (value: string) => {
-      setNickname(value)
-      setNicknameModalOpen(false)
-      setSubmitting(true)
-      performSubmission(value)
+  // Unified confirm handler. Runs the nickname-confirm path when the nickname
+  // section was present, and emits `survey_submit` only when the survey was
+  // actually completed. Whenever the survey section was shown, the device is
+  // marked answered on confirm — a confirm-past with no answers still retires
+  // the survey so it never reappears.
+  const handleModalConfirm = useCallback(
+    (result: PostGameModalResult) => {
+      if (result.nickname !== undefined) {
+        setNickname(result.nickname)
+        setSubmitting(true)
+        performSubmission(result.nickname)
+      }
+      if (result.survey !== undefined) {
+        logEvent('survey_submit', { ...result.survey })
+      }
+      if (needSurvey) {
+        markSurveyAnswered()
+      }
+      setModalOpen(false)
     },
-    [performSubmission]
+    [performSubmission, needSurvey]
   )
+
+  // Survey-only dismissal. The device is marked answered so the survey does
+  // not reappear, but no `survey_submit` event fires — a skip is not a
+  // response.
+  const handleModalSkip = useCallback(() => {
+    markSurveyAnswered()
+    setModalOpen(false)
+  }, [])
 
   const handleRetrySubmit = useCallback(() => {
     if (nickname === null) return
@@ -362,9 +394,9 @@ ${retroQuestions}`
               ) : (
                 <div className={styles.rankCell}>
                   <div className={styles.rankPending}>
-                    {nicknameModalOpen && '提交前请填写昵称'}
-                    {!nicknameModalOpen && submitting && '提交成绩中…'}
-                    {!nicknameModalOpen &&
+                    {nicknamePending && '提交前请填写昵称'}
+                    {!nicknamePending && submitting && '提交成绩中…'}
+                    {!nicknamePending &&
                       !submitting &&
                       submitFailed &&
                       (retried ? (
@@ -459,7 +491,13 @@ ${retroQuestions}`
         </div>
       </div>
 
-      <NicknameModal open={nicknameModalOpen} onConfirm={handleNicknameConfirm} />
+      <PostGameModal
+        open={modalOpen}
+        showNickname={needNickname}
+        showSurvey={needSurvey}
+        onConfirm={handleModalConfirm}
+        onSkip={handleModalSkip}
+      />
     </main>
   )
 }

@@ -44,6 +44,18 @@ interface DailyMetrics {
   unique_completes: number
 }
 
+// One endgame-survey response, read back from an `events:{date}:survey:{device_id}`
+// KV key. Field values are extracted defensively (see `toSurveyRow`) — the
+// survey payload is user-supplied and only structurally validated at ingestion.
+interface SurveyRow {
+  date: string
+  device_id: string
+  ai_tool: string
+  fun: number | null
+  difficulty: string
+  ai_issue: string
+}
+
 export async function handleGetDashboard(
   request: Request,
   kv: KVNamespace,
@@ -63,10 +75,21 @@ export async function handleGetDashboard(
 
   // Aggregate by date.
   const byDate = new Map<string, DailyMetrics>()
+  // Survey-response keys (`events:{date}:survey:{device_id}`) are collected
+  // here and read back after the metrics loop — they are not daily counters.
+  const surveyKeyRefs: { key: string; date: string; device_id: string }[] = []
   for (const key of keys) {
     const parsed = parseEventKey(key)
     if (!parsed) continue
     const { date, suffix } = parsed
+
+    // Survey responses are not daily-metric counters; collect them separately
+    // and skip before `ensureDate` so they never create empty metric rows.
+    if (suffix.startsWith('survey:')) {
+      surveyKeyRefs.push({ key, date, device_id: suffix.slice('survey:'.length) })
+      continue
+    }
+
     const metrics = ensureDate(byDate, date)
 
     if (suffix === 'unique_starts' || suffix === 'unique_completes') {
@@ -78,11 +101,24 @@ export async function handleGetDashboard(
       const count = typeof value?.count === 'number' ? value.count : 0
       metrics[suffix] = count
     }
-    // Unknown suffixes are silently skipped — defence against schema drift.
+    // Unknown suffixes (e.g. the `survey_submit` counter) are silently
+    // skipped — defence against schema drift.
   }
 
+  // Read each survey response back. One KV value per device per day.
+  const surveyRows: SurveyRow[] = []
+  for (const ref of surveyKeyRefs) {
+    const raw = await kv.get(ref.key, 'json')
+    if (raw === null) continue
+    surveyRows.push(toSurveyRow(ref.date, ref.device_id, raw))
+  }
+  surveyRows.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1
+    return a.device_id < b.device_id ? -1 : 1
+  })
+
   const rows = Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? 1 : -1))
-  const html = renderHtml(rows, keys.length, truncated)
+  const html = renderHtml(rows, surveyRows, keys.length, truncated)
   return new Response(html, {
     status: 200,
     headers: {
@@ -211,7 +247,12 @@ function markerCell(cell: PercentCell): string {
   return `<td class="num"><span class="val">${escapeHtml(cell.display)}</span></td>`
 }
 
-function renderHtml(rows: DailyMetrics[], totalKeys: number, truncated: boolean): string {
+function renderHtml(
+  rows: DailyMetrics[],
+  surveyRows: SurveyRow[],
+  totalKeys: number,
+  truncated: boolean
+): string {
   const generatedAt = new Date().toISOString()
 
   const styles = `
@@ -226,6 +267,7 @@ function renderHtml(rows: DailyMetrics[], totalKeys: number, truncated: boolean)
       line-height: 1.5;
     }
     h1 { font-size: 20px; margin: 0 0 12px; color: #f5f7fa; }
+    h2 { font-size: 15px; margin: 32px 0 8px; color: #f5f7fa; }
     p.meta { color: #9aa1a9; margin: 4px 0; }
     .table-wrap { overflow-x: auto; margin-top: 16px; border-radius: 8px; }
     table {
@@ -251,6 +293,7 @@ function renderHtml(rows: DailyMetrics[], totalKeys: number, truncated: boolean)
     }
     td.num { text-align: right; }
     td.date { font-weight: 600; color: #f5f7fa; }
+    td.wrap { white-space: normal; min-width: 220px; max-width: 380px; }
     .mark { font-weight: 700; margin-left: 4px; }
     .mark.pass { color: #5cd672; }
     .mark.fail { color: #ff6b6b; }
@@ -300,6 +343,7 @@ function renderHtml(rows: DailyMetrics[], totalKeys: number, truncated: boolean)
 <p class="meta">totals row sums per-day unique counts; a device active on multiple days is counted multiple times.</p>
 ${warning}
 ${body}
+${renderSurveySection(surveyRows)}
 <footer>generated ${escapeHtml(generatedAt)} · total keys read: ${totalKeys}</footer>
 </body>
 </html>`
@@ -392,6 +436,56 @@ function renderTable(rows: DailyMetrics[]): string {
 <tbody>
 ${bodyRows}
 ${totalsRow}
+</tbody>
+</table></div>`
+}
+
+function toSurveyRow(date: string, device_id: string, raw: unknown): SurveyRow {
+  // The survey payload is user-supplied and only structurally validated at
+  // ingestion (non-empty object). Each field is type-checked here so a
+  // malformed answer degrades to a blank cell rather than throwing.
+  const data =
+    raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {}
+  return {
+    date,
+    device_id,
+    ai_tool: typeof data.ai_tool === 'string' ? data.ai_tool : '',
+    fun: typeof data.fun === 'number' ? data.fun : null,
+    difficulty: typeof data.difficulty === 'string' ? data.difficulty : '',
+    ai_issue: typeof data.ai_issue === 'string' ? data.ai_issue : '',
+  }
+}
+
+function renderSurveyRow(r: SurveyRow): string {
+  // Every string field is escaped — `ai_tool` / `difficulty` / `ai_issue` are
+  // free-text answers and must not be able to inject markup into the page.
+  const fun = r.fun === null ? '—' : String(r.fun)
+  return `<tr>
+<td class="date">${escapeHtml(r.date)}</td>
+<td>${escapeHtml(r.device_id)}</td>
+<td>${escapeHtml(r.ai_tool || '—')}</td>
+<td>${escapeHtml(fun)}</td>
+<td>${escapeHtml(r.difficulty || '—')}</td>
+<td class="wrap">${escapeHtml(r.ai_issue || '—')}</td>
+</tr>`
+}
+
+function renderSurveySection(rows: SurveyRow[]): string {
+  const heading = `<h2>Survey Responses (${rows.length})</h2>`
+  if (rows.length === 0) {
+    return `${heading}
+<p class="empty">No survey responses yet — no \`events:*:survey:*\` keys found in KV.</p>`
+  }
+  const headers = ['Date', 'Device', 'AI Tool', 'Fun (1-5)', 'Difficulty', 'AI Issue']
+  const headerRow = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')
+  const bodyRows = rows.map(renderSurveyRow).join('\n')
+  return `${heading}
+<div class="table-wrap"><table>
+<thead><tr>${headerRow}</tr></thead>
+<tbody>
+${bodyRows}
 </tbody>
 </table></div>`
 }

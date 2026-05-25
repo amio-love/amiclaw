@@ -79,6 +79,16 @@ straight from the homepage CTAs.
 
 ### Added
 
+- **Endgame survey** After any game ends — win, loss, timeout, practice or
+  daily — the result page now shows a one-time, four-question survey: which AI
+  tool you played with, how fun and how hard the run felt, and an optional
+  free-text note on the biggest problem working with the AI. It rides inside
+  the existing post-game modal instead of stacking a second dialog: on a first
+  daily win the nickname prompt and the survey share one modal. The survey is
+  always optional — it can be skipped, and confirming the merged modal needs
+  only a valid nickname — and it appears just once per device. Answers are
+  POSTed to `/api/events` and surface in the beta data dashboard. Source task
+  `add-amiclaw-endgame-survey`.
 - **BombSquad gets its own landing page and a connect-AI on-ramp** Choosing
   BombSquad from the homepage no longer drops straight into a run. It now
   opens a dedicated BombSquad landing — a glowing planet hero, a live
@@ -190,6 +200,11 @@ straight from the homepage CTAs.
   package alongside the data they test. The game-package test file is back
   to schema-unit only, and root `pnpm test:run` runs both packages via
   `-r run` (CI inherits automatically).
+- **Daily-manual drift guard** Internal refactor — a new test in
+  `packages/manual` fails CI whenever a committed `data/daily/*.yaml` no longer
+  matches what the generator derives from the current `practice.yaml`, so
+  editing the practice rulebook without regenerating the daily manuals can no
+  longer drift silently into production.
 - **Post-refresh guidance** A short banner appears at the top of the game
   page after an accidental F5 / Cmd+R, diagnosing what just happened so the
   player can decide how to re-sync with their AI partner. The copy now
@@ -297,6 +312,16 @@ straight from the homepage CTAs.
 
 ### Fixed
 
+- **Keypad and symbol-dial puzzles are solvable from the manual again**
+  Both modules listed several manual rows — keypad sequences and dial
+  columns — built from one shared symbol set, so the rule "find the row
+  containing all your visible symbols" had no unique answer. An AI
+  partner reading the manual could not tell the player which row to use,
+  and players who drew the keypad or symbol-dial module got stuck. The
+  keypad sequences and symbol-dial columns are rebuilt over a wider
+  symbol pool so any set of visible symbols now matches exactly one row,
+  and all 366 daily manuals are regenerated to match. The modules play
+  exactly as before — only the underlying symbol sets changed.
 - **Atlas-consistency leftovers from the BombSquad redesign** A small
   cleanup pass clears the last traces of the old terminal look downstream
   of the redesign. The community feed's two sample run-result cards now
