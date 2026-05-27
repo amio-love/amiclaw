@@ -1,0 +1,94 @@
+# Regression guards for the fix-bombsquad-cannot-pass-level bundle
+# (task fix-bombsquad-cannot-pass-level, 2026-05-27).
+#
+# This file documents 4 regression scenarios — one per bug fixed in the
+# bundle — over the shipped practice manual, the keypad stylesheet, and the
+# trident symbol SVG. The executable assertions live in the companion node
+# script `e2e/regression/fix-bombsquad-cannot-pass-level.assert.mjs`, run via
+# `node e2e/regression/fix-bombsquad-cannot-pass-level.assert.mjs`. The
+# script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: every
+# assertion here is a pure read of YAML / CSS / TS source — no browser, no
+# preview server. Spinning up the full playwright harness would add minutes
+# of webserver boot per scenario without any added coverage.
+
+Feature: bombsquad-cannot-pass-level regression coverage
+  As an AI partner relying on the bomb manual to talk a player through a defuse
+  I want every per-module rule preamble and symbol description to be unambiguous
+  And the in-game un-tapped symbol stroke to be high-contrast on the star map
+  So that the regressions that left players stuck mid-run do not re-emerge
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+    And the keypad module stylesheet packages/game/src/modules/keypad/KeypadModule.module.css is loaded
+    And the shared SYMBOLS registry at shared/symbols.ts is loaded
+
+  # bug: Bug A — wire_routing manual had no rule preamble, so the AI partner
+  #   could not know that integer `position` is 0-indexed top-down or that
+  #   the rule list is first-match-wins. The AI defaulted to "find any
+  #   matching condition" + 1-indexed positions and produced wrong cut
+  #   instructions.
+  # fix: practice.yaml wire_routing.rule preamble (Chinese, modeled on
+  #   keypad/dial rule strings) declares first-match-wins, 0-indexed
+  #   top-down positions, first ≡ 0, last ≡ length-1, and the
+  #   target.color refinement semantics. Propagates to 366 daily files via
+  #   the seeded shuffle generator. The corresponding solver enforcement
+  #   lives in packages/game/src/modules/wire/solver.ts:resolvePosition.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` + `Wire 下标语义不变量` are removed.
+  Scenario: wire_routing manual declares 0-indexed position + first-match-wins (Bug A)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the wire_routing.rule field
+    Then the field is a non-empty string
+    And it declares 0-indexed position semantics in Chinese
+    And it declares first-match-wins in Chinese
+    And it declares first ≡ 0 and last ≡ length-1 in Chinese
+
+  # bug: Bug B — button manual had no rule preamble. Without a preamble the
+  #   AI partner could not infer first-match-wins; it tried multiple
+  #   matching conditions and gave conflicting "tap" vs "hold and release"
+  #   instructions on the same press.
+  # fix: practice.yaml button.rule preamble (Chinese, modeled on
+  #   keypad/dial rule strings) declares first-match-wins and walks the AI
+  #   through every condition dimension and every action shape.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: button manual declares rule preamble (Bug B)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the button.rule field
+    Then the field is a non-empty string
+    And it declares first-match-wins in Chinese
+    And it explains both tap and hold actions in Chinese
+
+  # bug: Bug C — keypad un-tapped symbol stroke was rgba(255, 255, 255, 0.5)
+  #   on the dark Atlas star map, rendering very dim / low-contrast and
+  #   making symbol naming a guess. Reported in the 2026-05-22 e2e shakedown.
+  # fix: stroke set to var(--color-text-primary) (#e0e0ff at 100%
+  #   opacity), restoring opaque high-contrast bright stroke against the
+  #   dark backdrop while staying inside the Atlas palette.
+  # retire-when: the keypad module CSS is reworked away from
+  #   stroke-on-dark or the design system token name changes.
+  Scenario: keypad un-tapped symbol stroke has sufficient contrast (Bug C)
+    Given the keypad module stylesheet packages/game/src/modules/keypad/KeypadModule.module.css
+    When inspecting the .symbol selector rule for stroke
+    Then stroke must NOT match the literal pattern "rgba(255, 255, 255, 0.5)"
+    And stroke must use var(--color-text-primary) or var(--y) or some non-50%-transparent value
+
+  # bug: Bug D — shared/symbols.ts trident description claimed the two top
+  #   arcs connect "左-中" and "中-右" inner spikes, but the actual SVG
+  #   sweeps the arcs outward from the inner spikes (x=30 / x=70) to the
+  #   outer wings (x=15 / x=85). The AI partner relayed the wrong shape
+  #   description, the player's "saw a fan with outward arcs" did not match,
+  #   and the symbol was misidentified.
+  # fix: description rewritten to describe 5 vertical bars + outward arcs,
+  #   matching what the SVG path actually draws.
+  # retire-when: the trident SVG path itself is redrawn or the symbol is
+  #   removed from the manual-referenced set.
+  Scenario: trident description matches SVG (Bug D)
+    Given shared/symbols.ts SYMBOLS for symbol id "trident"
+    When reading the description field
+    Then the description must NOT claim arcs connect 左-中 and 中-右
+    And the description must mention 外 or 外侧 (OUTER wing semantics)
