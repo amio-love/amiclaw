@@ -1,0 +1,61 @@
+/* TaijiFrame — central Taiji disc with an 8-trigram bagua ring.
+   Default size 240 mirrors home-hero `.yj-taiji-frame` (handoff styles.css).
+   Sibling 2 (motion round) will:
+     · attach a 5s ease-in-out float motion here,
+     · attach a 24s linear spin to the disc, and
+     · attach an 80s linear reverse-spin to the ring. */
+.frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.disc {
+  position: relative;
+  z-index: 3;
+  filter: drop-shadow(0 0 30px rgba(255, 229, 62, 0.28));
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.55);
+  /* transform / radius set inline via CSS custom properties from TaijiFrame.tsx. */
+  transform: translate(-50%, -50%) rotate(var(--tg-angle, 0deg))
+    translateY(calc(-1 * var(--tg-radius, 0px))) rotate(calc(-1 * var(--tg-angle, 0deg)));
+}
+
+.tg.accent {
+  color: var(--y, #ffe53e);
+}
+
+.tgLabel {
+  font: 500 9px var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.14em;
+  color: rgba(255, 229, 62, 0.55);
+  text-transform: uppercase;
+}
+
+/* Placeholder motion hooks — sibling 2 activates these. */
+.frameFloat {
+  /* sibling 2: 5s ease-in-out float */
+}
+.discSpin {
+  /* sibling 2: 24s linear spin */
+}
+.ringReverseSpin {
+  /* sibling 2: 80s linear reverse spin */
+}

@@ -1,0 +1,5 @@
+/* Yao — single line glyph wrapper. Stays block so it lives in the
+   column-reverse stack of Hexagram without baseline misalignment. */
+.yao {
+  display: block;
+}

@@ -1,0 +1,6 @@
+/* Coin 铜钱 — SVG-only render; wrapper is just a layout span so trio
+   gap / hover effects can attach without leaking into the SVG. */
+.coin {
+  display: inline-block;
+  line-height: 0;
+}
