@@ -14,6 +14,16 @@ while a signed-in visitor sees a personal welcome strip in the hero's
 place. The existing BombSquad game flow is unchanged and stays reachable
 straight from the homepage CTAs.
 
+**Yijing Oracle preview** — A first cut of AmiClaw's second game is now
+playable. The session walks you from a taiji-disc home, through picking
+two of six abstract images, through six 3-coin tosses that draw a
+six-line hexagram, into an AI-led cold-reading dialogue, and out to a
+shareable 卦签 card with a vermilion seal. This is a design-review
+preview: the reading runs on a stubbed phase machine rather than a real
+AI partner, voice I/O is not wired up yet, and a tab refresh clears the
+run; a later release adds a real AI partner, voice I/O, and the full
+64-hexagram dataset.
+
 ### Changed
 
 - **BombSquad landing and connect screens get the Atlas look** Entering
