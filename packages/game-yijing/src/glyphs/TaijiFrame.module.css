@@ -49,13 +49,15 @@
   text-transform: uppercase;
 }
 
-/* Placeholder motion hooks — sibling 2 activates these. */
+/* Motion hooks — keyframes `float` and `spin` are global, defined in
+   `@amiclaw/ui/styles/animations.css` (loaded by `main.tsx`).
+   Reduced-motion neutralization is inherited from those keyframes too. */
 .frameFloat {
-  /* sibling 2: 5s ease-in-out float */
+  animation: float 5s ease-in-out infinite;
 }
 .discSpin {
-  /* sibling 2: 24s linear spin */
+  animation: spin 24s linear infinite;
 }
 .ringReverseSpin {
-  /* sibling 2: 80s linear reverse spin */
+  animation: spin 80s linear infinite reverse;
 }

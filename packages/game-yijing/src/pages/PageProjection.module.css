@@ -1,0 +1,191 @@
+/* PageProjection — handoff §6.2. Yellow-border intent card + 3×2 ProjArt
+   grid + 2-pick counter + cleared / confirm CTA row. */
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255, 229, 62, 0.05), transparent 60%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2) 30%, var(--bg-3) 60%, var(--bg-4));
+  overflow-x: hidden;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  padding: 4px 22px 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ───── inline header (back · title · step pill) ───── */
+.header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  color: rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.iconBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 229, 62, 0.3);
+}
+.headerTitle {
+  font: 400 24px var(--font-display);
+  color: #fff;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.headerMeta {
+  text-align: right;
+  line-height: 1.25;
+}
+.headerStep {
+  font: 500 10px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.headerSub {
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 3px;
+}
+
+/* ───── intent + hint ───── */
+.intro {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.intent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse 100% 80% at 0% 0%, rgba(255, 229, 62, 0.1), transparent 60%),
+    rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 229, 62, 0.22);
+  text-align: left;
+}
+.intentLbl {
+  align-self: flex-start;
+  font: 500 10px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 229, 62, 0.1);
+  border: 1px solid rgba(255, 229, 62, 0.3);
+}
+.intentLine {
+  font: 400 18px / 1.55 var(--font-display);
+  color: #fff;
+  margin: 0;
+}
+.intentAccent {
+  color: var(--y);
+  font-style: italic;
+}
+.hint {
+  font: 400 13px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
+/* ───── 3×2 grid ───── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+/* ───── counter + CTA ───── */
+.counter {
+  font: 500 11px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.counterAccent {
+  color: var(--y);
+}
+
+.cta {
+  margin-top: auto;
+  padding-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+.cta > button {
+  padding: 14px 20px;
+  font-size: 14px;
+}
+.cta > button:last-child {
+  flex: 1;
+}
+
+/* ───── desktop ───── */
+@media (min-width: 600px) {
+  .content {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+@media (min-width: 900px) {
+  .content {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+    grid-template-areas:
+      'header header'
+      'intro grid'
+      'intro counter'
+      'intro cta';
+    gap: 22px 48px;
+    padding: 24px 48px 60px;
+    align-items: start;
+  }
+  .header {
+    grid-area: header;
+  }
+  .intro {
+    grid-area: intro;
+    text-align: left;
+  }
+  .grid {
+    grid-area: grid;
+  }
+  .counter {
+    grid-area: counter;
+    text-align: left;
+  }
+  .cta {
+    grid-area: cta;
+  }
+  .intentLine {
+    font-size: 22px;
+  }
+}

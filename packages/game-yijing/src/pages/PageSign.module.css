@@ -1,0 +1,313 @@
+/* PageSign — handoff §6.5. Card body with corner ornaments + judgment +
+   vermilion seal. Desktop two-col with action stack on the right. */
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255, 229, 62, 0.05), transparent 60%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2) 30%, var(--bg-3) 60%, var(--bg-4));
+  overflow-x: hidden;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  padding: 4px 22px 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ───── inline header ───── */
+.header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  color: rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.iconBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 229, 62, 0.3);
+}
+.headerTitle {
+  font: 400 24px var(--font-display);
+  color: #fff;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.headerMeta {
+  text-align: right;
+  line-height: 1.25;
+}
+.headerStep {
+  font: 500 10px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.headerSub {
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 3px;
+}
+
+/* ───── the shareable card ───── */
+.card {
+  position: relative;
+  padding: 32px 26px 26px;
+  border-radius: 26px;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 229, 62, 0.14), transparent 65%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(180, 120, 255, 0.1), transparent 70%),
+    linear-gradient(180deg, #0d0d22 0%, #050511 100%);
+  border: 1px solid rgba(255, 229, 62, 0.28);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  text-align: center;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* corner ornaments (top-left + bottom-right yellow 1px) */
+.card::before,
+.card::after {
+  content: '';
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 229, 62, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+.card::before {
+  top: 12px;
+  left: 12px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 8px;
+}
+.card::after {
+  bottom: 12px;
+  right: 12px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 8px;
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.cardLbl {
+  font: 500 10px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.cardDate {
+  font: 400 13px var(--font-display);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ───── hexagram row ───── */
+.hexRow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  align-items: center;
+  margin: 14px 0 16px;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.colTtl {
+  font: 400 20px var(--font-display);
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+.colRole {
+  font: 500 9px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.colBen .colTtl {
+  color: var(--y);
+}
+.colBian .colTtl {
+  color: var(--yj-yin);
+}
+.hexArrow {
+  font: 400 22px var(--font-display);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ───── judgment ───── */
+.judgment {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 17px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.92);
+  font-style: italic;
+  letter-spacing: 0.08em;
+  margin: 16px 0 18px;
+}
+
+/* ───── divider ───── */
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0 14px;
+  font: 500 9px var(--amio-font-mono);
+  color: rgba(255, 229, 62, 0.7);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 229, 62, 0.25), transparent);
+}
+
+/* ───── insight ───── */
+.insight {
+  font: 400 15px / 1.7 var(--font-body);
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.02em;
+  text-align: left;
+  padding: 0 4px;
+}
+
+/* ───── foot (url + vermilion seal) ───── */
+.foot {
+  margin-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footUrl {
+  font: 500 11px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.1em;
+}
+.seal {
+  width: 56px;
+  height: 56px;
+  background: var(--yj-vermilion);
+  color: #fff;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font:
+    700 14px 'Noto Serif SC',
+    serif;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  transform: rotate(-6deg);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.08) inset,
+    0 4px 12px rgba(194, 69, 58, 0.3);
+  position: relative;
+}
+.seal::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.sealL1 {
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+.sealL2 {
+  font-size: 11px;
+}
+
+/* ───── actions ───── */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+.actions > button {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 14px;
+}
+.textLink {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font: 400 13px var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  padding: 8px 0 0;
+}
+.textLink:hover {
+  color: #fff;
+}
+
+/* ───── desktop ───── */
+@media (min-width: 600px) {
+  .content {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+@media (min-width: 900px) {
+  .content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.55fr);
+    grid-template-areas:
+      'header header'
+      'card actions';
+    gap: 36px 48px;
+    padding: 40px 48px 60px;
+    align-items: start;
+  }
+  .header {
+    grid-area: header;
+  }
+  .card {
+    grid-area: card;
+    padding: 40px 36px 32px;
+  }
+  .actions {
+    grid-area: actions;
+    gap: 10px;
+    align-self: center;
+  }
+}

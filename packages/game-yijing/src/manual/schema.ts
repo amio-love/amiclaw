@@ -29,6 +29,11 @@ export interface ProjectionImage {
   id: string
   url: string
   dimensions: ProjectionDimensions
+  /** Phase-1 only — references one of the six built-in `ProjArt` SVG glyphs
+   *  (`'a'..'f'`) so the renderer can route to the inline component instead
+   *  of fetching `url`. Production data sets `url` to a curated asset path
+   *  and omits this field. */
+  placeholder_ref?: 'a' | 'b' | 'c' | 'd' | 'e' | 'f'
 }
 
 export interface HexagramName {
