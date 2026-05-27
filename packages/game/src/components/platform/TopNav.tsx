@@ -1,6 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import Button from '@/components/ui/Button'
-import ConicAvatar from '@/components/ui/ConicAvatar'
+import { Button, ConicAvatar } from '@amiclaw/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_TABS } from './nav-tabs'
 import styles from './TopNav.module.css'

@@ -1,86 +1,25 @@
 /* ============================================================
-   BombSquad — Atlas-styled Design Tokens
+   BombSquad — Game-specific Layout Radii
    ============================================================
-   BombSquad-specific custom properties for the redesigned game
-   surface (Atlas star-chart visual language). Custom-property
-   declarations ONLY — no base-element rules — so adding this file
-   to the global :root cannot restyle any existing page (a custom
-   property is inert until a var() references it).
+   Residual BombSquad-only custom properties — the two layout radii
+   that the puzzle-panel container (desktop) and game-stage frame
+   (phone) consume. Neither has an Atlas equivalent (Atlas tops out
+   at --radius-3xl: 30px), so they cannot be expressed via the
+   cosmic-shell token layer.
 
-   Loads in main.tsx immediately AFTER atlas-tokens.css, so the
-   var() aliases below resolve against the Atlas tokens.
-
-   Reconciliation with atlas-tokens.css:
-   - Variables whose value Atlas already owns are ALIASED here
-     (--y: var(--amio-yellow)) so the Atlas token stays the single
-     source of truth.
-   - Variables BombSquad needs that Atlas does not provide are
-     declared as literals: the .25 / .50 / .70 yellow glows, the
-     rgba(20,22,36,*) glass surfaces, the .08 hairline, and --rose.
-   - Fonts are NOT redeclared. --font-display / --font-body already
-     exist in atlas-tokens.css with the families BombSquad needs,
-     and the JetBrains Mono family is exposed by Atlas as
-     --amio-font-mono (NOT --font-mono — global.css owns that name
-     with Courier New and loads later). BombSquad component CSS
-     therefore uses --amio-font-mono for monospace text.
+   The wider BombSquad cosmic-shell vocabulary (--y / --y-glow-* /
+   --green / --rose / --violet / --blue / --cyan / --bg-1..4 /
+   --glass / --glass-strong / --hairline / --soft) was lifted to
+   @amiclaw/ui — see packages/ui/src/styles/tokens.css.
 
    Source: design_handoff_bombsquad README §4 +
    prototype/bombsquad/styles.css :root.
    ============================================================ */
 
 :root {
-  /* ----------  BRAND — AMIO YELLOW  ----------
-     --y aliases the Atlas brand yellow; the glow tints are new
-     (Atlas ships .10 / .30 / .60, BombSquad needs .25 / .50 / .70). */
-  --y: var(--amio-yellow);
-  --y-glow-25: rgba(255, 229, 62, 0.25);
-  --y-glow-50: rgba(255, 229, 62, 0.5);
-  --y-glow-70: rgba(255, 229, 62, 0.7);
-
-  /* ----------  SEMANTIC COLORS  ----------
-     green / violet / blue / cyan alias existing Atlas tokens with
-     the identical value; --rose is new — Atlas owns #ff6b9d only as
-     the theme-scoped --t-sakura-accent, not a reusable semantic. */
-  --green: var(--positive);
-  --rose: #ff6b9d;
-  --violet: var(--accent-violet);
-  --blue: var(--accent-blue);
-  --cyan: var(--bs-cyan);
-
-  /* ----------  BACKGROUND GRADIENT LAYERS  ----------
-     Alias the Atlas cosmic gradient stops (identical values). */
-  --bg-1: var(--bg-grad-start);
-  --bg-2: var(--bg-grad-mid-1);
-  --bg-3: var(--bg-grad-mid-2);
-  --bg-4: var(--bg-grad-end);
-
-  /* ----------  SURFACES  ----------
-     New: BombSquad glass uses a cooler rgba(20,22,36,*) tint and a
-     slightly stronger .08 hairline than the Atlas platform glass
-     (--glass-card rgba(41,43,45,.4) / --border-hairline .06).
-     --soft aliases --text-3 (identical rgba(255,255,255,.55)). */
-  --glass: rgba(20, 22, 36, 0.55);
-  --glass-strong: rgba(20, 22, 36, 0.78);
-  --hairline: rgba(255, 255, 255, 0.08);
-  --soft: var(--text-3);
-
-  /* ----------  RADII  ----------
-     The 16 / 20 / 24 / pill steps already exist in atlas-tokens.css
-     as --radius-lg / --radius-xl / --radius-2xl / --radius-pill and
-     are reused directly. Only the two larger BombSquad steps have no
-     Atlas equivalent (--radius-3xl is 30px, not 32):
+  /* ----------  BOMBSQUAD LAYOUT RADII  ----------
        --bs-radius-panel  desktop puzzle-panel container (32px)
        --bs-radius-stage  phone game-stage frame (48px) */
   --bs-radius-panel: 32px;
   --bs-radius-stage: 48px;
-
-  /* ----------  SHADOW / MOTION conventions (no new tokens)  ----------
-     The prototype :root never tokenized these — they are inlined per
-     component. Listed here as the canonical reference for the screen
-     rounds:
-       Glass card     backdrop-filter blur(20px) + 1px var(--hairline)
-       Button hover   0 0 28px var(--y-glow-50)
-       Desktop stage  0 60px 120px rgba(0,0,0,.6)
-       Needle settle  0.4s cubic-bezier(.34,1.56,.64,1)
-       Generic motion reuse Atlas --transition-fast/base/smooth/bounce */
 }

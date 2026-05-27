@@ -1,6 +1,4 @@
-import ConicAvatar from '@/components/ui/ConicAvatar'
-import EyebrowTag from '@/components/ui/EyebrowTag'
-import GlassCard from '@/components/ui/GlassCard'
+import { ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import { communityPosts } from '@/mocks/community'
 import styles from './CommunityPage.module.css'
 

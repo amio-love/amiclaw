@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import Scenery from '@/components/platform/Scenery'
+import { Scenery } from '@amiclaw/ui'
 import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
 import Glyph from '@/components/bombsquad/Glyph'

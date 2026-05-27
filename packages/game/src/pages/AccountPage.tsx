@@ -1,7 +1,4 @@
-import Button from '@/components/ui/Button'
-import ConicAvatar from '@/components/ui/ConicAvatar'
-import EyebrowTag from '@/components/ui/EyebrowTag'
-import GlassCard from '@/components/ui/GlassCard'
+import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import { badges, recentRuns } from '@/mocks/account'
 import { mockUser } from '@/mocks/auth'
 import styles from './AccountPage.module.css'

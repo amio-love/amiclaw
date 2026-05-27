@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
-import ConicAvatar from '@/components/ui/ConicAvatar'
-import GlassCard from '@/components/ui/GlassCard'
-import SectionHeader from '@/components/ui/SectionHeader'
+import { ConicAvatar, GlassCard, SectionHeader } from '@amiclaw/ui'
 import { type FeedItemBody, feedItems } from '@/mocks/community'
 import styles from './CommunityFeedCarousel.module.css'
 

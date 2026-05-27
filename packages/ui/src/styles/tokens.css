@@ -1,13 +1,31 @@
 /* ============================================================
-   Amiclaw Atlas — Design Tokens
+   @amiclaw/ui — Shared Design Tokens
    ============================================================
-   Additive design-token layer for the Atlas platform surface
-   (homepage / leaderboard / community / account). Custom-property
-   declarations ONLY — no base-element rules — so adding this file
-   to the global :root cannot restyle the existing BombSquad game
-   pages (custom properties are inert until a var() references them).
+   Platform-shared design-token foundation for every game inside
+   the amiclaw monorepo. Custom-property declarations ONLY — no
+   base-element rules — so importing this file cannot restyle any
+   consumer's existing pages (a custom property is inert until a
+   var() references it).
+
+   Composition:
+   1. AMIO base palette / typography / spacing / radii / shadows /
+      motion (formerly packages/game/src/styles/atlas-tokens.css).
+   2. Cosmic shell aliases used by the lifted chrome components —
+      Scenery / Button / GlassCard / EyebrowTag / ConicAvatar /
+      Chip / SectionHeader / StatPill (formerly the platform-shared
+      subset of packages/game/src/styles/bombsquad-tokens.css).
+
+   What stays out of this file (consumer-local):
+   - BombSquad-game-specific radii — --bs-radius-panel /
+     --bs-radius-stage (kept in packages/game/src/styles/
+     bombsquad-tokens.css).
+   - BombSquad-game-specific timer / explosion / strike colors
+     (live in their owning component CSS modules).
+   - Yijing-specific palette — --yj-* (lives in
+     packages/game-yijing/src/styles/tokens.css).
 
    Sources: design_handoff_amiclaw_homepage README §4 +
+   design_handoff_bombsquad README §4 +
    prototype/shared/colors_and_type.css.
 
    Naming note: the Atlas JetBrains Mono family is exposed as
@@ -167,4 +185,58 @@
   --t-base: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --t-smooth: 0.4s cubic-bezier(0.19, 1, 0.22, 1);
   --t-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ============================================================
+     COSMIC SHELL ALIASES
+     ============================================================
+     Cross-game cosmic-shell vocabulary. Most aliases resolve to
+     identical Atlas tokens; the .25 / .50 / .70 yellow glows and
+     the rgba(20,22,36,*) glass tints are net-new (the cosmic
+     palette ships .10 / .30 / .60 yellow glows and a warmer glass).
+     ============================================================ */
+
+  /* ----------  BRAND — AMIO YELLOW  ----------
+     --y aliases the Atlas brand yellow; the glow tints are new
+     (Atlas ships .10 / .30 / .60, the cosmic shell needs .25 / .50 / .70). */
+  --y: var(--amio-yellow);
+  --y-glow-25: rgba(255, 229, 62, 0.25);
+  --y-glow-50: rgba(255, 229, 62, 0.5);
+  --y-glow-70: rgba(255, 229, 62, 0.7);
+
+  /* ----------  SEMANTIC COLORS  ----------
+     green / violet / blue / cyan alias existing Atlas tokens with
+     the identical value; --rose is new — Atlas owns #ff6b9d only as
+     the theme-scoped --t-sakura-accent, not a reusable semantic. */
+  --green: var(--positive);
+  --rose: #ff6b9d;
+  --violet: var(--accent-violet);
+  --blue: var(--accent-blue);
+  --cyan: var(--bs-cyan);
+
+  /* ----------  BACKGROUND GRADIENT LAYERS  ----------
+     Alias the Atlas cosmic gradient stops (identical values). */
+  --bg-1: var(--bg-grad-start);
+  --bg-2: var(--bg-grad-mid-1);
+  --bg-3: var(--bg-grad-mid-2);
+  --bg-4: var(--bg-grad-end);
+
+  /* ----------  SURFACES  ----------
+     New: the cosmic shell glass uses a cooler rgba(20,22,36,*) tint
+     and a slightly stronger .08 hairline than the Atlas platform
+     glass (--glass-card rgba(41,43,45,.4) / --border-hairline .06).
+     --soft aliases --text-3 (identical rgba(255,255,255,.55)). */
+  --glass: rgba(20, 22, 36, 0.55);
+  --glass-strong: rgba(20, 22, 36, 0.78);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --soft: var(--text-3);
+
+  /* ----------  SHADOW / MOTION conventions (no new tokens)  ----------
+     The prototype :root never tokenized these — they are inlined per
+     component. Listed here as the canonical reference for cosmic
+     shell consumers:
+       Glass card     backdrop-filter blur(20px) + 1px var(--hairline)
+       Button hover   0 0 28px var(--y-glow-50)
+       Desktop stage  0 60px 120px rgba(0,0,0,.6)
+       Needle settle  0.4s cubic-bezier(.34,1.56,.64,1)
+       Generic motion reuse Atlas --transition-fast/base/smooth/bounce */
 }

@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import Scenery from './Scenery'
+import { Scenery } from '@amiclaw/ui'
 import TopNav from './TopNav'
 import BottomNav from './BottomNav'
 import PlatformFooter from './PlatformFooter'
