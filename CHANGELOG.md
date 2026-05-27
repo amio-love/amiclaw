@@ -312,6 +312,40 @@ straight from the homepage CTAs.
 
 ### Fixed
 
+- **Wire module manual gains a rule preamble** The wire_routing section
+  gains a natural-language `rule:` preamble that spells out
+  first-match-wins, that integer `position` is 0-indexed top-down, the
+  equivalence `first ≡ position 0` and `last ≡ position length-1`, and
+  that the `target.color` field is a stronger color filter rather than
+  a position override. Without the preamble an AI partner could only
+  guess the indexing base and the match order and would sometimes
+  translate "cut the bottom wire" into the wrong position, leading
+  players to cut the wrong wire. The change propagates through the
+  seeded shuffler to all 366 daily manuals.
+- **Button module manual gains a rule preamble** The button section
+  gains a natural-language `rule:` preamble that spells out
+  first-match-wins, the meaning of each condition dimension
+  (color / label / battery_count / indicator_FRK_lit), and what
+  `{ type: 'tap' }` and `{ type: 'hold', release_on_light }` each ask
+  the player to do. Without the preamble an AI partner would give
+  conflicting instructions whenever multiple conditions could match,
+  and the player could not tell whether to tap or hold.
+- **Keypad un-tapped symbol contrast restored** After the 星图 / Atlas
+  redesign the keypad module set un-tapped symbol strokes to 50%
+  transparent white, which was nearly unreadable on the dark
+  constellation backdrop and made players describe symbols incorrectly.
+  The stroke is restored to the fully opaque `var(--color-text-primary)`,
+  bringing back the high-contrast read-the-glyph experience from before
+  Atlas. The tapped-state yellow glow is unchanged.
+- **trident symbol description corrected to match the actual glyph**
+  The trident description in `shared/symbols.ts` previously claimed the
+  two top arcs connect the "left–center" and "center–right" inner
+  spikes, which disagrees with how the SVG is actually drawn — the
+  real glyph has a long center vertical, a medium vertical on each
+  side, and a shorter vertical further out, with top arcs sweeping
+  outward from the inner-spike tops to the outermost short verticals.
+  The rewritten description now matches what the player actually sees.
+
 - **Keypad and symbol-dial puzzles are solvable from the manual again**
   Both modules listed several manual rows — keypad sequences and dial
   columns — built from one shared symbol set, so the rule "find the row
