@@ -147,6 +147,61 @@ describe('manual HTML embedded yaml descriptions match shared/symbols.ts SSOT', 
   })
 })
 
+describe('manual-referenced symbols have Chinese descriptions', () => {
+  // Every symbol id actually referenced by any shipped manual (practice + all
+  // daily) must carry at least one CJK Unified Ideograph in its SYMBOLS
+  // description. The AI partner reads the description to map an abstract
+  // symbol id to a shape vocabulary the player can verbally recognize — an
+  // English-only placeholder description (e.g. "eye shape with a dot in the
+  // center") is unreadable to a Chinese-speaking voice channel and silently
+  // breaks the keypad / symbol_dial loop.
+  //
+  // Currently-unreferenced symbols (eye / lambda / arrow-loop / target /
+  // zigzag) are still allowed to carry English-only descriptions — this guard
+  // only enforces the rule on ids the manual actually injects. It catches the
+  // drift where someone later adds an English-described symbol to a
+  // keypad.sequences or symbol_dial.columns row without translating it first.
+  const CJK_REGEX = /[一-鿿]/
+  const SYMBOL_BY_ID = new Map(SYMBOLS.map((s) => [s.id, s]))
+
+  function loadManual(path: string): Manual {
+    return yaml.load(readFileSync(path, 'utf8')) as Manual
+  }
+
+  function collectAllReferencedIds(): Set<string> {
+    const ids = new Set<string>()
+    const add = (m: Manual): void => {
+      for (const id of collectReferencedSymbols(m.modules)) ids.add(id)
+    }
+    add(loadManual(PRACTICE_YAML))
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      add(loadManual(join(DAILY_DIR, file)))
+    }
+    return ids
+  }
+
+  it('every manual-referenced symbol description contains at least one Chinese character', () => {
+    const referenced = collectAllReferencedIds()
+    const offenders: string[] = []
+    for (const id of referenced) {
+      const sym = SYMBOL_BY_ID.get(id)
+      // Missing-from-registry case is already covered by validateManualSymbols
+      // in the suite above — skip here to keep the failure message focused on
+      // the description-language assertion.
+      if (!sym) continue
+      if (!CJK_REGEX.test(sym.description)) {
+        offenders.push(`${id}: ${JSON.stringify(sym.description)}`)
+      }
+    }
+    expect(
+      offenders,
+      `Symbols referenced by a shipped manual but described in English-only:\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+})
+
 describe('manual set-discrimination invariant', () => {
   // A keypad sequence is solvable from the manual only if any player-visible
   // 4-symbol subset attributes to exactly one sequence. That holds iff any two

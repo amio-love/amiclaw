@@ -3,6 +3,7 @@ meta:
   type: daily
 modules:
   wire_routing:
+    rule: '剪线模块从上到下展示 4 到 5 根彩色电线（颜色可重复）。在下方 rules 里按出现顺序找第一条 condition 与当前局面匹配的规则——first-match-wins，匹配到就停，绝不再尝试后续规则。condition 可能涉及 wire_count（电线数量）、color_at_last（最底端电线颜色）、count_red / count_blue / count_yellow / count_green / count_white / count_black 这类颜色计数、battery_count（电池数量,可用 { gt: N } / { lte: N } 这类比较）、indicator_FRK_lit 这类指示灯状态；空 condition: {} 是 catchall，恒为真，永远是最后一条兜底。target.position 是 0-indexed 自上而下编号：0 = 最上面那根，N-1 = 最底下那根（4 根线时 last = 3，5 根线时 last = 4）；关键字 first 与整数等价：first ≡ position 0；关键字 last 也与整数等价：last ≡ position length-1。如果 target 同时带 color 字段（例如 { position: ''last'', color: ''red'' }），含义是「按 position 方向（first 从顶部出发、last 从底部出发）找第一根该颜色的线」——color 是更强的过滤而不是位置覆盖，找不到该颜色就让 AI 视为本规则不适用、继续下一条。指示玩家时把 0-indexed 翻译成自然语言（position 0 = "从上数第 1 根"，last = "最底下那根"）——玩家不会读 YAML。'
     rules:
       - condition:
           wire_count: 4
@@ -136,6 +137,7 @@ modules:
         - diamond
     rule: 玩家报 3 个轮盘当前显示的符号 S1、S2、S3（都在位置 0）—— 生成器保证这 3 个起始符号互不相同，你可以信任玩家的描述。在下方 columns 里找那条同时包含 S1、S2、S3 的列。6 条列的符号集合两两交集不超过 2 个，因此 3 个起始符号必定恰好命中唯一一条列，不存在歧义。对第 i 个轮盘，目标位置 = S_i 在命中列中的 index（0=最上，4=最下）。指示玩家把每个轮盘从位置 0 按右箭头到达该 index 即可，不要说"让轮盘显示某个符号"——每个轮盘有自己独立的 6 符号池，跨轮盘不通用。
   button:
+    rule: '按钮模块只有一颗按钮，玩家会描述它的 color（red / blue / yellow / white）和上面印的 label（ABORT / DETONATE / HOLD / PRESS 等）。在下方 rules 里按出现顺序找第一条 condition 与当前局面匹配的规则——first-match-wins，匹配到就停，绝不再尝试后续规则。condition 可能涉及 color（按钮颜色）、label（按钮文字）、battery_count（场景中电池数量，可用 { gt: N } / { lte: N } 这类比较）、indicator_FRK_lit 这类指示灯状态；空 condition: {} 是 catchall，恒为真，永远是最后一条兜底。action 有两类：{ type: ''tap'' } 表示让玩家短按一下立即松开；{ type: ''hold'', release_on_light: ''X'' } 表示让玩家按住按钮不放，等旁边指示灯亮起 X 颜色（white / yellow / blue / red 之一）的那一刻再松开。指示玩家时直接说"短按一下"或"按住，等指示灯变成 X 色后再松开"——不要把 YAML 原文复述给玩家。'
     rules:
       - condition:
           color: white
