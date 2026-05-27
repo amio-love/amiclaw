@@ -1,0 +1,359 @@
+/* PageCasting — handoff §6.3 起卦.
+   Mobile (default): single-column flow. Desktop (≥ 900px): 1.1fr / .9fr
+   two-column grid with coin dish + result on the left, hexagram sidebar
+   on the right.
+
+   Ports prototype/yijing/styles.css `.yj-cast*` sections verbatim. The
+   `coinFlip` / `barPulse` / `drawn-grow` @keyframes live in
+   packages/game-yijing/src/styles/animations.css (yijing-wide).
+
+   Local CSS variables avoid touching the global tokens.css. */
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 10%, rgba(255, 229, 62, 0.06), transparent 60%),
+    linear-gradient(180deg, #06060f 0%, #050511 100%);
+}
+
+/* ---------- run-header (inline, no shared component) ---------- */
+.runHeader {
+  padding: 20px 22px 12px;
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.iconBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.title {
+  font: 400 24px/1 var(--font-display);
+  color: #fff;
+  letter-spacing: -0.01em;
+  text-align: center;
+  text-shadow: 0 0 20px rgba(255, 229, 62, 0.18);
+}
+
+.meta {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.metaLead {
+  font: 500 12px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.metaSub {
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+/* ---------- main casting region ---------- */
+.cast {
+  flex: 1;
+  padding: 4px 22px 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cast::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- 6-segment progress bar ---------- */
+.prog {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.seg {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s;
+}
+
+.segDone {
+  background: var(--y);
+  box-shadow: 0 0 6px var(--y-glow-50);
+}
+
+.segActive {
+  background: var(--y);
+  /* `pulse` keyframe is global from @amiclaw/ui/styles/animations.css */
+  animation: pulse 2s infinite;
+}
+
+/* ---------- coin dish (240px mobile / 360px desktop) ---------- */
+.dish {
+  position: relative;
+  height: 240px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 229, 62, 0.1), transparent 60%),
+    radial-gradient(circle at 50% 70%, rgba(180, 120, 255, 0.05), transparent 65%),
+    rgba(8, 8, 22, 0.6);
+  border: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dish::before {
+  content: '';
+  position: absolute;
+  inset: 24px;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 255, 255, 0.07);
+}
+
+/* ---------- result pill ---------- */
+.result {
+  margin-top: -4px;
+  display: flex;
+  justify-content: center;
+}
+
+.resultPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255, 229, 62, 0.08);
+  border: 1px solid rgba(255, 229, 62, 0.3);
+  font: 500 13px var(--font-body);
+  color: #fff;
+}
+
+.resultNum {
+  font: 700 16px var(--font-display);
+  color: var(--y);
+  font-variant-numeric: tabular-nums;
+}
+
+.resultIcon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.resultPlaceholder {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--hairline);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---------- hexagram-building sidebar ---------- */
+.hexCard {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--hairline);
+}
+
+.hexHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.hexLabel {
+  font: 500 10px var(--amio-font-mono);
+  color: var(--y);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hexCount {
+  font: 400 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.hexBody {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.hexNumbers {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+}
+
+.numCell {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font: 500 11px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.04em;
+}
+
+.numCellOn {
+  color: var(--y);
+}
+
+.numCellOn .numV {
+  color: #fff;
+  margin-right: 6px;
+}
+
+.numCellOn .numDigit {
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+/* Wrapper around the rendered Hexagram — re-keyed on each throw so the
+   `drawn-grow` keyframe replays as new yao appear. */
+.hexAnim {
+  animation: drawn-grow 0.5s ease-out both;
+}
+
+/* ---------- reveal panel (after 6th throw) ---------- */
+.reveal {
+  padding: 20px;
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 229, 62, 0.15), transparent 70%),
+    var(--glass-strong);
+  border: 1px solid rgba(255, 229, 62, 0.3);
+  text-align: center;
+}
+
+.revealHexRow {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  align-items: center;
+}
+
+.revealArrow {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 18px;
+}
+
+.revealName {
+  font: 400 32px var(--font-display);
+  color: #fff;
+  margin: 12px 0 4px;
+  letter-spacing: 0.04em;
+}
+
+.revealNameBen {
+  color: var(--y);
+}
+
+.revealNameArrow {
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0 8px;
+  font-style: normal;
+}
+
+.revealNameBian {
+  color: var(--yj-yin);
+}
+
+.revealMeta {
+  font: 500 10px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.revealJudgment {
+  font: 400 14px/1.55 var(--font-body);
+  color: rgba(255, 255, 255, 0.78);
+  font-style: italic;
+  margin-top: 12px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+}
+
+/* ---------- CTA row ---------- */
+.cta {
+  margin-top: auto;
+  padding-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.ctaFull {
+  flex: 1;
+}
+
+/* ============================================================
+   Desktop ≥ 900px — 2-col grid (handoff §6.3 desktop layout)
+   ============================================================ */
+@media (min-width: 900px) {
+  .cast {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-areas:
+      'prog  prog'
+      'dish  hex'
+      'result hex'
+      'cta   cta';
+    gap: 18px 36px;
+    padding: 24px 48px 60px;
+    align-items: start;
+  }
+  .prog {
+    grid-area: prog;
+  }
+  .dish {
+    grid-area: dish;
+    height: 360px;
+  }
+  .result {
+    grid-area: result;
+  }
+  .hexCard,
+  .reveal {
+    grid-area: hex;
+    align-self: stretch;
+  }
+  .cta {
+    grid-area: cta;
+    padding-top: 16px;
+  }
+}
