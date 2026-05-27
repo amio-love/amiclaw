@@ -240,10 +240,12 @@
   opacity: 0.7;
 }
 
-/* Wrapper around the rendered Hexagram — re-keyed on each throw so the
-   `drawn-grow` keyframe replays as new yao appear. */
+/* Wrapper around the rendered Hexagram — re-keyed on each throw via
+   `key={throwIdx}` in PageCasting.tsx so the per-yao `drawn-grow`
+   stagger (owned by `.hexRow` in Hexagram.module.css, delayed by
+   `--yao-idx * 60ms`) replays as new yao appear. */
 .hexAnim {
-  animation: drawn-grow 0.5s ease-out both;
+  /* No own animation — remount of children replays their stagger. */
 }
 
 /* ---------- reveal panel (after 6th throw) ---------- */

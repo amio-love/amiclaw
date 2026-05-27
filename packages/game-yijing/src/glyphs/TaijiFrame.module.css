@@ -1,9 +1,10 @@
 /* TaijiFrame — central Taiji disc with an 8-trigram bagua ring.
    Default size 240 mirrors home-hero `.yj-taiji-frame` (handoff styles.css).
-   Sibling 2 (motion round) will:
-     · attach a 5s ease-in-out float motion here,
-     · attach a 24s linear spin to the disc, and
-     · attach an 80s linear reverse-spin to the ring. */
+   Motion hooks applied by consumers:
+     · 24s linear spin on the disc (`.discSpin`),
+     · 80s linear reverse-spin on the ring (`.ringReverseSpin`).
+   Float motion is owned by the consuming wrapper (e.g. `.heroFrame` in
+   PageHome.module.css), not this component. */
 .frame {
   position: relative;
   display: flex;
@@ -49,12 +50,9 @@
   text-transform: uppercase;
 }
 
-/* Motion hooks — keyframes `float` and `spin` are global, defined in
+/* Motion hooks — keyframe `spin` is global, defined in
    `@amiclaw/ui/styles/animations.css` (loaded by `main.tsx`).
-   Reduced-motion neutralization is inherited from those keyframes too. */
-.frameFloat {
-  animation: float 5s ease-in-out infinite;
-}
+   Reduced-motion neutralization is inherited from that keyframe too. */
 .discSpin {
   animation: spin 24s linear infinite;
 }

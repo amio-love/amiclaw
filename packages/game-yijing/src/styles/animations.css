@@ -10,7 +10,7 @@
 
    - coinFlip    .85s cubic-bezier  — casting coin three-axis toss
    - barPulse    1.1s ease-in-out   — reading voice waveform
-   - drawn-grow  .5s ease-out       — hexagram line reveal stagger
+   - drawn-grow  .5s ease-out       — hexagram line reveal; per-yao stagger via `--yao-idx`
    ============================================================ */
 
 /* Casting coin toss — ports prototype/yijing/styles.css `.coin-slot.flipping`
