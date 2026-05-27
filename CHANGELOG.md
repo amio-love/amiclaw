@@ -312,26 +312,39 @@ straight from the homepage CTAs.
 
 ### Fixed
 
-- **剪线模块手册补全规则前言** wire_routing 章节新增 `rule:` 自然语言前言，
-  明确写出 first-match-wins 匹配顺序、整数 position 是 0-indexed 自上而下编号、
-  关键字 `first` ≡ position 0 与 `last` ≡ position length-1 的等价关系，以及
-  `target.color` 字段是更强的颜色过滤而非位置覆盖。修复前 AI 助手只能凭直觉猜
-  下标基与匹配顺序，时不时把"剪最底下那根"翻译成错误的位置，导致玩家剪错线。
-  改动同时透过种子洗牌器传播到全部 366 份每日手册。
-- **按钮模块手册补全规则前言** button 章节新增 `rule:` 自然语言前言，写出
-  first-match-wins 匹配顺序、每个 condition 维度（color / label / battery_count
-  / indicator_FRK_lit）的含义、以及 `{ type: 'tap' }` 与 `{ type: 'hold',
-release_on_light }` 两种动作分别该让玩家做什么。修复前 AI 在多条 condition
-  都可能匹配时给出彼此冲突的指令，玩家无法判断该短按还是按住。
-- **星符模块未点击态符号对比度恢复** 星图 / Atlas 改版后 KeypadModule 把未点
-  击星图符号的描边设成 50% 透明白色，在深色星图底上极难辨认，玩家描述符号时
-  错率飙升。改回 `var(--color-text-primary)` 的完全不透明描边，恢复 Atlas 之前
-  的高对比读图体验，已点击态的黄色发光效果保持不变。
-- **trident 符号描述修正以匹配实际图形** `shared/symbols.ts` 中 trident 的
-  description 此前声称两条顶部弧线连接"左-中"与"中-右"的内侧尖刺，与
-  SVG path 实际画法不符——真实图形是中央长竖线两侧各一根中等竖线，再向外各
-  一根更短竖线，顶部弧线分别从中央两侧的竖线顶端**向外**延伸到最外侧短竖线的
-  顶端。描述改写后符号视觉对照才能与玩家眼前的图形对上。
+- **Wire module manual gains a rule preamble** The wire_routing section
+  gains a natural-language `rule:` preamble that spells out
+  first-match-wins, that integer `position` is 0-indexed top-down, the
+  equivalence `first ≡ position 0` and `last ≡ position length-1`, and
+  that the `target.color` field is a stronger color filter rather than
+  a position override. Without the preamble an AI partner could only
+  guess the indexing base and the match order and would sometimes
+  translate "cut the bottom wire" into the wrong position, leading
+  players to cut the wrong wire. The change propagates through the
+  seeded shuffler to all 366 daily manuals.
+- **Button module manual gains a rule preamble** The button section
+  gains a natural-language `rule:` preamble that spells out
+  first-match-wins, the meaning of each condition dimension
+  (color / label / battery_count / indicator_FRK_lit), and what
+  `{ type: 'tap' }` and `{ type: 'hold', release_on_light }` each ask
+  the player to do. Without the preamble an AI partner would give
+  conflicting instructions whenever multiple conditions could match,
+  and the player could not tell whether to tap or hold.
+- **Keypad un-tapped symbol contrast restored** After the 星图 / Atlas
+  redesign the keypad module set un-tapped symbol strokes to 50%
+  transparent white, which was nearly unreadable on the dark
+  constellation backdrop and made players describe symbols incorrectly.
+  The stroke is restored to the fully opaque `var(--color-text-primary)`,
+  bringing back the high-contrast read-the-glyph experience from before
+  Atlas. The tapped-state yellow glow is unchanged.
+- **trident symbol description corrected to match the actual glyph**
+  The trident description in `shared/symbols.ts` previously claimed the
+  two top arcs connect the "left–center" and "center–right" inner
+  spikes, which disagrees with how the SVG is actually drawn — the
+  real glyph has a long center vertical, a medium vertical on each
+  side, and a shorter vertical further out, with top arcs sweeping
+  outward from the inner-spike tops to the outermost short verticals.
+  The rewritten description now matches what the player actually sees.
 
 - **Keypad and symbol-dial puzzles are solvable from the manual again**
   Both modules listed several manual rows — keypad sequences and dial
