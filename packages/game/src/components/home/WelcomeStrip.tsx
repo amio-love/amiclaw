@@ -1,4 +1,4 @@
-import ConicAvatar from '@/components/ui/ConicAvatar'
+import { ConicAvatar } from '@amiclaw/ui'
 import type { MockUser } from '@/mocks/auth'
 import styles from './WelcomeStrip.module.css'
 

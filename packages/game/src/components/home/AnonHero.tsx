@@ -1,6 +1,4 @@
-import Button from '@/components/ui/Button'
-import EyebrowTag from '@/components/ui/EyebrowTag'
-import StatPill from '@/components/ui/StatPill'
+import { Button, EyebrowTag, StatPill } from '@amiclaw/ui'
 import styles from './AnonHero.module.css'
 
 interface AnonHeroProps {

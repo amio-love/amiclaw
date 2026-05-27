@@ -1,5 +1,4 @@
-import GlassCard from '@/components/ui/GlassCard'
-import SectionHeader, { accentClass } from '@/components/ui/SectionHeader'
+import { GlassCard, SectionHeader, accentClass } from '@amiclaw/ui'
 import styles from './WhatIsAmiclaw.module.css'
 
 interface ValueProp {

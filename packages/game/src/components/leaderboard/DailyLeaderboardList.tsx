@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import Button from '@/components/ui/Button'
+import { Button } from '@amiclaw/ui'
 import { fetchLeaderboard } from '@/utils/leaderboard-api'
 import {
   clearOptimisticEntry,

@@ -1,5 +1,4 @@
-import Chip from '@/components/ui/Chip'
-import SectionHeader from '@/components/ui/SectionHeader'
+import { Chip, SectionHeader } from '@amiclaw/ui'
 import { type GameStatus, upcomingGames } from '@/mocks/upcoming-games'
 import styles from './UpcomingGames.module.css'
 

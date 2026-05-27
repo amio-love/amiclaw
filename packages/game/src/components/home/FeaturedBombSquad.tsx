@@ -1,6 +1,4 @@
-import Button from '@/components/ui/Button'
-import Chip from '@/components/ui/Chip'
-import SectionHeader, { accentClass } from '@/components/ui/SectionHeader'
+import { Button, Chip, SectionHeader, accentClass } from '@amiclaw/ui'
 import { featuredMini } from '@/mocks/leaderboard'
 import { formatMs } from '@/utils/format-time'
 import styles from './FeaturedBombSquad.module.css'

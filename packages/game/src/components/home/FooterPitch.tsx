@@ -1,4 +1,4 @@
-import Button from '@/components/ui/Button'
+import { Button } from '@amiclaw/ui'
 import styles from './FooterPitch.module.css'
 
 interface FooterPitchProps {

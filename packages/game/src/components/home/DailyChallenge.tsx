@@ -1,5 +1,4 @@
-import Button from '@/components/ui/Button'
-import EyebrowTag from '@/components/ui/EyebrowTag'
+import { Button, EyebrowTag } from '@amiclaw/ui'
 import { useDailyCountdown } from '@/hooks/useDailyCountdown'
 import styles from './DailyChallenge.module.css'
 

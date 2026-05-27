@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import EyebrowTag from './EyebrowTag'
+import EyebrowTag from '../EyebrowTag'
 import styles from './SectionHeader.module.css'
 
 /* Class for the yellow-italic accent fragment inside a section title.

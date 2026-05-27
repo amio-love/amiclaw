@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import EyebrowTag from '@/components/ui/EyebrowTag'
+import { EyebrowTag } from '@amiclaw/ui'
 import DailyLeaderboardList from '@/components/leaderboard/DailyLeaderboardList'
 import MockLeaderboardList from '@/components/leaderboard/MockLeaderboardList'
 import { allTimeRows, monthRows, weekRows } from '@/mocks/leaderboard'
