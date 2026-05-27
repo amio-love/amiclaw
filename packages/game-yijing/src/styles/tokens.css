@@ -1,0 +1,11 @@
+/* yijing-oracle design tokens — derived from [[pages/projects/amiclaw/yijing-oracle-design]] §UI 草图 + handoff §4. */
+/* Cosmic shell variables (--y / --green / --rose / --violet / --blue / --bg-* / --glass / --hairline / --font-*) */
+/* are inherited from BombSquad's existing stylesheet and intentionally NOT redeclared here. */
+
+:root {
+  --yj-yang: var(--y); /* 阳爻 = AMIO 黄 #ffe53e */
+  --yj-yin: #b478ff; /* 阴爻 = 紫罗兰 */
+  --yj-yang-soft: rgba(255, 229, 62, 0.16);
+  --yj-yin-soft: rgba(180, 120, 255, 0.18);
+  --yj-vermilion: #c2453a; /* 朱砂红 — 仅用于印章 */
+}
