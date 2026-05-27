@@ -1,0 +1,37 @@
+/* Trigram 八卦 — three-line glyph as inline-flex column-reverse, lines
+   rendered as absolutely-positioned bars (per handoff glyphs.jsx Trigram).
+   Yang line = single full-width bar; yin line = two 40% bars left + right. */
+.trigram {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  /* gap / width are set inline by Trigram.tsx (size-derived). */
+}
+
+.row {
+  display: block;
+  position: relative;
+}
+
+.barFull {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+}
+
+.barLeft {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: currentColor;
+}
+
+.barRight {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: currentColor;
+}

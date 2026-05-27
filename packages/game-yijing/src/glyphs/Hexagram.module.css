@@ -1,0 +1,19 @@
+/* Hexagram — vertical stack of six Yao, bottom-up (column-reverse).
+   Per handoff README §5 卦象: gap 6px at size=120, draw order 初爻 first. */
+.hexStack {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.hexRow {
+  display: flex;
+  align-items: center;
+}
+
+/* drawn-progress visibility — `hidden` rows reserve layout space but are
+   invisible so the stack height stays constant as yao reveal. The
+   fade-in keyframes live in sibling 2 (animations round). */
+.hexRowHidden {
+  opacity: 0;
+  /* No transform / transition here: the static port is purely opacity. */
+}

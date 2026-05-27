@@ -1,0 +1,11 @@
+/* Taiji 太极 — yin-yang disc. SVG carries the gradients; this wrapper
+   merely scopes a class so sibling 2 can attach the 24s spin motion
+   without editing the component. */
+.taiji {
+  display: block;
+}
+
+/* Placeholder class — sibling 2 (motion round) wires it to the 24s spin. */
+.taijiSpin {
+  /* intentionally empty in static port */
+}

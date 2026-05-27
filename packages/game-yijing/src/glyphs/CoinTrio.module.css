@@ -1,0 +1,17 @@
+/* CoinTrio — three coins side-by-side. gap 18px per handoff prototype
+   styles.css `.coin-trio`. Coin-flip motion (0.85s translateY + rotateY 5×)
+   lives in sibling 2; this static port only declares `.coinSlot` as the
+   future motion target. */
+.trio {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 0 12px;
+}
+
+.coinSlot {
+  transform-style: preserve-3d;
+  /* Sibling 2 will attach the coin-flip motion keyframes to .coinSlot.flipping. */
+}
