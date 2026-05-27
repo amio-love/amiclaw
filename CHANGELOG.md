@@ -79,6 +79,18 @@ straight from the homepage CTAs.
 
 ### Added
 
+- **AI manual gains game framing and collaboration philosophy** The AI
+  partner now receives full game context before any rule content on every
+  manual fetch. `AI_INSTRUCTIONS` now carries two new top-level keys —
+  `game_context` (role / player role / voice-only medium / session
+  freshness: every URL fetch starts a fresh game with no cross-session
+  memory) and `collaboration_philosophy` (guide the player to describe
+  features instead of guessing dictionary names, admit uncertainty before
+  guessing, and anchor the trust loop's data source to the BombSquad
+  app-rendered recap) — alongside the existing tactical-output keys.
+  Both injection paths (HTML embedded yaml and dist raw yaml at
+  `?format=yaml`) carry all four key categories. Source task
+  `add-bombsquad-ai-framing-and-collab-philosophy`.
 - **Endgame survey** After any game ends — win, loss, timeout, practice or
   daily — the result page now shows a one-time, four-question survey: which AI
   tool you played with, how fun and how hard the run felt, and an optional
