@@ -31,10 +31,7 @@ const yaml = require(
 )
 
 const PRACTICE_YAML = resolve(REPO_ROOT, 'packages/manual/data/practice.yaml')
-const KEYPAD_CSS = resolve(
-  REPO_ROOT,
-  'packages/game/src/modules/keypad/KeypadModule.module.css'
-)
+const KEYPAD_CSS = resolve(REPO_ROOT, 'packages/game/src/modules/keypad/KeypadModule.module.css')
 const SYMBOLS_TS = resolve(REPO_ROOT, 'shared/symbols.ts')
 
 const failures = []
@@ -48,8 +45,7 @@ function loadPractice() {
 
 // ---------- Scenario A: wire_routing rule preamble ----------
 function scenarioA() {
-  const name =
-    'Bug A — wire_routing manual declares 0-indexed position + first-match-wins'
+  const name = 'Bug A — wire_routing manual declares 0-indexed position + first-match-wins'
   const manual = loadPractice()
   const rule = manual?.modules?.wire_routing?.rule
   if (typeof rule !== 'string' || rule.length === 0) {
@@ -70,7 +66,8 @@ function scenarioA() {
   }
   // first ≡ 0 and last ≡ length-1 equivalence — accept either Chinese 等价 phrasing
   // or the literal ≡ glyph.
-  const declaresFirst = /first\s*[≡=]\s*(?:position\s*)?0/i.test(rule) ||
+  const declaresFirst =
+    /first\s*[≡=]\s*(?:position\s*)?0/i.test(rule) ||
     /关键字\s*first[^。]*?(?:等价|≡|=)[^。]*?0/i.test(rule)
   const declaresLast =
     /last\s*[≡=]\s*(?:position\s*)?length\s*[-－]\s*1/i.test(rule) ||
@@ -125,10 +122,7 @@ function scenarioC() {
   const strokeValue = strokeMatch[1].trim()
   // Pre-fix offending value: rgba(255, 255, 255, 0.5)
   if (/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0?\.5\s*\)/.test(strokeValue)) {
-    record(
-      name,
-      `.symbol stroke is still the dim pre-Atlas-after value: ${strokeValue}`
-    )
+    record(name, `.symbol stroke is still the dim pre-Atlas-after value: ${strokeValue}`)
     return
   }
   // Accept either var(--color-text-primary), var(--y), or any other
@@ -147,9 +141,7 @@ function scenarioD() {
   const symbolsSrc = readFileSync(SYMBOLS_TS, 'utf8')
   // Locate the trident entry by id, then extract its description string.
   // Symbols are object literals — naive but adequate regex.
-  const tridentBlockMatch = symbolsSrc.match(
-    /\{\s*id:\s*['"]trident['"][\s\S]*?\}/
-  )
+  const tridentBlockMatch = symbolsSrc.match(/\{\s*id:\s*['"]trident['"][\s\S]*?\}/)
   if (!tridentBlockMatch) {
     record(name, 'trident entry not found in shared/symbols.ts')
     return
