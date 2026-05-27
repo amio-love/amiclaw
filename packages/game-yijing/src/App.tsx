@@ -1,27 +1,27 @@
-import { CoinTrio, Hexagram, Taiji, TaijiFrame } from './glyphs'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { SessionProvider } from './session'
+import { PageHome } from './pages/PageHome'
+import { PageProjection } from './pages/PageProjection'
+import { PageCasting } from './pages/PageCasting'
+import { PageReading } from './pages/PageReading'
+import { PageSign } from './pages/PageSign'
 
-/* Temporary existence-proof render for the glyph vocabulary port (sibling 1
-   Round 3). Sibling 2 will replace this with the 5-screen flow + animations. */
+/* Hash-routed 5-screen scaffold (sibling 1 Round 4). Sibling 2 replaces every
+   placeholder page with the hi-fi implementation per handoff §6 and wires
+   real interactions into the SessionProvider actions. */
 export default function App() {
-  console.log('yijing-oracle scaffold mounted')
   return (
-    <main
-      style={{
-        padding: 24,
-        color: 'white',
-        background: '#111',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 24,
-        alignItems: 'flex-start',
-      }}
-    >
-      <h1>易经签卜 (scaffold + glyphs)</h1>
-      <Hexagram values={[7, 8, 9, 7, 7, 6]} size={120} />
-      <Taiji size={130} />
-      <TaijiFrame size={240} accent="qian" />
-      <CoinTrio sides={['heads', 'tails', 'heads']} />
-    </main>
+    <SessionProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<PageHome />} />
+          <Route path="/projection" element={<PageProjection />} />
+          <Route path="/casting" element={<PageCasting />} />
+          <Route path="/reading" element={<PageReading />} />
+          <Route path="/sign" element={<PageSign />} />
+        </Routes>
+      </HashRouter>
+    </SessionProvider>
   )
 }
