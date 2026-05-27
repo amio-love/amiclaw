@@ -166,6 +166,18 @@ straight from the homepage CTAs.
 
 ### Improvements
 
+- **AI partner gains wider symbol-misread vocabulary** The shared symbol
+  dictionary (`shared/symbols.ts`) now anchors more of the visual gestalts a
+  real player might say when describing a symbol under time pressure. `spiral`
+  picks up `'咖啡豆 / 实心椭圆带竖中线'` alongside the existing `'圆圈'` (a
+  2026-05-27 playtest produced the coffee-bean misread that the previous
+  description could not map back); `omega` gains `'拱门'`; and the three most
+  canonical shapes (`delta` / `star` / `diamond`) carry an explicit
+  `,无常见误读模式 — 略` slot so future audits see the coverage is deliberate.
+  Six other ids already carried adequate explicit or implicit reverse-alias
+  coverage and are unchanged. The five unreferenced placeholder symbols and
+  `trident`'s PR #101 geometric description are untouched. Source task
+  `reconcile-bombsquad-symbol-pool-and-aliases`.
 - **Bomb detonation sound** Failing a daily challenge now fires a dedicated
   explosion sound effect under the full-screen detonation overlay — a sharp,
   prominent boom — replacing the muffled module-failure thud reused as a

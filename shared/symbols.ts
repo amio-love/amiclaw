@@ -30,7 +30,7 @@ export const SYMBOLS: readonly Symbol[] = [
   {
     id: 'omega',
     name: 'Omega',
-    description: '马蹄铁形 / 倒 U 形,底部两个向外的小脚,中间无竖线穿过',
+    description: "马蹄铁形 / 倒 U 形,底部两个向外的小脚,中间无竖线穿过,容易被误描述为'拱门'",
     path: 'M50 15 C25 15 10 30 10 50 C10 70 25 82 38 85 L38 90 L30 90 L30 95 L70 95 L70 90 L62 90 L62 85 C75 82 90 70 90 50 C90 30 75 15 50 15 Z M50 25 C68 25 80 36 80 50 C80 64 68 76 54 78 L54 90 L46 90 L46 78 C32 76 20 64 20 50 C20 36 32 25 50 25 Z',
   },
   {
@@ -42,13 +42,13 @@ export const SYMBOLS: readonly Symbol[] = [
   {
     id: 'delta',
     name: 'Delta',
-    description: '等边三角形 △,三条直边围成封闭三角',
+    description: '等边三角形 △,三条直边围成封闭三角,无常见误读模式 — 略',
     path: 'M50 10 L90 85 L10 85 Z',
   },
   {
     id: 'star',
     name: 'Star',
-    description: '标准五角星 ☆,五个等长尖角向外',
+    description: '标准五角星 ☆,五个等长尖角向外,无常见误读模式 — 略',
     path: 'M50 5 L61 35 L95 35 L68 57 L79 91 L50 70 L21 91 L32 57 L5 35 L39 35 Z',
   },
   {
@@ -60,7 +60,7 @@ export const SYMBOLS: readonly Symbol[] = [
   {
     id: 'diamond',
     name: 'Diamond',
-    description: '正方形旋转 45 度后的菱形 ◇,四条等长边对角对称',
+    description: '正方形旋转 45 度后的菱形 ◇,四条等长边对角对称,无常见误读模式 — 略',
     path: 'M50 5 L95 50 L50 95 L5 50 Z',
   },
   {
@@ -80,7 +80,7 @@ export const SYMBOLS: readonly Symbol[] = [
     id: 'spiral',
     name: 'Spiral',
     description:
-      "从中心向外一圈圈盘旋的螺旋线 / 漩涡形,线条绕中心展开、首尾不闭合,容易被误描述为'圆圈'",
+      "从中心向外一圈圈盘旋的螺旋线 / 漩涡形,线条绕中心展开、首尾不闭合,容易被误描述为'圆圈' / '咖啡豆 / 实心椭圆带竖中线'",
     path: 'M50 50 C50 30 65 20 75 25 C90 32 90 55 75 65 C60 75 35 70 25 55 C12 37 20 15 38 10 C58 4 80 15 85 38',
   },
   {
