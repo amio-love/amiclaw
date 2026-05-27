@@ -12,6 +12,7 @@
    - spin     linear infinite        — conic avatar ring / planet ring
    - twinkle  ease-in-out infinite   — background star flicker
    - pulse    2s ease-in-out infinite — online dot / live badge
+   - breathe  2s ease-in-out infinite — subtle scale + opacity pulse (cards / chips)
    ============================================================ */
 
 @keyframes float {
@@ -50,6 +51,18 @@
   }
 }
 
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
 /* Reduced motion — neutralize the platform keyframes. Transform-driven
    animations (float / spin) collapse to no movement; opacity pulses
    (twinkle / pulse) flatten to a constant visible state. */
@@ -75,6 +88,13 @@
   @keyframes pulse {
     0%,
     100% {
+      opacity: 1;
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: none;
       opacity: 1;
     }
   }

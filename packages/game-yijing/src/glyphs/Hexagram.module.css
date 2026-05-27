@@ -5,15 +5,24 @@
   flex-direction: column-reverse;
 }
 
+/* Per-yao reveal — `drawn-grow` keyframe defined in
+   src/styles/animations.css (yijing-wide). Each visible row staggers
+   by 60ms via the `--yao-idx` custom property set inline from
+   Hexagram.tsx (bottom-up index 0..5, so 初爻 leads). The wrapper
+   `.hexAnim` in PageCasting.module.css remains as the re-key mount
+   point — its `key={throwIdx}` reset replays the stagger each throw.
+   Hidden rows skip the animation entirely (opacity:0 already). */
 .hexRow {
   display: flex;
   align-items: center;
+  animation: drawn-grow 0.5s ease-out both;
+  animation-delay: calc(var(--yao-idx, 0) * 60ms);
 }
 
 /* drawn-progress visibility — `hidden` rows reserve layout space but are
-   invisible so the stack height stays constant as yao reveal. The
-   fade-in keyframes live in sibling 2 (animations round). */
+   invisible so the stack height stays constant as yao reveal. */
 .hexRowHidden {
   opacity: 0;
+  animation: none;
   /* No transform / transition here: the static port is purely opacity. */
 }

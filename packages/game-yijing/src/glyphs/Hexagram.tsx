@@ -44,8 +44,15 @@ export function Hexagram({
         const rowClasses = [styles.hexRow, !visible && styles.hexRowHidden]
           .filter(Boolean)
           .join(' ')
+        /* `--yao-idx` drives the per-yao stagger in Hexagram.module.css
+           (`animation-delay: calc(var(--yao-idx) * 60ms)`). `i` is the
+           bottom-up index 0..5 — initial yao reveals first. */
+        const rowStyle = {
+          ['--yao-idx' as string]: i,
+          height: lineH,
+        } as CSSProperties
         return (
-          <div key={i} className={rowClasses} style={{ height: lineH }}>
+          <div key={i} className={rowClasses} style={rowStyle}>
             {visible && <Yao value={v} size={size} height={lineH} />}
           </div>
         )
