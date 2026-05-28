@@ -3,8 +3,8 @@
    radial-gradient placeholder keyed by `artVariant`. Consumed by
    components/home/UpcomingGames. */
 
-export type GameStatus = 'soon' | 'dev' | 'live'
-export type GameArtVariant = 'echo' | 'draw' | 'lab'
+export type GameStatus = 'soon' | 'dev' | 'live' | 'preview'
+export type GameArtVariant = 'echo' | 'draw' | 'lab' | 'oracle'
 
 export interface UpcomingGame {
   id: string
@@ -12,9 +12,22 @@ export interface UpcomingGame {
   blurb: string
   status: GameStatus
   artVariant: GameArtVariant
+  /* When set, the tile becomes a clickable link to this URL. Used by
+     'preview' tiles to route into a sibling-deployed prototype (e.g.
+     /oracle/ for the Yijing Oracle build merged into game/dist/oracle/).
+     'soon' / 'dev' tiles leave this undefined and stay non-clickable. */
+  href?: string
 }
 
 export const upcomingGames: UpcomingGame[] = [
+  {
+    id: 'yijing',
+    name: '易经签卜',
+    blurb: '五屏占卜原型 · 念问 → 投币 → 起卦 → 解读。CSS-only 动画，体验版可试玩。',
+    status: 'preview',
+    artVariant: 'oracle',
+    href: '/oracle/',
+  },
   {
     id: 'echo',
     name: '星海回声',

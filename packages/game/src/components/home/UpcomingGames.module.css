@@ -10,8 +10,11 @@
 }
 
 .grid {
+  /* Round 5: 4 tiles (yijing + echo + draw + lab) — auto-fit lets the
+     row reflow gracefully on narrower viewports without collapsing all
+     the way to 1-up until the @media breakpoint below. */
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
 }
 
@@ -29,6 +32,21 @@
 .tile:hover {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(41, 43, 45, 0.6);
+}
+
+/* Preview tile renders as <a> — strip default anchor styling and signal
+   click-affordance with cursor + a slightly stronger hover than the
+   non-clickable tiles. */
+.tilePreview {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tilePreview:hover {
+  border-color: rgba(180, 120, 255, 0.32);
+  background: rgba(41, 43, 45, 0.72);
 }
 
 .art {
@@ -57,6 +75,17 @@
   background: radial-gradient(circle at 50% 50%, rgba(255, 229, 62, 0.3), transparent 55%), #0a0a1a;
 }
 
+/* Yijing Oracle — handoff §4 yj-tokens. Yang (#ffe53e) anchor at top-left,
+   yin (#b478ff) sweep at bottom-right; vermilion (#c2453a) accent for the
+   印章 motif. Composed warmer / more saturated than echo or draw so the
+   first tile reads as the freshest entry. */
+.oracle {
+  background:
+    radial-gradient(circle at 28% 32%, rgba(255, 229, 62, 0.42), transparent 55%),
+    radial-gradient(circle at 72% 70%, rgba(180, 120, 255, 0.4), transparent 55%),
+    radial-gradient(circle at 80% 20%, rgba(194, 69, 58, 0.22), transparent 50%), #0a0a1a;
+}
+
 .artLabel {
   font: 600 22px var(--font-display);
   letter-spacing: 0.04em;
@@ -82,6 +111,24 @@
   margin: 6px 0 0;
   font: 400 13px var(--font-body);
   color: var(--text-3);
+}
+
+/* Local preview-status pill — sized to match Chip.module.css `.soon/.dev/.live`
+   for visual parity but tinted with yj-yin to read distinct from the
+   yellow `soon` chip. Kept inside this module so the @amiclaw/ui Chip
+   variant union does not have to grow for a homepage-only state. */
+.previewChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid rgba(180, 120, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(180, 120, 255, 0.1);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #d6c0ff;
 }
 
 /* ----------  responsive: mobile  ----------
