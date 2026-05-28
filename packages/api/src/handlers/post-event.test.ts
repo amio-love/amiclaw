@@ -38,7 +38,7 @@ function makeKv(initialStore: Record<string, unknown> = {}): {
 }
 
 function makeRequest(payload: Record<string, unknown>): Request {
-  return new Request('https://bombsquad.amio.fans/api/events', {
+  return new Request('https://claw.amio.fans/api/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

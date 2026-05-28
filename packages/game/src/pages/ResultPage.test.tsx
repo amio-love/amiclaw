@@ -137,7 +137,7 @@ describe('ResultPage replay_intent logging', () => {
 
   it('POSTs replay_intent with mode and attemptNumber when "再来一局" is clicked', () => {
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>
@@ -258,7 +258,7 @@ describe('ResultPage buildSummary recap format', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>
@@ -289,7 +289,7 @@ describe('ResultPage buildSummary recap format', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>
@@ -315,7 +315,7 @@ describe('ResultPage buildSummary recap format', () => {
     // Practice mode never invokes submitScore, so no mock setup needed.
 
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>
@@ -339,7 +339,7 @@ describe('ResultPage buildSummary recap format', () => {
     vi.mocked(submitScore).mockResolvedValueOnce(null)
 
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>
@@ -371,7 +371,7 @@ describe('ResultPage buildSummary recap format', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/result']}>
+      <MemoryRouter initialEntries={['/bombsquad/result']}>
         <GameProvider>
           <ResultPage />
         </GameProvider>

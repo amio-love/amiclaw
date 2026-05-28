@@ -46,7 +46,7 @@ function makeKv(store: Record<string, unknown>, pageSize = 1000): KVNamespace {
 }
 
 function makeRequest(query = ''): Request {
-  return new Request(`https://bombsquad.amio.fans/api/dashboard${query}`, { method: 'GET' })
+  return new Request(`https://claw.amio.fans/api/dashboard${query}`, { method: 'GET' })
 }
 
 describe('handleGetDashboard', () => {

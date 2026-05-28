@@ -6,7 +6,7 @@ const sampleState: GameState = {
   status: 'PLAYING',
   mode: 'practice',
   manual: null,
-  manualUrl: 'https://bombsquad.amio.fans/manual/practice',
+  manualUrl: 'https://claw.amio.fans/manual/practice',
   sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
   moduleSequence: ['wire', 'keypad'],
   moduleConfigs: [null, null],

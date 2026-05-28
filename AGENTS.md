@@ -7,7 +7,7 @@ project instructions.
 ## Project Overview
 
 **AmiClaw** (`claw.amio.fans`) is a human-AI collaborative gaming platform.
-**BombSquad** (`bombsquad.amio.fans`) is the first game: a voice-based
+**BombSquad** (`claw.amio.fans/bombsquad`) is the first game: a voice-based
 bomb-defusal challenge inspired by _Keep Talking and Nobody Explodes_, where the
 human player and an AI expert communicate only through voice.
 
@@ -91,7 +91,7 @@ A read-only HTML dashboard at `/api/dashboard?token=xxx` aggregates the
 game starts, completes, replay intents, and completion rates against the
 70%/50% north-star thresholds. Open the URL directly in a browser.
 
-- URL pattern: `https://bombsquad.amio.fans/api/dashboard?token=<secret>`
+- URL pattern: `https://claw.amio.fans/api/dashboard?token=<secret>`
 - Set the token (Pages production environment):
   `wrangler secret put DASHBOARD_TOKEN`
 - Source task: `add-beta-data-dashboard`.

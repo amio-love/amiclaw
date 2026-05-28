@@ -1,7 +1,7 @@
 /**
  * ConnectPage unit tests.
  *
- * Covers the connect-AI flow at /game/connect — the Atlas redesign's
+ * Covers the connect-AI flow at /bombsquad/connect — the Atlas redesign's
  * 3-step handoff (design_handoff_bombsquad README §6.2):
  *   1. step 1 renders the copy-manual card with the manual URL.
  *   2. copying the manual shows the copied feedback and auto-advances to
@@ -9,8 +9,8 @@
  *   3. the 3-step state machine reaches the ready step and confirms.
  *   4. daily mode hands off to the run carrying the manual URL as ?url=.
  *   5. practice mode hands off without a ?url= param.
- *   6. step 1 surfaces the /compatibility discovery link (re-homed from
- *      the retired PromptModal).
+ *   6. step 1 surfaces the /bombsquad/compatibility discovery link
+ *      (re-homed from the retired PromptModal).
  *
  * useDailyChallenge is mocked to deterministic URLs; copyToClipboard is
  * stubbed to its success branch so the copy → auto-advance path runs
@@ -21,8 +21,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 
-const DAILY_URL = 'https://bombsquad.amio.fans/manual/2026-05-22'
-const PRACTICE_URL = 'https://bombsquad.amio.fans/manual/practice'
+const DAILY_URL = 'https://claw.amio.fans/manual/2026-05-22'
+const PRACTICE_URL = 'https://claw.amio.fans/manual/practice'
 
 vi.mock('@/hooks/useDailyChallenge', () => ({
   useDailyChallenge: () => ({
@@ -49,10 +49,10 @@ function LocationProbe() {
 
 function renderConnect(mode: 'daily' | 'practice') {
   return render(
-    <MemoryRouter initialEntries={[`/game/connect?mode=${mode}`]}>
+    <MemoryRouter initialEntries={[`/bombsquad/connect?mode=${mode}`]}>
       <Routes>
-        <Route path="/game/connect" element={<ConnectPage />} />
-        <Route path="/game/run" element={<LocationProbe />} />
+        <Route path="/bombsquad/connect" element={<ConnectPage />} />
+        <Route path="/bombsquad/run" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
   )
@@ -85,14 +85,15 @@ describe('ConnectPage', () => {
     expect(screen.getByText(DAILY_URL)).toBeInTheDocument()
   })
 
-  it('surfaces the /compatibility discovery link on step 1', () => {
+  it('surfaces the /bombsquad/compatibility discovery link on step 1', () => {
     renderConnect('daily')
 
     // The link re-homes the entry point lost when PromptModal was removed;
-    // it must point at the /compatibility route to keep that page reachable.
+    // it must point at the /bombsquad/compatibility route to keep that page
+    // reachable.
     const compatLink = screen.getByRole('link', { name: /查看支持工具/ })
     expect(compatLink).toBeInTheDocument()
-    expect(compatLink).toHaveAttribute('href', '/compatibility')
+    expect(compatLink).toHaveAttribute('href', '/bombsquad/compatibility')
   })
 
   it('shows the copied feedback and auto-advances to step 2 after ~0.7s', async () => {
@@ -136,7 +137,7 @@ describe('ConnectPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /确认开始游戏/ }))
 
     const location = screen.getByTestId('location').textContent ?? ''
-    expect(location).toContain('/game/run')
+    expect(location).toContain('/bombsquad/run')
     expect(location).toContain('mode=daily')
     expect(location).toContain(`url=${encodeURIComponent(DAILY_URL)}`)
   })
@@ -149,7 +150,7 @@ describe('ConnectPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /确认开始游戏/ }))
 
     const location = screen.getByTestId('location').textContent ?? ''
-    expect(location).toBe('/game/run?mode=practice')
+    expect(location).toBe('/bombsquad/run?mode=practice')
     expect(location).not.toContain('url=')
   })
 })

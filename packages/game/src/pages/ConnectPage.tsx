@@ -46,9 +46,9 @@ export default function ConnectPage() {
      bundled manual and needs no URL. */
   const confirmStart = () => {
     if (mode === 'daily') {
-      navigate(`/game/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
+      navigate(`/bombsquad/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
     } else {
-      navigate('/game/run?mode=practice')
+      navigate('/bombsquad/run?mode=practice')
     }
   }
 
@@ -64,7 +64,7 @@ export default function ConnectPage() {
           <button
             type="button"
             className={styles.iconBtn}
-            onClick={() => navigate('/game')}
+            onClick={() => navigate('/bombsquad')}
             aria-label="返回 BombSquad 主页"
           >
             <svg
@@ -192,7 +192,7 @@ export default function ConnectPage() {
               {/* /compatibility discovery link — re-homed here from the
                  retired PromptModal, which placed it directly under the
                  same send-to-AI content. Step 1 is that moment now. */}
-              <Link to="/compatibility" className={styles.compatLink}>
+              <Link to="/bombsquad/compatibility" className={styles.compatLink}>
                 不确定用哪个 AI？查看支持工具 →
               </Link>
             </div>

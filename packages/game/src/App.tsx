@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { GameProvider } from './store/game-context'
 import PlatformLayout from './components/platform/PlatformLayout'
 import GamesPage from './pages/GamesPage'
@@ -23,14 +23,26 @@ export default function App() {
           <Route path="/me" element={<AccountPage />} />
         </Route>
         {/* Immersive BombSquad game flow — no platform shell. The flow is
-            landing (/game) → connect (/game/connect) → run (/game/run) →
-            result (/result). The platform homepage's BombSquad CTAs enter at
-            the landing; the run keeps the ?mode= / ?url= query params. */}
-        <Route path="/game" element={<BombSquadLandingPage />} />
-        <Route path="/game/connect" element={<ConnectPage />} />
-        <Route path="/game/run" element={<GamePage />} />
-        <Route path="/result" element={<ResultPage />} />
-        <Route path="/compatibility" element={<CompatibilityPage />} />
+            landing (/bombsquad) → connect (/bombsquad/connect) → run
+            (/bombsquad/run) → result (/bombsquad/result). The platform
+            homepage's BombSquad CTAs enter at the landing; the run keeps
+            the ?mode= / ?url= query params. The route prefix mirrors the
+            Yijing Oracle's /oracle/* pattern so every game lives under
+            its own sub-path on the claw.amio.fans platform. */}
+        <Route path="/bombsquad" element={<BombSquadLandingPage />} />
+        <Route path="/bombsquad/connect" element={<ConnectPage />} />
+        <Route path="/bombsquad/run" element={<GamePage />} />
+        <Route path="/bombsquad/result" element={<ResultPage />} />
+        <Route path="/bombsquad/compatibility" element={<CompatibilityPage />} />
+        {/* Legacy-path defensive redirects — any in-app Link/navigate target
+            that still points at the pre-prefix routes lands on the new
+            canonical path instead of 404'ing. External link rewrites for
+            bombsquad.amio.fans live in functions/_middleware.ts. */}
+        <Route path="/game" element={<Navigate to="/bombsquad" replace />} />
+        <Route path="/game/connect" element={<Navigate to="/bombsquad/connect" replace />} />
+        <Route path="/game/run" element={<Navigate to="/bombsquad/run" replace />} />
+        <Route path="/result" element={<Navigate to="/bombsquad/result" replace />} />
+        <Route path="/compatibility" element={<Navigate to="/bombsquad/compatibility" replace />} />
       </Routes>
     </GameProvider>
   )

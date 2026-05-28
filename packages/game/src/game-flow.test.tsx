@@ -89,12 +89,13 @@ describe('full game flow', () => {
   })
 
   it('practice run: 2 modules → result page shows 拆弹成功', async () => {
-    // Enter directly at the practice run route (/game/run) — symmetric
-    // with the daily test below. This deliberately skips the landing →
-    // connect screens; the homepage CTA → landing → connect → run path is
-    // covered separately by GamesPage.test.tsx and the screen tests.
+    // Enter directly at the practice run route (/bombsquad/run) —
+    // symmetric with the daily test below. This deliberately skips the
+    // landing → connect screens; the homepage CTA → landing → connect →
+    // run path is covered separately by GamesPage.test.tsx and the
+    // screen tests.
     render(
-      <MemoryRouter initialEntries={['/game/run?mode=practice']}>
+      <MemoryRouter initialEntries={['/bombsquad/run?mode=practice']}>
         <App />
       </MemoryRouter>
     )
@@ -118,7 +119,7 @@ describe('full game flow', () => {
     vi.mocked(loadManual).mockResolvedValue(yaml.load(practiceYamlRaw) as Manual)
 
     render(
-      <MemoryRouter initialEntries={['/game/run?mode=daily']}>
+      <MemoryRouter initialEntries={['/bombsquad/run?mode=daily']}>
         <App />
       </MemoryRouter>
     )

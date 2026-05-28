@@ -8,7 +8,7 @@ where you and your AI work together in real time to solve challenges.
 
 ## BombSquad
 
-**BombSquad** (`bombsquad.amio.fans`) is the first AmiClaw game, inspired by
+**BombSquad** (`claw.amio.fans/bombsquad`) is the first AmiClaw game, inspired by
 _Keep Talking and Nobody Explodes_.
 
 You are the bomb defuser. Your AI is the manual expert.
@@ -127,5 +127,5 @@ See [`docs/plans/`](./docs/plans/) for implementation plans and
 ## Links
 
 - Platform: [claw.amio.fans](https://claw.amio.fans)
-- BombSquad: [bombsquad.amio.fans](https://bombsquad.amio.fans)
+- BombSquad: [claw.amio.fans/bombsquad](https://claw.amio.fans/bombsquad)
 - Part of the [AMIO](https://amio.fans) ecosystem

@@ -76,7 +76,7 @@ function finishedState({ mode, outcome, moduleStats, strikeCount = 0 }: FixtureO
 function renderResult(state: GameState) {
   sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state))
   return render(
-    <MemoryRouter initialEntries={['/result']}>
+    <MemoryRouter initialEntries={['/bombsquad/result']}>
       <GameProvider>
         <ResultPage />
       </GameProvider>

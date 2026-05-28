@@ -117,7 +117,7 @@ function finishedPracticeState(): GameState {
 
 function renderResultPage() {
   return render(
-    <MemoryRouter initialEntries={['/result']}>
+    <MemoryRouter initialEntries={['/bombsquad/result']}>
       <GameProvider>
         <ResultPage />
       </GameProvider>

@@ -3,10 +3,10 @@
  *
  * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
- *   2. the daily-challenge CTA routes to the BombSquad landing (/game)
- *   3. the featured-BombSquad「开始一局」CTA routes to /game
- *   4. the featured-BombSquad「练习」CTA routes to /game
- *   5. the anonymous hero「开启旅程」CTA routes to /game
+ *   2. the daily-challenge CTA routes to the BombSquad landing (/bombsquad)
+ *   3. the featured-BombSquad「开始一局」CTA routes to /bombsquad
+ *   4. the featured-BombSquad「练习」CTA routes to /bombsquad
+ *   5. the anonymous hero「开启旅程」CTA routes to /bombsquad
  *   6. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
  *
  * Every BombSquad CTA on the homepage now routes to the BombSquad landing
@@ -14,9 +14,9 @@
  * flow, so the homepage no longer opens a pre-game modal. The
  * landing → connect → run path is covered by the screen tests.
  *
- * Render the page directly inside a MemoryRouter. A sibling `/game` route
- * renders a location probe so the navigation target is assertable without
- * mounting the real BombSquad landing page.
+ * Render the page directly inside a MemoryRouter. A sibling `/bombsquad`
+ * route renders a location probe so the navigation target is assertable
+ * without mounting the real BombSquad landing page.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -41,7 +41,7 @@ function renderHomepage(entry = '/') {
     <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/" element={<GamesPage />} />
-        <Route path="/game" element={<LocationProbe />} />
+        <Route path="/bombsquad" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
   )
@@ -76,7 +76,7 @@ describe('GamesPage homepage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /立即挑战/ }))
 
-    expect(screen.getByTestId('location').textContent).toBe('/game')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad')
   })
 
   it('routes to the BombSquad landing from the featured「开始一局」CTA', () => {
@@ -84,7 +84,7 @@ describe('GamesPage homepage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '开始一局' }))
 
-    expect(screen.getByTestId('location').textContent).toBe('/game')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad')
   })
 
   it('routes to the BombSquad landing from the featured「练习」CTA', () => {
@@ -92,7 +92,7 @@ describe('GamesPage homepage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
 
-    expect(screen.getByTestId('location').textContent).toBe('/game')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad')
   })
 
   it('routes to the BombSquad landing from the anonymous hero「开启旅程」CTA', () => {
@@ -100,7 +100,7 @@ describe('GamesPage homepage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /开启旅程/ }))
 
-    expect(screen.getByTestId('location').textContent).toBe('/game')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad')
   })
 
   it('renders the WelcomeStrip instead of the hero for a signed-in visitor', () => {

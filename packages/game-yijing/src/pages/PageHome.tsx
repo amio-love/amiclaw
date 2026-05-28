@@ -111,7 +111,7 @@ export function PageHome() {
 
           <a
             className={styles.crossLink}
-            href="https://bombsquad.amio.fans"
+            href="https://claw.amio.fans/bombsquad"
             target="_blank"
             rel="noreferrer"
           >

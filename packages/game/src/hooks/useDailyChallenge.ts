@@ -8,7 +8,7 @@ import { readDailyAttemptCount, reserveDailyAttempt } from '@/utils/session'
  * Whichever URL the player has the game open on, that same origin is
  * guaranteed to be serving the matching manual (via the
  * `functions/manual/[date].ts` Pages Function). Hardcoding a brand URL
- * like `bombsquad.amio.fans` meant the copied prompt pointed at a
+ * like `claw.amio.fans` meant the copied prompt pointed at a
  * domain that had not been wired up yet — players hit 404 and the AI
  * had nothing to read. Reading `window.location.origin` at render time
  * makes the URL self-heal across `amiclaw.pages.dev`, a custom domain,
@@ -22,7 +22,7 @@ function getOrigin(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }
-  return 'https://bombsquad.amio.fans'
+  return 'https://claw.amio.fans'
 }
 
 /**

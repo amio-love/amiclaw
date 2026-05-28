@@ -7,7 +7,7 @@
  *      Claude flagged as 已验证.
  *   3. Recommended opening-prompt block renders multi-line Chinese text.
  *   4. Copy button click triggers success feedback ("已复制！").
- *   5. Return-home link points to `/game` (the BombSquad landing page).
+ *   5. Return-home link points to `/bombsquad` (the BombSquad landing page).
  *
  * Clipboard helper is stubbed so the test doesn't depend on jsdom's
  * Clipboard API surface and the success branch is exercised deterministically.
@@ -25,7 +25,7 @@ import { copyToClipboard } from '@/utils/clipboard'
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/compatibility']}>
+    <MemoryRouter initialEntries={['/bombsquad/compatibility']}>
       <CompatibilityPage />
     </MemoryRouter>
   )
@@ -85,9 +85,9 @@ describe('CompatibilityPage', () => {
     expect(copiedArg).toMatch(/等会儿我会发你一个 URL/)
   })
 
-  it('renders a return-home link pointing to /game', () => {
+  it('renders a return-home link pointing to /bombsquad', () => {
     renderPage()
     const link = screen.getByRole('link', { name: /返回 BombSquad 首页/ })
-    expect(link).toHaveAttribute('href', '/game')
+    expect(link).toHaveAttribute('href', '/bombsquad')
   })
 })
