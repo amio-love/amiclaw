@@ -369,6 +369,23 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Fixed
 
+- **Symbol-dial AI no longer reverse-asks for the manual** The symbol_dial
+  manual's `rule:` preamble is rewritten so the AI partner stops asking the
+  player "do you have a manual?" and "what is the target arrangement?" mid-run.
+  The old preamble told the AI which column to look up but never anchored on
+  what the player physically sees on screen, never spelled out the spoken
+  command shape ("press right N times"), and never disclosed that each dial's
+  6-symbol pool — five fillers plus the starting symbol — lives only in the
+  frontend code and not in the manual. With those gaps the AI defaulted to
+  treating the player as the manual carrier whenever it tried to project a
+  post-rotation symbol. The new preamble opens with the visual anchor (three
+  dials, each showing a single symbol via a 摆轮 / dial display, left / right
+  arrow rotates by one slot), tells the AI to say "按右箭头 N 次" with N
+  derived from the lookup column, and explicitly forbids the AI from naming
+  the post-rotation symbol — the dial-after-rotation is none of the AI's
+  business. Propagates to all 366 daily manuals via the seeded shuffle
+  generator. No code, schema, or symbol changes.
+
 - **Wire module manual gains a rule preamble** The wire_routing section
   gains a natural-language `rule:` preamble that spells out
   first-match-wins, that integer `position` is 0-indexed top-down, the
