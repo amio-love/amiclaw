@@ -4,7 +4,7 @@
 # dialog (never two stacked). Submitting posts a `survey_submit` event to
 # /api/events; submitting or skipping both retire the survey for the device.
 #
-# Gated by localStorage['bombsquad-survey-answered'] (packages/game/src/utils/
+# Gated by localStorage['bombsquad-survey-answered'] (packages/game-bombsquad/src/utils/
 # survey.ts). The shared harness fixture seeds that flag as already-answered
 # for every other scenario so the modal never interferes with their result-page
 # steps; this file's scenario carries the @survey-fresh tag to opt out of the

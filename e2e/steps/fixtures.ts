@@ -2,7 +2,7 @@
  * Shared playwright-bdd fixtures for the amiclaw e2e harness.
  *
  * Implements the verified 6-D harness-side determinism design — zero
- * `packages/game` product changes. Four mechanisms live here:
+ * `packages/game-bombsquad` product changes. Four mechanisms live here:
  *
  *  1. Controlled clock — `pinClockOnLanding` runs the canonical
  *     `clock.install({time:T-BUF})` -> `goto('/')` -> `clock.pauseAt(T)`
@@ -174,10 +174,15 @@ export class World {
   // Every homepage BombSquad CTA shares one mode-agnostic target (`/bombsquad`);
   // the daily / practice choice is made on the BombSquad landing page.
 
-  /** Homepage `/` → BombSquad landing `/bombsquad` via a homepage BombSquad CTA. */
+  /** Homepage `/` → BombSquad landing `/bombsquad` via a homepage BombSquad CTA.
+   *  BombSquad is now a separate SPA served at `/bombsquad/`, so crossing the app
+   *  boundary is a full-page navigation that lands on the directory root
+   *  (`/bombsquad/`, with a trailing slash). Accept both forms. */
   async enterBombSquadLanding(): Promise<void> {
     await this.page.getByRole('button', { name: '立即挑战 →' }).click()
-    await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad', { timeout: 12_000 })
+    await this.page.waitForURL((url) => new URL(url).pathname.replace(/\/$/, '') === '/bombsquad', {
+      timeout: 12_000,
+    })
   }
 
   /** BombSquad landing `/bombsquad` → connect-AI flow `/bombsquad/connect?mode=…`. */
@@ -313,7 +318,7 @@ export const test = base.extend<{ world: World }>({
 
       // Endgame-survey gating. PostGameModal shows a once-per-device survey on
       // the first result-page visit, gated by the `bombsquad-survey-answered`
-      // localStorage flag (the exact key from packages/game/src/utils/
+      // localStorage flag (the exact key from packages/game-bombsquad/src/utils/
       // survey.ts). Every journey scenario that reaches /bombsquad/result would otherwise
       // trip the modal on its first game-end, so the flag is seeded as
       // already-answered by default. The dedicated result-page-survey scenario

@@ -41,18 +41,24 @@ jobs:
         run: pnpm build
 
       # Belt-and-suspenders: `pnpm build` already runs assemble-pages.mjs which
-      # merges packages/game-yijing/dist into packages/game/dist/oracle/. This
-      # explicit step guarantees the merge even if the assemble script is
+      # merges the game builds into packages/platform/dist (the deploy root) —
+      # game-bombsquad under /bombsquad/, game-yijing under /oracle/. These
+      # explicit steps guarantee the merge even if the assemble script is
       # bypassed or changes. `cp -r src/. dest/` is idempotent (overwrites
       # same-named files; does not create dest/dist nesting).
-      - name: Merge game-yijing build into game/dist under /oracle/
+      - name: Merge game-bombsquad build into platform/dist under /bombsquad/
         run: |
-          mkdir -p packages/game/dist/oracle
-          cp -r packages/game-yijing/dist/. packages/game/dist/oracle/
+          mkdir -p packages/platform/dist/bombsquad
+          cp -r packages/game-bombsquad/dist/. packages/platform/dist/bombsquad/
+
+      - name: Merge game-yijing build into platform/dist under /oracle/
+        run: |
+          mkdir -p packages/platform/dist/oracle
+          cp -r packages/game-yijing/dist/. packages/platform/dist/oracle/
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/game/dist --project-name=amiclaw --branch=main
+          command: pages deploy packages/platform/dist --project-name=amiclaw --branch=main

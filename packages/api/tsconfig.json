@@ -11,5 +11,6 @@
       "@shared/*": ["../../shared/*"]
     }
   },
-  "include": ["src", "../../shared"]
+  "include": ["src", "../../shared"],
+  "exclude": ["../../shared/leaderboard-api.ts", "../../shared/leaderboard-optimistic.ts"]
 }

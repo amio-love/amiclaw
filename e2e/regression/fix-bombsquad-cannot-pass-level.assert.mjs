@@ -4,7 +4,7 @@
  *
  * Pure data assertions over:
  *   - packages/manual/data/practice.yaml (wire_routing.rule, button.rule)
- *   - packages/game/src/modules/keypad/KeypadModule.module.css (.symbol stroke)
+ *   - packages/game-bombsquad/src/modules/keypad/KeypadModule.module.css (.symbol stroke)
  *   - shared/symbols.ts (trident description)
  *
  * Companion scenarios live in
@@ -31,7 +31,10 @@ const yaml = require(
 )
 
 const PRACTICE_YAML = resolve(REPO_ROOT, 'packages/manual/data/practice.yaml')
-const KEYPAD_CSS = resolve(REPO_ROOT, 'packages/game/src/modules/keypad/KeypadModule.module.css')
+const KEYPAD_CSS = resolve(
+  REPO_ROOT,
+  'packages/game-bombsquad/src/modules/keypad/KeypadModule.module.css'
+)
 const SYMBOLS_TS = resolve(REPO_ROOT, 'shared/symbols.ts')
 
 const failures = []

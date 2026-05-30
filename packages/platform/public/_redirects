@@ -1,0 +1,21 @@
+# SPA history fallback. Cloudflare Pages serves real files first, so existing
+# assets (/assets/*, /bombsquad/assets/*, /oracle/*, /manual/*) are returned
+# directly; only unmatched paths fall through to these rules.
+#
+# Legacy pre-split paths. Before BombSquad moved under /bombsquad/, these
+# root-level paths were served by the BombSquad SPA. The platform shell now owns
+# the root and has no routes for them, so a hard-load would 404. Permanently
+# redirect each to its canonical /bombsquad/ path. Listed first so these
+# specific 301s win over the SPA fallbacks below.
+/game /bombsquad/ 301
+/game/connect /bombsquad/connect 301
+/game/run /bombsquad/run 301
+/result /bombsquad/result 301
+/compatibility /bombsquad/compatibility 301
+# BombSquad is a separate sub-app (BrowserRouter under /bombsquad/), so its deep
+# client routes (/bombsquad/connect, /bombsquad/run, /bombsquad/result, …) must
+# fall back to the BombSquad index, not the platform shell. This rule is listed
+# before the catch-all so the more specific prefix wins.
+/bombsquad/* /bombsquad/index.html 200
+# Everything else falls back to the platform shell (BrowserRouter at the root).
+/* /index.html 200

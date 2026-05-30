@@ -17,9 +17,9 @@
  * button module with a single click and no press-and-hold choreography.
  *
  * Run: `pnpm e2e:build-answers` (tsx). Imports cross only relative paths into
- * `packages/game/src`; every `@shared/*` import in that subtree is `import type`
+ * `packages/game-bombsquad/src`; every `@shared/*` import in that subtree is `import type`
  * (erased by esbuild), so no path-alias resolution is needed. `generateSceneInfo`
- * is the one piece inlined verbatim from `packages/game/src/engine/scene-info.ts`
+ * is the one piece inlined verbatim from `packages/game-bombsquad/src/engine/scene-info.ts`
  * (it is scene generation, not a solver) to keep this script alias-free; the
  * harness smoke check confirms the inlined copy stays in sync with runtime.
  */
@@ -28,12 +28,12 @@ import { dirname, resolve } from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import yaml from 'js-yaml'
 
-import { createRng, type Rng } from '../../packages/game/src/engine/rng.ts'
-import { generateWire } from '../../packages/game/src/modules/wire/generator.ts'
-import { generateDial } from '../../packages/game/src/modules/dial/generator.ts'
-import { generateButton } from '../../packages/game/src/modules/button/generator.ts'
-import { generateKeypad } from '../../packages/game/src/modules/keypad/generator.ts'
-import { TONGUE_TWISTERS } from '../../packages/game/src/data/tongue-twisters.ts'
+import { createRng, type Rng } from '../../packages/game-bombsquad/src/engine/rng.ts'
+import { generateWire } from '../../packages/game-bombsquad/src/modules/wire/generator.ts'
+import { generateDial } from '../../packages/game-bombsquad/src/modules/dial/generator.ts'
+import { generateButton } from '../../packages/game-bombsquad/src/modules/button/generator.ts'
+import { generateKeypad } from '../../packages/game-bombsquad/src/modules/keypad/generator.ts'
+import { TONGUE_TWISTERS } from '../../packages/game-bombsquad/src/data/tongue-twisters.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -52,7 +52,7 @@ type Manual = {
   }
 }
 
-// --- Verbatim copy of packages/game/src/engine/scene-info.ts -----------------
+// --- Verbatim copy of packages/game-bombsquad/src/engine/scene-info.ts -----------------
 // Kept in sync by the harness smoke check (runtime puzzles must match
 // answers.json). scene-info is scene generation, not a solver.
 const INDICATOR_LABELS = ['FRK', 'CAR', 'NSA', 'MSA', 'SND', 'CLR', 'BOB', 'TRN']

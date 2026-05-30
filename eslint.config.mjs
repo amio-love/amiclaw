@@ -17,8 +17,10 @@ export default tseslint.config(
       '**/node_modules/**',
       '.wrangler/',
       '**/.wrangler/**',
-      'packages/game/src/**/*.js',
-      'packages/game/src/**/*.jsx',
+      'packages/platform/src/**/*.js',
+      'packages/platform/src/**/*.jsx',
+      'packages/game-bombsquad/src/**/*.js',
+      'packages/game-bombsquad/src/**/*.jsx',
       // Playwright-bdd generated specs + the .gherkin -> .feature mirror.
       '.features-gen/',
       '.features-mirror/',

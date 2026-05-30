@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": [
+    "/assets/*",
+    "/audio/*",
+    "/bombsquad/*",
+    "/oracle/*",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/_redirects",
+    "/_routes.json"
+  ]
+}

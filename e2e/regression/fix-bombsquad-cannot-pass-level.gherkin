@@ -23,7 +23,7 @@ Feature: bombsquad-cannot-pass-level regression coverage
 
   Background:
     Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
-    And the keypad module stylesheet packages/game/src/modules/keypad/KeypadModule.module.css is loaded
+    And the keypad module stylesheet packages/game-bombsquad/src/modules/keypad/KeypadModule.module.css is loaded
     And the shared SYMBOLS registry at shared/symbols.ts is loaded
 
   # bug: Bug A — wire_routing manual had no rule preamble, so the AI partner
@@ -36,7 +36,7 @@ Feature: bombsquad-cannot-pass-level regression coverage
   #   top-down positions, first ≡ 0, last ≡ length-1, and the
   #   target.color refinement semantics. Propagates to 366 daily files via
   #   the seeded shuffle generator. The corresponding solver enforcement
-  #   lives in packages/game/src/modules/wire/solver.ts:resolvePosition.
+  #   lives in packages/game-bombsquad/src/modules/wire/solver.ts:resolvePosition.
   # retire-when: docs/architecture/arch-component-manual-system.md
   #   §Invariants `每模块规则前言不变量` + `Wire 下标语义不变量` are removed.
   Scenario: wire_routing manual declares 0-indexed position + first-match-wins (Bug A)
@@ -72,7 +72,7 @@ Feature: bombsquad-cannot-pass-level regression coverage
   # retire-when: the keypad module CSS is reworked away from
   #   stroke-on-dark or the design system token name changes.
   Scenario: keypad un-tapped symbol stroke has sufficient contrast (Bug C)
-    Given the keypad module stylesheet packages/game/src/modules/keypad/KeypadModule.module.css
+    Given the keypad module stylesheet packages/game-bombsquad/src/modules/keypad/KeypadModule.module.css
     When inspecting the .symbol selector rule for stroke
     Then stroke must NOT match the literal pattern "rgba(255, 255, 255, 0.5)"
     And stroke must use var(--color-text-primary) or var(--y) or some non-50%-transparent value
