@@ -92,7 +92,7 @@ function finishedState({ mode, outcome }: FixtureOptions): GameState {
 function renderResult(state: GameState) {
   sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state))
   return render(
-    <MemoryRouter initialEntries={['/result']}>
+    <MemoryRouter initialEntries={['/bombsquad/result']}>
       <GameProvider>
         <ResultPage />
       </GameProvider>

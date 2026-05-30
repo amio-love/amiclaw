@@ -33,7 +33,7 @@ function playingPracticeState(): GameState {
     status: 'PLAYING',
     mode: 'practice',
     manual: {} as GameState['manual'],
-    manualUrl: 'https://bombsquad.amio.fans/manual/practice',
+    manualUrl: 'https://claw.amio.fans/manual/practice',
     sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
     moduleSequence: ['wire', 'keypad'],
     moduleConfigs: [{}, {}] as GameState['moduleConfigs'],
@@ -79,7 +79,7 @@ describe('GamePage countdown timer', () => {
 
   it('counts down from the time budget toward zero', async () => {
     render(
-      <MemoryRouter initialEntries={['/game/run?mode=practice']}>
+      <MemoryRouter initialEntries={['/bombsquad/run?mode=practice']}>
         <GameProvider>
           <GamePage />
         </GameProvider>

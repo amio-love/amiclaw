@@ -268,7 +268,7 @@ export default function ResultPage() {
       attemptNumber: state.attemptNumber,
     })
     dispatch({ type: 'RESET' })
-    navigate(`/game/run?mode=${state.mode}`)
+    navigate(`/bombsquad/run?mode=${state.mode}`)
   }
 
   const buildSummary = useCallback(() => {
@@ -324,7 +324,7 @@ ${retroQuestions}`
         <div className={styles.stage}>
           <p className={styles.noData}>
             暂无数据。{' '}
-            <Link to="/game" className={styles.noDataLink}>
+            <Link to="/bombsquad" className={styles.noDataLink}>
               返回主页
             </Link>
           </p>
@@ -477,7 +477,7 @@ ${retroQuestions}`
             <Button variant="primary" full onClick={handlePlayAgain}>
               再来一局<span aria-hidden="true"> →</span>
             </Button>
-            <Button variant="ghost" full onClick={() => navigate('/game')}>
+            <Button variant="ghost" full onClick={() => navigate('/bombsquad')}>
               回主页
             </Button>
           </div>

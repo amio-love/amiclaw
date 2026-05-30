@@ -19,7 +19,7 @@
 # (game-context.test.ts) — see e2e/flow-inventory.yaml.
 #
 # Aligned with the Atlas BombSquad redesign: the old PromptModal is replaced by
-# the routed connect-AI flow (/game → /game/connect → /game/run); the four
+# the routed connect-AI flow (/bombsquad → /bombsquad/connect → /bombsquad/run); the four
 # puzzles read by their Atlas names (光弦 / 星盘 / 按钮 / 星符); the failure
 # result heading is the gentler 差一点.
 
@@ -45,7 +45,7 @@ Feature: BombSquad daily challenge and practice mode
     Then I see the tip "已复制到剪贴板"
     And the system clipboard contains the daily manual URL
     When I finish the connect-AI flow
-    Then the URL path is /game/run
+    Then the URL path is /bombsquad/run
     And the query string carries "mode=daily"
     And the immersive game flow renders without the platform shell
     And I see the prompt "准备好了吗？"
@@ -60,7 +60,7 @@ Feature: BombSquad daily challenge and practice mode
     When I solve the 按钮 module correctly
     Then the module progress bar advances to the 星符 module
     When I solve the 星符 module correctly
-    Then I am navigated to the URL path /result
+    Then I am navigated to the URL path /bombsquad/result
     And the result page shows the heading "拆弹成功"
     And the leaderboard submission carries a plausible time
 
@@ -71,7 +71,7 @@ Feature: BombSquad daily challenge and practice mode
     Then the connect-AI flow opens at step 1
     And the copy card shows the practice manual URL
     When I complete the connect-AI flow
-    Then the URL path is /game/run
+    Then the URL path is /bombsquad/run
     And the query string carries "mode=practice"
     When I tap "开始"
     Then the timer starts at the practice budget 05:00 and counts down toward 00:00
@@ -90,7 +90,7 @@ Feature: BombSquad daily challenge and practice mode
     And I can immediately retry the same puzzle in place
     When I solve the 光弦 module correctly
     And I solve the 星符 module correctly
-    Then I am navigated to the URL path /result
+    Then I am navigated to the URL path /bombsquad/result
     And the result page shows the heading "拆弹成功"
 
   # Source: daily-fail-strikeout

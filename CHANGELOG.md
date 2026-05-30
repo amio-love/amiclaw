@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**AmiClaw moves to claw.amio.fans, BombSquad gets its own sub-path** —
+The platform's canonical home is now `claw.amio.fans`, and BombSquad
+lives at `claw.amio.fans/bombsquad` (with the run, connect, result and
+compatibility screens all under the same `/bombsquad/*` prefix). The
+legacy `bombsquad.amio.fans` host is preserved as a permanent
+redirect — every page on it 301s to its canonical equivalent on
+`claw.amio.fans`, so existing share links and AI-handed manual URLs keep
+working without anyone having to update bookmarks. The mirror-mode
+landing pattern matches the Yijing Oracle preview at `/oracle/*`, so
+every game now lives under its own sub-path on the platform.
+
 **AmiClaw platform homepage** — The site now opens on a full AmiClaw
 platform homepage instead of a bare BombSquad launcher. A four-tab shell
 (游戏 / 排行榜 / 社区 / 我的) frames the「星图 / Atlas」design: a signed-out

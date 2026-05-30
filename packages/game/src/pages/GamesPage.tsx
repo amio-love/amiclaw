@@ -12,8 +12,8 @@ import { useAuth } from '@/hooks/useAuth'
 /* The `/` route — the Amiclaw platform homepage. Renders the anonymous
    hero or the signed-in welcome strip per useAuth(), then the homepage
    sections. Every BombSquad「开始游戏」CTA routes to the BombSquad
-   landing page (/game); the landing owns the daily/practice choice and
-   the connect-AI flow, so the homepage no longer gates the run itself.
+   landing page (/bombsquad); the landing owns the daily/practice choice
+   and the connect-AI flow, so the homepage no longer gates the run itself.
    WhatIsAmiclaw and FooterPitch are anonymous-only (handoff §1). */
 export default function GamesPage() {
   const { signedIn, user } = useAuth()
@@ -21,7 +21,7 @@ export default function GamesPage() {
 
   /* All homepage「玩 BombSquad」CTAs share one target — the BombSquad
      landing page. Mode is chosen on the landing, not here. */
-  const enterBombSquad = () => navigate('/game')
+  const enterBombSquad = () => navigate('/bombsquad')
 
   /* The ghost「看看 BombSquad」CTA scrolls to the FeaturedBombSquad
      section, which carries id="featured". */

@@ -263,7 +263,7 @@ export default function GamePage() {
     const origin =
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
-        : 'https://bombsquad.amio.fans'
+        : 'https://claw.amio.fans'
     const manualUrl =
       mode === 'practice'
         ? `${origin}/manual/practice`
@@ -347,7 +347,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (state.status === 'RESULT') {
-      navigate('/result')
+      navigate('/bombsquad/result')
     }
   }, [state.status, navigate])
 
@@ -452,12 +452,12 @@ export default function GamePage() {
                 </p>
                 <button
                   className={styles.startBtn}
-                  onClick={() => navigate('/game/run?mode=practice', { replace: true })}
+                  onClick={() => navigate('/bombsquad/run?mode=practice', { replace: true })}
                 >
                   去练习
                 </button>
                 <Link to="/" className={styles.homeLink}>
-                  ← 返回首页
+                  ← 返回平台首页
                 </Link>
               </>
             ) : state.errorKind === 'yaml_parse' ? (
@@ -469,7 +469,7 @@ export default function GamePage() {
                   重试
                 </button>
                 <Link to="/" className={styles.homeLink}>
-                  ← 返回首页
+                  ← 返回平台首页
                 </Link>
               </>
             ) : (
@@ -483,7 +483,7 @@ export default function GamePage() {
                   重试
                 </button>
                 <Link to="/" className={styles.homeLink}>
-                  ← 返回首页
+                  ← 返回平台首页
                 </Link>
               </>
             )

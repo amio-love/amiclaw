@@ -8,8 +8,8 @@ import styles from './BombSquadLandingPage.module.css'
 
 /* BombSquad game landing page — Atlas star-chart visual language
    (design_handoff_bombsquad README §6.1). This is BombSquad's own
-   landing, mounted at /game; the platform homepage at / is separate.
-   The 每日挑战 / 练习 CTAs enter the connect-AI flow (/game/connect),
+   landing, mounted at /bombsquad; the platform homepage at / is separate.
+   The 每日挑战 / 练习 CTAs enter the connect-AI flow (/bombsquad/connect),
    which then hands off to the existing run. */
 export default function BombSquadLandingPage() {
   const navigate = useNavigate()
@@ -17,8 +17,8 @@ export default function BombSquadLandingPage() {
 
   /* Each CTA picks a mode and enters the connect-AI flow; the connect
      screen copies the manual link and hands off to the run. */
-  const startDaily = () => navigate('/game/connect?mode=daily')
-  const startPractice = () => navigate('/game/connect?mode=practice')
+  const startDaily = () => navigate('/bombsquad/connect?mode=daily')
+  const startPractice = () => navigate('/bombsquad/connect?mode=practice')
 
   return (
     <main className={styles.page}>
@@ -34,7 +34,7 @@ export default function BombSquadLandingPage() {
               type="button"
               className={styles.iconBtn}
               onClick={() => navigate('/')}
-              aria-label="返回 Amiclaw 首页"
+              aria-label="返回平台首页（claw.amio.fans）"
             >
               {/* Exit-to-platform glyph — a settings gear would imply a
                   settings surface the immersive game does not have. */}

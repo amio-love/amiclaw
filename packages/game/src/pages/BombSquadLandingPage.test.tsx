@@ -1,8 +1,8 @@
 /**
  * BombSquadLandingPage unit tests.
  *
- * Covers the BombSquad game landing page (/game) — the Atlas star-chart
- * redesign (design_handoff_bombsquad README §6.1):
+ * Covers the BombSquad game landing page (/bombsquad) — the Atlas
+ * star-chart redesign (design_handoff_bombsquad README §6.1):
  *   1. render smoke — planet hero, BOMBSQUAD title, the AI-status eyebrow,
  *      and the daily-countdown card.
  *   2. both the 练习 and 每日挑战 CTAs render.
@@ -31,10 +31,10 @@ function LocationProbe() {
 
 function renderLanding() {
   return render(
-    <MemoryRouter initialEntries={['/game']}>
+    <MemoryRouter initialEntries={['/bombsquad']}>
       <Routes>
-        <Route path="/game" element={<BombSquadLandingPage />} />
-        <Route path="/game/connect" element={<LocationProbe />} />
+        <Route path="/bombsquad" element={<BombSquadLandingPage />} />
+        <Route path="/bombsquad/connect" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
   )
@@ -69,12 +69,12 @@ describe('BombSquadLandingPage', () => {
   it('enters the connect flow as mode=daily when 每日挑战 is clicked', () => {
     renderLanding()
     fireEvent.click(screen.getByRole('button', { name: /每日挑战/ }))
-    expect(screen.getByTestId('location').textContent).toBe('/game/connect?mode=daily')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad/connect?mode=daily')
   })
 
   it('enters the connect flow as mode=practice when 练习 is clicked', () => {
     renderLanding()
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
-    expect(screen.getByTestId('location').textContent).toBe('/game/connect?mode=practice')
+    expect(screen.getByTestId('location').textContent).toBe('/bombsquad/connect?mode=practice')
   })
 })

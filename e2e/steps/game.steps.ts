@@ -34,7 +34,7 @@ When('I enter practice mode from the homepage', async ({ world }) => {
 })
 
 Then('the connect-AI flow opens at step 1', async ({ page }) => {
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/connect')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/connect')
   await expect(page.getByText('第 1/3 步').first()).toBeVisible()
 })
 
@@ -68,7 +68,7 @@ When('I complete the connect-AI flow', async ({ world }) => {
 // --- Game HUD ----------------------------------------------------------------
 
 Then('the immersive game flow renders without the platform shell', async ({ page }) => {
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/run')
   await expect(page.getByRole('navigation', { name: '主导航' })).toHaveCount(0)
 })
 
@@ -183,7 +183,7 @@ Then(
 )
 
 Then('the result page shows the heading {string}', async ({ page }, text: string) => {
-  await page.waitForURL(/\/result/, { timeout: 10_000 })
+  await page.waitForURL(/\/bombsquad\/result/, { timeout: 10_000 })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(text)
 })
 
@@ -224,7 +224,7 @@ Then('a red error pulse plays over the module panel', async ({ page }) => {
 Then('no strike is counted and the run does not fail', async ({ page }) => {
   await expect(page.getByTestId('strike-pip')).toHaveCount(0)
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/run')
 })
 
 Then('I can immediately retry the same puzzle in place', async ({ page }) => {
@@ -245,12 +245,12 @@ Then('the current module is not reset — the same puzzle stays on screen', asyn
 
 Then('the run continues in the PLAYING state', async ({ page }) => {
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/run')
 })
 
 Then('the run still continues', async ({ page }) => {
   await expect(page.getByRole('alert', { name: '炸弹爆炸' })).toHaveCount(0)
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game/run')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/run')
 })
 
 When('the countdown timer reaches 00:00', async ({ world }) => {
@@ -271,9 +271,9 @@ Then('no explosion animation plays', async ({ page }) => {
 })
 
 Then('the result page opens with the heading {string}', async ({ world, page }, text: string) => {
-  // Clear the 1.4s EXPLOSION_DURATION timer (harmless if already at /result).
+  // Clear the 1.4s EXPLOSION_DURATION timer (harmless if already at /bombsquad/result).
   await world.advance(1600)
-  await page.waitForURL(/\/result/, { timeout: 10_000 })
+  await page.waitForURL(/\/bombsquad\/result/, { timeout: 10_000 })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(text)
 })
 

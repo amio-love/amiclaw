@@ -1,5 +1,5 @@
 # Mobile internal-beta — the daily win-to-leaderboard path a friend follows on
-# their phone: a defused daily run -> /result recap -> NicknameModal -> score
+# their phone: a defused daily run -> /bombsquad/result recap -> NicknameModal -> score
 # submission -> /leaderboard ranking. Daily mode is used deliberately so the
 # NicknameModal and the leaderboard segment are exercised.
 #
