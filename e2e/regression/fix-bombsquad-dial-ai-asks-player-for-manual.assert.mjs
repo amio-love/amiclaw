@@ -100,14 +100,21 @@ function scenarioC() {
     record(name, `symbol_dial.rule is missing or empty (got: ${JSON.stringify(rule)})`)
     return
   }
-  // Disclosure of the per-dial 6-symbol pool model. Accept any of:
-  //   - "filler" (English term used inline)
-  //   - "5 个" (the count of filler symbols per dial)
-  //   - "6 符号池" (the existing phrasing — still permitted)
-  if (!/filler|5\s*个|6\s*符号池/.test(rule)) {
+  // Disclosure of the per-dial 6-symbol pool model. The NEW preamble must
+  // pair BOTH "filler" (English term) AND "5 个" (the explicit count of
+  // filler symbols per dial) — the pre-fix rule already contained "6 符号池"
+  // alone, so requiring both phrasings together makes this scenario
+  // properly discriminate fixed-vs-unfixed.
+  if (!/filler/.test(rule)) {
     record(
       name,
-      'rule preamble does not disclose the per-dial 6-symbol pool model (expected "filler" / "5 个" / "6 符号池")'
+      'rule preamble does not mention "filler" (English term for the per-dial filler symbols)'
+    )
+  }
+  if (!/5\s*个/.test(rule)) {
+    record(
+      name,
+      'rule preamble does not mention "5 个" (the explicit count of filler symbols per dial)'
     )
   }
 }
@@ -120,12 +127,13 @@ function scenarioD() {
     record(name, `symbol_dial.rule is missing or empty (got: ${JSON.stringify(rule)})`)
     return
   }
-  // Negation keyword.
-  const hasNegation = /不能|不需要告诉|不预言/.test(rule)
+  // Negation keyword. Widened dictionary so future stylistic edits cannot
+  // silently weaken the disclaimer.
+  const hasNegation = /不能|不需要告诉|不预言|无法|不应|不可/.test(rule)
   if (!hasNegation) {
     record(
       name,
-      'rule preamble does not carry a negation keyword (expected "不能" / "不需要告诉" / "不预言")'
+      'rule preamble does not carry a negation keyword (expected "不能" / "不需要告诉" / "不预言" / "无法" / "不应" / "不可")'
     )
   }
   // Target / final / "see what" pairing.
