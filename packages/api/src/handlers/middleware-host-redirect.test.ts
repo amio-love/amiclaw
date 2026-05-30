@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { LEGACY_HOST, CANONICAL_HOST, mapLegacyBombsquadPath } from './middleware-host-redirect'
+import {
+  LEGACY_HOST,
+  ORACLE_HOST,
+  CANONICAL_HOST,
+  mapLegacyBombsquadPath,
+  mapLegacyOraclePath,
+} from './middleware-host-redirect'
 
 /**
  * Covers the path-mapping table the `bombsquad.amio.fans` → `claw.amio.fans`
@@ -65,12 +71,52 @@ describe('mapLegacyBombsquadPath — specific path rewrites', () => {
   })
 })
 
-describe('LEGACY_HOST / CANONICAL_HOST constants', () => {
+/**
+ * Covers the path-mapping table the `oracle.amio.fans` → `claw.amio.fans`
+ * 301 middleware is built on. Unlike BombSquad, the Yijing Oracle SPA lives
+ * entirely under `/oracle/*`, so unknown paths are prefixed with `/oracle`
+ * rather than passed through verbatim; the shared `/manual/*` and `/api/*`
+ * namespaces still pass through unchanged.
+ */
+describe('mapLegacyOraclePath — Oracle SPA path rewrites', () => {
+  it('maps root to the /oracle landing on the canonical host', () => {
+    expect(mapLegacyOraclePath('/', '')).toBe(`https://${CANONICAL_HOST}/oracle`)
+  })
+
+  it('treats an empty pathname like root (defensive — `URL` always produces "/")', () => {
+    expect(mapLegacyOraclePath('', '')).toBe(`https://${CANONICAL_HOST}/oracle`)
+  })
+
+  it('passes through /manual/* paths verbatim onto the canonical host', () => {
+    expect(mapLegacyOraclePath('/manual/2026-05-30', '')).toBe(
+      `https://${CANONICAL_HOST}/manual/2026-05-30`
+    )
+  })
+
+  it('passes through /api/* paths verbatim, preserving the query string', () => {
+    expect(mapLegacyOraclePath('/api/leaderboard', '?date=2026-05-30')).toBe(
+      `https://${CANONICAL_HOST}/api/leaderboard?date=2026-05-30`
+    )
+  })
+
+  it('prefixes unknown SPA paths with /oracle', () => {
+    expect(mapLegacyOraclePath('/casting', '')).toBe(`https://${CANONICAL_HOST}/oracle/casting`)
+  })
+
+  it('prefixes deep SPA paths with /oracle and preserves the query string', () => {
+    expect(mapLegacyOraclePath('/reading/sign', '?seed=42')).toBe(
+      `https://${CANONICAL_HOST}/oracle/reading/sign?seed=42`
+    )
+  })
+})
+
+describe('LEGACY_HOST / ORACLE_HOST / CANONICAL_HOST constants', () => {
   it('exposes the exact host strings the middleware checks against', () => {
     // These strings are the authoritative spelling. If a rename ever lands,
     // the test must change in lockstep — a typo here would silently break
     // every legacy link in the wild.
     expect(LEGACY_HOST).toBe('bombsquad.amio.fans')
+    expect(ORACLE_HOST).toBe('oracle.amio.fans')
     expect(CANONICAL_HOST).toBe('claw.amio.fans')
   })
 })
