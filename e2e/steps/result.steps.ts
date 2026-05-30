@@ -271,9 +271,9 @@ Then('the system clipboard contains the recommended opening prompt text', async 
 })
 
 Then('I am back on the BombSquad landing page', async ({ page }) => {
-  // The compatibility page's 返回 link lands on the BombSquad landing (/game),
+  // The compatibility page's 返回 link lands on the BombSquad landing (/bombsquad),
   // not the Amiclaw platform homepage — the landing carries the mode CTAs.
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/game')
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad')
   await expect(page.getByRole('button', { name: '每日挑战 →' })).toBeVisible()
 })
 

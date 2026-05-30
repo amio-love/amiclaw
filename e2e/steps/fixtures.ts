@@ -7,8 +7,8 @@
  *  1. Controlled clock — `pinClockOnLanding` runs the canonical
  *     `clock.install({time:T-BUF})` -> `goto('/')` -> `clock.pauseAt(T)`
  *     recipe so the daily run-seed (`getRunSeed('daily')` === `Date.now()`)
- *     is pinned to exactly `T`. The seed-reading `/game` route is reached by
- *     in-app client-side navigation, so `GamePage` mounts under an
+ *     is pinned to exactly `T`. The seed-reading `/bombsquad/run` route is
+ *     reached by in-app client-side navigation, so `GamePage` mounts under an
  *     already-frozen clock. `advance` / `fastForwardPast` step the clock.
  *  2. Route mocking — the manual, leaderboard and events network routes are
  *     intercepted so the static-build gate never makes a live call. The
@@ -169,28 +169,28 @@ export class World {
   // --- Run-entry helpers -----------------------------------------------------
   //
   // The redesign replaced the old single PromptModal with a routed flow:
-  //   platform homepage `/` → BombSquad landing `/game` → connect-AI flow
-  //   `/game/connect` (three in-place steps) → run `/game/run`.
-  // Every homepage BombSquad CTA shares one mode-agnostic target (`/game`);
+  //   platform homepage `/` → BombSquad landing `/bombsquad` → connect-AI flow
+  //   `/bombsquad/connect` (three in-place steps) → run `/bombsquad/run`.
+  // Every homepage BombSquad CTA shares one mode-agnostic target (`/bombsquad`);
   // the daily / practice choice is made on the BombSquad landing page.
 
-  /** Homepage `/` → BombSquad landing `/game` via a homepage BombSquad CTA. */
+  /** Homepage `/` → BombSquad landing `/bombsquad` via a homepage BombSquad CTA. */
   async enterBombSquadLanding(): Promise<void> {
     await this.page.getByRole('button', { name: '立即挑战 →' }).click()
-    await this.page.waitForURL((url) => new URL(url).pathname === '/game', { timeout: 12_000 })
+    await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad', { timeout: 12_000 })
   }
 
-  /** BombSquad landing `/game` → connect-AI flow `/game/connect?mode=…`. */
+  /** BombSquad landing `/bombsquad` → connect-AI flow `/bombsquad/connect?mode=…`. */
   async openConnect(mode: 'daily' | 'practice'): Promise<void> {
     this.runMode = mode
     const label = mode === 'daily' ? '每日挑战 →' : '练习'
     await this.page.getByRole('button', { name: label, exact: true }).click()
-    await this.page.waitForURL((url) => new URL(url).pathname === '/game/connect', {
+    await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad/connect', {
       timeout: 12_000,
     })
   }
 
-  /** Homepage `/` → connect-AI flow `/game/connect?mode=…` in one hop. */
+  /** Homepage `/` → connect-AI flow `/bombsquad/connect?mode=…` in one hop. */
   async enterConnect(mode: 'daily' | 'practice'): Promise<void> {
     await this.enterBombSquadLanding()
     await this.openConnect(mode)
@@ -213,7 +213,9 @@ export class World {
     await this.page.getByRole('button', { name: '下一步 →' }).click()
     await this.page.getByText('第 3/3 步').first().waitFor()
     await this.page.getByRole('button', { name: '确认开始游戏 →' }).click()
-    await this.page.waitForURL((url) => new URL(url).pathname === '/game/run', { timeout: 12_000 })
+    await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad/run', {
+      timeout: 12_000,
+    })
   }
 
   /** Walk the whole connect-AI flow: copy the manual link, then hand off. */
@@ -246,7 +248,8 @@ export class World {
    * through the `onComplete` (<=800ms) and `NEXT_MODULE` (800ms) timers. The
    * `拆除成功` overlay between the two `runFor`s confirms React has committed
    * the MODULE_COMPLETE render, so the NEXT_MODULE timer is registered before
-   * the second advance. After the last module the same chain reaches /result.
+   * the second advance. After the last module the same chain reaches
+   * /bombsquad/result.
    */
   async solveModule(kind: ModuleKind): Promise<void> {
     const answer = this.answerFor(kind)
@@ -286,14 +289,14 @@ export class World {
     await this.solveModule('dial')
     await this.solveModule('button')
     await this.solveModule('keypad')
-    await this.page.waitForURL(/\/result/, { timeout: 10_000 })
+    await this.page.waitForURL(/\/bombsquad\/result/, { timeout: 10_000 })
   }
 
   async drivePracticeToResult(): Promise<void> {
     await this.startPracticeRun()
     await this.solveModule('wire')
     await this.solveModule('keypad')
-    await this.page.waitForURL(/\/result/, { timeout: 10_000 })
+    await this.page.waitForURL(/\/bombsquad\/result/, { timeout: 10_000 })
   }
 }
 
@@ -311,7 +314,7 @@ export const test = base.extend<{ world: World }>({
       // Endgame-survey gating. PostGameModal shows a once-per-device survey on
       // the first result-page visit, gated by the `bombsquad-survey-answered`
       // localStorage flag (the exact key from packages/game/src/utils/
-      // survey.ts). Every journey scenario that reaches /result would otherwise
+      // survey.ts). Every journey scenario that reaches /bombsquad/result would otherwise
       // trip the modal on its first game-end, so the flag is seeded as
       // already-answered by default. The dedicated result-page-survey scenario
       // carries the @survey-fresh tag to opt out of the seed so the modal
