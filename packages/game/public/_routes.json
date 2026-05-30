@@ -1,5 +1,13 @@
 {
   "version": 1,
-  "include": ["/manual/*", "/api/*"],
-  "exclude": []
+  "include": ["/*"],
+  "exclude": [
+    "/assets/*",
+    "/audio/*",
+    "/oracle/*",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/_redirects",
+    "/_routes.json"
+  ]
 }
