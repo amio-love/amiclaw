@@ -1,0 +1,104 @@
+# Regression guards for the fix-bombsquad-dial-ai-asks-player-for-manual
+# bundle (task fix-bombsquad-dial-ai-asks-player-for-manual, 2026-05-30).
+#
+# This file documents 4 regression scenarios — one per missing structural
+# element in the symbol_dial rule preamble — over the shipped practice
+# manual. The executable assertions live in the companion node script
+# `e2e/regression/fix-bombsquad-dial-ai-asks-player-for-manual.assert.mjs`,
+# run via
+# `node e2e/regression/fix-bombsquad-dial-ai-asks-player-for-manual.assert.mjs`.
+# The script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: every
+# assertion here is a pure read of YAML — no browser, no preview server,
+# no DOM. Spinning up the full playwright harness would add minutes of
+# webserver boot per scenario without any added coverage.
+#
+# The Feature has no @playwright tag, so the playwright-bdd harness
+# (configured in playwright.config.ts with `tags: '@playwright'`) skips
+# this file entirely — only the .assert.mjs sibling is executable.
+
+Feature: symbol_dial preamble teaches AI to own rotation count + target-arrangement narrative
+  As an AI partner relying on the bomb manual to talk a player through symbol_dial
+  I want the rule preamble to anchor what the player physically sees, to tell me
+  how to translate the internal index into a spoken "press right N times" command,
+  to disclose that the per-dial 6-symbol pool is invisible to me, and to forbid me
+  from predicting the post-rotation symbol
+  So that I stop reverse-asking the player "do you have a manual?" or "what is the
+  target arrangement?" — both questions caused by missing structural elements in
+  the preamble
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+
+  # bug: Bug A — symbol_dial rule preamble does not anchor on what the
+  #   player physically sees on screen (3 dials, each showing 1 symbol via
+  #   a 摆轮 / dial display). Without the anchor the AI partner cannot
+  #   describe the current state back to the player in the player's own
+  #   visual vocabulary, and the conversation drifts.
+  # fix: practice.yaml symbol_dial.rule preamble opens with the visual
+  #   anchor (Chinese): "玩家屏幕上看到 3 个轮盘…每个轮盘以摆轮形式只
+  #   显示当前停在自家转盘第 0 格的那 1 个符号…".
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble carries a visual anchor (Bug A)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it mentions a "what the player sees" anchor — 屏幕 or 看到 (visual surface)
+    And it mentions 摆轮 (the dial display form the player physically sees)
+
+  # bug: Bug B — symbol_dial rule preamble does not tell the AI how to
+  #   translate the internal `index` lookup into a spoken command the
+  #   player can act on. Old preamble said "目标位置 = S_i 在命中列中的
+  #   index" + "按右箭头到达该 index" — but never said the spoken form
+  #   "按右箭头 N 次", leaving the AI to invent its own phrasing and
+  #   often defaulting to abstract index talk the player cannot use.
+  # fix: practice.yaml symbol_dial.rule preamble explicitly tells the AI
+  #   to say `按右箭头 N 次`, with the N derivation inline.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble teaches the spoken-translation step (Bug B)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it mentions "按右箭头" as the player-facing verb phrase
+    And it pairs the verb phrase with a count phrasing (N 次 / 几次 / a numeric 次)
+
+  # bug: Bug C — symbol_dial rule preamble does not disclose that each
+  #   dial has its own 6-symbol pool (5 fillers + the starting symbol) and
+  #   that the filler pool lives in the frontend code, not in the manual.
+  #   Without this disclosure the AI infers it should be able to project
+  #   the post-rotation symbol — and when it can't, it reverse-asks the
+  #   player for the "target arrangement", treating the player as the
+  #   manual carrier.
+  # fix: practice.yaml symbol_dial.rule preamble explicitly says each dial
+  #   has its own 6-symbol pool (5 filler + starting symbol) and the
+  #   filler pool is invisible to the AI.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble discloses the per-dial filler pool (Bug C)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it discloses the per-dial 6-symbol pool via "filler" / "5 个" / "6 符号池"
+
+  # bug: Bug D — symbol_dial rule preamble does not explicitly forbid the
+  #   AI from predicting / naming the post-rotation symbol. The AI then
+  #   tries to answer "what symbol will the dial show after I rotate?",
+  #   discovers it cannot, and reverse-asks the player for the "target
+  #   arrangement". Symptom #2 of the reported bug.
+  # fix: practice.yaml symbol_dial.rule preamble carries an explicit
+  #   disclaimer pairing "不能" / "不需要告诉" / "不预言" with "目标" /
+  #   "最终" / "看到什么", instructing the AI to output only the rotation
+  #   count and never the post-rotation symbol identity.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble disclaims AI's ability to predict the post-rotation symbol (Bug D)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it carries a negation keyword (不能 / 不需要告诉 / 不预言)
+    And the negation is paired with a target / final / "see what" phrasing (目标 / 最终 / 看到什么)
