@@ -163,13 +163,13 @@ jobs:
             changed="$(git diff --name-only "$base" HEAD 2>/dev/null || true)"
           fi
 
-          if printf '%s\n' "$changed" | grep -Eq '^(packages/game/|packages/manual/data/)'; then
+          if printf '%s\n' "$changed" | grep -Eq '^(packages/game-bombsquad/|packages/platform/|packages/manual/data/)'; then
             echo "NOTE: game logic / manual data changed — consider running an e2e dual-agent simulation."
             echo "NOTE: playbook: ~/.claude/scheduled-tasks/e2e-test"
             echo "NOTE: this is a reminder only and never gates the build."
             echo "::notice title=E2E dual-agent simulation::game logic / manual data changed — consider running an e2e dual-agent simulation (see ~/.claude/scheduled-tasks/e2e-test). Reminder only; not a merge gate."
           else
-            echo "No packages/game or packages/manual/data changes detected — e2e simulation reminder not applicable."
+            echo "No packages/game-bombsquad, packages/platform or packages/manual/data changes detected — e2e simulation reminder not applicable."
           fi
 
           # Belt-and-suspenders: always succeed regardless of the above.

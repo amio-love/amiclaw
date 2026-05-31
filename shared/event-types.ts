@@ -1,7 +1,7 @@
 /**
  * Wire-shared types for the `/api/events` ingestion pipeline.
  *
- * Frontend `packages/game/src/utils/event-log.ts` constructs an
+ * Frontend `packages/game-bombsquad/src/utils/event-log.ts` constructs an
  * `EventPayload` and POSTs it to the Pages Function entry
  * `functions/api/events.ts`, which delegates to the
  * `packages/api/src/handlers/post-event.ts` handler.

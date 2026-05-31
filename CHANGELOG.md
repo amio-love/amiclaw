@@ -97,6 +97,18 @@ run; a later release adds a real AI partner, voice I/O, and the full
   The unused `serial_last_digit` / `serial_has_vowel` derived rule-engine
   context and the matching `simon_says` decoy block in `practice.yaml` and
   365 daily manuals are removed alongside.
+- **BombSquad split into its own package; the platform shell becomes the deploy
+  root** The old `packages/game` workspace is split into `@amiclaw/platform`
+  (the renamed deploy root that owns the homepage, leaderboard, community and
+  account shell) and a new `@amiclaw/game-bombsquad` package that owns the whole
+  BombSquad game flow, mirroring how the Yijing Oracle lives in its own package.
+  Cross-used utilities (`format-time`, `date`, `leaderboard-api`,
+  `leaderboard-optimistic`) move to the shared `@shared/*` workspace and the
+  `useDailyCountdown` hook moves to `@amiclaw/ui`, so the platform and the game
+  no longer duplicate them. BombSquad now builds with a `/bombsquad/` asset base
+  and is assembled into the platform deploy root under `/bombsquad/`, alongside
+  `/oracle/` and `/manual/`. This is a pure structural refactor — every route,
+  game rule and visual is unchanged.
 
 ### Added
 

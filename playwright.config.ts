@@ -70,11 +70,17 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // Serve the production `pnpm build` artifact (packages/game/dist) with SPA
-    // history fallback so direct navigation to /leaderboard, /game, /result and
-    // /compatibility resolves to index.html. `vite preview` defaults to
-    // appType:'spa', which provides exactly that fallback.
-    command: 'pnpm --filter game exec vite preview --port 4173 --strictPort',
+    // Serve the assembled `pnpm build` artifact (packages/platform/dist — the
+    // deploy root that hosts the platform shell at /, BombSquad under
+    // /bombsquad/, and the Yijing Oracle under /oracle/). A plain `vite preview`
+    // only does a single-root SPA history fallback, but BombSquad is a separate
+    // BrowserRouter SPA: a hard load or reload of a deep route like
+    // /bombsquad/result must fall back to the BombSquad index, not the platform
+    // shell. scripts/preview-pages.mjs mirrors the production Cloudflare Pages
+    // _redirects fallback exactly (real file first, then /bombsquad/* ->
+    // bombsquad/index.html, else -> index.html), so the e2e tree behaves like
+    // production. The artifact must already be built (`pnpm build` precedes e2e).
+    command: 'node scripts/preview-pages.mjs packages/platform/dist',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
