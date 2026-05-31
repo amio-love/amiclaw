@@ -37,6 +37,13 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Changed
 
+- **Yijing Oracle gets its own vanity domain** The Yijing Oracle now has a
+  memorable own-domain entry at `oracle.amio.fans` that 301-redirects to
+  `claw.amio.fans/oracle/*` — root lands on `/oracle`, deep links are
+  prefixed onto `/oracle`, and the shared `/manual/*` and `/api/*` paths
+  pass through unchanged. This matches the BombSquad vanity pattern, so
+  every game now has its own memorable domain that funnels into the
+  platform.
 - **BombSquad landing and connect screens get the Atlas look** Entering
   BombSquad from the homepage now opens BombSquad's own landing page in the
   「星图 / Atlas」cosmic style — a floating planet hero, the BOMBSQUAD
