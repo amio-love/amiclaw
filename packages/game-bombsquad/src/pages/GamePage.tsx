@@ -96,6 +96,29 @@ function consumeRefreshBanner(): void {
   refreshBannerConsumed = true
 }
 
+// First-run nudge pointing the player at the scene-info bar. A first-timer
+// often skips reading 暗号/电池/指示灯 to the AI and stalls, so on the first
+// module we surface a one-time, dismissible hint. Persisted in localStorage so
+// it shows once ever, never nagging on later runs. Read defensively — a denied
+// or full localStorage simply means the hint is treated as already seen.
+const SCENE_NUDGE_SEEN_KEY = 'bombsquad:scene-nudge-seen'
+
+function sceneNudgeAlreadySeen(): boolean {
+  try {
+    return localStorage.getItem(SCENE_NUDGE_SEEN_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+function markSceneNudgeSeen(): void {
+  try {
+    localStorage.setItem(SCENE_NUDGE_SEEN_KEY, '1')
+  } catch {
+    /* storage unavailable — the in-memory `everSeen` flag still hides it after this run */
+  }
+}
+
 /** Generate a single module's `{ config, answer }` pair by its kind. */
 function generateModuleByKind(
   kind: ModuleKind,
@@ -179,12 +202,35 @@ export default function GamePage() {
   // remounts the pulse element, restarting the CSS animation on every error.
   const [errorPulseKey, setErrorPulseKey] = useState(0)
 
+  // A correct answer gets the positive counterpart: a single green border
+  // bloom over the same module panel, so a win reads at panel level rather
+  // than as the old small text alone. Keyed like the error pulse so it
+  // restarts on each module solved.
+  const [successPulseKey, setSuccessPulseKey] = useState(0)
+
   // Captured once on mount so it stays stable across re-renders. The player
   // can dismiss it; once dismissed it does not reappear for the lifetime of
   // this page (state lives in component memory, intentionally not persisted).
   const [wasRefreshed] = useState<boolean>(detectRefresh)
   const [refreshBannerDismissed, setRefreshBannerDismissed] = useState(false)
   const showRefreshBanner = wasRefreshed && !refreshBannerDismissed
+
+  // First-run scene-info nudge. Captured once on mount so a player who has
+  // seen it before never gets it again; dismissible mid-run. Only shown on the
+  // first module while actively playing, and only until the player advances.
+  const [sceneNudgeEverSeen] = useState<boolean>(sceneNudgeAlreadySeen)
+  const [sceneNudgeDismissed, setSceneNudgeDismissed] = useState(false)
+  const showSceneNudge =
+    !sceneNudgeEverSeen &&
+    !sceneNudgeDismissed &&
+    state.status === 'PLAYING' &&
+    state.currentModuleIndex === 0
+
+  // Mark the nudge seen the moment it first appears, so a future run never
+  // shows it — independent of whether the player dismisses it this run.
+  useEffect(() => {
+    if (showSceneNudge) markSceneNudgeSeen()
+  }, [showSceneNudge])
 
   // Consume the one-shot refresh flag from a commit-phase effect rather than
   // from inside `detectRefresh`. This keeps the detector pure so StrictMode's
@@ -387,6 +433,10 @@ export default function GamePage() {
     // based), and reads state.currentModuleErrorCount. Keeping those in
     // state, not refs, is what makes refresh-resilience possible.
     dispatch({ type: 'MODULE_COMPLETE', moduleType })
+    // Positive panel bloom, mirroring the error pulse. Fires under the
+    // completion overlay's brief fade-in so it reads as the leading edge of
+    // the green payoff.
+    setSuccessPulseKey((key) => key + 1)
   }, [dispatch, state.moduleSequence, state.currentModuleIndex])
 
   const handleExitRun = useCallback(() => {
@@ -561,12 +611,21 @@ export default function GamePage() {
           {renderModule()}
         </div>
         {errorPulseKey > 0 && (
-          <div key={errorPulseKey} className={styles.errorPulse} aria-hidden="true" />
+          <div key={`err-${errorPulseKey}`} className={styles.errorPulse} aria-hidden="true" />
+        )}
+        {successPulseKey > 0 && (
+          <div key={`ok-${successPulseKey}`} className={styles.successPulse} aria-hidden="true" />
         )}
       </div>
 
       <div className={styles.bottomArea}>
-        {state.sceneInfo && <SceneInfoBar sceneInfo={state.sceneInfo} />}
+        {state.sceneInfo && (
+          <SceneInfoBar
+            sceneInfo={state.sceneInfo}
+            showNudge={showSceneNudge}
+            onDismissNudge={() => setSceneNudgeDismissed(true)}
+          />
+        )}
         <ProgressBar
           total={state.moduleSequence.length}
           completed={state.currentModuleIndex}
@@ -575,7 +634,8 @@ export default function GamePage() {
       </div>
 
       {state.status === 'MODULE_COMPLETE' && (
-        <div className={styles.overlay}>
+        <div className={`${styles.overlay} ${styles.overlayComplete}`}>
+          <div className={styles.defusedBurst} aria-hidden="true" />
           <p className={styles.defusedText}>拆除成功</p>
         </div>
       )}

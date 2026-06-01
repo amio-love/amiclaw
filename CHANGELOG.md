@@ -218,6 +218,22 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Improvements
 
+- **Clearing a module finally feels good** Solving a module now lands with a
+  bright two-note rising chime and a quick green bloom on the panel and the
+  just-filled progress segment, instead of the near-silent thunk it used to
+  share with a wrong answer. Finishing a run celebrates a win with a glyph
+  burst and a short rising sting, visibly and audibly distinct from the calm
+  failure screen, and a correct answer mid-run flashes a confident green panel
+  pulse mirroring the existing red error pulse. All restrained, dark-only,
+  CSS-only, and gated behind `prefers-reduced-motion`. Source task
+  `fix-bombsquad-to-invitable-quality`.
+- **Honest setup copy, and a first-run scene-bar nudge** The BombSquad landing
+  page no longer claims "AI 已就位" before you have connected one — it now says
+  you bring your own voice AI (Claude / ChatGPT / Gemini); the connect flow's
+  "switch to voice mode" step is a passive reminder instead of a fake button;
+  and the AI-avatar label reads "你的 AI" rather than a hardcoded "Claude". On
+  your first run, a one-time dismissible hint points you at the scene-info bar
+  to read out to your AI. Source task `fix-bombsquad-to-invitable-quality`.
 - **One-tap voice-AI setup, and a practice mode that onboards you** Connecting
   your AI partner is now a single tap to copy the manual link and send it —
   modern voice AIs open and read the link on their own, and the manual now

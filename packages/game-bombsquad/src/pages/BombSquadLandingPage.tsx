@@ -24,10 +24,14 @@ export default function BombSquadLandingPage() {
       <Scenery accent="yellow" />
       <div className={styles.stage}>
         <div className={styles.home}>
-          {/* Top strip — AI-status chip + exit-to-platform control. */}
+          {/* Top strip — bring-your-own-AI premise label + exit-to-platform
+              control. This is not a status: the player supplies their own
+              voice AI, so the label invites rather than asserting any AI is
+              connected. Brand-yellow (not green) keeps it a label, not a
+              "ready/online" signal. */}
           <div className={styles.top}>
-            <Eyebrow dot color="var(--green)">
-              AI 已就位 · Claude · 语音模式
+            <Eyebrow dot color="var(--y)">
+              自带语音 AI · 支持 Claude / ChatGPT / Gemini
             </Eyebrow>
             <button
               type="button"

@@ -252,6 +252,53 @@
   color: var(--green);
 }
 
+/* ----------  step-2 voice-mode reminder (passive)  ----------
+   A non-interactive instruction, visually distinct from the actionable
+   copyCard: flat fill, dashed hairline, muted (not yellow) icon, no hover
+   and no pointer. The player performs "切到语音模式" on their own AI; this
+   only reminds — it must not look tappable. */
+.voiceStep {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--hairline);
+  text-align: left;
+}
+
+.voiceStepIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.voiceStepText {
+  flex: 1;
+  min-width: 0;
+}
+
+.voiceStepLabel {
+  font: 500 11px var(--amio-font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.voiceStepSub {
+  margin-top: 4px;
+  font: 500 15px var(--amio-font-mono);
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .hint {
   margin: 12px 0 0;
   font: 400 13px/1.55 var(--font-body);

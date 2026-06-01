@@ -1,6 +1,83 @@
 /* Scene info HUD row — Atlas star-chart visual language: a glass
    bar carrying the puzzle-global variables the player reads to
    their AI partner. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* First-run hint above the bar. The container is click-through so it never
+   blocks the controls beneath it; only the dismiss button re-enables pointer
+   events. Yellow-tinted glass to match the refresh banner's idiom. */
+.nudge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 8px 8px 8px 14px;
+  pointer-events: none;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 229, 62, 0.3);
+  border-radius: var(--radius-lg);
+  animation: scene-nudge-in 0.3s ease;
+}
+
+.nudgeText {
+  font: 500 0.82rem var(--font-body);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* A small downward caret tying the hint to the bar below it. */
+.nudgeText::after {
+  content: ' ↓';
+  color: var(--y);
+}
+
+.nudgeDismiss {
+  flex: none;
+  pointer-events: auto;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--soft);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.nudgeDismiss:hover,
+.nudgeDismiss:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.nudgeDismiss:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
+@keyframes scene-nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .bar {
   display: flex;
   flex-wrap: wrap;
@@ -77,4 +154,32 @@
   background: rgba(255, 255, 255, 0.06);
   color: var(--soft);
   border: 1px solid var(--hairline);
+}
+
+/* While the first-run nudge is up, the bar carries a steady brighter border
+   and pulses its yellow glow a couple of times to draw the eye, then settles. */
+.barNudged {
+  border-color: rgba(255, 229, 62, 0.4);
+  animation: scene-bar-pulse 1.6s ease-in-out 2;
+}
+
+@keyframes scene-bar-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 229, 62, 0);
+  }
+  50% {
+    box-shadow: 0 0 16px var(--y-glow-25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nudge {
+    animation: none;
+  }
+
+  /* Drop the pulse but keep the steady brighter border as a static cue. */
+  .barNudged {
+    animation: none;
+  }
 }

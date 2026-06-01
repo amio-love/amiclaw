@@ -142,7 +142,10 @@ export default function ConnectPage() {
                 <ConicAvatar size={64} letter="AI" ariaHidden />
                 <span className={styles.aiPulse} />
               </div>
-              <div className={styles.visLabel}>Claude</div>
+              {/* BYO-neutral: the player supplies their own voice AI (Claude /
+                  ChatGPT / Gemini / …), so this mirrors "你" rather than naming
+                  one tool. */}
+              <div className={styles.visLabel}>你的 AI</div>
             </div>
           </div>
 
@@ -200,15 +203,15 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Step 2 — switch the AI partner into voice mode, then hand off. */}
+          {/* Step 2 — a passive reminder of the one thing to do on the AI
+              side: switch it to voice mode. Deliberately NOT a button — the
+              UI cannot flip the player's AI into voice mode, so a tappable
+              card here would fake an action the app does not perform. The
+              only real action on this step is the 进入游戏 handoff below. */}
           {step === 2 && (
             <div className={styles.action}>
-              <button type="button" className={styles.copyCard} onClick={confirmStart}>
-                <div className={styles.copyCardText}>
-                  <div className={styles.copyCardLabel}>切到语音模式</div>
-                  <div className={styles.copyCardUrl}>AI 端 → 麦克风</div>
-                </div>
-                <div className={styles.copyCardIcon}>
+              <div className={styles.voiceStep}>
+                <div className={styles.voiceStepIcon} aria-hidden="true">
                   <svg
                     viewBox="0 0 24 24"
                     width="22"
@@ -221,7 +224,11 @@ export default function ConnectPage() {
                     <path d="M5 11 a7 7 0 0 0 14 0 M12 18 V21 M9 21 H15" />
                   </svg>
                 </div>
-              </button>
+                <div className={styles.voiceStepText}>
+                  <div className={styles.voiceStepLabel}>切到语音模式</div>
+                  <div className={styles.voiceStepSub}>AI 端 → 麦克风</div>
+                </div>
+              </div>
               <p className={styles.hint}>这样你描述、AI 回应，全程不用手离开屏幕。</p>
             </div>
           )}
