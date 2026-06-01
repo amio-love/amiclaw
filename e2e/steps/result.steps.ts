@@ -281,12 +281,10 @@ Then('I am back on the BombSquad landing page', async ({ page }) => {
 
 Then('the system clipboard contains the daily manual URL', async ({ page }) => {
   // The connect step-1 copy card shows the manual URL in its `copyCardUrl`
-  // cell; one tap copies the opening prompt and that URL together as a single
-  // block (`OPENING_PROMPT\n\nmanualUrl`), so the clipboard contains the URL
-  // rather than equalling it.
+  // cell; one tap copies that URL alone, so the clipboard equals it exactly.
   const url = (await page.locator('[class*="copyCardUrl"]').first().innerText()).trim()
   expect(url).toMatch(/\/manual\//)
-  expect(await readClipboard(page)).toContain(url)
+  expect((await readClipboard(page)).trim()).toBe(url)
 })
 
 // --- Regression: leaderboard column integrity --------------------------------

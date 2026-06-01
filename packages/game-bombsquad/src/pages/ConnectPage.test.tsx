@@ -3,11 +3,9 @@
  *
  * Covers the connect-AI flow at /bombsquad/connect — the Atlas redesign's
  * 2-step handoff (design_handoff_bombsquad README §6.2):
- *   1. step 1 renders the copy card (opening prompt + manual URL) with the
- *      manual URL and surfaces the opening-prompt text inline.
- *   2. copying the handoff message shows the copied feedback and auto-advances
- *      to step 2 after ~0.7s; the clipboard payload pairs OPENING_PROMPT with
- *      the manual URL.
+ *   1. step 1 renders the copy card with the manual URL.
+ *   2. copying the manual link shows the copied feedback and auto-advances
+ *      to step 2 after ~0.7s; the clipboard payload is the manual URL.
  *   3. the 2-step state machine reaches the voice-mode step and hands off.
  *   4. daily mode hands off to the run carrying the manual URL as ?url=.
  *   5. practice mode hands off without a ?url= param.
@@ -44,7 +42,6 @@ vi.mock('@/utils/clipboard', () => ({
 
 import ConnectPage from './ConnectPage'
 import { copyToClipboard } from '@/utils/clipboard'
-import { OPENING_PROMPT } from '@/constants/opening-prompt'
 
 /* Renders the current location so the run-handoff target is assertable
    without mounting the real GamePage. */
@@ -81,19 +78,14 @@ describe('ConnectPage', () => {
     vi.mocked(copyToClipboard).mockResolvedValue(true)
   })
 
-  it('renders step 1 with the copy card, manual URL, and opening prompt', () => {
+  it('renders step 1 with the copy card and manual URL', () => {
     renderConnect('daily')
 
     expect(screen.getByText('第 1/2 步')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: /发给 AI/ })).toBeInTheDocument()
-    // The copy card pairs the opening prompt with the manual link.
-    expect(screen.getByText('开场白 + 手册链接')).toBeInTheDocument()
+    // The copy card surfaces the manual link only — no opening prompt.
+    expect(screen.getByText('手册链接')).toBeInTheDocument()
     expect(screen.getByText(DAILY_URL)).toBeInTheDocument()
-    // The opening prompt is surfaced inline (not buried behind /compatibility).
-    // Matched by signature lines — getByText normalizes the <pre> whitespace,
-    // so an exact multi-line match is unreliable.
-    expect(screen.getByText(/等会儿我会发你一个 URL/)).toBeInTheDocument()
-    expect(screen.getByText(/每次只回复一步指令/)).toBeInTheDocument()
   })
 
   it('surfaces the /bombsquad/compatibility discovery link on step 1', () => {
@@ -107,7 +99,7 @@ describe('ConnectPage', () => {
     expect(compatLink).toHaveAttribute('href', '/bombsquad/compatibility')
   })
 
-  it('copies prompt + manual together and auto-advances to step 2 after ~0.7s', async () => {
+  it('copies the manual link and auto-advances to step 2 after ~0.7s', async () => {
     renderConnect('practice')
 
     fireEvent.click(screen.getByRole('button', { name: /手册链接/ }))
@@ -117,8 +109,8 @@ describe('ConnectPage', () => {
       expect(screen.getByText('已复制到剪贴板')).toBeInTheDocument()
     })
     expect(copyToClipboard).toHaveBeenCalledTimes(1)
-    // The clipboard payload is the opening prompt followed by the manual URL.
-    expect(copyToClipboard).toHaveBeenCalledWith(`${OPENING_PROMPT}\n\n${PRACTICE_URL}`)
+    // The clipboard payload is the manual URL alone.
+    expect(copyToClipboard).toHaveBeenCalledWith(PRACTICE_URL)
 
     // ~0.7s auto-advance — step 2 (voice mode) takes over in place.
     await waitFor(() => {

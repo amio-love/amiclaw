@@ -219,9 +219,10 @@ run; a later release adds a real AI partner, voice I/O, and the full
 ### Improvements
 
 - **One-tap voice-AI setup, and a practice mode that onboards you** Connecting
-  your AI partner now copies the opening prompt and the manual link together in
-  a single tap — the prompt that puts the AI in its manual-expert role used to
-  be buried behind a discovery link — and the redundant pre-run "ready?" screen
+  your AI partner is now a single tap to copy the manual link and send it —
+  modern voice AIs open and read the link on their own, and the manual now
+  frames the AI's role itself, so there is no separate prompt to paste — and the
+  redundant pre-run "ready?" screen
   is gone, so you reach the bomb in fewer steps. In practice mode the manual now
   tells the AI to treat you as a first-timer: it opens with the
   describe-then-act loop and reminds you to read out the scene info bar, instead
@@ -398,8 +399,13 @@ run; a later release adds a real AI partner, voice I/O, and the full
   before it reads a single rule. And the manual mixed Chinese rules with
   English instructions; it is now one all-Chinese document, carrying a global
   "you hold the only manual — never ask the player what a rule says"
-  discipline that previously lived in just one module. Source task
-  `fix-bombsquad-to-invitable-quality`.
+  discipline that previously lived in just one module. The manual now also opens
+  with a short whole-game overview — what BombSquad is, how a run flows, the
+  scene info bar, and the timer and strike rules — so the AI grasps the full
+  picture before any rule; and the old "every session is fresh, you have no
+  memory" framing is corrected, so within one conversation the AI now remembers
+  earlier rounds and gets better with you across them, the way the recap loop
+  intends. Source task `fix-bombsquad-to-invitable-quality`.
 - **Symbol-dial AI no longer reverse-asks for the manual** The symbol_dial
   manual's `rule:` preamble is rewritten so the AI partner stops asking the
   player "do you have a manual?" and "what is the target arrangement?" mid-run.

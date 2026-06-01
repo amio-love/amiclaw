@@ -324,10 +324,11 @@ describe('manual set-discrimination invariant', () => {
 
 describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () => {
   // build.ts injects AI_INSTRUCTIONS into the HTML-embedded yaml AND the dist
-  // raw yaml on every render. This block locks in the four-key schema (the
-  // existing tactical-output keys plus the new framing + philosophy keys) so
-  // the AI receives full game context before any rule content, on every
-  // manual fetch, in either consumption path.
+  // raw yaml on every render. This block locks in the five-key schema
+  // (`game_overview` leading with a whole-game mental model, then `game_context`,
+  // the two tactical-output keys, and `collaboration_philosophy`) so the AI
+  // grasps what BombSquad is and receives full game context before any rule
+  // content, on every manual fetch, in either consumption path.
   beforeAll(() => {
     buildManualForTests()
   })
@@ -344,13 +345,14 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
   }
 
   const REQUIRED_KEYS = [
+    'game_overview',
     'do_not_reveal_to_player',
     'give_conclusions_not_reasoning',
     'game_context',
     'collaboration_philosophy',
   ] as const
 
-  it('practice manual HTML embedded yaml ai_instructions contains all four required keys', () => {
+  it('practice manual HTML embedded yaml ai_instructions contains all five required keys', () => {
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     expect(
       manual.ai_instructions,
@@ -385,18 +387,15 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
   it('framing and philosophy values carry the load-bearing Chinese tokens', () => {
     // AI_INSTRUCTIONS is now all-Chinese (unifying the manual to one language —
     // rules + symbol descriptions are already Chinese). These tokens are the
-    // Chinese equivalents of the prior English anchors (fresh game / voice /
-    // describe / uncertain / recap).
+    // Chinese equivalents of the prior English anchors (voice / describe /
+    // uncertain / recap). The cross-round memory framing is asserted separately
+    // in 'game_overview leads with a whole-game mental model …' below.
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     const instructions = manual.ai_instructions ?? {}
 
-    // game_context anchors session freshness (no cross-session memory) and
-    // names the voice-only medium — both are physical anchors for the
+    // game_context names the voice-only medium — the physical anchor for the
     // trust-building loop and the manual's role as the only AI-facing surface.
     const gameContextText = (instructions.game_context ?? []).join('\n')
-    expect(gameContextText, 'game_context must state that each fetch is a fresh game').toMatch(
-      /全新的游戏/
-    )
     expect(gameContextText, 'game_context must name the voice-only medium').toMatch(/语音/)
 
     // collaboration_philosophy must (a) tell the AI to ask the player to
@@ -416,6 +415,57 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
       philosophyText,
       'collaboration_philosophy must anchor trust-loop data source to the app-rendered recap'
     ).toMatch(/复盘/)
+  })
+
+  it('game_overview leads with a whole-game mental model and corrects the memory framing', () => {
+    // Finding 2: the manual jumped straight into the AI's role + per-module rule
+    // tables and never told the AI what BombSquad IS as a whole. game_overview
+    // is a dedicated key placed FIRST so the AI reads a concise whole-game model
+    // (what it is / how a run flows / the scene info bar / timer + fail / the
+    // collaborate loop / decoy modules) before anything else.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const instructions = manual.ai_instructions ?? {}
+
+    // game_overview must be the very first ai_instructions key (the first thing
+    // the AI reads top-to-bottom).
+    const firstKey = Object.keys(instructions)[0]
+    expect(firstKey, 'game_overview must be the first ai_instructions key').toBe('game_overview')
+
+    // game_overview must carry the core game-mechanics vocabulary so the AI's
+    // mental model covers the run loop (模块 / 拆完), the countdown (倒计时), and
+    // the daily fail rule (失误).
+    const overviewText = (instructions.game_overview ?? []).join('\n')
+    expect(overviewText, 'game_overview must name the countdown timer').toMatch(/倒计时/)
+    expect(overviewText, 'game_overview must name the strike/fail mechanic').toMatch(/失误/)
+    expect(overviewText, 'game_overview must name the module structure').toMatch(/模块/)
+    expect(overviewText, 'game_overview must convey clearing all modules to win').toMatch(/拆完/)
+
+    // Finding 3: the old "every fetch = a fresh game / no memory of any prior
+    // session / never claim to remember the last round" framing was WRONG — the
+    // player plays multiple rounds inside ONE continuous voice conversation, so
+    // the AI DOES remember earlier rounds and SHOULD use that. The corrected
+    // framing lives in game_context: same-conversation memory exists and should
+    // be used (同一对话 / 记得), while each round's puzzle is re-randomized so the
+    // AI must not assume carry-over (重新随机).
+    const gameContextText = (instructions.game_context ?? []).join('\n')
+    expect(
+      gameContextText,
+      'game_context must state the AI shares one continuous conversation with the player'
+    ).toMatch(/同一对话/)
+    expect(
+      gameContextText,
+      'game_context must tell the AI it remembers earlier rounds in this conversation'
+    ).toMatch(/记得/)
+    expect(
+      gameContextText,
+      'game_context must tell the AI each round is re-randomized (no carry-over assumption)'
+    ).toMatch(/重新随机/)
+
+    // The obsolete fresh-game claim must be gone everywhere in ai_instructions.
+    const allText = Object.values(instructions).flat().join('\n')
+    expect(allText, 'the obsolete "全新的游戏" fresh-game framing must be removed').not.toMatch(
+      /全新的游戏/
+    )
   })
 
   it('every ai_instructions entry is Chinese (carries at least one CJK character)', () => {

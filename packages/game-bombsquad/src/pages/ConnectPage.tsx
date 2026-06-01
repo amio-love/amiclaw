@@ -5,19 +5,17 @@ import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { copyToClipboard } from '@/utils/clipboard'
-import { OPENING_PROMPT } from '@/constants/opening-prompt'
 import styles from './ConnectPage.module.css'
 
 type ConnectMode = 'daily' | 'practice'
 
 /* Connect-AI flow — design_handoff_bombsquad README §6.2. Two steps swap in
-   place: copy the opening prompt + manual link in one tap, then switch the AI
-   to voice mode and hand off to the run. The readiness gate lives once, on the
-   GamePage "开始" button (which also unlocks iOS audio inside the user gesture),
-   so this flow ends with a plain "进入游戏" navigation, not a second confirm.
-   The manual URL is derived by useDailyChallenge; the clipboard payload pairs
-   the role-setting OPENING_PROMPT with that URL so a cold AI gets full context
-   on turn one. */
+   place: copy the manual link in one tap, then switch the AI to voice mode and
+   hand off to the run. The readiness gate lives once, on the GamePage "开始"
+   button (which also unlocks iOS audio inside the user gesture), so this flow
+   ends with a plain "进入游戏" navigation, not a second confirm. The manual URL
+   is derived by useDailyChallenge; voice AIs auto-read a bare pasted link and
+   adopt the role from the now-self-framing manual, so the link alone suffices. */
 export default function ConnectPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -30,7 +28,7 @@ export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
 
-  /* Once the handoff message is copied, the card turns green and the flow
+  /* Once the manual link is copied, the card turns green and the flow
      auto-advances to step 2 after ~0.7s. The timer is owned by an effect
      so it cleans up if the player leaves the page mid-wait. */
   useEffect(() => {
@@ -39,12 +37,12 @@ export default function ConnectPage() {
     return () => clearTimeout(id)
   }, [copied])
 
-  /* One tap copies the opening prompt and the manual URL together, so the
-     player pastes a single block that both sets the AI's role and points it at
-     the manual — no naked URL to a cold AI. */
+  /* One tap copies the manual URL. Voice AIs auto-read a bare pasted link and
+     adopt the role from the now-self-framing manual, so the link alone is
+     enough — no opening prompt needed. */
   const handleCopy = async () => {
     if (copied) return
-    const ok = await copyToClipboard(`${OPENING_PROMPT}\n\n${manualUrl}`)
+    const ok = await copyToClipboard(manualUrl)
     if (ok) setCopied(true)
   }
 
@@ -102,7 +100,7 @@ export default function ConnectPage() {
           <h2 className={styles.title}>
             {step === 1 && (
               <>
-                把<span className={styles.titleAccent}>开场白和手册</span>发给 AI。
+                把<span className={styles.titleAccent}>手册</span>发给 AI。
               </>
             )}
             {step === 2 && (
@@ -148,7 +146,7 @@ export default function ConnectPage() {
             </div>
           </div>
 
-          {/* Step 1 — copy the opening prompt + manual link together. */}
+          {/* Step 1 — copy the manual link. */}
           {step === 1 && (
             <div className={styles.action}>
               <button
@@ -158,7 +156,7 @@ export default function ConnectPage() {
               >
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>
-                    {copied ? '已复制到剪贴板' : '开场白 + 手册链接'}
+                    {copied ? '已复制到剪贴板' : '手册链接'}
                   </div>
                   <div className={styles.copyCardUrl}>{manualUrl}</div>
                 </div>
@@ -192,17 +190,7 @@ export default function ConnectPage() {
                 </div>
               </button>
 
-              {/* The opening prompt is shown inline so the player sees exactly
-                 what the single copy sends — no longer buried behind
-                 /compatibility. */}
-              <div className={styles.promptPreview}>
-                <div className={styles.promptPreviewLabel}>开场白</div>
-                <pre className={styles.promptPreviewText}>{OPENING_PROMPT}</pre>
-              </div>
-
-              <p className={styles.hint}>
-                一次复制开场白和手册地址，整段粘贴给 AI，让它读完手册后说「好了」。
-              </p>
+              <p className={styles.hint}>粘贴到你常用的 AI，让它读完手册后说「好了」。</p>
               {/* /compatibility discovery link — re-homed here from the
                  retired PromptModal, which placed it directly under the
                  same send-to-AI content. Step 1 is that moment now. */}
@@ -241,7 +229,7 @@ export default function ConnectPage() {
           <div className={styles.cta}>
             {step === 1 ? (
               <Button variant="primary" full disabled={!copied} onClick={() => setStep(2)}>
-                {copied ? '下一步 →' : '先复制开场白'}
+                {copied ? '下一步 →' : '先复制手册'}
               </Button>
             ) : (
               <Button variant="primary" full onClick={confirmStart}>
