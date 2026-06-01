@@ -41,12 +41,7 @@ describe('matchValue', () => {
 describe('matchCondition', () => {
   it('matches wire_count exactly', () => {
     const config = {
-      wires: [
-        { color: 'red', hasStripe: false },
-        { color: 'blue', hasStripe: false },
-        { color: 'yellow', hasStripe: false },
-        { color: 'green', hasStripe: false },
-      ],
+      wires: [{ color: 'red' }, { color: 'blue' }, { color: 'yellow' }, { color: 'green' }],
     }
     expect(matchCondition({ wire_count: 4 }, config, sceneInfo)).toBe(true)
     expect(matchCondition({ wire_count: 5 }, config, sceneInfo)).toBe(false)
@@ -66,16 +61,13 @@ describe('matchCondition', () => {
 
   it('matches color_at_last', () => {
     const config = {
-      wires: [
-        { color: 'red', hasStripe: false },
-        { color: 'blue', hasStripe: false },
-      ],
+      wires: [{ color: 'red' }, { color: 'blue' }],
     }
     expect(matchCondition({ color_at_last: 'blue' }, config, sceneInfo)).toBe(true)
   })
 
   it('all conditions must match (AND logic)', () => {
-    const config = { wires: Array(4).fill({ color: 'red', hasStripe: false }) }
+    const config = { wires: Array(4).fill({ color: 'red' }) }
     expect(matchCondition({ wire_count: 4, battery_count: { gt: 2 } }, config, sceneInfo)).toBe(
       true
     )

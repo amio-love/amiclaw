@@ -30,10 +30,10 @@ describe('solveWire', () => {
   it('matches rule by color_at_last', () => {
     const config = {
       wires: [
-        { color: 'blue' as const, hasStripe: false },
-        { color: 'yellow' as const, hasStripe: false },
-        { color: 'green' as const, hasStripe: false },
-        { color: 'red' as const, hasStripe: false },
+        { color: 'blue' as const },
+        { color: 'yellow' as const },
+        { color: 'green' as const },
+        { color: 'red' as const },
       ],
     }
     const answer = solveWire(config, rules, sceneInfo)
@@ -41,7 +41,7 @@ describe('solveWire', () => {
   })
 
   it('returns null when no rule matches (empty rules)', () => {
-    const config = { wires: [{ color: 'red' as const, hasStripe: false }] }
+    const config = { wires: [{ color: 'red' as const }] }
     expect(solveWire(config, [], sceneInfo)).toBeNull()
   })
 })

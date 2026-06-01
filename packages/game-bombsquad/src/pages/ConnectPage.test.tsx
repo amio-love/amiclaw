@@ -2,15 +2,20 @@
  * ConnectPage unit tests.
  *
  * Covers the connect-AI flow at /bombsquad/connect — the Atlas redesign's
- * 3-step handoff (design_handoff_bombsquad README §6.2):
- *   1. step 1 renders the copy-manual card with the manual URL.
- *   2. copying the manual shows the copied feedback and auto-advances to
- *      step 2 after ~0.7s.
- *   3. the 3-step state machine reaches the ready step and confirms.
+ * 2-step handoff (design_handoff_bombsquad README §6.2):
+ *   1. step 1 renders the copy card (opening prompt + manual URL) with the
+ *      manual URL and surfaces the opening-prompt text inline.
+ *   2. copying the handoff message shows the copied feedback and auto-advances
+ *      to step 2 after ~0.7s; the clipboard payload pairs OPENING_PROMPT with
+ *      the manual URL.
+ *   3. the 2-step state machine reaches the voice-mode step and hands off.
  *   4. daily mode hands off to the run carrying the manual URL as ?url=.
  *   5. practice mode hands off without a ?url= param.
  *   6. step 1 surfaces the /bombsquad/compatibility discovery link
  *      (re-homed from the retired PromptModal).
+ *
+ * The readiness gate now lives once on GamePage's "开始" button, so this flow
+ * ends with a plain "进入游戏" navigation — there is no second confirm here.
  *
  * useDailyChallenge is mocked to deterministic URLs; copyToClipboard is
  * stubbed to its success branch so the copy → auto-advance path runs
@@ -39,6 +44,7 @@ vi.mock('@/utils/clipboard', () => ({
 
 import ConnectPage from './ConnectPage'
 import { copyToClipboard } from '@/utils/clipboard'
+import { OPENING_PROMPT } from '@/constants/opening-prompt'
 
 /* Renders the current location so the run-handoff target is assertable
    without mounting the real GamePage. */
@@ -58,8 +64,8 @@ function renderConnect(mode: 'daily' | 'practice') {
   )
 }
 
-/* Drive the flow from step 1 to step 2 by copying the manual and waiting
-   for the ~0.7s auto-advance to settle. Waiting for step 2 to actually
+/* Drive the flow from step 1 to step 2 by copying the handoff message and
+   waiting for the ~0.7s auto-advance to settle. Waiting for step 2 to actually
    render means the auto-advance timer has already fired, so it can never
    race a later manual step change. */
 async function copyAndReachStep2() {
@@ -75,14 +81,19 @@ describe('ConnectPage', () => {
     vi.mocked(copyToClipboard).mockResolvedValue(true)
   })
 
-  it('renders step 1 with the copy-manual card and the manual URL', () => {
+  it('renders step 1 with the copy card, manual URL, and opening prompt', () => {
     renderConnect('daily')
 
-    expect(screen.getByText('第 1/3 步')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: /把手册发给 AI/ })).toBeInTheDocument()
-    // The copy card carries the manual-link label and the daily manual URL.
-    expect(screen.getByText('手册链接')).toBeInTheDocument()
+    expect(screen.getByText('第 1/2 步')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /发给 AI/ })).toBeInTheDocument()
+    // The copy card pairs the opening prompt with the manual link.
+    expect(screen.getByText('开场白 + 手册链接')).toBeInTheDocument()
     expect(screen.getByText(DAILY_URL)).toBeInTheDocument()
+    // The opening prompt is surfaced inline (not buried behind /compatibility).
+    // Matched by signature lines — getByText normalizes the <pre> whitespace,
+    // so an exact multi-line match is unreliable.
+    expect(screen.getByText(/等会儿我会发你一个 URL/)).toBeInTheDocument()
+    expect(screen.getByText(/每次只回复一步指令/)).toBeInTheDocument()
   })
 
   it('surfaces the /bombsquad/compatibility discovery link on step 1', () => {
@@ -96,7 +107,7 @@ describe('ConnectPage', () => {
     expect(compatLink).toHaveAttribute('href', '/bombsquad/compatibility')
   })
 
-  it('shows the copied feedback and auto-advances to step 2 after ~0.7s', async () => {
+  it('copies prompt + manual together and auto-advances to step 2 after ~0.7s', async () => {
     renderConnect('practice')
 
     fireEvent.click(screen.getByRole('button', { name: /手册链接/ }))
@@ -106,7 +117,8 @@ describe('ConnectPage', () => {
       expect(screen.getByText('已复制到剪贴板')).toBeInTheDocument()
     })
     expect(copyToClipboard).toHaveBeenCalledTimes(1)
-    expect(copyToClipboard).toHaveBeenCalledWith(PRACTICE_URL)
+    // The clipboard payload is the opening prompt followed by the manual URL.
+    expect(copyToClipboard).toHaveBeenCalledWith(`${OPENING_PROMPT}\n\n${PRACTICE_URL}`)
 
     // ~0.7s auto-advance — step 2 (voice mode) takes over in place.
     await waitFor(() => {
@@ -114,27 +126,24 @@ describe('ConnectPage', () => {
     })
   })
 
-  it('walks the 3-step state machine to the ready step', async () => {
+  it('walks the 2-step state machine to the voice-mode step', async () => {
     renderConnect('practice')
 
     // Step 1 → step 2 via copy + auto-advance.
     await copyAndReachStep2()
 
-    // Step 2 → step 3 via the 下一步 CTA.
-    fireEvent.click(screen.getByRole('button', { name: /下一步/ }))
-
-    // Step 3 — the ready step, with the confirm CTA.
-    expect(screen.getByText('第 3/3 步')).toBeInTheDocument()
-    expect(screen.getByText('AI 已读完手册，正在等你。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /确认开始游戏/ })).toBeInTheDocument()
+    // Step 2 — the voice-mode step, with the run handoff CTA. No second
+    // readiness confirm — that gate lives on GamePage's "开始" button.
+    expect(screen.getByText('第 2/2 步')).toBeInTheDocument()
+    expect(screen.getByText('切到语音模式')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /进入游戏/ })).toBeInTheDocument()
   })
 
   it('hands daily mode off to the run carrying the manual URL as ?url=', async () => {
     renderConnect('daily')
 
     await copyAndReachStep2()
-    fireEvent.click(screen.getByRole('button', { name: /下一步/ }))
-    fireEvent.click(screen.getByRole('button', { name: /确认开始游戏/ }))
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
 
     const location = screen.getByTestId('location').textContent ?? ''
     expect(location).toContain('/bombsquad/run')
@@ -146,8 +155,7 @@ describe('ConnectPage', () => {
     renderConnect('practice')
 
     await copyAndReachStep2()
-    fireEvent.click(screen.getByRole('button', { name: /下一步/ }))
-    fireEvent.click(screen.getByRole('button', { name: /确认开始游戏/ }))
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
 
     const location = screen.getByTestId('location').textContent ?? ''
     expect(location).toBe('/bombsquad/run?mode=practice')

@@ -23,8 +23,6 @@ export type WireColor = 'red' | 'blue' | 'yellow' | 'green' | 'white' | 'black'
 
 export interface Wire {
   color: WireColor
-  hasStripe: boolean
-  stripeColor?: WireColor
 }
 
 export interface WireConfig {
@@ -109,13 +107,14 @@ export interface ManualModules {
 }
 
 /**
- * Per-symbol visual description embedded in each rendered manual HTML so
- * the AI partner has a vocabulary alignment between the abstract symbol id
+ * Per-symbol visual description injected into each rendered manual's AI
+ * payload so the AI partner has a vocabulary alignment between the symbol id
  * (e.g. `psi`) and the shape the player will actually try to describe
  * ("三叉戟" / "扇子"). Under the unified-SSOT architecture the descriptions
- * live solely in `shared/symbols.ts` and the build pipeline injects them
- * into the HTML-embedded yaml at build time — neither the source yaml nor
- * the dist raw yaml carries them. The injected post-build shape still
+ * live solely in `shared/symbols.ts`; the build pipeline injects them at
+ * build time into the canonical AI payload that backs BOTH read paths — the
+ * HTML-embedded yaml and the dist raw yaml served at `?format=yaml`. Only the
+ * source yaml never carries them. The injected post-build shape still
  * conforms to this interface, so it stays here as the canonical type.
  */
 export interface SymbolEntry {
@@ -126,9 +125,9 @@ export interface Manual {
   meta: ManualMeta
   modules: ManualModules
   /**
-   * Optional in source yaml (Option C: descriptions live only in HTML
-   * after build-time injection from SYMBOLS). The build script populates
-   * this field on the cloned object that gets embedded in the HTML.
+   * Absent from the source yaml; the build script populates it from SYMBOLS
+   * at build time onto the canonical AI payload that backs both read paths —
+   * the HTML-embedded yaml and the dist raw yaml served at `?format=yaml`.
    */
   symbols?: Record<string, SymbolEntry>
   decoy_modules?: Record<string, unknown>

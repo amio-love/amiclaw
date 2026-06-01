@@ -5,15 +5,19 @@ import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { copyToClipboard } from '@/utils/clipboard'
+import { OPENING_PROMPT } from '@/constants/opening-prompt'
 import styles from './ConnectPage.module.css'
 
 type ConnectMode = 'daily' | 'practice'
 
-/* Connect-AI flow — design_handoff_bombsquad README §6.2. Three steps
-   swap in place: copy the manual link, switch the AI to voice mode, then
-   confirm and hand off to the existing run. The manual URL is derived by
-   useDailyChallenge and copied with copyToClipboard, no parallel
-   mechanism. */
+/* Connect-AI flow — design_handoff_bombsquad README §6.2. Two steps swap in
+   place: copy the opening prompt + manual link in one tap, then switch the AI
+   to voice mode and hand off to the run. The readiness gate lives once, on the
+   GamePage "开始" button (which also unlocks iOS audio inside the user gesture),
+   so this flow ends with a plain "进入游戏" navigation, not a second confirm.
+   The manual URL is derived by useDailyChallenge; the clipboard payload pairs
+   the role-setting OPENING_PROMPT with that URL so a cold AI gets full context
+   on turn one. */
 export default function ConnectPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -23,10 +27,10 @@ export default function ConnectPage() {
   const { dailyUrl, practiceUrl } = useDailyChallenge()
   const manualUrl = mode === 'daily' ? dailyUrl : practiceUrl
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
 
-  /* Once the manual link is copied, the card turns green and the flow
+  /* Once the handoff message is copied, the card turns green and the flow
      auto-advances to step 2 after ~0.7s. The timer is owned by an effect
      so it cleans up if the player leaves the page mid-wait. */
   useEffect(() => {
@@ -35,15 +39,19 @@ export default function ConnectPage() {
     return () => clearTimeout(id)
   }, [copied])
 
+  /* One tap copies the opening prompt and the manual URL together, so the
+     player pastes a single block that both sets the AI's role and points it at
+     the manual — no naked URL to a cold AI. */
   const handleCopy = async () => {
     if (copied) return
-    const ok = await copyToClipboard(manualUrl)
+    const ok = await copyToClipboard(`${OPENING_PROMPT}\n\n${manualUrl}`)
     if (ok) setCopied(true)
   }
 
-  /* Step 3 → the existing run. Daily carries the manual URL as ?url= so
+  /* Final step → the existing run. Daily carries the manual URL as ?url= so
      the AI partner and the run fetch the same manual; practice loads its
-     bundled manual and needs no URL. */
+     bundled manual and needs no URL. The run's READY "开始" button is the
+     single readiness gate and unlocks iOS audio on tap. */
   const confirmStart = () => {
     if (mode === 'daily') {
       navigate(`/bombsquad/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
@@ -53,8 +61,8 @@ export default function ConnectPage() {
   }
 
   // SVG thread between the player and the AI: a faint guide path plus a
-  // yellow path that draws itself in as the steps progress.
-  const threadOffset = step === 3 ? 0 : 200 - step * 80
+  // yellow path that draws itself in fully on the final step.
+  const threadOffset = step === 2 ? 0 : 200 - step * 80
 
   return (
     <main className={styles.page}>
@@ -88,23 +96,18 @@ export default function ConnectPage() {
 
         <div className={styles.connect}>
           <Eyebrow dot color="var(--y)">
-            第 {step}/3 步
+            第 {step}/2 步
           </Eyebrow>
 
           <h2 className={styles.title}>
             {step === 1 && (
               <>
-                把<span className={styles.titleAccent}>手册</span>发给 AI。
+                把<span className={styles.titleAccent}>开场白和手册</span>发给 AI。
               </>
             )}
             {step === 2 && (
               <>
                 切到<span className={styles.titleAccent}>语音模式</span>。
-              </>
-            )}
-            {step === 3 && (
-              <>
-                深呼吸 —— <span className={styles.titleAccent}>准备开局</span>。
               </>
             )}
           </h2>
@@ -122,7 +125,7 @@ export default function ConnectPage() {
                   stroke="rgba(255,229,62,.35)"
                   strokeWidth="1.5"
                   fill="none"
-                  strokeDasharray={step === 3 ? '0' : '4 4'}
+                  strokeDasharray={step === 2 ? '0' : '4 4'}
                 />
                 <path
                   className={styles.threadDraw}
@@ -134,7 +137,7 @@ export default function ConnectPage() {
                   style={{ strokeDashoffset: threadOffset }}
                 />
               </svg>
-              {step === 3 && <div className={styles.spark}>✦</div>}
+              {step === 2 && <div className={styles.spark}>✦</div>}
             </div>
             <div className={styles.visSide}>
               <div className={styles.aiAvatar}>
@@ -145,7 +148,7 @@ export default function ConnectPage() {
             </div>
           </div>
 
-          {/* Step 1 — copy the manual link. */}
+          {/* Step 1 — copy the opening prompt + manual link together. */}
           {step === 1 && (
             <div className={styles.action}>
               <button
@@ -155,7 +158,7 @@ export default function ConnectPage() {
               >
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>
-                    {copied ? '已复制到剪贴板' : '手册链接'}
+                    {copied ? '已复制到剪贴板' : '开场白 + 手册链接'}
                   </div>
                   <div className={styles.copyCardUrl}>{manualUrl}</div>
                 </div>
@@ -188,7 +191,18 @@ export default function ConnectPage() {
                   )}
                 </div>
               </button>
-              <p className={styles.hint}>粘贴到你常用的 AI，让它读完手册后说「好了」。</p>
+
+              {/* The opening prompt is shown inline so the player sees exactly
+                 what the single copy sends — no longer buried behind
+                 /compatibility. */}
+              <div className={styles.promptPreview}>
+                <div className={styles.promptPreviewLabel}>开场白</div>
+                <pre className={styles.promptPreviewText}>{OPENING_PROMPT}</pre>
+              </div>
+
+              <p className={styles.hint}>
+                一次复制开场白和手册地址，整段粘贴给 AI，让它读完手册后说「好了」。
+              </p>
               {/* /compatibility discovery link — re-homed here from the
                  retired PromptModal, which placed it directly under the
                  same send-to-AI content. Step 1 is that moment now. */}
@@ -198,10 +212,10 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Step 2 — switch the AI partner into voice mode. */}
+          {/* Step 2 — switch the AI partner into voice mode, then hand off. */}
           {step === 2 && (
             <div className={styles.action}>
-              <button type="button" className={styles.copyCard} onClick={() => setStep(3)}>
+              <button type="button" className={styles.copyCard} onClick={confirmStart}>
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>切到语音模式</div>
                   <div className={styles.copyCardUrl}>AI 端 → 麦克风</div>
@@ -224,32 +238,14 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Step 3 — ready pulse, then confirm. */}
-          {step === 3 && (
-            <div className={styles.action}>
-              <div className={styles.readyPulse} aria-hidden="true">
-                <div className={styles.readyRing} />
-                <div className={styles.readyRing} />
-                <div className={styles.readyRing} />
-                <div className={styles.readyCore} />
-              </div>
-              <p className={`${styles.hint} ${styles.hintCenter}`}>AI 已读完手册，正在等你。</p>
-            </div>
-          )}
-
           <div className={styles.cta}>
-            {step < 3 ? (
-              <Button
-                variant="primary"
-                full
-                disabled={step === 1 && !copied}
-                onClick={() => setStep((s) => (s === 1 ? 2 : 3))}
-              >
-                {step === 1 ? (copied ? '下一步 →' : '先复制手册') : '下一步 →'}
+            {step === 1 ? (
+              <Button variant="primary" full disabled={!copied} onClick={() => setStep(2)}>
+                {copied ? '下一步 →' : '先复制开场白'}
               </Button>
             ) : (
               <Button variant="primary" full onClick={confirmStart}>
-                确认开始游戏 →
+                进入游戏 →
               </Button>
             )}
           </div>

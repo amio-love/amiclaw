@@ -4,10 +4,10 @@ import WireModule from './WireModule'
 
 const config = {
   wires: [
-    { color: 'red' as const, hasStripe: false },
-    { color: 'blue' as const, hasStripe: false },
-    { color: 'yellow' as const, hasStripe: false },
-    { color: 'green' as const, hasStripe: false },
+    { color: 'red' as const },
+    { color: 'blue' as const },
+    { color: 'yellow' as const },
+    { color: 'green' as const },
   ],
 }
 const answer = { type: 'wire' as const, cutPosition: 2 }

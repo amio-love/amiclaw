@@ -218,6 +218,15 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Improvements
 
+- **One-tap voice-AI setup, and a practice mode that onboards you** Connecting
+  your AI partner now copies the opening prompt and the manual link together in
+  a single tap — the prompt that puts the AI in its manual-expert role used to
+  be buried behind a discovery link — and the redundant pre-run "ready?" screen
+  is gone, so you reach the bomb in fewer steps. In practice mode the manual now
+  tells the AI to treat you as a first-timer: it opens with the
+  describe-then-act loop and reminds you to read out the scene info bar, instead
+  of replying in terse fragments. Source task
+  `fix-bombsquad-to-invitable-quality`.
 - **AI partner gains wider symbol-misread vocabulary** The shared symbol
   dictionary (`shared/symbols.ts`) now anchors more of the visual gestalts a
   real player might say when describing a symbol under time pressure. `spiral`
@@ -376,6 +385,21 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Fixed
 
+- **The AI partner can finally use its manual** BombSquad is
+  bring-your-own-AI, so the manual the voice AI fetches is its only source of
+  truth — and it was failing the AI in three ways at once. The AI-fetched
+  payload (`?format=yaml`) shipped without the symbol shape descriptions, so
+  the AI saw bare ids like `trident` / `psi`, guessed, and gave
+  confident-but-wrong steps; the descriptions are now injected into that
+  payload too, character-equal to the `shared/symbols.ts` source of truth. The
+  AI's role and rules of engagement (`ai_instructions`, with `game_context`
+  first) were dumped _after_ 350+ lines of puzzle rules; they now lead the
+  payload, so the AI knows who it is and that the player cannot see the manual
+  before it reads a single rule. And the manual mixed Chinese rules with
+  English instructions; it is now one all-Chinese document, carrying a global
+  "you hold the only manual — never ask the player what a rule says"
+  discipline that previously lived in just one module. Source task
+  `fix-bombsquad-to-invitable-quality`.
 - **Symbol-dial AI no longer reverse-asks for the manual** The symbol_dial
   manual's `rule:` preamble is rewritten so the AI partner stops asking the
   player "do you have a manual?" and "what is the target arrangement?" mid-run.

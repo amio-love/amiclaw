@@ -55,7 +55,7 @@ function buildContext(
 
   // Wire-specific computed fields
   if (Array.isArray(config['wires'])) {
-    const wires = config['wires'] as Array<{ color: string; hasStripe: boolean }>
+    const wires = config['wires'] as Array<{ color: string }>
     ctx['wire_count'] = wires.length
     ctx['color_at_last'] = wires[wires.length - 1]?.color
     ctx['color_at_first'] = wires[0]?.color
