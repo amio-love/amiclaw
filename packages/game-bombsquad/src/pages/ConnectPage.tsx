@@ -9,11 +9,13 @@ import styles from './ConnectPage.module.css'
 
 type ConnectMode = 'daily' | 'practice'
 
-/* Connect-AI flow — design_handoff_bombsquad README §6.2. Three steps
-   swap in place: copy the manual link, switch the AI to voice mode, then
-   confirm and hand off to the existing run. The manual URL is derived by
-   useDailyChallenge and copied with copyToClipboard, no parallel
-   mechanism. */
+/* Connect-AI flow — design_handoff_bombsquad README §6.2. Two steps swap in
+   place: copy the manual link in one tap, then switch the AI to voice mode and
+   hand off to the run. The readiness gate lives once, on the GamePage "开始"
+   button (which also unlocks iOS audio inside the user gesture), so this flow
+   ends with a plain "进入游戏" navigation, not a second confirm. The manual URL
+   is derived by useDailyChallenge; voice AIs auto-read a bare pasted link and
+   adopt the role from the now-self-framing manual, so the link alone suffices. */
 export default function ConnectPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -23,7 +25,7 @@ export default function ConnectPage() {
   const { dailyUrl, practiceUrl } = useDailyChallenge()
   const manualUrl = mode === 'daily' ? dailyUrl : practiceUrl
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
 
   /* Once the manual link is copied, the card turns green and the flow
@@ -35,15 +37,19 @@ export default function ConnectPage() {
     return () => clearTimeout(id)
   }, [copied])
 
+  /* One tap copies the manual URL. Voice AIs auto-read a bare pasted link and
+     adopt the role from the now-self-framing manual, so the link alone is
+     enough — no opening prompt needed. */
   const handleCopy = async () => {
     if (copied) return
     const ok = await copyToClipboard(manualUrl)
     if (ok) setCopied(true)
   }
 
-  /* Step 3 → the existing run. Daily carries the manual URL as ?url= so
+  /* Final step → the existing run. Daily carries the manual URL as ?url= so
      the AI partner and the run fetch the same manual; practice loads its
-     bundled manual and needs no URL. */
+     bundled manual and needs no URL. The run's READY "开始" button is the
+     single readiness gate and unlocks iOS audio on tap. */
   const confirmStart = () => {
     if (mode === 'daily') {
       navigate(`/bombsquad/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
@@ -53,8 +59,8 @@ export default function ConnectPage() {
   }
 
   // SVG thread between the player and the AI: a faint guide path plus a
-  // yellow path that draws itself in as the steps progress.
-  const threadOffset = step === 3 ? 0 : 200 - step * 80
+  // yellow path that draws itself in fully on the final step.
+  const threadOffset = step === 2 ? 0 : 200 - step * 80
 
   return (
     <main className={styles.page}>
@@ -88,7 +94,7 @@ export default function ConnectPage() {
 
         <div className={styles.connect}>
           <Eyebrow dot color="var(--y)">
-            第 {step}/3 步
+            第 {step}/2 步
           </Eyebrow>
 
           <h2 className={styles.title}>
@@ -100,11 +106,6 @@ export default function ConnectPage() {
             {step === 2 && (
               <>
                 切到<span className={styles.titleAccent}>语音模式</span>。
-              </>
-            )}
-            {step === 3 && (
-              <>
-                深呼吸 —— <span className={styles.titleAccent}>准备开局</span>。
               </>
             )}
           </h2>
@@ -122,7 +123,7 @@ export default function ConnectPage() {
                   stroke="rgba(255,229,62,.35)"
                   strokeWidth="1.5"
                   fill="none"
-                  strokeDasharray={step === 3 ? '0' : '4 4'}
+                  strokeDasharray={step === 2 ? '0' : '4 4'}
                 />
                 <path
                   className={styles.threadDraw}
@@ -134,7 +135,7 @@ export default function ConnectPage() {
                   style={{ strokeDashoffset: threadOffset }}
                 />
               </svg>
-              {step === 3 && <div className={styles.spark}>✦</div>}
+              {step === 2 && <div className={styles.spark}>✦</div>}
             </div>
             <div className={styles.visSide}>
               <div className={styles.aiAvatar}>
@@ -188,6 +189,7 @@ export default function ConnectPage() {
                   )}
                 </div>
               </button>
+
               <p className={styles.hint}>粘贴到你常用的 AI，让它读完手册后说「好了」。</p>
               {/* /compatibility discovery link — re-homed here from the
                  retired PromptModal, which placed it directly under the
@@ -198,10 +200,10 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Step 2 — switch the AI partner into voice mode. */}
+          {/* Step 2 — switch the AI partner into voice mode, then hand off. */}
           {step === 2 && (
             <div className={styles.action}>
-              <button type="button" className={styles.copyCard} onClick={() => setStep(3)}>
+              <button type="button" className={styles.copyCard} onClick={confirmStart}>
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>切到语音模式</div>
                   <div className={styles.copyCardUrl}>AI 端 → 麦克风</div>
@@ -224,32 +226,14 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Step 3 — ready pulse, then confirm. */}
-          {step === 3 && (
-            <div className={styles.action}>
-              <div className={styles.readyPulse} aria-hidden="true">
-                <div className={styles.readyRing} />
-                <div className={styles.readyRing} />
-                <div className={styles.readyRing} />
-                <div className={styles.readyCore} />
-              </div>
-              <p className={`${styles.hint} ${styles.hintCenter}`}>AI 已读完手册，正在等你。</p>
-            </div>
-          )}
-
           <div className={styles.cta}>
-            {step < 3 ? (
-              <Button
-                variant="primary"
-                full
-                disabled={step === 1 && !copied}
-                onClick={() => setStep((s) => (s === 1 ? 2 : 3))}
-              >
-                {step === 1 ? (copied ? '下一步 →' : '先复制手册') : '下一步 →'}
+            {step === 1 ? (
+              <Button variant="primary" full disabled={!copied} onClick={() => setStep(2)}>
+                {copied ? '下一步 →' : '先复制手册'}
               </Button>
             ) : (
               <Button variant="primary" full onClick={confirmStart}>
-                确认开始游戏 →
+                进入游戏 →
               </Button>
             )}
           </div>

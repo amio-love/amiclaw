@@ -1,5 +1,5 @@
 /* Connect-AI flow — Atlas star-chart visual language
-   (design_handoff_bombsquad README §6.2). Three steps swap in place.
+   (design_handoff_bombsquad README §6.2). Two steps swap in place.
    Pixel values ported from prototype/bombsquad/styles.css `.connect*`. */
 
 .page {
@@ -258,11 +258,6 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
-.hintCenter {
-  margin-top: 18px;
-  text-align: center;
-}
-
 /* ----------  compatibility discovery link  ---------- */
 /* Re-homes the /compatibility entry point removed with PromptModal —
    a subtle text link sitting directly under the step-1 send-to-AI hint. */
@@ -290,53 +285,14 @@
   border-radius: 4px;
 }
 
-/* ----------  step 3 — ready pulse  ---------- */
-.readyPulse {
-  position: relative;
-  width: 200px;
-  height: 200px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.readyCore {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--y), rgba(255, 229, 62, 0.3) 60%, transparent);
-  box-shadow: 0 0 40px var(--y-glow-50);
-  animation: breathe 2.4s ease-in-out infinite;
-}
-
-.readyRing {
-  position: absolute;
-  border: 1px solid rgba(255, 229, 62, 0.3);
-  border-radius: 50%;
-  animation: ringExpand 3s ease-out infinite;
-}
-
-.readyRing:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.readyRing:nth-child(2) {
-  animation-delay: 1s;
-}
-
-.readyRing:nth-child(3) {
-  animation-delay: 2s;
-}
-
 /* ----------  bottom CTA  ---------- */
 .cta {
   margin-top: auto;
   padding-top: 8px;
 }
 
-/* `breathe` and `ringExpand` are BombSquad-specific (not in
-   atlas-animations.css); CSS Modules scopes them to this file. */
+/* `breathe` is BombSquad-specific (not in atlas-animations.css);
+   CSS Modules scopes it to this file. */
 @keyframes breathe {
   0%,
   100% {
@@ -349,24 +305,9 @@
   }
 }
 
-@keyframes ringExpand {
-  0% {
-    width: 70px;
-    height: 70px;
-    opacity: 1;
-  }
-  100% {
-    width: 200px;
-    height: 200px;
-    opacity: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .aiPulse,
-  .spark,
-  .readyCore,
-  .readyRing {
+  .spark {
     animation: none;
   }
 
@@ -446,29 +387,5 @@
 
   .copyCardUrl {
     font-size: 17px;
-  }
-
-  .readyPulse {
-    width: 260px;
-    height: 260px;
-  }
-
-  .readyCore {
-    width: 80px;
-    height: 80px;
-  }
-
-  /* The rings expand to the larger desktop pulse footprint. */
-  @keyframes ringExpand {
-    0% {
-      width: 80px;
-      height: 80px;
-      opacity: 1;
-    }
-    100% {
-      width: 260px;
-      height: 260px;
-      opacity: 0;
-    }
   }
 }

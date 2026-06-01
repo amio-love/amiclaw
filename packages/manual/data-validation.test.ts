@@ -47,7 +47,12 @@ describe('shipped manual YAMLs', () => {
   })
 })
 
-describe('source YAMLs and dist raw YAMLs ship no symbols block (Option C invariant)', () => {
+describe('source YAMLs ship no symbols block (Option C source invariant)', () => {
+  // Source YAMLs must never author a `symbols:` block — descriptions are owned
+  // by the `shared/symbols.ts` SSOT and injected at build time. (The BUILT
+  // dist raw YAML now DOES carry the injected symbols so the AI's
+  // `?format=yaml` path can disambiguate ids — that is asserted in
+  // 'AI-served payload (dist raw YAML) carries injected symbols' below.)
   beforeAll(() => {
     buildManualForTests()
   })
@@ -57,14 +62,7 @@ describe('source YAMLs and dist raw YAMLs ship no symbols block (Option C invari
     expect(parsed.symbols).toBeUndefined()
   })
 
-  it('practice.yaml dist raw has no top-level symbols block', () => {
-    const parsed = yaml.load(
-      readFileSync(join(MANUAL_DIST, 'data/practice.yaml'), 'utf8')
-    ) as Record<string, unknown>
-    expect(parsed.symbols).toBeUndefined()
-  })
-
-  it('every daily YAML source/dist raw has no top-level symbols block', () => {
+  it('every daily YAML source has no top-level symbols block', () => {
     const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
     expect(dailyFiles.length).toBeGreaterThan(0)
     for (const file of dailyFiles) {
@@ -73,15 +71,87 @@ describe('source YAMLs and dist raw YAMLs ship no symbols block (Option C invari
         unknown
       >
       expect(sourceParsed.symbols, `source ${file} should not ship a symbols block`).toBeUndefined()
-
-      const distRawParsed = yaml.load(
-        readFileSync(join(MANUAL_DIST, 'data', file), 'utf8')
-      ) as Record<string, unknown>
-      expect(
-        distRawParsed.symbols,
-        `dist raw ${file} should not ship a symbols block`
-      ).toBeUndefined()
     }
+  })
+})
+
+describe('AI-served payload (dist raw YAML) carries injected symbols (AI disambiguation path)', () => {
+  // New invariant (reverses the prior Option-C dist-raw rule): the dist raw
+  // YAML is the payload the AI fetches via `?format=yaml` / `Accept:
+  // text/plain`. It MUST carry a `symbols:` block whose descriptions are
+  // character-equal to the `shared/symbols.ts` SSOT for every id the manual
+  // references — otherwise the AI sees bare ids (`psi`, `trident`, `omega`)
+  // with no shape vocabulary and mis-identifies symbols. The HTML path already
+  // had this; this guard locks it onto the plain-text AI path too.
+  beforeAll(() => {
+    buildManualForTests()
+  })
+
+  const SSOT_DESCRIPTIONS: Map<string, string> = new Map(SYMBOLS.map((s) => [s.id, s.description]))
+
+  function assertDistRawSymbols(label: string, distRawPath: string): string[] {
+    const errors: string[] = []
+    const manual = yaml.load(readFileSync(distRawPath, 'utf8')) as Manual
+    const symbols = manual.symbols
+    if (symbols === undefined) {
+      errors.push(
+        `${label}: dist raw YAML has NO symbols block — the AI path cannot disambiguate ids`
+      )
+      return errors
+    }
+    const referenced = collectReferencedSymbols(manual.modules)
+    for (const id of referenced) {
+      const entry = symbols[id]
+      if (!entry || typeof entry.description !== 'string' || entry.description.length === 0) {
+        errors.push(
+          `${label}: referenced symbol '${id}' missing a non-empty description in dist raw symbols block`
+        )
+        continue
+      }
+      const ssot = SSOT_DESCRIPTIONS.get(id)
+      if (entry.description !== ssot) {
+        errors.push(
+          `${label}: symbol '${id}' dist-raw description differs from shared/symbols.ts SSOT.\n` +
+            `  dist raw: ${JSON.stringify(entry.description)}\n` +
+            `  SYMBOLS:  ${JSON.stringify(ssot)}`
+        )
+      }
+    }
+    return errors
+  }
+
+  it('practice dist raw YAML carries SSOT-equal symbol descriptions for every referenced id', () => {
+    const errors = assertDistRawSymbols('practice', join(MANUAL_DIST, 'data/practice.yaml'))
+    expect(errors, `\n${errors.join('\n')}`).toEqual([])
+  })
+
+  it('every daily dist raw YAML carries SSOT-equal symbol descriptions for every referenced id', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const errors: string[] = []
+    for (const file of dailyFiles) {
+      errors.push(...assertDistRawSymbols(`daily ${file}`, join(MANUAL_DIST, 'data', file)))
+    }
+    expect(errors, `\n${errors.join('\n')}`).toEqual([])
+  })
+
+  it('dist raw YAML orders ai_instructions before modules (framing-first)', () => {
+    // The AI reads the plain-text payload top-to-bottom; its role + the
+    // do-not-reveal rules + collaboration philosophy (in ai_instructions) must
+    // land BEFORE any module rule content. Assert on the raw text positions of
+    // the top-level (column-0) keys, which is exactly what the AI reads.
+    const raw = readFileSync(join(MANUAL_DIST, 'data/practice.yaml'), 'utf8')
+    const aiIdx = raw.search(/^ai_instructions:/m)
+    const modIdx = raw.search(/^modules:/m)
+    expect(
+      aiIdx,
+      'ai_instructions: top-level key missing from dist raw YAML'
+    ).toBeGreaterThanOrEqual(0)
+    expect(modIdx, 'modules: top-level key missing from dist raw YAML').toBeGreaterThanOrEqual(0)
+    expect(
+      aiIdx,
+      'ai_instructions must appear before modules so the AI reads its role before any rule'
+    ).toBeLessThan(modIdx)
   })
 })
 
@@ -254,10 +324,11 @@ describe('manual set-discrimination invariant', () => {
 
 describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () => {
   // build.ts injects AI_INSTRUCTIONS into the HTML-embedded yaml AND the dist
-  // raw yaml on every render. This block locks in the four-key schema (the
-  // existing tactical-output keys plus the new framing + philosophy keys) so
-  // the AI receives full game context before any rule content, on every
-  // manual fetch, in either consumption path.
+  // raw yaml on every render. This block locks in the five-key schema
+  // (`game_overview` leading with a whole-game mental model, then `game_context`,
+  // the two tactical-output keys, and `collaboration_philosophy`) so the AI
+  // grasps what BombSquad is and receives full game context before any rule
+  // content, on every manual fetch, in either consumption path.
   beforeAll(() => {
     buildManualForTests()
   })
@@ -274,13 +345,14 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
   }
 
   const REQUIRED_KEYS = [
+    'game_overview',
     'do_not_reveal_to_player',
     'give_conclusions_not_reasoning',
     'game_context',
     'collaboration_philosophy',
   ] as const
 
-  it('practice manual HTML embedded yaml ai_instructions contains all four required keys', () => {
+  it('practice manual HTML embedded yaml ai_instructions contains all five required keys', () => {
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     expect(
       manual.ai_instructions,
@@ -312,18 +384,19 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     }
   })
 
-  it('framing and philosophy values carry the load-bearing English tokens', () => {
+  it('framing and philosophy values carry the load-bearing Chinese tokens', () => {
+    // AI_INSTRUCTIONS is now all-Chinese (unifying the manual to one language —
+    // rules + symbol descriptions are already Chinese). These tokens are the
+    // Chinese equivalents of the prior English anchors (voice / describe /
+    // uncertain / recap). The cross-round memory framing is asserted separately
+    // in 'game_overview leads with a whole-game mental model …' below.
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     const instructions = manual.ai_instructions ?? {}
 
-    // game_context anchors session freshness (no cross-session memory) and
-    // names the voice-only medium — both are physical anchors for the
+    // game_context names the voice-only medium — the physical anchor for the
     // trust-building loop and the manual's role as the only AI-facing surface.
     const gameContextText = (instructions.game_context ?? []).join('\n')
-    expect(gameContextText, 'game_context must state that each fetch is a fresh game').toMatch(
-      /fresh game/i
-    )
-    expect(gameContextText, 'game_context must name the voice-only medium').toMatch(/voice/i)
+    expect(gameContextText, 'game_context must name the voice-only medium').toMatch(/语音/)
 
     // collaboration_philosophy must (a) tell the AI to ask the player to
     // describe shapes instead of guessing dictionary names, (b) call for
@@ -334,14 +407,132 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     expect(
       philosophyText,
       'collaboration_philosophy must invite the player to describe shapes'
-    ).toMatch(/describe/i)
+    ).toMatch(/描述/)
     expect(philosophyText, 'collaboration_philosophy must call for admitting uncertainty').toMatch(
-      /uncertain/i
+      /不确定/
     )
     expect(
       philosophyText,
       'collaboration_philosophy must anchor trust-loop data source to the app-rendered recap'
-    ).toMatch(/recap/i)
+    ).toMatch(/复盘/)
+  })
+
+  it('game_overview leads with a whole-game mental model and corrects the memory framing', () => {
+    // Finding 2: the manual jumped straight into the AI's role + per-module rule
+    // tables and never told the AI what BombSquad IS as a whole. game_overview
+    // is a dedicated key placed FIRST so the AI reads a concise whole-game model
+    // (what it is / how a run flows / the scene info bar / timer + fail / the
+    // collaborate loop / decoy modules) before anything else.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const instructions = manual.ai_instructions ?? {}
+
+    // game_overview must be the very first ai_instructions key (the first thing
+    // the AI reads top-to-bottom).
+    const firstKey = Object.keys(instructions)[0]
+    expect(firstKey, 'game_overview must be the first ai_instructions key').toBe('game_overview')
+
+    // game_overview must carry the core game-mechanics vocabulary so the AI's
+    // mental model covers the run loop (模块 / 拆完), the countdown (倒计时), and
+    // the daily fail rule (失误).
+    const overviewText = (instructions.game_overview ?? []).join('\n')
+    expect(overviewText, 'game_overview must name the countdown timer').toMatch(/倒计时/)
+    expect(overviewText, 'game_overview must name the strike/fail mechanic').toMatch(/失误/)
+    expect(overviewText, 'game_overview must name the module structure').toMatch(/模块/)
+    expect(overviewText, 'game_overview must convey clearing all modules to win').toMatch(/拆完/)
+
+    // Finding 3: the old "every fetch = a fresh game / no memory of any prior
+    // session / never claim to remember the last round" framing was WRONG — the
+    // player plays multiple rounds inside ONE continuous voice conversation, so
+    // the AI DOES remember earlier rounds and SHOULD use that. The corrected
+    // framing lives in game_context: same-conversation memory exists and should
+    // be used (同一对话 / 记得), while each round's puzzle is re-randomized so the
+    // AI must not assume carry-over (重新随机).
+    const gameContextText = (instructions.game_context ?? []).join('\n')
+    expect(
+      gameContextText,
+      'game_context must state the AI shares one continuous conversation with the player'
+    ).toMatch(/同一对话/)
+    expect(
+      gameContextText,
+      'game_context must tell the AI it remembers earlier rounds in this conversation'
+    ).toMatch(/记得/)
+    expect(
+      gameContextText,
+      'game_context must tell the AI each round is re-randomized (no carry-over assumption)'
+    ).toMatch(/重新随机/)
+
+    // The obsolete fresh-game claim must be gone everywhere in ai_instructions.
+    const allText = Object.values(instructions).flat().join('\n')
+    expect(allText, 'the obsolete "全新的游戏" fresh-game framing must be removed').not.toMatch(
+      /全新的游戏/
+    )
+  })
+
+  it('every ai_instructions entry is Chinese (carries at least one CJK character)', () => {
+    // The manual is unified to all-Chinese; an English-only entry would be a
+    // regression. Assert every entry of every key carries a CJK ideograph.
+    const CJK_REGEX = /[一-鿿]/
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const instructions = manual.ai_instructions ?? {}
+    const offenders: string[] = []
+    for (const key of REQUIRED_KEYS) {
+      const entries = instructions[key] ?? []
+      entries.forEach((entry, i) => {
+        if (!CJK_REGEX.test(entry)) offenders.push(`${key}[${i}]: ${JSON.stringify(entry)}`)
+      })
+    }
+    expect(
+      offenders,
+      `ai_instructions entries with no Chinese character:\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+
+  it('carries the global "sole manual holder" role-discipline framing', () => {
+    // Promoted out of the dial preamble into GLOBAL ai_instructions so the
+    // discipline (you hold the manual; never bounce a rule/target question back
+    // to the player; turn every lookup into one executable action) governs all
+    // four modules, not just the dial.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const allText = Object.values(manual.ai_instructions ?? {})
+      .flat()
+      .join('\n')
+    expect(allText, 'ai_instructions must state the AI is the sole manual holder').toMatch(
+      /唯一持有手册/
+    )
+    expect(allText, 'ai_instructions must forbid bouncing lookups back to the player').toMatch(
+      /绝不反问/
+    )
+  })
+
+  it('game_context frames practice-vs-daily mode and practice-mode onboarding', () => {
+    // Core design goal: in practice mode the AI must onboard a possible
+    // first-timer through the collaboration loop. game_context must name both
+    // meta.type modes, mark practice as the newbie-onboarding mode, and point
+    // the player at the scene info bar to read out.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const gameContextText = (manual.ai_instructions?.game_context ?? []).join('\n')
+    expect(gameContextText, 'game_context must distinguish the practice mode').toMatch(/practice/)
+    expect(gameContextText, 'game_context must distinguish the daily mode').toMatch(/daily/)
+    expect(
+      gameContextText,
+      'game_context must frame practice mode as onboarding a possible first-timer'
+    ).toMatch(/新手/)
+    expect(
+      gameContextText,
+      'game_context must point the player at the scene info bar to read out'
+    ).toMatch(/场景信息栏/)
+  })
+
+  it('do_not_reveal_to_player separates process guidance from spoiling the answer', () => {
+    // The onboarding push must not collide with the anti-spoiler discipline:
+    // process guidance (how the flow goes, what to describe, how to cooperate)
+    // is orthogonal to leaking answers/rule-text/why. This caveat lives in
+    // do_not_reveal_to_player so the AI reads it right where the strict
+    // anti-spoiler rules are stated.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const text = (manual.ai_instructions?.do_not_reveal_to_player ?? []).join('\n')
+    expect(text, 'must name process guidance as distinct from spoiling').toMatch(/流程引导/)
+    expect(text, 'must state process guidance is not spoiling the answer').toMatch(/剧透/)
   })
 })
 

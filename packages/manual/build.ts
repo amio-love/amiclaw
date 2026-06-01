@@ -48,25 +48,38 @@ interface MinimalManual {
  * and survives the daily generator's wholesale `meta` rewrite.
  */
 const AI_INSTRUCTIONS: Record<string, string[]> = {
-  do_not_reveal_to_player: [
-    'The player never sees this manual and acts only on what you say aloud. Never read out, paste, quote, or summarize raw manual content to the player: rule text, condition tables, YAML or data structure, rule ids, or rule counts. Convert every lookup into one concrete action the player performs right now, e.g. "cut the second wire from the top".',
-    'Never reveal or hint at the decoy modules (morse_code, maze, memory), and never tell the player that decoy or irrelevant rules exist. Only ever discuss the module the player is currently describing.',
-    'Never expose manual meta-information or structure: how the manual is organized, how many rules it holds, or that most rules do not apply. Tell the player only the next action to perform.',
-  ],
-  give_conclusions_not_reasoning: [
-    'When you look up a table, match conditions, or work out which rule applies, never narrate that process aloud. Do not tell the player which rule matched, which conditions you checked, or how you searched the manual.',
-    'Reply with only the final, conclusive, executable instruction, e.g. "Cut the second wire from the top." Add a release or stop condition only when the action needs one, e.g. "hold the button and release when the strip turns red." Never say why.',
+  game_overview: [
+    'BombSquad 是一个人机语音协作拆弹游戏。玩家站在炸弹前，看得到面板却查不了任何资料；你（AI）持有这份手册、却看不到炸弹。两人只能靠语音沟通，合力把这颗炸弹拆掉。',
+    '一颗炸弹由若干模块组成，一次只显示一个，逐个拆完即获胜。每日挑战有 4 个模块——线路、密码盘、按钮、键盘；练习模式精简到 2 个——线路和键盘。',
+    '开局时屏幕底部有一行全局场景信息栏：序号、电池数量、指示灯亮灭。很多模块的规则都会用到它们，玩家开局会先把这一行念给你一次，请记住备用。',
+    '两种模式都有倒计时。每日挑战累计三次失误、或时间归零，炸弹就会爆炸；练习模式宽容得多——答错可在原题重试、不计失误，超时也只是温和地结束本局。',
+    '配合的循环是：玩家描述他看到的画面 → 你查手册找到匹配规则 → 你说出一个玩家此刻就能执行的具体动作 → 玩家执行 → 进入下一个模块，循环往复直到把所有模块拆完。',
+    '手册里还混有 morse_code、maze、memory 等诱饵模块，它们永远不会在真正的游戏里出现，纯属干扰项——请直接忽略，也绝不向玩家提起它们的存在。',
   ],
   game_context: [
-    'Every fetch of this manual URL starts a fresh game. You have no memory of any previous session, and you must not assume any prior context about this player, this bomb, or any earlier conversation. Treat every player as new and every defusal as the first one.',
-    'You are the bomb-defusal manual expert. The player never sees this manual; the entire document exists only for you. Your job is to translate every rule you read into a single concrete action the player can perform right now.',
-    "The player is the defuser standing in front of the bomb. They can see the bomb's wires, buttons, displays, and symbols, but they cannot look anything up. Their entire knowledge of what to do comes from what you say aloud.",
-    'Your only channel to the player is voice. There is no text chat, no diagrams, and no shared screen. Phrase every instruction so it is unambiguous when spoken aloud and easy to act on without re-asking.',
+    '你是拆弹手册专家。玩家永远看不到这份手册，整份文档只为你而存在。你的任务是把读到的每一条规则，翻译成一个玩家此刻就能执行的具体动作。',
+    '玩家是站在炸弹前的拆弹手。他们能看到炸弹的电线、按钮、显示屏和符号，却无法查阅任何资料。他们关于该怎么做的全部认知，都来自你说出口的话。',
+    '你与玩家之间唯一的通道是语音。没有文字聊天，没有图示，没有共享屏幕。组织每一条指令时都要让它在被读出口时毫无歧义，且玩家无需追问就能照做。',
+    '你和玩家处在同一对话里的同一段连续语音中，他可能一口气连玩好几局。你记得本次对话里之前发生的事——上一局卡在哪、复盘时学到了什么——应当主动用这些把后面的配合做得更快更好。这个「一起复盘、一起变强」的循环正是 BombSquad 的核心玩法。app 在每局结束后生成的复盘摘要是玩家可分享的有用辅助，但即便没有它，你本来就记得这段对话里刚刚发生的事。',
+    '每一局的炸弹都是重新随机生成的：绝不能假设这一局的线路、符号、按钮和上一局相同。每开一局都让玩家从头把他看到的画面重新描述一遍，再按当前这一局的实际描述去查规则。',
+    '唯一要避免的是编造本次对话开始之前的记忆——不要声称记得这段对话之前、某个你根本没经历过的更早会话，也不要凭空捏造先前的上下文。',
+    '手册的 meta.type 区分 practice（练习模式）与 daily（每日挑战）两种模式。当 meta.type 是 practice 时，把对方当作可能第一次玩的新手：开局先主动讲清你们的协作循环——"你描述你看到的画面，我查手册告诉你怎么操作"——并提醒玩家先把屏幕底部场景信息栏里的序号、电池数量、指示灯念给你；全程语气耐心、多给鼓励，带着新手稳稳走完上手循环。当 meta.type 是 daily 时，默认对方已经熟练，保持简洁高效，不必重复上手说明。',
+  ],
+  do_not_reveal_to_player: [
+    '玩家永远看不到这份手册，只能照你说出口的话去做。绝不向玩家读出、粘贴、引用或概述任何手册原文：规则文字、条件表、YAML 或数据结构、规则编号、规则条数，一律不说。把每一次查表都转成一个玩家此刻就能立刻执行的具体动作，例如"剪从上往下数第 2 根线"。',
+    '绝不透露或暗示诱饵模块（morse_code、maze、memory）的存在，也绝不告诉玩家手册里有诱饵规则或无关规则。任何时候都只讨论玩家当前正在描述的那一个模块。',
+    '绝不暴露手册的元信息或结构：手册怎么组织、一共多少条规则、或大多数规则其实都用不上，这些都不能讲。只告诉玩家下一步要执行的动作。',
+    '你是唯一持有手册的人；玩家看不到手册；绝不反问玩家某条规则是什么、目标是什么、或让玩家自己去查手册；把每次查表都转成一个玩家此刻能执行的具体动作。',
+    '分清两件正交的事：对"答案、规则原文、为什么这么做"始终简洁、绝不泄露；但对"流程怎么走、玩家此刻该描述什么、你们如何配合"可以主动讲清、有耐心。流程引导不等于剧透答案——别因为要"不剧透"就对新手惜字如金到他根本上不了手；先帮玩家把眼前画面顺畅地描述给你，再把查表结果收敛成一个具体动作。',
+  ],
+  give_conclusions_not_reasoning: [
+    '当你查表、匹配条件、或推断该套用哪条规则时，绝不把这个过程说出口。不要告诉玩家命中了哪条规则、你核对了哪些条件、或你是怎么在手册里检索的。',
+    '只回复最终的、确定的、可执行的指令，例如"剪从上往下数第 2 根线"。只有当动作本身需要时，才补一句松手或停止条件，例如"按住按钮，等灯条变红再松手"。永远不解释为什么。',
   ],
   collaboration_philosophy: [
-    'When the player describes a symbol or feature and your visual vocabulary does not match, ask them to describe the shape in their own words — strokes, curves, comparisons to everyday objects — rather than asking them to pick from a list of dictionary names. Trust their description over your assumption.',
-    'When you are not confident which rule applies, say so before guessing. Tell the player what you are uncertain about and ask one targeted clarifying question. Confidence about the wrong rule causes detonations; admitted uncertainty does not.',
-    'This manual is intentionally incomplete by design, and your imperfect collaboration with the player is a feature, not a bug. After the session ends, the BombSquad app renders a recap summary that the player may choose to share with you outside the game; that app-rendered recap is the only legitimate source of information about prior play. Never claim to remember a previous session, and never act as if you can hear or recall any voice conversation that happened before this fetch.',
+    '当玩家描述某个符号或特征、而你的视觉词汇对不上时，请让他们用自己的话描述形状——笔画、弧线、跟日常物件的类比——别让他们从一串字典名称里挑选。宁可信玩家的描述，也别套用你自己的假设。',
+    '当你拿不准该套用哪条规则时，先说出来，再动手猜。告诉玩家你对什么不确定，并问一个有针对性的澄清问题。对错误规则的笃定会引爆炸弹，坦承不确定则不会。',
+    '这份手册被刻意设计成不完整，你与玩家之间不完美的协作是它有意保留的特性，不算缺陷。每局结束后，BombSquad 应用会生成一份复盘摘要，玩家可以分享给你；它是一份有用的辅助，但并非你了解先前对局的唯一来源——同一段对话里之前发生的事，你本就记得，应当主动用上。你唯一不该做的，是编造本次对话开始之前、你并未真正经历过的更早会话，别假装能回忆起从未发生在你这里的语音对话。',
   ],
 }
 
@@ -84,8 +97,9 @@ function collectReferencedSymbolIds(modules: MinimalModules): Set<string> {
 /**
  * Verify every symbol id referenced by `modules` is registered in the
  * shared SYMBOLS SSOT. The descriptions themselves are NOT carried by the
- * source yaml under Option C — they are injected from SYMBOLS at build
- * time and embedded only in the rendered HTML.
+ * source yaml — they are injected from SYMBOLS at build time into the
+ * canonical AI payload (both the HTML-embedded yaml and the dist raw yaml
+ * the AI fetches via `?format=yaml`).
  */
 function validateReferencedSymbolsAgainstSSOT(manual: MinimalManual): void {
   const referenced = collectReferencedSymbolIds(manual.modules)
@@ -133,21 +147,13 @@ function buildPage(yamlPath: string, slug: string) {
   // (Option C invariant).
   validateNoSourceSymbols(parsed)
 
-  // Prepend the AI output constraints so they render before any rule
-  // content. This variant feeds both the HTML page and the dist raw yaml,
-  // so the constraints reach the AI on every read path (browser HTML and
-  // `?format=yaml`). Spread order places `ai_instructions` LAST so the
-  // hard-coded AI_INSTRUCTIONS wins regardless of what `parsed` contains —
-  // defense in depth alongside `validateNoSourceAiInstructions`.
-  const withInstructions: MinimalManual = { ...parsed, ai_instructions: AI_INSTRUCTIONS }
-
-  // Build the injected variant: a deep-clone of `withInstructions`
-  // augmented with a `symbols` block derived from SYMBOLS. Only this
-  // variant is embedded in the rendered HTML; the source yaml and the dist
-  // raw yaml never carry descriptions (Option C: hybrid HTML-only inline).
+  // Build the symbol-description block from the SYMBOLS SSOT for every id the
+  // modules reference. This is the AI's vocabulary bridge from an abstract id
+  // (`psi`) to the shape a player will actually try to describe ("三叉戟"). The
+  // descriptions never live in the source yaml — they are injected here from
+  // the single source of truth.
   const referenced = collectReferencedSymbolIds(parsed.modules)
-  const injected = structuredClone(withInstructions)
-  injected.symbols = Object.fromEntries(
+  const symbols = Object.fromEntries(
     [...referenced].map((id) => {
       const sym = SYMBOLS.find((s) => s.id === id)
       if (!sym) {
@@ -158,13 +164,38 @@ function buildPage(yamlPath: string, slug: string) {
     })
   )
 
+  // One canonical AI payload feeds BOTH read paths: the browser HTML page and
+  // the `?format=yaml` / `text/plain` raw fetch the AI actually consumes. So
+  // the symbol descriptions and the framing reach the AI on every path — the
+  // raw-yaml path is no longer a symbols-less, framing-last variant that left
+  // the AI staring at bare ids (`psi`, `trident`) it could only mis-identify.
+  //
+  // Framing-first key order: `ai_instructions` leads (its `game_overview`
+  // entry first — a whole-game mental model before anything else — then
+  // `game_context`, the do-not-reveal rules, and the collaboration
+  // philosophy) so the AI grasps what BombSquad is and reads its role BEFORE
+  // any rule content; then `symbols` so the shape vocabulary is in hand before
+  // the modules that reference it; then the parsed source (`meta` / `modules`
+  // / `decoy_modules`) in its authored order.
+  //
+  // `parsed` is stripped of any `ai_instructions` / `symbols` before the
+  // spread so the hard-coded blocks always win even under this explicit-first
+  // ordering — defense in depth alongside the source-level validators above
+  // (which already reject a source-level copy of either key).
+  const { ai_instructions: _srcAi, symbols: _srcSymbols, ...sourceRest } = parsed
+  const aiPayload: MinimalManual = {
+    ai_instructions: AI_INSTRUCTIONS,
+    symbols,
+    ...sourceRest,
+  }
+
   // Minify YAML: emit fully-flow (JSON-like) on a single line for
   // anti-human rendering. `flowLevel: 0` forces flow style at every
   // depth, producing one dense `{...}` blob that is both visually
   // anti-human and round-trippable through `yaml.load` — required for
   // the cross-SSOT test that re-parses the HTML-embedded yaml.
   const minified = yaml
-    .dump(injected, {
+    .dump(aiPayload, {
       flowLevel: 0,
       lineWidth: -1,
     })
@@ -175,10 +206,11 @@ function buildPage(yamlPath: string, slug: string) {
   mkdirSync(pageDir, { recursive: true })
   writeFileSync(join(pageDir, 'index.html'), html)
 
-  // Dist raw yaml: serialise `withInstructions` — carries the AI output
-  // constraints (so the `?format=yaml` AI path is also governed) but never
-  // the `symbols` block (Option C: descriptions stay HTML-only).
-  writeFileSync(join(dataOutDir, `${slug}.yaml`), yaml.dump(withInstructions))
+  // Dist raw yaml: the AI's `?format=yaml` fetch path. Serialise the SAME
+  // canonical payload (block style) so this path carries the framing-first
+  // `ai_instructions` AND the `symbols` descriptions, identical in content to
+  // the HTML-embedded yaml.
+  writeFileSync(join(dataOutDir, `${slug}.yaml`), yaml.dump(aiPayload))
   console.log(`Built manual route: /manual/${slug}`)
 }
 

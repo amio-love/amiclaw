@@ -35,7 +35,7 @@ When('I enter practice mode from the homepage', async ({ world }) => {
 
 Then('the connect-AI flow opens at step 1', async ({ page }) => {
   await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/connect')
-  await expect(page.getByText('第 1/3 步').first()).toBeVisible()
+  await expect(page.getByText('第 1/2 步').first()).toBeVisible()
 })
 
 Then('the copy card shows the daily manual URL', async ({ page }) => {

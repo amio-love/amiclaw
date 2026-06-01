@@ -40,21 +40,20 @@ export function validateNoSourceAiInstructions(manual: ManualForInstructionsVali
 /**
  * Fail loud if a source YAML carries its own `symbols:` block. The
  * `SYMBOLS` constant in `shared/symbols.ts` is the single source of truth
- * for symbol descriptions; `build.ts` injects them into the HTML-embedded
- * yaml only (Option C: source YAML + dist raw YAML both stay free of
- * `symbols:` so human-readable descriptions do not leak to the AI's
- * `?format=yaml` fetch path). A source-level `symbols:` block would both
- * shadow the SYMBOLS SSOT at build time and leak through the dist raw yaml
- * spread, so we reject it at the same gate where
+ * for symbol descriptions; `build.ts` injects them at build time into the
+ * canonical AI payload (both the HTML-embedded yaml and the dist raw yaml
+ * the AI fetches via `?format=yaml`). A source-level `symbols:` block would
+ * shadow that SSOT — descriptions would diverge from `shared/symbols.ts`
+ * without any guard noticing — so we reject it at the same gate where
  * `validateNoSourceAiInstructions` rejects its parallel. Together with
- * `validateReferencedSymbolsAgainstSSOT` (which checks every referenced
- * id is registered) this validator provides defense in depth on both the
- * registration check and the source-leak path.
+ * `validateReferencedSymbolsAgainstSSOT` (which checks every referenced id
+ * is registered) this validator keeps `shared/symbols.ts` the sole author of
+ * every shipped description.
  */
 export function validateNoSourceSymbols(manual: ManualForInstructionsValidation): void {
   if (manual.symbols !== undefined) {
     throw new Error(
-      `Manual ${manual.meta?.version ?? '<unknown>'}: source YAML must not carry a \`symbols\` block — symbol descriptions live only in the shared/symbols.ts SYMBOLS SSOT and are injected into the HTML-embedded yaml at build time; carrying \`symbols\` in source would shadow the SSOT and leak human-readable descriptions to the AI-readable dist raw yaml (\`?format=yaml\` path), violating the Option C invariant.`
+      `Manual ${manual.meta?.version ?? '<unknown>'}: source YAML must not carry a \`symbols\` block — symbol descriptions live only in the shared/symbols.ts SYMBOLS SSOT and are injected at build time; carrying \`symbols\` in source would shadow the SSOT and let the shipped descriptions silently diverge from shared/symbols.ts.`
     )
   }
 }

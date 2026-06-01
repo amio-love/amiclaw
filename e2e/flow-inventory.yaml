@@ -40,7 +40,7 @@ flows:
     description: >-
       A first-time visitor enters practice mode — a homepage BombSquad CTA
       opens the BombSquad landing page, its 练习 CTA enters the connect-AI flow,
-      and finishing that three-step flow starts a 2-module practice run.
+      and finishing that two-step flow starts a 2-module practice run.
     steps: [landing, bombsquad-landing, cta-practice, connect-flow, game-practice, result]
     status: active
 

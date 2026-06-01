@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { copyToClipboard } from '@/utils/clipboard'
+import { OPENING_PROMPT } from '@/constants/opening-prompt'
 import styles from './CompatibilityPage.module.css'
-
-/**
- * Recommended opening prompt the player can paste into their AI partner
- * after handing over the manual URL. Kept as a multi-line template literal
- * so it stays copy-pastable verbatim (no smart-quote / formatting drift).
- */
-const OPENING_PROMPT = `等会儿我会发你一个 URL，里面是 YAML 拆弹手册。请打开它读完整本手册，告诉我"读完了"。
-然后我开始描述拆弹面板的画面，你根据手册告诉我下一步该怎么做。
-每次只回复一步指令，不要一口气说完，等我执行完再继续。
-如果我念出一个奇怪的中文短句（暗号），请准确听写下来并念回给我确认。`
 
 type Verification = 'verified' | 'untested'
 

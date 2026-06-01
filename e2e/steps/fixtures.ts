@@ -170,7 +170,7 @@ export class World {
   //
   // The redesign replaced the old single PromptModal with a routed flow:
   //   platform homepage `/` → BombSquad landing `/bombsquad` → connect-AI flow
-  //   `/bombsquad/connect` (three in-place steps) → run `/bombsquad/run`.
+  //   `/bombsquad/connect` (two in-place steps) → run `/bombsquad/run`.
   // Every homepage BombSquad CTA shares one mode-agnostic target (`/bombsquad`);
   // the daily / practice choice is made on the BombSquad landing page.
 
@@ -208,16 +208,16 @@ export class World {
   }
 
   /**
-   * Connect steps 1→2→3→run. The controlled clock is paused, so the post-copy
-   * 700ms auto-advance never fires — every step is advanced by an explicit
-   * 下一步 click instead. Assumes the manual link is already copied.
+   * Connect steps 1→2→run. The controlled clock is paused, so the post-copy
+   * 700ms auto-advance to step 2 never fires — the step is advanced by an
+   * explicit 下一步 click instead. The single readiness confirm was removed
+   * (it now lives once on GamePage's 开始), so step 2 ends with a plain
+   * 进入游戏 navigation. Assumes the manual link is already copied.
    */
   async finishConnectFlow(): Promise<void> {
     await this.page.getByRole('button', { name: '下一步 →' }).click()
-    await this.page.getByText('第 2/3 步').first().waitFor()
-    await this.page.getByRole('button', { name: '下一步 →' }).click()
-    await this.page.getByText('第 3/3 步').first().waitFor()
-    await this.page.getByRole('button', { name: '确认开始游戏 →' }).click()
+    await this.page.getByText('第 2/2 步').first().waitFor()
+    await this.page.getByRole('button', { name: '进入游戏 →' }).click()
     await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad/run', {
       timeout: 12_000,
     })

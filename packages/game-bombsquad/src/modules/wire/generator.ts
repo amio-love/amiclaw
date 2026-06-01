@@ -18,8 +18,6 @@ export function generateWire(
   for (let attempt = 0; attempt < 100; attempt++) {
     const wires = Array.from({ length: wireCount }, () => ({
       color: rng.pick(COLORS),
-      hasStripe: rng.float() < 0.3,
-      stripeColor: rng.float() < 0.3 ? rng.pick(COLORS) : undefined,
     }))
     const config: WireConfig = { wires }
     const answer = solveWire(config, rules, sceneInfo)
