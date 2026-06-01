@@ -40,7 +40,7 @@ Feature: BombSquad daily challenge and practice mode
     Then the connect-AI flow opens at step 1
     And the copy card shows the daily manual URL
     And the connect screen has no horizontal overflow
-    And I see the tip "粘贴到你常用的 AI"
+    And I see the tip "整段粘贴给 AI"
     When I copy the manual link
     Then I see the tip "已复制到剪贴板"
     And the system clipboard contains the daily manual URL
