@@ -60,6 +60,42 @@
   transition: opacity 100ms;
 }
 
+/* Wrong cut: the clicked strand flashes red and recoils (a quick horizontal
+   jitter — the snip bounces off), then settles back to its own color. The
+   strand stays INTACT; severing is reserved for the correct cut. `--wire-color`
+   is set inline per strand so the red decays back to that exact hue. */
+.strandError {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wire-strand-error 600ms ease-out;
+}
+
+@keyframes wire-strand-error {
+  0% {
+    stroke: #ff073a;
+    filter: drop-shadow(0 0 7px #ff073a);
+    transform: translateX(0);
+  }
+  12% {
+    transform: translateX(-3px);
+  }
+  28% {
+    transform: translateX(3px);
+  }
+  44% {
+    transform: translateX(-2px);
+  }
+  60% {
+    stroke: #ff073a;
+    transform: translateX(1px);
+  }
+  100% {
+    stroke: var(--wire-color, #ff073a);
+    filter: none;
+    transform: translateX(0);
+  }
+}
+
 .halo {
   pointer-events: none;
 }
@@ -164,5 +200,11 @@
   .sparkRing {
     animation: none;
     opacity: 0;
+  }
+  /* No motion — keep the wrong-wire cue as a static red stroke (held for the
+     ~600ms error window, then cleared when the panel returns to idle). */
+  .strandError {
+    animation: none;
+    stroke: #ff073a;
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, type CSSProperties } from 'react'
 import type { WireConfig, WireAnswer } from '@shared/manual-schema'
 import type { ModuleProps } from '../types'
 import { playSfx } from '@/audio/useSfx'
@@ -29,6 +29,10 @@ export default function WireModule({
 }: ModuleProps<WireConfig, WireAnswer>) {
   const [state, setState] = useState<WireState>('idle')
   const [cutIndex, setCutIndex] = useState<number | null>(null)
+  // Index of the strand the player cut WRONG — drives a red flash + recoil on
+  // that one strand (the wire stays intact). Cleared on the same ~600ms reset
+  // that returns the panel to 'idle'. Severing is reserved for the correct cut.
+  const [errorIndex, setErrorIndex] = useState<number | null>(null)
 
   const handleClick = useCallback(
     (index: number) => {
@@ -41,11 +45,15 @@ export default function WireModule({
         navigator.vibrate?.(100)
         setTimeout(onComplete, 800)
       } else {
+        setErrorIndex(index)
         setState('error')
         playSfx('module-error')
         navigator.vibrate?.(200)
         onError()
-        setTimeout(() => setState('idle'), 600)
+        setTimeout(() => {
+          setState('idle')
+          setErrorIndex(null)
+        }, 600)
       }
     },
     [state, answer.cutPosition, onComplete, onError]
@@ -77,6 +85,7 @@ export default function WireModule({
             const d = `M 20 ${startY} Q ${midX} ${midY} 280 ${startY}`
             const color = COLOR_MAP[wire.color] ?? '#888'
             const isCut = cutIndex === i
+            const isError = errorIndex === i
 
             return (
               <g key={i}>
@@ -117,10 +126,12 @@ export default function WireModule({
                   <path
                     d={d}
                     stroke={color}
-                    className={styles.strand}
+                    className={`${styles.strand} ${isError ? styles.strandError : ''}`}
+                    style={isError ? ({ '--wire-color': color } as CSSProperties) : undefined}
                     strokeWidth={3}
                     fill="none"
                     strokeLinecap="round"
+                    data-testid={`strand-${i}`}
                   />
                 )}
                 {/* Anchor pins at both ends. */}
