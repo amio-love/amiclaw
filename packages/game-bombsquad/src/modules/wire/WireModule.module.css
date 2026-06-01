@@ -85,12 +85,17 @@
   stroke: rgba(255, 255, 255, 0.08);
 }
 
-/* The hit target is an SVG path; a box outline would frame the whole
-   curve's bounding rect, so focus is shown as a yellow band tracing the
-   strand instead. */
+/* The hit target is an SVG path; the browser's default box outline would
+   frame the whole curve's bounding rect (reads as two stray lines above and
+   below the strand). Suppress it on ALL focus — including pointer/tap focus,
+   where :focus-visible does NOT match — and show keyboard focus as a yellow
+   band tracing the strand instead. */
+.hitTarget:focus {
+  outline: none;
+}
+
 .hitTarget:focus-visible {
   stroke: var(--y-glow-50);
-  outline: none;
 }
 
 /* Severed strand halves — transform keyframes are global; the glow
