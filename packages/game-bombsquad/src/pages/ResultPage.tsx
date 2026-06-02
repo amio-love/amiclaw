@@ -15,6 +15,7 @@ import { saveOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
 import { buildRetroQuestions } from '@/utils/retro-questions'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
+import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
 
@@ -91,6 +92,21 @@ export default function ResultPage() {
   // game-modes rework added the `outcome` field.
   const outcome: GameOutcome = state.outcome ?? 'defused'
   const variant = resultVariant(outcome)
+
+  // True only when ResultPage was opened with no run in memory at all (distinct
+  // from a finished run that solved zero modules — that still carries an
+  // outcome). Gates both the "暂无数据" fallback and the success payoff below.
+  const noRunData = state.moduleStats.length === 0 && state.outcome === null
+
+  // Success sting on entry — a short, restrained rising chime that marks the
+  // arrival, the audible half of the success-only payoff. Failure stays silent
+  // (the detonation already played during the EXPLODING animation). Silent-fail
+  // when audio is unavailable or muted. Mount-once; StrictMode double-fires it
+  // in dev only, like the reducer's logEvent calls.
+  useEffect(() => {
+    if (variant === 'success' && !noRunData) playSfx('result-success')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const totalMs =
     state.totalStartTime !== null && state.totalEndTime !== null
@@ -317,7 +333,7 @@ ${retroQuestions}`
 
   // No game in memory at all — distinct from a finished run that solved zero
   // modules (an exploded run, which still carries an `outcome`).
-  if (state.moduleStats.length === 0 && state.outcome === null) {
+  if (noRunData) {
     return (
       <main className={styles.page}>
         <Scenery accent="yellow" />
@@ -356,12 +372,15 @@ ${retroQuestions}`
       <div className={styles.stage}>
         <div className={styles.result} data-variant={variant}>
           <div className={styles.burst}>
+            {variant === 'success' && <span className={styles.successRing} aria-hidden="true" />}
             <Glyph
               name={burstGlyph}
               size={variant === 'success' ? 88 : 92}
               glow={false}
               color={accentColor}
-              className={styles.burstGlyph}
+              className={`${styles.burstGlyph} ${
+                variant === 'success' ? styles.burstGlyphEnter : ''
+              }`}
             />
           </div>
 

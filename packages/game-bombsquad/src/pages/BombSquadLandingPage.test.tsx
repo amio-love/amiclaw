@@ -3,8 +3,8 @@
  *
  * Covers the BombSquad game landing page (/bombsquad) — the Atlas
  * star-chart redesign (design_handoff_bombsquad README §6.1):
- *   1. render smoke — planet hero, BOMBSQUAD title, the AI-status eyebrow,
- *      and the daily-countdown card.
+ *   1. render smoke — planet hero, BOMBSQUAD title, the bring-your-own-AI
+ *      eyebrow, and the daily-countdown card.
  *   2. both the 练习 and 每日挑战 CTAs render.
  *   3. the 每日挑战 CTA enters the connect flow as mode=daily.
  *   4. the 练习 CTA enters the connect flow as mode=practice.
@@ -52,8 +52,8 @@ describe('BombSquadLandingPage', () => {
     // Hero copy markers.
     expect(screen.getByText('拆弹小队')).toBeInTheDocument()
     expect(screen.getByText(/人机协作 · 语音拆弹挑战/)).toBeInTheDocument()
-    // AI-status eyebrow.
-    expect(screen.getByText(/AI 已就位 · Claude · 语音模式/)).toBeInTheDocument()
+    // Bring-your-own-AI premise eyebrow (not a status claim).
+    expect(screen.getByText(/自带语音 AI · 支持 Claude/)).toBeInTheDocument()
     // Daily-countdown card — its label plus the mocked countdown digits.
     // The countdown splits the `:` separators into <span> elements, so the
     // digits are loose text nodes — match on the element's full textContent.

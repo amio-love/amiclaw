@@ -20,6 +20,12 @@
 .filled {
   background: var(--green);
   box-shadow: 0 0 6px var(--green);
+  /* One-shot surge the moment a segment turns green — fires as the
+     just-cleared module's segment gains `.filled` (overlay gone, next module
+     in), the visible tail of the module-pass payoff. Settles back to the
+     steady fill so a re-render never replays it. */
+  animation: segment-surge 0.5s ease-out;
+  transform-origin: center;
 }
 
 .active {
@@ -28,8 +34,29 @@
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* A vertical pop + glow swell, ending exactly on the steady `.filled` look. */
+@keyframes segment-surge {
+  0% {
+    transform: scaleY(1);
+    box-shadow: 0 0 6px var(--green);
+  }
+  35% {
+    transform: scaleY(2.4);
+    box-shadow: 0 0 16px 2px var(--green);
+  }
+  100% {
+    transform: scaleY(1);
+    box-shadow: 0 0 6px var(--green);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .active {
+    animation: none;
+  }
+
+  /* Keep the 0.3s colour cross-fade (a non-motion transition); drop the pop. */
+  .filled {
     animation: none;
   }
 }

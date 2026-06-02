@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
 import type { SceneInfo } from '@shared/manual-schema'
 import SceneInfoBar from './SceneInfoBar'
 
@@ -45,5 +45,29 @@ describe('SceneInfoBar', () => {
     )
     expect(screen.getByText('指示灯：')).toBeInTheDocument()
     expect(screen.getByText('无')).toBeInTheDocument()
+  })
+})
+
+describe('SceneInfoBar first-run nudge', () => {
+  it('does not render the nudge by default', () => {
+    render(<SceneInfoBar sceneInfo={sceneWithIndicators} />)
+    expect(screen.queryByText(/读给 AI/)).not.toBeInTheDocument()
+  })
+
+  it('renders the dismissible hint when showNudge is set', () => {
+    render(<SceneInfoBar sceneInfo={sceneWithIndicators} showNudge />)
+    expect(screen.getByText(/读给 AI/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '关闭提示' })).toBeInTheDocument()
+    // The scene fields stay rendered alongside the hint.
+    expect(screen.getByText('暗号：')).toBeInTheDocument()
+  })
+
+  it('calls onDismissNudge when the hint is dismissed', () => {
+    const onDismissNudge = vi.fn()
+    render(
+      <SceneInfoBar sceneInfo={sceneWithIndicators} showNudge onDismissNudge={onDismissNudge} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '关闭提示' }))
+    expect(onDismissNudge).toHaveBeenCalledTimes(1)
   })
 })

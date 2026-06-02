@@ -224,12 +224,55 @@
   }
 }
 
+/* Correct-answer feedback — the positive counterpart to .errorPulse. Same
+   panel-framed border + glow, green instead of rose, and a single confident
+   bloom rather than the error's anxious double-pulse. Sits over the module
+   area; the completion overlay blooms in just behind it. */
+.successPulse {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid var(--green);
+  border-radius: var(--radius-2xl);
+  box-shadow:
+    0 0 24px 4px rgba(75, 210, 102, 0.4),
+    inset 0 0 32px 4px rgba(75, 210, 102, 0.24);
+  background: radial-gradient(circle at center, rgba(75, 210, 102, 0.1), transparent 70%);
+  opacity: 0;
+  animation: module-success-pulse 0.55s ease-out;
+}
+
+@keyframes module-success-pulse {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .errorPulse {
     animation: module-error-pulse-reduced 0.6s ease-out;
   }
 
+  .successPulse {
+    animation: module-success-pulse-reduced 0.55s ease-out;
+  }
+
   .defusedText {
+    animation: none;
+  }
+
+  .defusedBurst {
+    animation: none;
+    opacity: 0;
+  }
+
+  .overlayComplete {
     animation: none;
   }
 
@@ -244,9 +287,39 @@
       opacity: 0;
     }
   }
+
+  @keyframes module-success-pulse-reduced {
+    0% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 0.8;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+/* The completion overlay blooms in over ~0.18s instead of snapping, so the
+   green .successPulse on the panel behind it is visible for a beat before the
+   dark layer settles — the win reads as one continuous bloom. */
+.overlayComplete {
+  animation: overlay-bloom 0.18s ease-out;
+}
+
+@keyframes overlay-bloom {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .defusedText {
+  position: relative;
+  z-index: 1;
   font: 400 clamp(2.6rem, 11vw, 4.4rem) var(--font-display);
   font-style: italic;
   color: var(--green);
@@ -264,6 +337,38 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* One-shot radiating ring behind the 拆除成功 text — a soft green pop that
+   reinforces the module-pass payoff without tipping into fanfare. Centred over
+   the overlay (inset:0 + margin:auto). */
+.defusedBurst {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  background: radial-gradient(circle, rgba(75, 210, 102, 0.22), transparent 62%);
+  box-shadow: 0 0 32px rgba(75, 210, 102, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  animation: defused-burst 0.62s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+@keyframes defused-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
   }
 }
 

@@ -1,6 +1,10 @@
 /** Shared navigation, viewport, URL and generic locator steps. */
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { Given, When, Then } from './fixtures'
+
+/** How long the wait fallback lets a late-rendering control appear before
+ * giving up. Bounded so a genuinely-absent target still fails promptly. */
+const TAP_TARGET_TIMEOUT_MS = 8000
 
 /** Click a button or link by its visible label, tolerant of ← / → affixes. */
 export async function tapByLabel(page: Page, raw: string): Promise<void> {
@@ -9,29 +13,53 @@ export async function tapByLabel(page: Page, raw: string): Promise<void> {
   const noArrow = text.replaceAll('←', '').replaceAll('→', '').trim()
   if (noArrow && noArrow !== text) variants.push(noArrow)
 
+  // Candidate locators in priority order: exact accessible-name, then inexact
+  // accessible-name, then visible-text content (covers buttons whose aria-label
+  // differs from their label text). Each candidate matches button OR link.
+  // Built once and reused for both the fast path and the wait fallback.
+  const candidates: Locator[] = []
   for (const exact of [true, false]) {
     for (const name of variants) {
-      const locator = page
-        .getByRole('button', { name, exact })
-        .or(page.getByRole('link', { name, exact }))
+      candidates.push(
+        page.getByRole('button', { name, exact }).or(page.getByRole('link', { name, exact }))
+      )
+    }
+  }
+  for (const name of variants) {
+    candidates.push(
+      page
+        .getByRole('button')
+        .filter({ hasText: name })
+        .or(page.getByRole('link').filter({ hasText: name }))
+    )
+  }
+
+  const clickFirstPresent = async (): Promise<boolean> => {
+    for (const locator of candidates) {
+      // `count()` is instantaneous and non-auto-waiting, so this is the fast
+      // path: click immediately when a match is already in the DOM.
       if ((await locator.count()) > 0) {
         await locator.first().click()
-        return
+        return true
       }
     }
+    return false
   }
-  // Fallback: match by visible text content rather than accessible name —
-  // covers buttons whose aria-label differs from their label text.
-  for (const name of variants) {
-    const byText = page
-      .getByRole('button')
-      .filter({ hasText: name })
-      .or(page.getByRole('link').filter({ hasText: name }))
-    if ((await byText.count()) > 0) {
-      await byText.first().click()
-      return
-    }
+
+  if (await clickFirstPresent()) return
+
+  // Slow path: the control may render a beat late (e.g. the GamePage READY
+  // "开始" button only paints after the LOADING→READY transition), so the
+  // instantaneous count-check above can miss it. Wait — bounded — for any
+  // candidate to become visible, then re-run the selection.
+  let combined = candidates[0]
+  for (const locator of candidates.slice(1)) combined = combined.or(locator)
+  try {
+    await combined.first().waitFor({ state: 'visible', timeout: TAP_TARGET_TIMEOUT_MS })
+  } catch {
+    throw new Error(`tap/click target not found: ${raw}`)
   }
+  if (await clickFirstPresent()) return
   throw new Error(`tap/click target not found: ${raw}`)
 }
 
