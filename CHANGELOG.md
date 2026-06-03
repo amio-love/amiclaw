@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your AI partner now leads the post-game debrief** — When a run ends,
+you no longer copy a summary and paste it to your AI to get a recap. The
+result page shows this run at a glance — total time, each module's time
+and misses, and your daily rank — for you to read directly, and your AI
+partner now takes the lead on the debrief in your ongoing voice chat:
+once you tell it how the run went, it asks what tripped you up, suggests
+what to change, and invites you into another round. The failure-screen
+messages were rewritten to match, nudging you to talk the run over with
+your AI instead of handing out canned tactics.
+
 **AmiClaw moves to claw.amio.fans, BombSquad gets its own sub-path** —
 The platform's canonical home is now `claw.amio.fans`, and BombSquad
 lives at `claw.amio.fans/bombsquad` (with the run, connect, result and

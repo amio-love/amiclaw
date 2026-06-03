@@ -12,12 +12,6 @@ async function readClipboard(page: Page): Promise<string> {
   return page.evaluate(() => navigator.clipboard.readText())
 }
 
-async function fillNicknameAndConfirm(page: Page): Promise<void> {
-  const dialog = page.getByRole('dialog')
-  await dialog.getByRole('textbox').fill(E2E_NICKNAME)
-  await dialog.getByRole('button', { name: '确认' }).click()
-}
-
 function assertPlausibleSubmission(submission: Record<string, unknown> | undefined): void {
   expect(submission, 'a /api/leaderboard POST was captured').toBeDefined()
   const sub = submission as { time_ms: number; module_times: number[] }
@@ -115,114 +109,7 @@ Then(
   }
 )
 
-// --- Recap copy (Scenario Outline) -------------------------------------------
-
-Given(
-  'I have finished a {string} run and the result page is open',
-  async ({ world }, mode: string) => {
-    await world.openPath('/')
-    if (mode === 'daily') {
-      await world.driveDailyToResult()
-    } else {
-      await world.drivePracticeToResult()
-    }
-  }
-)
-
-When(
-  'the score submission resolves with rank {int} of {int} and personal best {int}ms attempt {int}',
-  async ({ world, page }, rank: number, total: number, pbMs: number, pbAttempt: number) => {
-    world.leaderboard.postResponse = {
-      rank,
-      total_players: total,
-      personal_best_ms: pbMs,
-      personal_best_attempt: pbAttempt,
-    }
-    await fillNicknameAndConfirm(page)
-    await expect(page.getByText('全球排名')).toBeVisible()
-  }
-)
-
-When(
-  'the score submission resolves with rank {int} of {int} and a legacy personal best {int}ms',
-  async ({ world, page }, rank: number, total: number, pbMs: number) => {
-    world.leaderboard.postResponse = { rank, total_players: total, personal_best_ms: pbMs }
-    await fillNicknameAndConfirm(page)
-    await expect(page.getByText('全球排名')).toBeVisible()
-  }
-)
-
-When('the score submission has not resolved', async ({ world, page }) => {
-  world.leaderboard.abortPost = true
-  await fillNicknameAndConfirm(page)
-  await expect(page.getByText(/提交失败/)).toBeVisible()
-})
-
-When('the score submission is never sent', async ({ world }) => {
-  expect(world.leaderboard.submissions).toHaveLength(0)
-})
-
-Then('the system clipboard holds plain text with no HTML formatting', async ({ page }) => {
-  const text = await readClipboard(page)
-  expect(text.length).toBeGreaterThan(0)
-  expect(text).not.toMatch(/<\/?[a-z][^>]*>/i)
-})
-
-Then('the clipboard text contains the line {string}', async ({ page }, line: string) => {
-  expect(await readClipboard(page)).toContain(line)
-})
-
-Then('the recap text contains the line {string}', async ({ page }, line: string) => {
-  expect(await readClipboard(page)).toContain(line)
-})
-
-Then(
-  'the recap text contains the exact line {string} with no attempt suffix',
-  async ({ page }, line: string) => {
-    const lines = (await readClipboard(page)).split('\n')
-    expect(lines).toContain(line)
-    expect(lines.some((l) => l.startsWith(`${line}（`))).toBe(false)
-  }
-)
-
-Then('the recap text contains no {string} line', async ({ page }, prefix: string) => {
-  expect(await readClipboard(page)).not.toContain(prefix)
-})
-
-Then(
-  'the recap places any {string} line between {string} and {string}',
-  async ({ page }, middle: string, before: string, after: string) => {
-    const text = await readClipboard(page)
-    const mid = text.indexOf(middle)
-    if (mid === -1) return // line absent — vacuously satisfied
-    const beforeIdx = text.indexOf(before)
-    expect(beforeIdx).toBeGreaterThanOrEqual(0)
-    expect(beforeIdx).toBeLessThan(mid)
-    const afterIdx = text.indexOf(after)
-    if (afterIdx !== -1) expect(mid).toBeLessThan(afterIdx)
-  }
-)
-
-Then(
-  'the clipboard text ends with three lines each starting with {string}',
-  async ({ page }, prefix: string) => {
-    const lines = (await readClipboard(page)).replace(/\s+$/, '').split('\n')
-    const lastThree = lines.slice(-3)
-    expect(lastThree).toHaveLength(3)
-    for (const line of lastThree) expect(line.startsWith(prefix)).toBe(true)
-  }
-)
-
-Then(
-  'the first {string} bullet names the slowest module by its Chinese label',
-  async ({ page }, prefix: string) => {
-    const firstBullet = (await readClipboard(page)).split('\n').find((l) => l.startsWith(prefix))
-    expect(firstBullet, 'a bullet line exists').toBeDefined()
-    // buildRetroQuestions() names the slowest module; assert the bullet leads
-    // with one of the four Atlas Chinese module labels.
-    expect(firstBullet).toMatch(/^- (光弦|星盘|按钮|星符)模块/)
-  }
-)
+// --- Leaderboard submission assertion (shared by mobile-beta + game-modes) ----
 
 Then('the leaderboard submission carries a plausible time', async ({ world, page }) => {
   // A daily-win submission only fires once the NicknameModal is confirmed.
@@ -238,10 +125,6 @@ Then('the leaderboard submission carries a plausible time', async ({ world, page
     await expect.poll(() => world.leaderboard.submissions.length).toBeGreaterThan(0)
   }
   assertPlausibleSubmission(world.leaderboard.submissions.at(-1))
-})
-
-Then('the leaderboard submission is never sent', async ({ world }) => {
-  expect(world.leaderboard.submissions).toHaveLength(0)
 })
 
 // --- Voice-AI compatibility page ---------------------------------------------
