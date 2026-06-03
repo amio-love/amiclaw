@@ -108,7 +108,7 @@ Feature: BombSquad daily challenge and practice mode
     When I submit a third wrong answer
     Then a full-screen explosion animation plays over the bomb panel
     And the result page opens with the heading "差一点"
-    And the failure reason reads "三次失误就到这了"
+    And the failure reason reads "三次失误，这一局就到这了"
     And no nickname modal appears
     And no score is submitted to the leaderboard
 

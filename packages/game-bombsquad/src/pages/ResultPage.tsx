@@ -5,7 +5,6 @@ import { Scenery } from '@amiclaw/ui'
 import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
-import { copyToClipboard } from '@/utils/clipboard'
 import { getTodayString } from '@shared/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
@@ -13,7 +12,6 @@ import { formatMs } from '@shared/format-time'
 import { submitScore } from '@shared/leaderboard-api'
 import { saveOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
-import { buildRetroQuestions } from '@/utils/retro-questions'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
@@ -53,37 +51,21 @@ function resultVariant(outcome: GameOutcome): ResultVariant {
   return outcome === 'exploded' || outcome === 'practice-timeout' ? 'failure' : 'success'
 }
 
-/** Label used in the copyable recap summary's "结果：" line. Kept four-way
- *  (distinct from the two-way heading) so the plain-text recap still tells a
- *  practice end apart from a daily defuse. */
-function summaryLabel(outcome: GameOutcome): string {
-  switch (outcome) {
-    case 'exploded':
-      return '失败 💥'
-    case 'practice-cleared':
-      return '练习完成 ✅'
-    case 'practice-timeout':
-      return '时间到 ⏱'
-    case 'defused':
-    default:
-      return '成功 ✅'
-  }
-}
-
 /** AI-voiced consolation line on the failure screen (handoff README §6.7).
- *  Static, non-punishing copy keyed on the real failure cause — no fabricated
- *  per-run advice. */
+ *  Static, non-punishing copy keyed on the real failure cause — restrained and
+ *  reasoned (no fabricated per-run advice, no slogans). Each line nudges the
+ *  player back to the AI partner for an end-of-round debrief, which is where the
+ *  qualitative coaching now lives. */
 function consolationText(outcome: GameOutcome, strikeCount: number): string {
   if (outcome === 'exploded' && strikeCount >= MAX_STRIKES) {
-    return '三次失误就到这了 —— 下一局遇到拿不准的地方，先让我把手册多读两遍，别急着动手。'
+    return '三次失误，这一局就到这了 —— 趁记得，跟我聊聊刚才哪几步卡住了，下一局我们会更稳。'
   }
-  return '时间走得比想象中快 —— 下一局我们先盯住最耗时的那个模块，慢一点反而更稳。'
+  return '时间走得比想象中快 —— 跟我复盘一下这局哪里慢了，理清思路，下一局再来。'
 }
 
 export default function ResultPage() {
   const navigate = useNavigate()
   const { state, dispatch } = useGame()
-  const [copied, setCopied] = useState(false)
   const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(null)
   const [submitFailed, setSubmitFailed] = useState(false)
   const [retried, setRetried] = useState(false)
@@ -287,50 +269,6 @@ export default function ResultPage() {
     navigate(`/bombsquad/run?mode=${state.mode}`)
   }
 
-  const buildSummary = useCallback(() => {
-    const date = getTodayString()
-    const modeLabel =
-      state.mode === 'daily' ? `每日挑战（第 ${state.attemptNumber} 次尝试）` : '练习'
-    const timeStr = totalMs !== null ? formatMs(totalMs) : '--:--'
-    const breakdown = state.moduleStats
-      .map((s, i) => {
-        const name = MODULE_LABEL[s.moduleType] ?? s.moduleType
-        const t = formatMs(s.timeMs)
-        return `${i + 1}. ${name}模块 - ${t} - 成功 (${s.errorCount} 次失误)`
-      })
-      .join('\n')
-    const rankLine = rankResult ? `全球排名：#${rankResult.rank} / ${rankResult.total_players}` : ''
-    const personalBestLine =
-      state.mode === 'daily' && rankResult?.personal_best_ms !== undefined
-        ? `今日最佳：${formatMs(rankResult.personal_best_ms)}${
-            rankResult.personal_best_attempt !== undefined
-              ? `（第 ${rankResult.personal_best_attempt} 次）`
-              : ''
-          }`
-        : ''
-    const retroQuestions = buildRetroQuestions(state.moduleStats, state.attemptNumber, state.mode)
-
-    return `=== BombSquad 结果摘要 ===
-日期：${date}
-模式：${modeLabel}
-结果：${summaryLabel(outcome)}
-总用时：${timeStr}
-${personalBestLine ? `${personalBestLine}\n` : ''}${rankLine ? `${rankLine}\n` : ''}
-模块详情：
-${breakdown}
-
-请和我一起复盘：
-${retroQuestions}`
-  }, [state, totalMs, rankResult, outcome])
-
-  const handleCopySummary = async () => {
-    const ok = await copyToClipboard(buildSummary())
-    if (ok) {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   // No game in memory at all — distinct from a finished run that solved zero
   // modules (an exploded run, which still carries an `outcome`).
   if (noRunData) {
@@ -500,13 +438,6 @@ ${retroQuestions}`
               回主页
             </Button>
           </div>
-
-          <button
-            className={`${styles.copyLink} ${copied ? styles.copyLinkCopied : ''}`}
-            onClick={handleCopySummary}
-          >
-            {copied ? '已复制！' : '复制赛后摘要'}
-          </button>
         </div>
       </div>
 

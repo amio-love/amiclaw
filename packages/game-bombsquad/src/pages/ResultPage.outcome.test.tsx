@@ -8,7 +8,7 @@
  * initializer hydrates straight into a renderable ResultPage.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('@/utils/device-fingerprint', () => ({
@@ -34,7 +34,6 @@ vi.mock('@/utils/nickname', () => ({
 import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { submitScore } from '@shared/leaderboard-api'
-import * as clipboardModule from '@/utils/clipboard'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
 
@@ -105,7 +104,10 @@ describe('ResultPage outcome branches', () => {
     )
 
     expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
-    expect(screen.getByText(/三次失误就到这了/)).toBeInTheDocument()
+    // The strike-out consolation names the three-strike cause and nudges the
+    // player to debrief with the AI partner.
+    expect(screen.getByText(/三次失误，这一局就到这了/)).toBeInTheDocument()
+    expect(screen.getByText(/跟我聊聊/)).toBeInTheDocument()
     expect(screen.queryByText(/全球排名/)).not.toBeInTheDocument()
     expect(submitScore).not.toHaveBeenCalled()
   })
@@ -121,7 +123,9 @@ describe('ResultPage outcome branches', () => {
     )
 
     expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
+    // The timeout consolation leads with the time cause and invites a recap.
     expect(screen.getByText(/时间走得比想象中快/)).toBeInTheDocument()
+    expect(screen.getByText(/跟我复盘/)).toBeInTheDocument()
   })
 
   it('exploded with zero solved modules: still a failure page, not "暂无数据"', () => {
@@ -165,26 +169,5 @@ describe('ResultPage outcome branches', () => {
 
     expect(screen.getByRole('heading', { name: '拆弹成功' })).toBeInTheDocument()
     expect(submitScore).not.toHaveBeenCalled()
-  })
-
-  it('copyable recap summary reflects the failure outcome', async () => {
-    const copySpy = vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValue(true)
-    renderResult(
-      finishedState({
-        mode: 'daily',
-        outcome: 'exploded',
-        strikeCount: 3,
-        moduleStats: [{ moduleType: 'wire', timeMs: 30_000, errorCount: 1 }],
-      })
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '复制赛后摘要' }))
-
-    expect(copySpy).toHaveBeenCalledTimes(1)
-    const summary = copySpy.mock.calls[0][0] as string
-    expect(summary).toContain('结果：失败 💥')
-    expect(summary).toContain('1. 光弦模块')
-    expect(summary).toContain('1 次失误')
-    copySpy.mockRestore()
   })
 })

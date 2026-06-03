@@ -523,6 +523,33 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     ).toMatch(/场景信息栏/)
   })
 
+  it('post_game_recap instructs the AI to proactively run an end-of-round debrief', () => {
+    // The endgame settlement rework moved the post-game recap from a player-copied
+    // summary into an AI-initiated debrief. AI_INSTRUCTIONS gains a dedicated
+    // `post_game_recap` key telling the AI to: infer the round ended from the
+    // player's own words (NOT any app signal — zero-integration), proactively
+    // start the debrief (ask 2-3 targeted questions + give actionable advice +
+    // invite another round), and rely only on its conversation memory (the page
+    // owns the exact numbers, the AI owns the qualitative coaching).
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const recap = manual.ai_instructions?.post_game_recap ?? []
+    expect(recap.length, 'post_game_recap must be a non-empty string[]').toBeGreaterThan(0)
+    const recapText = recap.join('\n')
+    // The AI proactively starts the recap rather than waiting for the player.
+    expect(recapText, 'post_game_recap must tell the AI to proactively start the recap').toMatch(
+      /主动/
+    )
+    expect(recapText, 'post_game_recap must have the AI ask targeted questions').toMatch(/问/)
+    // The AI invites the player into another round to close the improvement loop.
+    expect(recapText, 'post_game_recap must invite another round').toMatch(/再开一局|再来一局/)
+    // The round-end is sensed from the player's spoken result, not an app signal —
+    // the zero-integration invariant.
+    expect(
+      recapText,
+      'post_game_recap must sense round-end from the player, not an app signal'
+    ).toMatch(/app 不会给你发任何结束信号/)
+  })
+
   it('do_not_reveal_to_player separates process guidance from spoiling the answer', () => {
     // The onboarding push must not collide with the anti-spoiler discipline:
     // process guidance (how the flow goes, what to describe, how to cooperate)
