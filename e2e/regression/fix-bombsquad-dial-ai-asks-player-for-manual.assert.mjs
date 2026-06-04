@@ -42,26 +42,47 @@ function loadDialRule() {
   return manual?.modules?.symbol_dial?.rule
 }
 
-// ---------- Scenario A: visual anchor ----------
+// ---------- Scenario A: ask-the-player, never paint the screen ----------
+// SUPERSEDED 2026-06-04 (task fix-bombsquad-dial-ai-invents-pointer-direction):
+// PR#106 added a visual anchor (摆轮 + 屏幕/看到) on the theory that letting
+// the AI "describe what the player sees" would steady the conversation. The
+// dial bug recurred anyway — describing the visual surface lured the AI into
+// REASONING about a scene it cannot see, inventing a pointer / "turn every
+// dial to 12 o'clock" mechanic the manual never defined. That route is now
+// empirically falsified. The new core principle: the preamble carries only
+// the lookup rule + the one input it needs from the player + the discipline
+// "you cannot see the screen, so ASK; never fabricate visual attributes".
+// This scenario now asserts THAT — the inverse of the original anchor.
+// The fully fleshed-out de-visualisation guard lives in the sibling bundle
+// fix-bombsquad-dial-ai-invents-pointer-direction.assert.mjs; this kept-stub
+// pins the supersession so a future edit cannot silently re-add 摆轮/顺时针.
 function scenarioA() {
-  const name = 'Bug A — dial rule preamble carries a visual anchor'
+  const name = 'Bug A — dial rule preamble asks the player, never paints the screen'
   const rule = loadDialRule()
   if (typeof rule !== 'string' || rule.length === 0) {
     record(name, `symbol_dial.rule is missing or empty (got: ${JSON.stringify(rule)})`)
     return
   }
-  // "what the player sees" anchor — 屏幕 / 看到 (visual surface).
-  if (!/屏幕|看到/.test(rule)) {
+  // The de-visualisation guard: no on-screen display-form description and no
+  // clock-face direction — both seed the invented pointer / 12-o'clock mechanic.
+  if (/摆轮/.test(rule)) {
     record(
       name,
-      'rule preamble does not mention "屏幕" or "看到" (no visual surface anchor for what the player sees)'
+      'rule preamble still mentions "摆轮" (an on-screen display-form description; the visual-anchor route was falsified — see supersession note)'
     )
   }
-  // The dial display form — 摆轮 (the on-screen artefact).
-  if (!/摆轮/.test(rule)) {
+  if (/顺时针/.test(rule)) {
     record(
       name,
-      'rule preamble does not mention "摆轮" (the dial display form the player physically sees)'
+      'rule preamble still mentions "顺时针" (a clock-face direction the AI cannot observe)'
+    )
+  }
+  // The ask-the-player framing that replaces the visual anchor: the AI cannot
+  // see the screen, so it must ask the player for the current symbol.
+  if (!/看不到屏幕|看不见屏幕|你看不到|看不到画面/.test(rule)) {
+    record(
+      name,
+      'rule preamble does not state the AI cannot see the screen (看不到屏幕 / 看不见屏幕 / 你看不到) — the ask-the-player framing that replaces the visual anchor'
     )
   }
 }
