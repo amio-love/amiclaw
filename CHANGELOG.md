@@ -335,6 +335,13 @@ run; a later release adds a real AI partner, voice I/O, and the full
   matches what the generator derives from the current `practice.yaml`, so
   editing the practice rulebook without regenerating the daily manuals can no
   longer drift silently into production.
+- **Button-preamble regression guard** Internal refactor — a new
+  `packages/manual` test locks the two hardenings in the button module's
+  manual preamble (strict top-down rule-walking with no salient jump, and the
+  scene-info ask-gate) across `practice.yaml` and every daily file, mirroring
+  the existing wire-routing guard. The wire fix already shipped both hardenings
+  but only wire was CI-protected, so a future revert of the button preamble can
+  no longer pass CI silently.
 - **Post-refresh guidance** A short banner appears at the top of the game
   page after an accidental F5 / Cmd+R, diagnosing what just happened so the
   player can decide how to re-sync with their AI partner. The copy now
