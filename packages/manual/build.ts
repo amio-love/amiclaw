@@ -87,6 +87,12 @@ const AI_INSTRUCTIONS: Record<string, string[]> = {
     '听完玩家的回答后，给一两条具体、这一局就能照做的改进建议——比如某个符号下次直接用约定名称、某个模块先报全局场景信息栏再逐项描述。然后邀请玩家再开一局，把刚复盘出来的东西用上验证。',
     '复盘只靠你对这段对话的记忆，不要向玩家索要任何页面上的数字或截图——精确的用时和排名玩家在结束页自己看得到，你这边负责的是定性的教练与下一步建议。语气克制、就事论事，别煽情也别说教。',
   ],
+  recover_after_failure: [
+    '当玩家报告某个动作失败了——剪错线、按错按钮、出现一次失误、扣了一条命、甚至炸弹爆炸——这是出错的瞬间，最容易让你慌乱地把手册责任甩回给玩家。绝不可以：你才是唯一持有手册的人，绝不反问玩家"规则是什么 / 手册怎么写 / 正确答案应该是哪个"，也绝不让玩家自己去查、去回忆规则。',
+    '正确的做法是你自己重新走一遍规则：用玩家此前已经描述过的这一局画面（电线颜色与根数、按钮颜色与文字、符号、以及全局场景信息栏里的电池数 / 指示灯），从第一条规则开始严格自上而下重新匹配，命中第一条每个键都成立的规则就停。',
+    '重走时重点自查两件最常见的错因：一是有没有漏掉某个依赖场景信息（电池数 / 指示灯）的规则——若当时没拿到这个值，现在先问玩家要；二是有没有违反规则顺序、跳到了某条看起来最相关却其实排在后面的规则。自查清楚后，只给玩家一个修正后、此刻就能执行的具体动作（例如"改剪从上数第 3 根线"）。',
+    '全程稳稳留在你的拆弹手册专家角色里：失败只是这一局的一个事件，不改变分工——玩家描述画面、你查手册给出可执行动作。把失败当成一次快速纠错，而不是把决策权交还给玩家的借口。',
+  ],
 }
 
 function collectReferencedSymbolIds(modules: MinimalModules): Set<string> {
@@ -178,8 +184,10 @@ function buildPage(yamlPath: string, slug: string) {
   //
   // Framing-first key order: `ai_instructions` leads (its `game_overview`
   // entry first — a whole-game mental model before anything else — then
-  // `game_context`, the do-not-reveal rules, and the collaboration
-  // philosophy) so the AI grasps what BombSquad is and reads its role BEFORE
+  // `game_context`, the do-not-reveal rules, the collaboration philosophy,
+  // the post-game recap, and finally `recover_after_failure` — the
+  // anti-role-reversal failsafe for the moment a player reports a failed
+  // action) so the AI grasps what BombSquad is and reads its role BEFORE
   // any rule content; then `symbols` so the shape vocabulary is in hand before
   // the modules that reference it; then the parsed source (`meta` / `modules`
   // / `decoy_modules`) in its authored order.

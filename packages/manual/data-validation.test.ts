@@ -324,11 +324,14 @@ describe('manual set-discrimination invariant', () => {
 
 describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () => {
   // build.ts injects AI_INSTRUCTIONS into the HTML-embedded yaml AND the dist
-  // raw yaml on every render. This block locks in the five-key schema
+  // raw yaml on every render. This block locks in the six-key schema
   // (`game_overview` leading with a whole-game mental model, then `game_context`,
-  // the two tactical-output keys, and `collaboration_philosophy`) so the AI
-  // grasps what BombSquad is and receives full game context before any rule
-  // content, on every manual fetch, in either consumption path.
+  // the two tactical-output keys, `collaboration_philosophy`, and
+  // `recover_after_failure` — the anti-role-reversal failsafe for the moment a
+  // player reports a failed action) so the AI grasps what BombSquad is and
+  // receives full game context before any rule content, on every manual fetch,
+  // in either consumption path. (`post_game_recap` is a sibling injected key
+  // guarded by its own dedicated test below, not part of REQUIRED_KEYS.)
   beforeAll(() => {
     buildManualForTests()
   })
@@ -350,9 +353,10 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     'give_conclusions_not_reasoning',
     'game_context',
     'collaboration_philosophy',
+    'recover_after_failure',
   ] as const
 
-  it('practice manual HTML embedded yaml ai_instructions contains all five required keys', () => {
+  it('practice manual HTML embedded yaml ai_instructions contains all six required keys', () => {
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     expect(
       manual.ai_instructions,
@@ -560,6 +564,164 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     const text = (manual.ai_instructions?.do_not_reveal_to_player ?? []).join('\n')
     expect(text, 'must name process guidance as distinct from spoiling').toMatch(/流程引导/)
     expect(text, 'must state process guidance is not spoiling the answer').toMatch(/剧透/)
+  })
+
+  it('recover_after_failure is the anti-role-reversal failsafe for the post-failure moment', () => {
+    // A capable manual-reading AI, after a player reports a failed action (wrong
+    // cut / strike / detonation), reverse-asked the player for the rules — even
+    // though the existing do_not_reveal_to_player ban already forbids bouncing a
+    // lookup back to the player. That ban was not salient enough at the
+    // post-failure moment, so AI_INSTRUCTIONS gains a dedicated 6th key
+    // `recover_after_failure` that fires precisely then: never reverse-ask the
+    // player, re-walk the rules yourself from the scene already described
+    // (checking for missed scene info / rule-order violations), give one
+    // corrected executable action, and stay fully in role.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const recover = manual.ai_instructions?.recover_after_failure ?? []
+    expect(recover.length, 'recover_after_failure must be a non-empty string[]').toBeGreaterThan(0)
+    const text = recover.join('\n')
+    // The failure trigger vocabulary so the AI knows this fires at the
+    // post-failure moment.
+    expect(
+      text,
+      'recover_after_failure must name the failure trigger (剪错 / 失误 / 爆炸)'
+    ).toMatch(/剪错|失误|爆炸/)
+    // The core anti-role-reversal ban: never reverse-ask the player for the
+    // rules / manual / right answer.
+    expect(
+      text,
+      'recover_after_failure must forbid reverse-asking the player for the rules'
+    ).toMatch(/绝不反问/)
+    // The corrective discipline: re-walk the rules yourself.
+    expect(text, 'recover_after_failure must tell the AI to re-walk the rules itself').toMatch(
+      /重新走/
+    )
+    // Self-check for the two most common error causes named in the spec:
+    // missed scene info and rule-order violation.
+    expect(text, 'recover_after_failure must have the AI self-check for missed scene info').toMatch(
+      /电池|指示灯|场景信息/
+    )
+    expect(
+      text,
+      'recover_after_failure must have the AI self-check for a rule-order violation'
+    ).toMatch(/顺序|跳到|跳过/)
+    // Stay fully in role.
+    expect(text, 'recover_after_failure must tell the AI to stay in role').toMatch(/角色/)
+  })
+
+  it('ai_instructions keys land in the locked framing-first order ending with recover_after_failure', () => {
+    // The framing-first ordering invariant: the AI reads the payload
+    // top-to-bottom, so the key order is load-bearing. game_overview leads
+    // (whole-game mental model), then game_context (role + medium), the two
+    // tactical-output keys, collaboration_philosophy, post_game_recap, and
+    // finally recover_after_failure — the post-failure failsafe sits last,
+    // grouped with the other end-of-round / post-action concern. This locks the
+    // exact insertion order build.ts emits so a future reorder is caught.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const keys = Object.keys(manual.ai_instructions ?? {})
+    expect(keys, 'ai_instructions key order must match the locked framing-first sequence').toEqual([
+      'game_overview',
+      'game_context',
+      'do_not_reveal_to_player',
+      'give_conclusions_not_reasoning',
+      'collaboration_philosophy',
+      'post_game_recap',
+      'recover_after_failure',
+    ])
+  })
+})
+
+describe('wire_routing preamble carries the three readability-trap hardenings', () => {
+  // A capable manual-reading AI, on the all-yellow repro scene (4 yellow wires,
+  // battery 4), produced a wrong cut and then reverse-asked the player for the
+  // rules. Root cause was a manual-content readability trap, not a logic bug —
+  // solver.ts and the published rules agree on the answer (rule#2
+  // battery_count>2 → position 2). The wire_routing.rule preamble gains three
+  // hardened elements so a literal, time-pressured AI reader walks the rules
+  // correctly. These guards run over practice.yaml AND every daily file (the
+  // preamble is carried verbatim by the deterministic daily generator), so a
+  // future practice edit that drops an element — or a stale daily that predates
+  // the edit — fails loudly.
+  function loadWirePreamble(path: string): string {
+    const manual = yaml.load(readFileSync(path, 'utf8')) as Manual
+    const rule = (manual.modules as unknown as { wire_routing?: { rule?: string } }).wire_routing
+      ?.rule
+    expect(typeof rule, `${path}: wire_routing.rule must be a string`).toBe('string')
+    return rule as string
+  }
+
+  function assertWirePreambleHardenings(label: string, rule: string): void {
+    // Element (a): emphatic STRICT top-down first-match-wins — walk in listed
+    // order, the FIRST rule whose conditions ALL hold wins, do NOT jump to the
+    // rule that looks most relevant to a salient feature.
+    expect(rule, `${label}: must emphasise a STRICT walk (严格)`).toMatch(/严格/)
+    expect(rule, `${label}: must name the top-down walk direction`).toMatch(
+      /自上而下|从上到下|从上往下/
+    )
+    expect(rule, `${label}: must forbid jumping ahead`).toMatch(/不要跳|绝不跳|不可跳|别跳/)
+    expect(rule, `${label}: anti-jump must name the salient-feature trap object`).toMatch(
+      /显眼|最相关|最像|最突出/
+    )
+
+    // Element (b): worked color-filter SKIP example — condition color and
+    // action color can differ; if no wire of the action color exists the rule
+    // does NOT apply, continue; never repair the action to an available color.
+    // The all-yellow / no-red example must be concrete.
+    expect(rule, `${label}: color-filter example must reference the yellow trigger`).toMatch(/黄/)
+    expect(
+      rule,
+      `${label}: color-filter example must reference the absent red action color`
+    ).toMatch(/红/)
+    expect(rule, `${label}: must state the rule 不适用 when the action color is absent`).toMatch(
+      /不适用/
+    )
+    expect(rule, `${label}: must tell the AI to 继续 to the next rule on a skip`).toMatch(/继续/)
+    expect(rule, `${label}: must forbid repairing the action to the available color`).toMatch(
+      /绝不改成剪黄|不要改成剪黄|绝不改剪黄|不能改成剪黄/
+    )
+
+    // Element (c): scene-info ask-gate — rules can depend on battery /
+    // indicators; if the AI lacks the value it must ASK the player before
+    // answering, never guess.
+    expect(rule, `${label}: scene-info gate must name 电池`).toMatch(/电池/)
+    expect(rule, `${label}: scene-info gate must name 指示灯`).toMatch(/指示灯/)
+    expect(rule, `${label}: must instruct the AI to ASK the player for missing scene info`).toMatch(
+      /问玩家|先问|向玩家确认|让玩家报|问一下玩家/
+    )
+    expect(rule, `${label}: must forbid guessing a scene-info-dependent answer`).toMatch(
+      /不要猜|绝不靠猜|不能猜|别靠猜|不靠猜/
+    )
+  }
+
+  it('practice.yaml wire_routing preamble carries all three hardened elements', () => {
+    assertWirePreambleHardenings('practice.yaml', loadWirePreamble(PRACTICE_YAML))
+  })
+
+  it('every daily YAML wire_routing preamble carries all three hardened elements', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      assertWirePreambleHardenings(file, loadWirePreamble(join(DAILY_DIR, file)))
+    }
+  })
+
+  it("today's daily wire preamble equals practice's (regen propagated the edit)", () => {
+    // The daily generator carries the wire_routing.rule string verbatim
+    // (structuredClone) — only rule ORDER is permuted. So every daily's wire
+    // preamble must be character-equal to practice's. This catches a stale
+    // daily that predates a practice preamble edit (regen not run / partial).
+    const practiceRule = loadWirePreamble(PRACTICE_YAML)
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const file of dailyFiles) {
+      const dailyRule = loadWirePreamble(join(DAILY_DIR, file))
+      if (dailyRule !== practiceRule) offenders.push(file)
+    }
+    expect(
+      offenders,
+      `daily wire preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
   })
 })
 
