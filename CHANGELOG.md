@@ -14,6 +14,14 @@ for the whole conversation instead of re-opening the link every turn — less
 waiting between your description and its next instruction, and no getting
 stuck if a mid-game reload fails.
 
+**Your daily-challenge time now makes it onto the leaderboard** — Finishing
+the daily challenge and entering your name used to fail for many players with
+a misleading "submission failed (you may be offline)" message, even on a
+solid connection — so a clean run never showed a rank. Submissions now go
+through, and you see where your time lands. When a submission really is
+refused for another reason, the result screen tells you that plainly instead
+of blaming your network, and keeps the retry button handy.
+
 **Your AI partner stops inventing a dial it can't see** — On the symbol
 dial, your AI used to talk about a pointer or a clock face and ask you to
 turn every dial to "12 o'clock" — a mechanic the game never had — then
@@ -336,6 +344,13 @@ run; a later release adds a real AI partner, voice I/O, and the full
   matches what the generator derives from the current `practice.yaml`, so
   editing the practice rulebook without regenerating the daily manuals can no
   longer drift silently into production.
+- **Button-preamble regression guard** Internal refactor — a new
+  `packages/manual` test locks the two hardenings in the button module's
+  manual preamble (strict top-down rule-walking with no salient jump, and the
+  scene-info ask-gate) across `practice.yaml` and every daily file, mirroring
+  the existing wire-routing guard. The wire fix already shipped both hardenings
+  but only wire was CI-protected, so a future revert of the button preamble can
+  no longer pass CI silently.
 - **Post-refresh guidance** A short banner appears at the top of the game
   page after an accidental F5 / Cmd+R, diagnosing what just happened so the
   player can decide how to re-sync with their AI partner. The copy now
