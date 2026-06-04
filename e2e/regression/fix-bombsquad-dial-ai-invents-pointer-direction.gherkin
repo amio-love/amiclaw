@@ -1,0 +1,103 @@
+# Regression guards for the fix-bombsquad-dial-ai-invents-pointer-direction
+# bundle (task fix-bombsquad-dial-ai-invents-pointer-direction, 2026-06-04).
+#
+# This file documents 4 regression scenarios over the shipped practice
+# manual's symbol_dial.rule preamble. The executable assertions live in the
+# companion node script
+# `e2e/regression/fix-bombsquad-dial-ai-invents-pointer-direction.assert.mjs`,
+# run via
+# `node e2e/regression/fix-bombsquad-dial-ai-invents-pointer-direction.assert.mjs`.
+# The script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Bisect contract: on the pre-fix HEAD this script FAILS — the dial preamble
+# still describes the on-screen visual scene (摆轮 / 顺时针走 1 格), which is
+# exactly what lured the AI into inventing an undefined "turn every dial's
+# pointer to 12 o'clock" mechanic and repeatedly reverse-asking the player
+# for a pointer direction the manual never defined. After the fix it PASSES.
+#
+# Why a thin node script instead of playwright-bdd step defs: every assertion
+# here is a pure read of YAML — no browser, no preview server, no DOM. The
+# Feature has no @playwright tag, so the playwright-bdd harness (configured in
+# playwright.config.ts with `tags: '@playwright'`) skips this file entirely —
+# only the .assert.mjs sibling is executable.
+
+Feature: symbol_dial preamble asks the player for the current symbol instead of inventing screen visuals
+  As an AI partner relying on the bomb manual to talk a player through symbol_dial
+  I want the rule preamble to carry only the lookup rule, the one input it needs
+  from the player (each dial's current centre symbol), and the discipline that I
+  cannot see the screen so I must ASK for that symbol and never fabricate visual
+  attributes the player did not report
+  So that I stop inventing a pointer / clock-face / "turn every dial to 12
+  o'clock" mechanic the manual never defined, and stop reverse-asking the player
+  for a pointer direction that does not exist
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+
+  # bug: Bug A — symbol_dial rule preamble paints the on-screen visual scene
+  #   with 摆轮 (an escapement-wheel display form) and 顺时针走 1 格
+  #   (clockwise-by-one-notch). Describing the visual surface lured a capable
+  #   manual-reading AI into REASONING about a scene it cannot see — inventing
+  #   a pointer / clock-face and an undefined "turn every dial's pointer to 12
+  #   o'clock" mechanic, then repeatedly reverse-asking the player for a
+  #   pointer direction the manual never defined.
+  # fix: practice.yaml symbol_dial.rule preamble drops 摆轮 and 顺时针, and is
+  #   reframed around the collaboration principle: you cannot see the screen,
+  #   so ask the player for each dial's current centre symbol; the rest is a
+  #   pure column lookup + a "press right N times" count.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble does not paint the on-screen visual scene (Bug A)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it does NOT mention 摆轮 (an on-screen display-form description that invites visual invention)
+    And it does NOT mention 顺时针 (a clock-face direction the AI cannot observe)
+
+  # bug: Bug B — without an explicit ask-the-player framing, the preamble let
+  #   the AI treat the screen state as something it could deduce, rather than
+  #   something only the player can report. The fix makes the AI ASK the player
+  #   for the one input the rule needs: each dial's current centre symbol.
+  # fix: practice.yaml symbol_dial.rule preamble explicitly tells the AI to ask
+  #   the player to report each dial's current symbol, framed by "you cannot
+  #   see the screen".
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble frames the ask-the-player-for-the-current-symbol step (Bug B)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it tells the AI it cannot see the screen (看不到屏幕 / 看不见屏幕 / 你看不到)
+    And it tells the AI to ask the player to report the current symbol (报 / 描述 paired with 符号)
+
+  # bug: Bug C — the count action must survive the rewrite. The player executes
+  #   "press the right arrow N times"; the preamble must still teach that exact
+  #   spoken count command (an action instruction, not a visual description).
+  # fix: practice.yaml symbol_dial.rule preamble keeps "按右箭头 N 次" with the
+  #   N derivation (the symbol's index in the matched column) inline.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble keeps the press-right-N-times count action (Bug C)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it mentions "按右箭头" as the player-facing verb phrase
+    And it pairs the verb phrase with a count phrasing (N 次 / 几次 / a numeric 次)
+
+  # bug: Bug D — the no-fabricated-target discipline must survive the rewrite.
+  #   The AI must never predict / name the post-rotation symbol or invent a
+  #   "target arrangement" (the same impulse that produced the pointer/12
+  #   o'clock invention); it outputs only the rotation count.
+  # fix: practice.yaml symbol_dial.rule preamble carries an explicit disclaimer
+  #   pairing a negation (不能 / 不需要 / 不预言 / 无法 / 不可) with 目标 /
+  #   最终 / 看到什么.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` is removed.
+  Scenario: dial rule preamble forbids inventing the post-rotation symbol or target (Bug D)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the symbol_dial.rule field
+    Then the field is a non-empty string
+    And it carries a negation keyword (不能 / 不需要 / 不预言 / 无法 / 不可)
+    And the negation is paired with a target / final / "see what" phrasing (目标 / 最终 / 看到什么)
