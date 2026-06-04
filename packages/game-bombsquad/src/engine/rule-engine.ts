@@ -53,14 +53,18 @@ function buildContext(
     ctx[`indicator_${ind.label}_lit`] = ind.lit
   }
 
-  // Wire-specific computed fields
+  // Wire-specific computed fields. Only the keys some published rule actually
+  // uses as a condition key are computed — no published practice/daily rule
+  // reads color_at_first or count_{yellow,green,white,black}, so computing them
+  // was dead context. The wire preamble still documents the full color-count
+  // vocabulary as the shape a rule *could* take; if a future rule starts using
+  // one of these keys, add it back to this loop.
   if (Array.isArray(config['wires'])) {
     const wires = config['wires'] as Array<{ color: string }>
     ctx['wire_count'] = wires.length
     ctx['color_at_last'] = wires[wires.length - 1]?.color
-    ctx['color_at_first'] = wires[0]?.color
-    // Count each color
-    for (const color of ['red', 'blue', 'yellow', 'green', 'white', 'black']) {
+    // count_red / count_blue are the only color counts referenced by a rule.
+    for (const color of ['red', 'blue']) {
       ctx[`count_${color}`] = wires.filter((w) => w.color === color).length
     }
   }

@@ -3,7 +3,7 @@ import styles from './SceneInfoBar.module.css'
 
 interface SceneInfoBarProps {
   sceneInfo: SceneInfo
-  /** First-run only: highlight the bar and show a one-time "read this to your AI" hint. */
+  /** First-run only: highlight the bar and show a one-time "read battery + indicators to your AI" hint. */
   showNudge?: boolean
   /** Called when the player taps the hint's dismiss control. */
   onDismissNudge?: () => void
@@ -17,9 +17,11 @@ interface SceneInfoBarProps {
  * chevron.
  *
  * On a first-timer's first module, `showNudge` adds a dismissible hint above
- * the bar and a brief highlight pulse, prompting them to read this row to the
- * AI before diving into the puzzle. The hint never blocks interaction — its
- * container is click-through and only the dismiss control is interactive.
+ * the bar and a brief highlight pulse, prompting them to read the real rule
+ * inputs (battery count + indicators) to the AI before diving into the puzzle.
+ * The leading 暗号 phrase is decorative background — it feeds no rule — so the
+ * nudge no longer urges reading it out. The hint never blocks interaction —
+ * its container is click-through and only the dismiss control is interactive.
  */
 export default function SceneInfoBar({
   sceneInfo,
@@ -30,7 +32,7 @@ export default function SceneInfoBar({
     <div className={styles.wrap}>
       {showNudge && (
         <div className={styles.nudge} role="status">
-          <span className={styles.nudgeText}>开局先把这一行读给 AI</span>
+          <span className={styles.nudgeText}>开局先把电池和指示灯读给 AI</span>
           <button
             type="button"
             className={styles.nudgeDismiss}
