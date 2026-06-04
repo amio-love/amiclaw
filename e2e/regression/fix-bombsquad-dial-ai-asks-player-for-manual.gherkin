@@ -33,22 +33,29 @@ Feature: symbol_dial preamble teaches AI to own rotation count + target-arrangem
   Background:
     Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
 
-  # bug: Bug A — symbol_dial rule preamble does not anchor on what the
-  #   player physically sees on screen (3 dials, each showing 1 symbol via
-  #   a 摆轮 / dial display). Without the anchor the AI partner cannot
-  #   describe the current state back to the player in the player's own
-  #   visual vocabulary, and the conversation drifts.
-  # fix: practice.yaml symbol_dial.rule preamble opens with the visual
-  #   anchor (Chinese): "玩家屏幕上看到 3 个轮盘…每个轮盘以摆轮形式只
-  #   显示当前停在自家转盘第 0 格的那 1 个符号…".
+  # SUPERSEDED 2026-06-04 (task fix-bombsquad-dial-ai-invents-pointer-direction).
+  # bug: Bug A (original) — symbol_dial rule preamble did not anchor on what
+  #   the player physically sees (3 dials via a 摆轮 display). PR#106 added
+  #   that visual anchor on the theory it would steady the conversation. The
+  #   dial bug recurred anyway: describing the visual surface lured the AI
+  #   into REASONING about a scene it cannot see, inventing a pointer / "turn
+  #   every dial to 12 o'clock" mechanic the manual never defined. The
+  #   visual-anchor route is empirically falsified.
+  # fix (superseding): practice.yaml symbol_dial.rule preamble DROPS 摆轮 and
+  #   顺时针 and is reframed around the collaboration principle — you cannot
+  #   see the screen, so ask the player for each dial's current centre symbol.
+  #   This scenario now asserts the inverse of the original anchor. The fully
+  #   fleshed-out guard lives in the sibling bundle
+  #   fix-bombsquad-dial-ai-invents-pointer-direction.{gherkin,assert.mjs}.
   # retire-when: docs/architecture/arch-component-manual-system.md
   #   §Invariants `每模块规则前言不变量` is removed.
-  Scenario: dial rule preamble carries a visual anchor (Bug A)
+  Scenario: dial rule preamble asks the player, never paints the screen (Bug A, superseded)
     Given the practice manual YAML at packages/manual/data/practice.yaml
     When parsing the symbol_dial.rule field
     Then the field is a non-empty string
-    And it mentions a "what the player sees" anchor — 屏幕 or 看到 (visual surface)
-    And it mentions 摆轮 (the dial display form the player physically sees)
+    And it does NOT mention 摆轮 (an on-screen display-form description; the visual-anchor route was falsified)
+    And it does NOT mention 顺时针 (a clock-face direction the AI cannot observe)
+    And it states the AI cannot see the screen (看不到屏幕 / 看不见屏幕 / 你看不到)
 
   # bug: Bug B — symbol_dial rule preamble does not tell the AI how to
   #   translate the internal `index` lookup into a spoken command the

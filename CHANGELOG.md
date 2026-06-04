@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your AI partner stops inventing a dial it can't see** — On the symbol
+dial, your AI used to talk about a pointer or a clock face and ask you to
+turn every dial to "12 o'clock" — a mechanic the game never had — then
+get stuck waiting for a pointer direction you couldn't give. The manual
+no longer describes what the dials look like on screen. It now tells your
+AI the one thing it actually needs: ask you which symbol each dial is
+currently showing, find the matching row, and tell you "press the right
+arrow N times." All four module pages were rewritten to the same
+principle — your AI holds the rules, you describe the screen, and your AI
+never assumes anything you didn't report.
+
 **Your AI partner reads the wire module right — and recovers in role
 when a cut goes wrong** — The bomb manual now spells out the wire rules
 so your AI partner stops a common slip: it walks the rules strictly in
