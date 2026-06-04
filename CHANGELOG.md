@@ -20,6 +20,15 @@ AI treats the 暗号, any indicator a rule doesn't name, and the button's previe
 color and display number as background it can safely ignore — so it asks you
 for less and never matches a rule against something that doesn't count.
 
+**The manual reliably reaches your AI — and stays in its memory** — Some
+AI partners couldn't open the manual link at all: the page quietly bounced
+them with an empty redirect and they gave up with nothing to read. That
+page now answers in one hop, so even an AI that won't follow redirects gets
+the full manual. And once your AI has read it, it keeps the manual in mind
+for the whole conversation instead of re-opening the link every turn — less
+waiting between your description and its next instruction, and no getting
+stuck if a mid-game reload fails.
+
 **Your daily-challenge time now makes it onto the leaderboard** — Finishing
 the daily challenge and entering your name used to fail for many players with
 a misleading "submission failed (you may be offline)" message, even on a

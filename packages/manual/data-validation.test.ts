@@ -324,14 +324,16 @@ describe('manual set-discrimination invariant', () => {
 
 describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () => {
   // build.ts injects AI_INSTRUCTIONS into the HTML-embedded yaml AND the dist
-  // raw yaml on every render. This block locks in the six-key schema
+  // raw yaml on every render. This block locks in the required-key schema
   // (`game_overview` leading with a whole-game mental model, then `game_context`,
-  // the two tactical-output keys, `collaboration_philosophy`, and
-  // `recover_after_failure` — the anti-role-reversal failsafe for the moment a
-  // player reports a failed action) so the AI grasps what BombSquad is and
-  // receives full game context before any rule content, on every manual fetch,
-  // in either consumption path. (`post_game_recap` is a sibling injected key
-  // guarded by its own dedicated test below, not part of REQUIRED_KEYS.)
+  // `retain_manual_in_session` — read the manual once and keep it in working
+  // memory, never re-fetch the link every turn — the two tactical-output keys,
+  // `collaboration_philosophy`, and `recover_after_failure` — the
+  // anti-role-reversal failsafe for the moment a player reports a failed
+  // action) so the AI grasps what BombSquad is and receives full game context
+  // before any rule content, on every manual fetch, in either consumption path.
+  // (`post_game_recap` is a sibling injected key guarded by its own dedicated
+  // test below, not part of REQUIRED_KEYS.)
   beforeAll(() => {
     buildManualForTests()
   })
@@ -352,11 +354,12 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     'do_not_reveal_to_player',
     'give_conclusions_not_reasoning',
     'game_context',
+    'retain_manual_in_session',
     'collaboration_philosophy',
     'recover_after_failure',
   ] as const
 
-  it('practice manual HTML embedded yaml ai_instructions contains all six required keys', () => {
+  it('practice manual HTML embedded yaml ai_instructions contains all required keys', () => {
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     expect(
       manual.ai_instructions,
@@ -609,19 +612,74 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     expect(text, 'recover_after_failure must tell the AI to stay in role').toMatch(/角色/)
   })
 
+  it('retain_manual_in_session tells the AI to read the manual once and never re-fetch the link', () => {
+    // An AI that can read the manual was re-opening the link every turn —
+    // wasting latency / tokens and risking a mid-run fetch failure.
+    // AI_INSTRUCTIONS gains a dedicated `retain_manual_in_session` key,
+    // inserted right after game_context (before do_not_reveal_to_player), that
+    // tells the AI to read the whole manual ONCE at the start, keep it in
+    // working memory for the whole conversation, and never re-open / re-fetch
+    // the unchanging manual link on later turns. These tokens are the
+    // load-bearing semantics; weakening any of them would let the re-fetch
+    // behaviour creep back.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const retain = manual.ai_instructions?.retain_manual_in_session ?? []
+    expect(retain.length, 'retain_manual_in_session must be a non-empty string[]').toBeGreaterThan(
+      0
+    )
+    const text = retain.join('\n')
+    // (a) keep the manual in working memory across the whole session.
+    expect(text, 'retain_manual_in_session must tell the AI to keep the manual in memory').toMatch(
+      /记在|记住/
+    )
+    expect(text, 'retain_manual_in_session must scope the retention to the whole session').toMatch(
+      /整局|整段对话/
+    )
+    // (b) never re-open / re-fetch the unchanging manual link every turn.
+    expect(
+      text,
+      'retain_manual_in_session must forbid re-fetching / re-opening the link every turn'
+    ).toMatch(/重新打开|重新抓取|重抓/)
+  })
+
+  it('retain_manual_in_session sits right after game_context (before do_not_reveal_to_player)', () => {
+    // Framing position is load-bearing: the retention discipline must land
+    // immediately after the role framing (game_context) and before the
+    // anti-spoiler rules, so the AI reads "read once, keep in memory" right
+    // where it first learns its role. This pins the relative position so a
+    // future reorder of the surrounding keys is caught here too (the absolute
+    // 8-key lock lives in the dedicated order test below).
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const keys = Object.keys(manual.ai_instructions ?? {})
+    const ctxIdx = keys.indexOf('game_context')
+    const retainIdx = keys.indexOf('retain_manual_in_session')
+    const revealIdx = keys.indexOf('do_not_reveal_to_player')
+    expect(retainIdx, 'retain_manual_in_session must be present').toBeGreaterThanOrEqual(0)
+    expect(retainIdx, 'retain_manual_in_session must come right after game_context').toBe(
+      ctxIdx + 1
+    )
+    expect(
+      retainIdx,
+      'retain_manual_in_session must come before do_not_reveal_to_player'
+    ).toBeLessThan(revealIdx)
+  })
+
   it('ai_instructions keys land in the locked framing-first order ending with recover_after_failure', () => {
     // The framing-first ordering invariant: the AI reads the payload
     // top-to-bottom, so the key order is load-bearing. game_overview leads
-    // (whole-game mental model), then game_context (role + medium), the two
-    // tactical-output keys, collaboration_philosophy, post_game_recap, and
-    // finally recover_after_failure — the post-failure failsafe sits last,
-    // grouped with the other end-of-round / post-action concern. This locks the
-    // exact insertion order build.ts emits so a future reorder is caught.
+    // (whole-game mental model), then game_context (role + medium),
+    // retain_manual_in_session (read once, keep in memory, never re-fetch the
+    // link), the two tactical-output keys, collaboration_philosophy,
+    // post_game_recap, and finally recover_after_failure — the post-failure
+    // failsafe sits last, grouped with the other end-of-round / post-action
+    // concern. This locks the exact insertion order build.ts emits so a future
+    // reorder is caught.
     const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
     const keys = Object.keys(manual.ai_instructions ?? {})
     expect(keys, 'ai_instructions key order must match the locked framing-first sequence').toEqual([
       'game_overview',
       'game_context',
+      'retain_manual_in_session',
       'do_not_reveal_to_player',
       'give_conclusions_not_reasoning',
       'collaboration_philosophy',
