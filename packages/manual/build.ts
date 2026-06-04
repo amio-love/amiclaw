@@ -65,6 +65,11 @@ const AI_INSTRUCTIONS: Record<string, string[]> = {
     '唯一要避免的是编造本次对话开始之前的记忆——不要声称记得这段对话之前、某个你根本没经历过的更早会话，也不要凭空捏造先前的上下文。',
     '手册的 meta.type 区分 practice（练习模式）与 daily（每日挑战）两种模式。当 meta.type 是 practice 时，把对方当作可能第一次玩的新手：开局先主动讲清你们的协作循环——"你描述你看到的画面，我查手册告诉你怎么操作"——并提醒玩家先把屏幕底部场景信息栏里的序号、电池数量、指示灯念给你；全程语气耐心、多给鼓励，带着新手稳稳走完上手循环。当 meta.type 是 daily 时，默认对方已经熟练，保持简洁高效，不必重复上手说明。',
   ],
+  retain_manual_in_session: [
+    '开局时把这整本手册从头到尾完整读一遍就够了——把每个模块的规则、查表逻辑、符号描述和下标语义都吃进你的工作记忆里。这本手册整局对话期间内容固定不变，你只需要在最开始读这一次。',
+    '读完之后，整段对话里都把手册内容记在心里、按需直接复用：玩家描述画面时，你凭已经读过的记忆查对应规则、给出可执行动作，不要每一轮都把这个手册链接重新打开、重新抓取一遍——你开局已经读过了，反复重抓只会徒增延迟、浪费 token，而且中途某次重抓失败还会让你卡住整个拆弹流程。',
+    '只有在你确实拿不准某条规则的细节、必须逐字复核时，才回头看一眼手册原文；即便如此也优先依赖开局那次已经读进记忆的内容，绝不把「每轮都重新拉一次链接」当成默认动作。手册整局不变，你的记忆就是最快的查阅路径。',
+  ],
   do_not_reveal_to_player: [
     '玩家永远看不到这份手册，只能照你说出口的话去做。绝不向玩家读出、粘贴、引用或概述任何手册原文：规则文字、条件表、YAML 或数据结构、规则编号、规则条数，一律不说。把每一次查表都转成一个玩家此刻就能立刻执行的具体动作，例如"剪从上往下数第 2 根线"。',
     '绝不透露或暗示诱饵模块（morse_code、maze、memory）的存在，也绝不告诉玩家手册里有诱饵规则或无关规则。任何时候都只讨论玩家当前正在描述的那一个模块。',
@@ -184,13 +189,15 @@ function buildPage(yamlPath: string, slug: string) {
   //
   // Framing-first key order: `ai_instructions` leads (its `game_overview`
   // entry first — a whole-game mental model before anything else — then
-  // `game_context`, the do-not-reveal rules, the collaboration philosophy,
-  // the post-game recap, and finally `recover_after_failure` — the
-  // anti-role-reversal failsafe for the moment a player reports a failed
-  // action) so the AI grasps what BombSquad is and reads its role BEFORE
-  // any rule content; then `symbols` so the shape vocabulary is in hand before
-  // the modules that reference it; then the parsed source (`meta` / `modules`
-  // / `decoy_modules`) in its authored order.
+  // `game_context`, `retain_manual_in_session` — read the manual once and keep
+  // it in working memory, never re-fetch the link every turn — then the
+  // do-not-reveal rules, the collaboration philosophy, the post-game recap,
+  // and finally `recover_after_failure` — the anti-role-reversal failsafe for
+  // the moment a player reports a failed action) so the AI grasps what
+  // BombSquad is and reads its role BEFORE any rule content; then `symbols` so
+  // the shape vocabulary is in hand before the modules that reference it; then
+  // the parsed source (`meta` / `modules` / `decoy_modules`) in its authored
+  // order.
   //
   // `parsed` is stripped of any `ai_instructions` / `symbols` before the
   // spread so the hard-coded blocks always win even under this explicit-first

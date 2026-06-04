@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The manual reliably reaches your AI — and stays in its memory** — Some
+AI partners couldn't open the manual link at all: the page quietly bounced
+them with an empty redirect and they gave up with nothing to read. That
+page now answers in one hop, so even an AI that won't follow redirects gets
+the full manual. And once your AI has read it, it keeps the manual in mind
+for the whole conversation instead of re-opening the link every turn — less
+waiting between your description and its next instruction, and no getting
+stuck if a mid-game reload fails.
+
 **Your AI partner stops inventing a dial it can't see** — On the symbol
 dial, your AI used to talk about a pointer or a clock face and ask you to
 turn every dial to "12 o'clock" — a mechanic the game never had — then
