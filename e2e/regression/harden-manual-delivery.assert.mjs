@@ -83,28 +83,38 @@ async function loadOnRequest() {
 const HTML_BODY = '<!doctype html><html><body><pre class="anti-human">{blob}</pre></body></html>'
 
 /**
- * Mock `env.ASSETS` that reproduces Cloudflare ASSETS behaviour for the bomb
- * manual route:
+ * Mock `env.ASSETS` that mirrors the REAL Cloudflare Pages edge behaviour for
+ * the bomb manual route, verified against a `wrangler pages dev` preview:
  *   - a bare directory path `/manual/<date>` (no trailing slash) → empty 308
- *     redirect to `/manual/<date>/` (exactly the weak-fetcher trap)
- *   - the index asset `/manual/<date>/index.html` (and the trailing-slash
- *     directory form) → 200 with the anti-human HTML body
+ *     redirect to the canonical `/manual/<date>/` (the weak-fetcher trap)
+ *   - the explicit index asset `/manual/<date>/index.html` ALSO → empty 308 to
+ *     the same `/manual/<date>/` directory URL. This is the crucial detail the
+ *     earlier mock got wrong: on the real edge `/index.html` does NOT serve a
+ *     200, it redirects to the directory form. A mock that 200s `/index.html`
+ *     hides the bug, which is why the fix must follow ASSETS' OWN redirect
+ *     rather than guessing the `/index.html` path.
+ *   - only the canonical trailing-slash directory form `/manual/<date>/` → 200
+ *     with the anti-human HTML body.
  */
 function makeAssetsMock() {
   return {
     fetch: async (req) => {
       const u = new URL(req.url)
       const p = u.pathname
-      if (p.endsWith('/index.html') || p.endsWith('/')) {
+      // Only the canonical trailing-slash directory URL serves a 200 body.
+      if (p.endsWith('/')) {
         return new Response(HTML_BODY, {
           status: 200,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
-      // Bare directory path → Cloudflare emits an empty 308 to the slash form.
+      // Both the bare directory path and an explicit `/index.html` 308-redirect
+      // to the canonical trailing-slash directory URL — exactly as the real
+      // Cloudflare Pages ASSETS binding does.
+      const target = p.endsWith('/index.html') ? p.slice(0, -'index.html'.length) : `${p}/`
       return new Response('', {
         status: 308,
-        headers: { Location: `${p}/` },
+        headers: { Location: target },
       })
     },
   }
@@ -142,14 +152,23 @@ async function scenarioA() {
     )
   }
   if (res.status >= 300 && res.status < 400) {
-    record(name, `bare /manual/${date} is still a ${res.status} redirect — weak fetchers see no body`)
+    record(
+      name,
+      `bare /manual/${date} is still a ${res.status} redirect — weak fetchers see no body`
+    )
   }
   const body = await res.text()
   if (body.length === 0) {
-    record(name, `bare /manual/${date} returned an EMPTY body — a non-redirect-following AI fetcher gets nothing`)
+    record(
+      name,
+      `bare /manual/${date} returned an EMPTY body — a non-redirect-following AI fetcher gets nothing`
+    )
   }
   if (!/anti-human/.test(body)) {
-    record(name, 'bare /manual/<date> body is not the anti-human HTML page (fix must still serve the anti-human render)')
+    record(
+      name,
+      'bare /manual/<date> body is not the anti-human HTML page (fix must still serve the anti-human render)'
+    )
   }
   const ct = res.headers.get('Content-Type') ?? ''
   if (!/text\/html/.test(ct)) {
@@ -221,11 +240,17 @@ async function scenarioC() {
   }
   const ct = res.headers.get('Content-Type') ?? ''
   if (!/text\/plain/.test(ct)) {
-    record(name, `?format=yaml Content-Type is "${ct}" (expected text/plain — content negotiation must be unchanged)`)
+    record(
+      name,
+      `?format=yaml Content-Type is "${ct}" (expected text/plain — content negotiation must be unchanged)`
+    )
   }
   const body = await res.text()
   if (body !== yamlBody) {
-    record(name, '?format=yaml body differs from the served raw YAML (content negotiation regressed)')
+    record(
+      name,
+      '?format=yaml body differs from the served raw YAML (content negotiation regressed)'
+    )
   }
 }
 
@@ -254,7 +279,10 @@ function scenarioD() {
   for (let i = 0; i < retain.length; i++) {
     const entry = retain[i]
     if (typeof entry !== 'string' || entry.length < 30) {
-      record(name, `retain_manual_in_session[${i}] must be a string of at least 30 chars (got ${entry?.length})`)
+      record(
+        name,
+        `retain_manual_in_session[${i}] must be a string of at least 30 chars (got ${entry?.length})`
+      )
     }
     if (typeof entry === 'string' && !CJK.test(entry)) {
       record(name, `retain_manual_in_session[${i}] must be Chinese (carry a CJK character)`)
@@ -262,14 +290,23 @@ function scenarioD() {
   }
   // (a) keep the manual in working memory for the whole session.
   if (!/记在|记住/.test(text)) {
-    record(name, 'retain_manual_in_session does not tell the AI to keep the manual in memory (记在 / 记住)')
+    record(
+      name,
+      'retain_manual_in_session does not tell the AI to keep the manual in memory (记在 / 记住)'
+    )
   }
   if (!/整局|整段对话/.test(text)) {
-    record(name, 'retain_manual_in_session does not scope retention to the whole session (整局 / 整段对话)')
+    record(
+      name,
+      'retain_manual_in_session does not scope retention to the whole session (整局 / 整段对话)'
+    )
   }
   // (b) never re-open / re-fetch the unchanging manual link every turn.
   if (!/重新打开|重新抓取|重抓/.test(text)) {
-    record(name, 'retain_manual_in_session does not forbid re-fetching the link every turn (重新打开 / 重新抓取 / 重抓)')
+    record(
+      name,
+      'retain_manual_in_session does not forbid re-fetching the link every turn (重新打开 / 重新抓取 / 重抓)'
+    )
   }
 }
 

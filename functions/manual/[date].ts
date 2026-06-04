@@ -37,30 +37,36 @@ export async function onRequest(context: Context): Promise<Response> {
   }
 
   // HTML path. A bare `/manual/<date>` (no trailing slash) is a directory
-  // path: handing `request` straight to `env.ASSETS.fetch` makes Cloudflare
-  // ASSETS reply with an empty 308 redirect to `/manual/<date>/`. A weak
-  // external AI fetcher that does not follow redirects then sees an empty
-  // body and cannot read the manual at all. Instead, fetch the canonical
-  // index asset directly (pathname normalised to `/manual/<date>/index.html`)
-  // and re-emit its body as a 200 so the no-trailing-slash URL returns the
-  // anti-human HTML page in one hop, no redirect. A request that already
-  // targets a normal asset (e.g. the trailing-slash form, or any path ending
-  // in a file extension) is passed through untouched so the normal 200 path
-  // is not disturbed.
-  const path = url.pathname
-  const isDirectoryPath = !path.endsWith('/') && !/\.[^/]+$/.test(path)
-  if (!isDirectoryPath) {
-    return env.ASSETS.fetch(request)
+  // path. On the real Cloudflare Pages edge, ASSETS replies with an empty 308
+  // redirect to the canonical `/manual/<date>/` form — and a fetch for the
+  // explicit `/manual/<date>/index.html` ALSO 308-redirects to the same
+  // directory URL. A weak external AI fetcher that does not follow redirects
+  // then sees an empty body and cannot read the manual at all.
+  //
+  // Rather than guess the canonical asset path, let ASSETS tell us: fetch the
+  // request as-is, and if it answers with a 3xx redirect, follow that redirect
+  // exactly once to the `location` it names and re-emit the resulting body as a
+  // 200 `text/html`. This serves the anti-human HTML page in one hop with no
+  // redirect, using ASSETS' own notion of the canonical URL instead of a
+  // hard-coded `/index.html` guess. A normal asset request (the trailing-slash
+  // form, or any direct file) is not a 3xx and passes through untouched, so the
+  // existing 200 path is undisturbed. The follow is single-hop and non-
+  // recursive: if the followed response is still not 200, the original response
+  // is returned unchanged so we never manufacture a 404 regression.
+  const res = await env.ASSETS.fetch(request)
+  const isRedirect = res.status >= 300 && res.status < 400
+  const location = res.headers.get('location')
+  if (!isRedirect || !location) {
+    return res
   }
 
-  const htmlUrl = new URL(request.url)
-  htmlUrl.pathname = `${path}/index.html`
-  const htmlResponse = await env.ASSETS.fetch(new Request(htmlUrl.toString(), request))
-  if (!htmlResponse.ok) {
-    return new Response(`Manual not found: ${params.date}`, { status: 404 })
+  const followUrl = new URL(location, request.url)
+  const followed = await env.ASSETS.fetch(new Request(followUrl.toString(), request))
+  if (!followed.ok) {
+    return res
   }
 
-  return new Response(await htmlResponse.text(), {
+  return new Response(await followed.text(), {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
