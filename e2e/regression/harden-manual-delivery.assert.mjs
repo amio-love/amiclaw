@@ -32,7 +32,6 @@ import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
-import { register } from 'tsx/esm/api'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../..')
@@ -66,18 +65,14 @@ function loadDistAiInstructions() {
 }
 
 /**
- * Import the Pages Function under test. tsx's programmatic loader lets a plain
- * `node script.mjs` import the TypeScript source directly — no separate build
- * step for the function.
+ * Import the Pages Function under test. This script runs via `tsx` (see the
+ * `test:regression` package script), whose loader resolves the TypeScript
+ * source directly — no separate build step and no programmatic `register()`
+ * (that path trips a `require(esm)` cycle on Node 22 in CI).
  */
 async function loadOnRequest() {
-  const unregister = register()
-  try {
-    const mod = await import(pathToFileURL(FN_PATH).href)
-    return mod.onRequest
-  } finally {
-    await unregister()
-  }
+  const mod = await import(pathToFileURL(FN_PATH).href)
+  return mod.onRequest
 }
 
 const HTML_BODY = '<!doctype html><html><body><pre class="anti-human">{blob}</pre></body></html>'

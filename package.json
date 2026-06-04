@@ -13,7 +13,7 @@
     "test:run": "pnpm -r run test:run",
     "typecheck": "pnpm -r run typecheck",
     "test:e2e": "bddgen && playwright test",
-    "test:regression": "for f in e2e/regression/*.assert.mjs; do echo \"# $f\"; node \"$f\" || exit 1; done",
+    "test:regression": "for f in e2e/regression/*.assert.mjs; do echo \"# $f\"; tsx \"$f\" || exit 1; done",
     "e2e:audit": "node e2e/scripts/audit-coverage.mjs",
     "e2e:build-answers": "tsx e2e/fixtures/build-answers.mts",
     "prepare": "husky"
