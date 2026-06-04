@@ -130,7 +130,7 @@ describe('ResultPage nickname gate', () => {
     installFakeLocalStorage()
     sessionStorage.clear()
     mockedSubmit.mockReset()
-    mockedSubmit.mockResolvedValue({ rank: 5, total_players: 100 })
+    mockedSubmit.mockResolvedValue({ ok: true, data: { rank: 5, total_players: 100 } })
   })
 
   afterEach(() => {

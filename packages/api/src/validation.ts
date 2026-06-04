@@ -1,9 +1,21 @@
 import type { ScoreSubmission } from '../../../shared/leaderboard-types'
 import type { EventName, EventPayload } from '../../../shared/event-types'
+import { MODULE_ADVANCE_DELAY_MS } from '../../../shared/game-timing'
 
 const MIN_GAME_TIME_MS = 15_000 // 15 seconds minimum — reject obvious cheats
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max
 const MAX_NICKNAME_LEN = 20
+
+// Module-sum tolerance. The wall-clock `time_ms` is always ≥ the sum of the
+// per-module times because each MODULE_COMPLETE → NEXT_MODULE transition adds a
+// wall-clock gap (MODULE_ADVANCE_DELAY_MS) that is not attributed to any module.
+// A run with N modules has (N − 1) such gaps, so the legitimate overshoot scales
+// with the module count rather than being a fixed budget. BASE_MARGIN absorbs
+// timing jitter (clock resolution, the brief render/dispatch latency around each
+// stamp). PER_TRANSITION_SLACK_MS is the per-gap allowance — pinned to the real
+// frontend auto-advance delay via the shared constant so the two never drift.
+const MODULE_SUM_BASE_MARGIN_MS = 2_000
+const PER_TRANSITION_SLACK_MS = MODULE_ADVANCE_DELAY_MS
 
 const VALID_EVENT_NAMES: ReadonlySet<EventName> = new Set<EventName>([
   'game_start',
@@ -45,10 +57,29 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
     return fail('Invalid date — must be today or yesterday')
   }
 
-  // Module times must sum to ≈ total time (within 2 seconds)
+  // Module times must sum to ≈ total time, but the allowed window is ASYMMETRIC.
+  // Honest play always has wall-clock `time_ms` ≥ sum(module_times): the only
+  // wall-clock not attributed to a module is the inter-module transition gap,
+  // and that is strictly positive. So `diff = time_ms − moduleSum` is normally
+  // ≥ 0, growing by PER_TRANSITION_SLACK_MS per transition.
+  //
+  //   - High side (positive diff): the legitimate overshoot. Allow up to
+  //     BASE_MARGIN jitter + PER_TRANSITION_SLACK_MS × (n − 1) transitions.
+  //   - Low side (negative diff): a player UNDER-reporting time_ms relative to
+  //     their module sum has no legitimate cause — and since the leaderboard
+  //     ranks by ascending time_ms, under-reporting is exactly how one would
+  //     cheat for a better rank. Keep this side tight at BASE_MARGIN (the same
+  //     2000ms the original symmetric check enforced), so widening the high
+  //     side to cover transitions does not open a low-side cheat window.
+  //
+  // Boundaries stay strict (`diff` exactly at either bound still passes) and the
+  // check still only runs for a length-4 module_times array.
   if (Array.isArray(submission.module_times) && submission.module_times.length === 4) {
     const moduleSum = submission.module_times.reduce((a, b) => a + b, 0)
-    if (Math.abs(moduleSum - submission.time_ms) > 2_000) {
+    const diff = submission.time_ms - moduleSum
+    const upperBound =
+      MODULE_SUM_BASE_MARGIN_MS + PER_TRANSITION_SLACK_MS * (submission.module_times.length - 1)
+    if (diff < -MODULE_SUM_BASE_MARGIN_MS || diff > upperBound) {
       return fail('Module times do not match total time')
     }
   }

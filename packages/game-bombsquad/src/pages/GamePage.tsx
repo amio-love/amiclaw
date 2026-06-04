@@ -13,6 +13,7 @@ import {
 } from '@/utils/yaml-loader'
 import { logEvent } from '@/utils/event-log'
 import { formatMs } from '@shared/format-time'
+import { MODULE_ADVANCE_DELAY_MS } from '@shared/game-timing'
 import { generateWire } from '@/modules/wire/generator'
 import { generateDial } from '@/modules/dial/generator'
 import { generateButton } from '@/modules/button/generator'
@@ -397,12 +398,14 @@ export default function GamePage() {
     }
   }, [state.status, navigate])
 
-  // Auto-advance from MODULE_COMPLETE after 800ms
+  // Auto-advance from MODULE_COMPLETE after the inter-module transition delay.
+  // The constant is shared with the score validator (@shared/game-timing) so
+  // the server-side module-sum tolerance stays in step with this wall-clock gap.
   useEffect(() => {
     if (state.status !== 'MODULE_COMPLETE') return
     const timeout = setTimeout(() => {
       dispatch({ type: 'NEXT_MODULE' })
-    }, 800)
+    }, MODULE_ADVANCE_DELAY_MS)
     return () => clearTimeout(timeout)
   }, [state.status, dispatch])
 
