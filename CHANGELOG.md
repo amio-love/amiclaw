@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your daily-challenge time now makes it onto the leaderboard** — Finishing
+the daily challenge and entering your name used to fail for many players with
+a misleading "submission failed (you may be offline)" message, even on a
+solid connection — so a clean run never showed a rank. Submissions now go
+through, and you see where your time lands. When a submission really is
+refused for another reason, the result screen tells you that plainly instead
+of blaming your network, and keeps the retry button handy.
+
 **Your AI partner stops inventing a dial it can't see** — On the symbol
 dial, your AI used to talk about a pointer or a clock face and ask you to
 turn every dial to "12 o'clock" — a mechanic the game never had — then

@@ -51,7 +51,7 @@ vi.mock('./modules/keypad/KeypadModule', () => ({
 }))
 
 vi.mock('@shared/leaderboard-api', () => ({
-  submitScore: vi.fn().mockResolvedValue({ rank: 5, total_players: 100 }),
+  submitScore: vi.fn().mockResolvedValue({ ok: true, data: { rank: 5, total_players: 100 } }),
   fetchLeaderboard: vi.fn().mockResolvedValue({ date: '2026-03-16', entries: [] }),
 }))
 

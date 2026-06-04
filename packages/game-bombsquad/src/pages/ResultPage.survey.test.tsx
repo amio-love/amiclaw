@@ -118,7 +118,7 @@ describe('ResultPage endgame survey', () => {
     surveyMock.hasAnsweredSurvey.mockReset()
     surveyMock.markSurveyAnswered.mockReset()
     vi.mocked(submitScore).mockReset()
-    vi.mocked(submitScore).mockResolvedValue({ rank: 5, total_players: 100 })
+    vi.mocked(submitScore).mockResolvedValue({ ok: true, data: { rank: 5, total_players: 100 } })
   })
 
   afterEach(() => {

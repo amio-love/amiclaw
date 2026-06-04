@@ -9,7 +9,7 @@ import { getTodayString } from '@shared/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
 import { formatMs } from '@shared/format-time'
-import { submitScore } from '@shared/leaderboard-api'
+import { submitScore, type SubmitScoreResult } from '@shared/leaderboard-api'
 import { saveOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
@@ -69,6 +69,10 @@ export default function ResultPage() {
   const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(null)
   const [submitFailed, setSubmitFailed] = useState(false)
   const [retried, setRetried] = useState(false)
+  // Distinguishes a server-side validation rejection from a network failure so
+  // the failure copy can be honest. `null` while no failure is showing.
+  const [submitFailKind, setSubmitFailKind] = useState<'network' | 'rejected' | null>(null)
+  const [submitFailMessage, setSubmitFailMessage] = useState<string | null>(null)
 
   // Fall back to `defused` for any legacy RESULT state persisted before the
   // game-modes rework added the `outcome` field.
@@ -156,6 +160,32 @@ export default function ResultPage() {
     []
   )
 
+  // Applies a submission outcome to UI state. Centralizes the three-way mapping
+  // (success / network failure / server rejection) so the mount, modal-confirm,
+  // and retry paths stay in lockstep.
+  const applySubmitResult = useCallback(
+    (submission: ScoreSubmission, result: SubmitScoreResult) => {
+      setSubmitting(false)
+      if (result.ok) {
+        setSubmitFailed(false)
+        setSubmitFailKind(null)
+        setSubmitFailMessage(null)
+        setRankResult(result.data)
+        recordOptimistic(submission, result.data)
+        try {
+          sessionStorage.removeItem(`pending-score:${submission.date}`)
+        } catch {
+          /* ignore */
+        }
+      } else {
+        setSubmitFailed(true)
+        setSubmitFailKind(result.kind)
+        setSubmitFailMessage(result.kind === 'rejected' ? (result.error ?? null) : null)
+      }
+    },
+    [recordOptimistic]
+  )
+
   // Fires the actual submission. Callers own `submitting` toggles — the mount
   // path relies on the lazy `useState` initializer above to start truthy, and
   // the modal-confirm path flips it on synchronously before calling here.
@@ -173,22 +203,9 @@ export default function ResultPage() {
         /* storage full */
       }
 
-      submitScore(submission).then((result) => {
-        setSubmitting(false)
-        if (result) {
-          setRankResult(result)
-          recordOptimistic(submission, result)
-          try {
-            sessionStorage.removeItem(`pending-score:${submission.date}`)
-          } catch {
-            /* ignore */
-          }
-        } else {
-          setSubmitFailed(true)
-        }
-      })
+      submitScore(submission).then((result) => applySubmitResult(submission, result))
     },
-    [buildSubmission, recordOptimistic]
+    [buildSubmission, applySubmitResult]
   )
 
   // Submit score on mount when a nickname is already known (returning daily
@@ -235,27 +252,16 @@ export default function ResultPage() {
     if (nickname === null) return
     setRetried(true)
     setSubmitFailed(false)
+    setSubmitFailKind(null)
+    setSubmitFailMessage(null)
     setSubmitting(true)
     const submission = buildSubmission(nickname)
     if (!submission) {
       setSubmitting(false)
       return
     }
-    submitScore(submission).then((result) => {
-      setSubmitting(false)
-      if (result) {
-        setRankResult(result)
-        recordOptimistic(submission, result)
-        try {
-          sessionStorage.removeItem(`pending-score:${submission.date}`)
-        } catch {
-          /* ignore */
-        }
-      } else {
-        setSubmitFailed(true)
-      }
-    })
-  }, [buildSubmission, recordOptimistic, nickname])
+    submitScore(submission).then((result) => applySubmitResult(submission, result))
+  }, [buildSubmission, applySubmitResult, nickname])
 
   const handlePlayAgain = () => {
     // Emit BEFORE the RESET so we still capture the just-finished run's mode
@@ -356,7 +362,26 @@ export default function ResultPage() {
                     {!nicknamePending &&
                       !submitting &&
                       submitFailed &&
-                      (retried ? (
+                      (submitFailKind === 'rejected' ? (
+                        // Server reached and refused — not an offline state.
+                        // Retry once for transient refusals (e.g. rate limit);
+                        // a persistent rejection points the player at feedback.
+                        retried ? (
+                          <>
+                            成绩未能通过校验，暂时无法上榜。
+                            {submitFailMessage ? `（${submitFailMessage}）` : ''}
+                            可邮件反馈 byheaven0912@gmail.com
+                          </>
+                        ) : (
+                          <>
+                            成绩校验未通过
+                            {submitFailMessage ? `（${submitFailMessage}）` : ''}
+                            <button className={styles.retryBtn} onClick={handleRetrySubmit}>
+                              重试
+                            </button>
+                          </>
+                        )
+                      ) : retried ? (
                         '网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com'
                       ) : (
                         <>
