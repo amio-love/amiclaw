@@ -1,9 +1,10 @@
 # Full-run scenarios — end-to-end collaboration across all modules in both game
 # modes.
 #
-# Practice mode runs 2 modules with a 05:00 timer; wrong answers never fail
-# the run. Daily-challenge mode runs 4 modules with a 10:00 timer; three
-# strikes detonate the bomb and the run fails. The daily-challenge scenario
+# Practice mode runs 2 modules; wrong answers never fail the run. The timer is
+# a count-up stopwatch (starts at 00:00) in both modes — time is a score, not a
+# detonator. Daily-challenge mode runs 4 modules; three strikes detonate the
+# bomb and the run fails (the only daily failure path). The daily-challenge scenario
 # explicitly tests the "decline submission" path: the player completes the run
 # but does NOT submit a score — the NicknameModal is left unfilled. This
 # prevents leaderboard pollution from simulation runs (per the Design proposal
@@ -34,7 +35,7 @@ Feature: Full game run collaboration
     And the player confirms the prompt modal and starts the game
 
     When the game starts
-    Then the timer begins counting down from 05:00
+    Then the timer starts at 00:00 and counts up
     And the module progress bar shows 2 segments
 
     When the first module appears
@@ -66,7 +67,7 @@ Feature: Full game run collaboration
     And the player confirms the prompt modal and starts the game
 
     When the game starts
-    Then the timer begins counting down from 10:00
+    Then the timer starts at 00:00 and counts up
     And the module progress bar shows 4 segments
 
     When the first module appears

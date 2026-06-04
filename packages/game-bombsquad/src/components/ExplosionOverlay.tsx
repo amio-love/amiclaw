@@ -4,7 +4,9 @@ import styles from './ExplosionOverlay.module.css'
 
 /**
  * Full-screen, CSS-only detonation spectacle shown over the bomb panel for
- * ~1.4s when a daily run fails (3 strikes or the countdown hitting zero).
+ * ~1.4s when a daily run fails. The only daily failure path is the 3-strike
+ * rule — time is a stopwatch score, never a detonator, so a cap-out does not
+ * trigger this overlay.
  *
  * Every motion is a `@keyframes` — no JS animation library (hard project
  * constraint). The `prefers-reduced-motion` fallback in the stylesheet drops

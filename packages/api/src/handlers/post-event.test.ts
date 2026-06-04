@@ -77,7 +77,7 @@ describe('handlePostEvent — game-failed telemetry counters', () => {
     vi.useFakeTimers()
     try {
       vi.setSystemTime(new Date('2026-05-21T10:00:00.000Z'))
-      for (const event of ['game_failed_strikeout', 'game_failed_timeout'] as const) {
+      for (const event of ['game_failed_strikeout', 'game_ended_timeout'] as const) {
         const { kv, puts } = makeKv()
         const req = makeRequest({
           event,

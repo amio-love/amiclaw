@@ -43,12 +43,15 @@ type ResultVariant = 'success' | 'failure'
 
 /**
  * Map a frozen game outcome to a result variant. `defused` and
- * `practice-cleared` are runs that finished every module → success;
- * `exploded` and `practice-timeout` are runs that stopped short → failure.
- * The outcome LOGIC is unchanged — only the displayed grouping is.
+ * `practice-cleared` are runs that finished every module → success; `exploded`
+ * (a daily 3-strike-out) and the two neutral cap-outs (`practice-timeout` /
+ * `daily-timeout`) are runs that stopped short → the gentle 差一点 failure
+ * variant. A cap-out never submits to the leaderboard (the run never defused).
  */
 function resultVariant(outcome: GameOutcome): ResultVariant {
-  return outcome === 'exploded' || outcome === 'practice-timeout' ? 'failure' : 'success'
+  return outcome === 'exploded' || outcome === 'practice-timeout' || outcome === 'daily-timeout'
+    ? 'failure'
+    : 'success'
 }
 
 /** AI-voiced consolation line on the failure screen (handoff README §6.7).

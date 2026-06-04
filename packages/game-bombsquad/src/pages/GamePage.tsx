@@ -51,9 +51,6 @@ const MODULE_LABEL: Record<ModuleKind, string> = {
 // page — kept in step with the ExplosionOverlay keyframe durations.
 const EXPLOSION_DURATION_MS = 1400
 
-// Daily-challenge low-time warning threshold — timer turns red below this.
-const LOW_TIME_THRESHOLD_MS = 60_000
-
 // Two-line diagnostic copy: line 1 names what just happened locally, line 2
 // names the AI partner's now-stale view. Kept as an array so the two lines
 // stay independently inspectable and we can render them as separate spans
@@ -273,13 +270,12 @@ export default function GamePage() {
     </div>
   ) : null
 
-  // Countdown timer. `useTimer` still measures elapsed wall-clock time; the
-  // direction flip to "remaining" happens here, the single place it lives.
+  // Stopwatch. `useTimer` measures elapsed wall-clock time; the display counts
+  // UP from 00:00. Faster runs rank higher, so the elapsed time IS the score —
+  // there is no countdown and no detonation deadline.
   const { elapsedMs } = useTimer(state.totalStartTime, state.totalEndTime)
-  const remainingMs = Math.max(0, state.timeBudgetMs - elapsedMs)
-  const timerDisplay = formatMs(remainingMs)
+  const timerDisplay = formatMs(elapsedMs)
   const isRunning = state.status === 'PLAYING' || state.status === 'MODULE_COMPLETE'
-  const lowTime = state.mode === 'daily' && isRunning && remainingMs < LOW_TIME_THRESHOLD_MS
 
   // Load the manual on mount — but skip the reload if the provider already
   // restored a live, in-progress run for this exact mode from sessionStorage.
@@ -409,17 +405,25 @@ export default function GamePage() {
     return () => clearTimeout(timeout)
   }, [state.status, dispatch])
 
-  // Countdown-zero detection. `remainingMs` is recomputed every animation
-  // frame by `useTimer`, so the frame the budget runs out this effect fires
-  // TIME_EXPIRED. Short-circuited once `totalEndTime` is set (run resolved),
-  // which also covers the last-module win lock — a daily run whose final
-  // module was just solved has `totalEndTime` stamped and is immune here.
+  // Hard-cap detection. `elapsedMs` is recomputed every animation frame by
+  // `useTimer`, so the frame the stopwatch reaches the 1-hour cap this effect
+  // fires TIME_EXPIRED, which ends the run neutrally (no explosion in either
+  // mode). Short-circuited once `totalEndTime` is set (run resolved), which
+  // also covers the last-module win lock — a run whose final module was just
+  // solved has `totalEndTime` stamped and is immune here.
   useEffect(() => {
     if (state.totalStartTime === null || state.totalEndTime !== null) return
     if (state.status !== 'PLAYING' && state.status !== 'MODULE_COMPLETE') return
-    if (remainingMs > 0) return
+    if (elapsedMs < state.timeBudgetMs) return
     dispatch({ type: 'TIME_EXPIRED' })
-  }, [remainingMs, state.status, state.totalStartTime, state.totalEndTime, dispatch])
+  }, [
+    elapsedMs,
+    state.status,
+    state.totalStartTime,
+    state.totalEndTime,
+    state.timeBudgetMs,
+    dispatch,
+  ])
 
   // Auto-advance EXPLODING → RESULT once the explosion animation has played.
   useEffect(() => {
@@ -584,7 +588,7 @@ export default function GamePage() {
       {refreshBanner}
       <div className={styles.topBar}>
         <div className={styles.timerCluster}>
-          <Timer display={timerDisplay} isRunning={isRunning} lowTime={lowTime} />
+          <Timer display={timerDisplay} isRunning={isRunning} />
           {state.mode === 'daily' && <StrikeIndicator strikeCount={state.strikeCount} />}
         </div>
         <div className={styles.modeMeta}>

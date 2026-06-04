@@ -51,7 +51,7 @@ import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { submitScore } from '@shared/leaderboard-api'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 
 interface FixtureOptions {
   mode: GameState['mode']

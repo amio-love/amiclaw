@@ -42,8 +42,24 @@ describe('persistence', () => {
   })
 
   it('returns null when the stored value is corrupt JSON', () => {
-    sessionStorage.setItem('bombsquad:game-state:v2', '{broken json')
+    sessionStorage.setItem('bombsquad:game-state:v3', '{broken json')
     expect(loadPersistedState()).toBeNull()
+  })
+
+  it('ignores a stale v2 blob so the timeBudgetMs semantics change cannot leak in', () => {
+    // The stopwatch rework reused `timeBudgetMs` but flipped its meaning from a
+    // per-mode countdown budget (600000 / 300000) to the 1-hour positive-count
+    // hard cap (3600000). A v2 blob persisted by the previous build still
+    // carries the old 600000 value — if it were restored, the new count-up
+    // timer would end a daily run the instant elapsed ≥ 600000 (10 minutes)
+    // instead of running on. The key bump to v3 must make any v2 entry invisible
+    // to loadPersistedState so the player gets a clean fresh run with the
+    // correct 1-hour cap, never the stale 10-minute value.
+    const staleV2State = { ...sampleState, mode: 'daily' as const, timeBudgetMs: 600_000 }
+    sessionStorage.setItem('bombsquad:game-state:v2', JSON.stringify(staleV2State))
+    expect(loadPersistedState()).toBeNull()
+    // And nothing leaked the old budget back to a caller.
+    expect(loadPersistedState()?.timeBudgetMs).toBeUndefined()
   })
 
   it('round-trips an EXPLODING state so a refresh mid-explosion is recoverable', () => {

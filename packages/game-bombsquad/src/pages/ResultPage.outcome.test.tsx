@@ -1,9 +1,10 @@
 /**
  * ResultPage outcome-branching tests — the game-modes rework turned the
- * single success page into a four-way outcome-aware page.
+ * single success page into an outcome-aware page.
  *
- * Covers exploded (3-strike and timeout), practice-cleared and
- * practice-timeout. Setup mirrors the other ResultPage tests: pre-seed
+ * Covers exploded (the daily 3-strike-out, the only daily failure path), the
+ * two neutral cap-outs (daily-timeout / practice-timeout), and
+ * practice-cleared. Setup mirrors the other ResultPage tests: pre-seed
  * sessionStorage with a finished-game state so `GameProvider`'s lazy
  * initializer hydrates straight into a renderable ResultPage.
  */
@@ -35,7 +36,7 @@ import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { submitScore } from '@shared/leaderboard-api'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 
 interface FixtureOptions {
   mode: GameState['mode']
@@ -112,20 +113,24 @@ describe('ResultPage outcome branches', () => {
     expect(submitScore).not.toHaveBeenCalled()
   })
 
-  it('exploded by timeout: failure reason names time, not strikes', () => {
+  it('daily-timeout: neutral cap-out → failure variant, time-based reason, no leaderboard submit', () => {
     renderResult(
       finishedState({
         mode: 'daily',
-        outcome: 'exploded',
+        outcome: 'daily-timeout',
         strikeCount: 1,
         moduleStats: [{ moduleType: 'wire', timeMs: 30_000, errorCount: 0 }],
       })
     )
 
+    // A daily cap-out is neutral — no explosion — but it never defused, so it
+    // shows the gentle 差一点 failure variant with the time-based consolation
+    // and submits nothing to the leaderboard.
     expect(screen.getByRole('heading', { name: '差一点' })).toBeInTheDocument()
-    // The timeout consolation leads with the time cause and invites a recap.
     expect(screen.getByText(/时间走得比想象中快/)).toBeInTheDocument()
     expect(screen.getByText(/跟我复盘/)).toBeInTheDocument()
+    expect(screen.queryByText(/全球排名/)).not.toBeInTheDocument()
+    expect(submitScore).not.toHaveBeenCalled()
   })
 
   it('exploded with zero solved modules: still a failure page, not "暂无数据"', () => {

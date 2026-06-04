@@ -50,7 +50,7 @@ import ResultPage from './ResultPage'
 import { submitScore } from '@shared/leaderboard-api'
 import { GameProvider, type GameState } from '@/store/game-context'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 const NICKNAME_KEY = 'bombsquad-nickname'
 
 const mockedSubmit = vi.mocked(submitScore)

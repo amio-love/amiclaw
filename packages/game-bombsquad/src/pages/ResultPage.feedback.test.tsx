@@ -33,7 +33,7 @@ import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { playSfx } from '@/audio/useSfx'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 
 function finishedState(mode: GameState['mode'], outcome: GameOutcome): GameState {
   const sequence: GameState['moduleSequence'] =
