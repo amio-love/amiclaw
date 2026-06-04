@@ -1,0 +1,115 @@
+# Regression guards for the harden-manual-delivery bundle
+# (task harden-manual-delivery, 2026-06-04).
+#
+# This file documents 4 regression scenarios across the two manual-delivery
+# robustness fixes. Three guard the empty-308 fix in the Pages Function
+# functions/manual/[date].ts (bare-URL 200 body, no trailing-slash regression,
+# content-negotiation unchanged); the fourth guards the new global
+# `retain_manual_in_session` AI_INSTRUCTIONS key injected by
+# packages/manual/build.ts. The executable assertions live in the companion
+# node script `e2e/regression/harden-manual-delivery.assert.mjs`, run via
+# `node e2e/regression/harden-manual-delivery.assert.mjs`. The script exits 0
+# on full pass and non-zero on any failure, naming the failing scenario in
+# stderr — capture format matches the rest of the repository's data-assertion
+# regression scenarios in this directory.
+#
+# Bisect contract: on the pre-fix HEAD the script FAILS (the HTML path returns
+# the empty 308 unchanged and AI_INSTRUCTIONS has no retain_manual_in_session
+# key); after the fix it PASSES. It exists as failure evidence before the
+# companion fix, giving a bisect-friendly history — identical to the wire /
+# dial regression siblings in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: the #2 assertion
+# invokes the Pages Function `onRequest` with a mocked `env.ASSETS` (no real
+# Cloudflare edge, no browser, no preview server) and the #3 assertion is a
+# `pnpm --filter manual build` + read of the dist raw YAML. Spinning up the
+# full playwright harness would add minutes of webserver boot per scenario
+# without any added coverage.
+#
+# The Feature has no @playwright tag, so the playwright-bdd harness
+# (configured in playwright.config.ts with `tags: '@playwright'`) skips this
+# file entirely — only the .assert.mjs sibling is executable.
+#
+# Background — empirical bug evidence: a bare `GET https://claw.amio.fans/
+# manual/2026-06-04` returned HTTP 308 + content-length 0 with
+# `location: /manual/2026-06-04/`. A weak external AI fetcher (e.g. Gemini)
+# that does not follow the redirect sees an empty body and cannot read the
+# manual. Separately, an AI that CAN read the manual re-opened the link every
+# turn, wasting latency / tokens and risking a mid-run fetch failure.
+
+Feature: the manual reaches a weak-fetcher AI in one hop and the AI keeps it in memory
+  As an external AI partner that fetches the bomb manual over plain HTTP
+  I want a bare `/manual/<date>` HTML request to return a 200 body in one hop
+  (not an empty 308 redirect a weak fetcher cannot follow)
+  And I want the AI_INSTRUCTIONS to tell me to read the manual once and keep it
+  in working memory rather than re-fetching the unchanging link every turn
+  So that a redirect-averse AI can actually read the manual, and a capable AI
+  stops wasting latency / tokens re-opening the link mid-run
+
+  Background:
+    Given the Pages Function functions/manual/[date].ts onRequest is loaded
+    And env.ASSETS is mocked to emit an empty 308 for a bare directory path and a 200 HTML body for the index asset
+    And the manual is built so the dist raw YAML reflects the injected AI_INSTRUCTIONS
+
+  # bug: Bug #2 — a bare `/manual/<date>` (no trailing slash) HTML request
+  #   returns an empty 308 redirect to `/manual/<date>/`. The pre-fix function
+  #   did `return env.ASSETS.fetch(request)`, and Cloudflare ASSETS replies to
+  #   a directory path with an empty 308. A non-redirect-following AI fetcher
+  #   gets a 0-byte body and cannot read the manual.
+  # fix: the HTML fallthrough detects the bare directory path and fetches the
+  #   `/manual/<date>/index.html` asset directly, re-emitting its body as a
+  #   200 text/html response — the anti-human page in one hop, no redirect.
+  # retire-when: docs/architecture/arch-component-manual-system.md §Invariants
+  #   `手册交付 weak-fetcher 健壮性不变量` drops the bare-URL-200 requirement.
+  Scenario: bare /manual/<date> HTML path returns a 200 body, not an empty 308 (Bug #2)
+    Given a bare request to https://claw.amio.fans/manual/2026-06-04 with no trailing slash
+    When onRequest handles it on the HTML path
+    Then the response status is 200
+    And the response is not a 3xx redirect
+    And the response body is non-empty
+    And the response body is the anti-human HTML page
+    And the response Content-Type is text/html
+
+  # bug: guard against a regression where the empty-308 fix breaks the normal
+  #   trailing-slash path that already returned 200.
+  # fix: the fix only rewrites a bare directory path; a trailing-slash request
+  #   passes through to ASSETS untouched.
+  # retire-when: same as Bug #2.
+  Scenario: trailing-slash /manual/<date>/ still serves a 200 body (no regression) (Bug #2 guard)
+    Given a request to https://claw.amio.fans/manual/2026-06-04/ with a trailing slash
+    When onRequest handles it on the HTML path
+    Then the response status is 200
+    And the response body is non-empty
+
+  # bug: guard against a regression where the empty-308 fix disturbs the
+  #   `?format=yaml` / Accept content-negotiation branch the AI uses to fetch
+  #   the raw YAML payload.
+  # fix: the content-negotiation branch (wantsYaml) is left untouched; only the
+  #   HTML fallthrough changed.
+  # retire-when: same as Bug #2.
+  Scenario: ?format=yaml content negotiation path is unchanged (Bug #2 guard)
+    Given a request to https://claw.amio.fans/manual/2026-06-04?format=yaml
+    When onRequest handles it
+    Then the response status is 200
+    And the response Content-Type is text/plain
+    And the response body is the served raw YAML
+
+  # bug: Bug #3 — an AI that can read the manual re-opens / re-fetches the
+  #   manual link every turn instead of reading it once and keeping it in
+  #   working memory, wasting latency / tokens and risking a mid-run fetch
+  #   failure.
+  # fix: build.ts injects a new AI_INSTRUCTIONS key retain_manual_in_session
+  #   (Chinese values, inserted after game_context, before
+  #   do_not_reveal_to_player) telling the AI to read the manual once, keep it
+  #   in memory for the whole session (记在 / 整局 / 整段对话), and never
+  #   re-open / re-fetch the unchanging link (重新打开 / 重新抓取 / 重抓).
+  # retire-when: docs/architecture/arch-component-manual-system.md §Invariants
+  #   `AI_INSTRUCTIONS 七类前置上下文不变量` drops retain_manual_in_session.
+  Scenario: AI_INSTRUCTIONS carries a retain_manual_in_session instruction (Bug #3)
+    Given the manual is built and the dist raw YAML AI_INSTRUCTIONS is loaded
+    When reading ai_instructions.retain_manual_in_session
+    Then it is a non-empty string[]
+    And every entry is at least 30 characters and carries a CJK character
+    And it tells the AI to keep the manual in memory via 记在 / 记住
+    And it scopes the retention to the whole session via 整局 / 整段对话
+    And it forbids re-fetching the link every turn via 重新打开 / 重新抓取 / 重抓
