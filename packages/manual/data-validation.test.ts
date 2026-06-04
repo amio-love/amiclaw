@@ -725,6 +725,85 @@ describe('wire_routing preamble carries the three readability-trap hardenings', 
   })
 })
 
+describe('button preamble carries the two readability-trap hardenings', () => {
+  // PR #114's wire bug fix also hardened the button module preamble against the
+  // same literal, time-pressured-AI failure modes, but only wire got a CI-wired
+  // vitest guard. The button preamble carries exactly TWO of the wire block's
+  // three hardenings: (a) strict top-down first-match-wins with no salient jump,
+  // and (b) the scene-info ask-gate. Button has NO color-filter-skip element —
+  // button targets have no action-color mechanic — so there is no third element
+  // to assert. These guards run over practice.yaml AND every daily file (the
+  // preamble is carried verbatim by the deterministic daily generator, which
+  // permutes only rule ORDER), so a future practice edit that drops an element —
+  // or a stale daily that predates the edit — fails loudly.
+  function loadButtonPreamble(path: string): string {
+    const manual = yaml.load(readFileSync(path, 'utf8')) as Manual
+    const rule = (manual.modules as unknown as { button?: { rule?: string } }).button?.rule
+    expect(typeof rule, `${path}: button.rule must be a string`).toBe('string')
+    return rule as string
+  }
+
+  function assertButtonPreambleHardenings(label: string, rule: string): void {
+    // Element (a): emphatic STRICT top-down first-match-wins — walk in listed
+    // order, the FIRST rule whose conditions ALL hold wins, do NOT jump to the
+    // rule that looks most relevant to a salient feature (button color / label).
+    expect(rule, `${label}: must emphasise a STRICT walk (严格)`).toMatch(/严格/)
+    expect(rule, `${label}: must name the top-down walk direction`).toMatch(
+      /自上而下|从上到下|从上往下/
+    )
+    // The button jump-negation is phrased "绝不…就跳到…那条规则" (the negated text
+    // sits between 绝不 and 跳), so the wire block's `/绝不跳/` literal does NOT
+    // match — this regex matches the button's actual phrasing.
+    expect(rule, `${label}: must forbid jumping ahead`).toMatch(/绝不[^。]*跳到|不要跳|别跳|不可跳/)
+    expect(rule, `${label}: anti-jump must name the salient-feature trap object`).toMatch(
+      /显眼|最相关|最像|最突出/
+    )
+
+    // Element (b): scene-info ask-gate — rules can depend on battery /
+    // indicators; if the AI lacks the value it must ASK the player before
+    // answering, never guess.
+    expect(rule, `${label}: scene-info gate must name 电池`).toMatch(/电池/)
+    expect(rule, `${label}: scene-info gate must name 指示灯`).toMatch(/指示灯/)
+    expect(rule, `${label}: must instruct the AI to ASK the player for missing scene info`).toMatch(
+      /先问|问玩家|向玩家确认|让玩家报/
+    )
+    expect(rule, `${label}: must forbid guessing a scene-info-dependent answer`).toMatch(
+      /绝不靠猜|不要猜|别靠猜|不靠猜/
+    )
+  }
+
+  it('practice.yaml button preamble carries both hardened elements', () => {
+    assertButtonPreambleHardenings('practice.yaml', loadButtonPreamble(PRACTICE_YAML))
+  })
+
+  it('every daily YAML button preamble carries both hardened elements', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      assertButtonPreambleHardenings(file, loadButtonPreamble(join(DAILY_DIR, file)))
+    }
+  })
+
+  it("today's daily button preamble equals practice's (regen propagated the edit)", () => {
+    // The daily generator carries the button.rule string verbatim
+    // (structuredClone) — only rule ORDER is permuted. So every daily's button
+    // preamble must be character-equal to practice's. This catches a stale daily
+    // that predates a practice preamble edit (regen not run / partial).
+    const practiceRule = loadButtonPreamble(PRACTICE_YAML)
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const file of dailyFiles) {
+      const dailyRule = loadButtonPreamble(join(DAILY_DIR, file))
+      if (dailyRule !== practiceRule) offenders.push(file)
+    }
+    expect(
+      offenders,
+      `daily button preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+})
+
 describe('source yaml ai_instructions block is rejected (build-time fail-loud)', () => {
   // AI_INSTRUCTIONS is owned by `build.ts` as a single hard-coded constant and
   // injected into every rendered manual. `validateNoSourceAiInstructions` is
