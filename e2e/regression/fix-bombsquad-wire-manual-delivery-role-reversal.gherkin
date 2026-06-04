@@ -1,0 +1,131 @@
+# Regression guards for the fix-bombsquad-wire-manual-delivery-role-reversal
+# bundle (task fix-bombsquad-wire-manual-delivery-role-reversal, 2026-06-04).
+#
+# This file documents 4 regression scenarios. Three guard the three hardened
+# elements added to the wire_routing rule preamble in the shipped practice
+# manual; the fourth guards the new global `recover_after_failure`
+# AI_INSTRUCTIONS key injected by packages/manual/build.ts. The executable
+# assertions live in the companion node script
+# `e2e/regression/fix-bombsquad-wire-manual-delivery-role-reversal.assert.mjs`,
+# run via
+# `node e2e/regression/fix-bombsquad-wire-manual-delivery-role-reversal.assert.mjs`.
+# The script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Bisect contract: on the pre-fix HEAD the script FAILS (the wire preamble
+# carries none of the three elements and AI_INSTRUCTIONS has no
+# recover_after_failure key); after the fix it PASSES. It exists as failure
+# evidence before the companion fix, giving a bisect-friendly history —
+# identical to the PR #106 dial regression sister in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: the preamble
+# assertions are a pure read of YAML and the AI-instruction assertion is a
+# `pnpm --filter manual build` + read of the dist raw YAML — no browser, no
+# preview server, no DOM. Spinning up the full playwright harness would add
+# minutes of webserver boot per scenario without any added coverage.
+#
+# The Feature has no @playwright tag, so the playwright-bdd harness
+# (configured in playwright.config.ts with `tags: '@playwright'`) skips
+# this file entirely — only the .assert.mjs sibling is executable.
+#
+# Canonical repro scene (the worked example): daily challenge, module 1/4
+# wire, 4 wires all yellow, battery 4, indicator MSA. Strict first-match-wins:
+# rule#1 (last white? no) → rule#2 (battery>2? yes) → cut position 2 (3rd from
+# top). A capable manual-reading AI instead said "cut the last yellow wire"
+# (matches NO rule — it skipped rule#2 and misread the color_at_last:yellow →
+# cut last RED rule as "cut last yellow"), then on failure reverse-asked the
+# player for the rules.
+
+Feature: wire preamble + recover_after_failure stop the manual-reading AI from a wrong cut and a role reversal
+  As an AI partner relying on the bomb manual to talk a player through wire_routing
+  I want the rule preamble to force a strict top-down first-match-wins walk, to
+  work the color-filter SKIP case so I never "repair" an absent action color, and
+  to gate scene-info-dependent rules behind an explicit ask
+  And I want a global failure-recovery discipline so that after a wrong cut I
+  re-walk the rules myself and stay in role
+  So that I stop producing a wrong cut on the all-yellow scene and stop
+  reverse-asking the player "what are the rules?" when an action fails
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+    And the manual is built so the dist raw YAML reflects the injected AI_INSTRUCTIONS
+
+  # bug: Bug A — wire rule preamble does not emphasise a STRICT top-down
+  #   first-match-wins walk. A capable AI jumps to the rule that LOOKS most
+  #   relevant to the salient feature (all wires yellow → the "yellow" rule)
+  #   instead of walking top-down and stopping at the first rule whose
+  #   conditions ALL hold. On the repro scene this skips rule#2
+  #   (battery_count>2 → position 2) entirely.
+  # fix: practice.yaml wire_routing.rule preamble emphasises 严格 +
+  #   自上而下 walk and forbids 跳 to the 显眼 / 最相关 rule.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` drops the strict-first-match-wins
+  #   emphasis requirement.
+  Scenario: wire rule preamble emphasises strict top-down first-match-wins (Bug A)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the wire_routing.rule field
+    Then the field is a non-empty string
+    And it emphasises a STRICT walk via 严格
+    And it names the top-down direction via 自上而下 / 从上到下
+    And it forbids jumping ahead via 不要跳 / 绝不跳 / 别跳
+    And the anti-jump pairs with the salient-feature object 显眼 / 最相关 / 最像 / 最突出
+
+  # bug: Bug B — wire rule preamble buries the color-filter SKIP semantics.
+  #   A rule whose condition keys on one color (color_at_last: yellow) but
+  #   whose action cuts a different color (position: last, color: red) does
+  #   NOT apply when no wire of the action color exists — but a reader
+  #   "repairs" the action to an available color and cuts the last yellow.
+  # fix: practice.yaml wire_routing.rule preamble works the all-yellow
+  #   example explicitly: the yellow trigger fires a rule that cuts the last
+  #   RED wire, no red wire exists → rule 不适用, 继续 to the next rule, and
+  #   绝不改成剪黄.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` drops the color-filter-skip example
+  #   requirement.
+  Scenario: wire rule preamble works the color-filter SKIP example (Bug B)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the wire_routing.rule field
+    Then the field is a non-empty string
+    And the color-filter example references the yellow trigger 黄
+    And the color-filter example references the absent action color 红
+    And it states the rule 不适用 when the action color is absent
+    And it tells the AI to 继续 to the next rule on a skip
+    And it forbids repairing the action to the available color via 绝不改成剪黄
+
+  # bug: Bug C — wire rule preamble has no scene-info ask-gate. Rules can
+  #   depend on battery count / indicators (global scene info reported once
+  #   at start); if the AI lacks the value the rule silently drops. No
+  #   instruction tells the AI to confirm/ask for required scene info before
+  #   answering.
+  # fix: practice.yaml wire_routing.rule preamble names 电池 / 指示灯 as the
+  #   scene-info some rules depend on and instructs the AI to ask the player
+  #   (问玩家 / 先问) before answering, never to guess (不要猜 / 绝不靠猜).
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` drops the scene-info gate requirement.
+  Scenario: wire rule preamble carries a scene-info ask-gate (Bug C)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the wire_routing.rule field
+    Then the field is a non-empty string
+    And the scene-info gate names 电池 and 指示灯
+    And it instructs the AI to ask the player for missing scene info via 问玩家 / 先问
+    And it forbids guessing a scene-info-dependent answer via 不要猜 / 绝不靠猜
+
+  # bug: Bug D — after a player reports a failed action (wrong cut / strike /
+  #   detonation) the AI reverse-asks the player for the rules / manual / the
+  #   right answer. The existing do_not_reveal_to_player ban was not salient
+  #   enough at the post-failure moment.
+  # fix: build.ts injects a 6th AI_INSTRUCTIONS key recover_after_failure
+  #   (Chinese values) telling the AI never to reverse-ask the player after a
+  #   failure (绝不反问), to re-walk the rules itself (重新走) checking for
+  #   missed scene info or rule-order violations, and to stay in role (角色).
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `AI_INSTRUCTIONS 六类前置上下文不变量` drops
+  #   recover_after_failure.
+  Scenario: AI_INSTRUCTIONS carries a recover_after_failure failsafe (Bug D)
+    Given the manual is built and the dist raw YAML AI_INSTRUCTIONS is loaded
+    When reading ai_instructions.recover_after_failure
+    Then it is a non-empty string[]
+    And it forbids reverse-asking the player after a failure via 绝不反问
+    And it tells the AI to re-walk the rules itself via 重新走
+    And it tells the AI to stay in role via 角色

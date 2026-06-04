@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your AI partner reads the wire module right — and recovers in role
+when a cut goes wrong** — The bomb manual now spells out the wire rules
+so your AI partner stops a common slip: it walks the rules strictly in
+order instead of jumping to whichever one looks most relevant, it knows a
+rule that wants a color you can't see simply doesn't apply (so it moves
+on rather than inventing a wire to cut), and it asks you for the battery
+count or indicator state when a rule needs it instead of guessing. And
+when an action does go wrong, your AI now re-checks the rules itself and
+gives you a corrected move — it never turns around and asks you what the
+right answer was.
+
 **Your AI partner now leads the post-game debrief** — When a run ends,
 you no longer copy a summary and paste it to your AI to get a recap. The
 result page shows this run at a glance — total time, each module's time
