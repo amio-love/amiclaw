@@ -79,6 +79,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Run regression assertions
+        run: pnpm test:regression
+
       - name: Run e2e tests
         run: pnpm test:e2e
 
