@@ -110,6 +110,12 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Changed
 
+- **Drop the redundant opening-prompt panel from the AI compatibility page**
+  The supported-AI page no longer shows a copy-ready opening prompt, and the
+  vestigial `OPENING_PROMPT` constant behind it is removed. Your AI now gets
+  everything it needs from the manual itself, which already frames its role,
+  so a second hand-copied script was only a stale duplicate. The page still
+  lists which voice AIs work and which are verified.
 - **Yijing Oracle gets its own vanity domain** The Yijing Oracle now has a
   memorable own-domain entry at `oracle.amio.fans` that 301-redirects to
   `claw.amio.fans/oracle/*` — root lands on `/oracle`, deep links are
