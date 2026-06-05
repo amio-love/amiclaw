@@ -56,7 +56,9 @@ describe('SceneInfoBar first-run nudge', () => {
 
   it('renders the dismissible hint when showNudge is set', () => {
     render(<SceneInfoBar sceneInfo={sceneWithIndicators} showNudge />)
-    expect(screen.getByText(/读给 AI/)).toBeInTheDocument()
+    // The nudge now points only at the real rule inputs (battery + indicators);
+    // it no longer urges reading out the decorative 暗号 phrase.
+    expect(screen.getByText(/电池和指示灯读给 AI/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '关闭提示' })).toBeInTheDocument()
     // The scene fields stay rendered alongside the hint.
     expect(screen.getByText('暗号：')).toBeInTheDocument()

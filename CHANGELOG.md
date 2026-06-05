@@ -5,6 +5,21 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your AI partner now calls the modules by the names you see** — The manual
+used to name the puzzles by old internal labels, so when you said "光弦" or
+"星符" your AI had never heard of them and stalled on your very first sentence.
+The manual now uses the exact names on your screen — 光弦, 星盘, 按钮, 星符 —
+so the two of you start on the same page.
+
+**Your AI stops chasing the decorative bits of the scene row** — The 暗号
+phrase at the start of the scene info row is just flavor — no rule ever uses
+it — yet your AI used to ask you to read it out and even echo it back, and
+the game nudged you to recite the whole row. Now the prompt to read the row
+points only at the parts that matter (battery count and indicators), and your
+AI treats the 暗号, any indicator a rule doesn't name, and the button's preview
+color and display number as background it can safely ignore — so it asks you
+for less and never matches a rule against something that doesn't count.
+
 **The clock is now your score, not a fuse** — The timer counts up from 00:00
 instead of ticking down, and running long no longer blows up the bomb. In the
 daily challenge a faster run simply ranks higher on the leaderboard, so you can
