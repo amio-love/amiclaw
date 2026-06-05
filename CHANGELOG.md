@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Refreshing or sharing a game link no longer lands on a blank page** —
+Reloading mid-run, opening a bookmark, or following a link a friend sent you
+used to drop you on an empty platform screen instead of the game. Now those
+links open straight into BombSquad, and a mid-game refresh picks your run back
+up where you left off.
+
 **Your AI partner now calls the modules by the names you see** — The manual
 used to name the puzzles by old internal labels, so when you said "光弦" or
 "星符" your AI had never heard of them and stalled on your very first sentence.
