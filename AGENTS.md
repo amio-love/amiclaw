@@ -38,15 +38,17 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
 
 - The game page has no hints. All guidance comes from the AI voice partner.
 - One module is displayed at a time, with a module progress bar at the bottom.
-- The timer counts down from a per-mode budget. In the daily challenge,
-  reaching zero detonates the bomb; in practice, reaching zero gently ends
-  the session.
-- The daily challenge uses a 3-strike fail rule: three wrong answers across
-  the run detonate the bomb, with the first two surfaced as a visible strike
-  count. A wrong answer never resets the module — the same puzzle stays and
-  the player retries it in place.
+- The timer counts up from 00:00 (a stopwatch) in both modes. Time is a
+  score, not a detonator: a faster run ranks higher on the daily leaderboard.
+  A 1-hour hard cap ends either mode neutrally (no explosion) — it exists only
+  to bound the displayed time, not as a deadline.
+- The daily challenge uses a 3-strike fail rule, which is the only daily
+  failure path: three wrong answers across the run detonate the bomb, with the
+  first two surfaced as a visible strike count. Time never detonates the bomb.
+  A wrong answer never resets the module — the same puzzle stays and the player
+  retries it in place.
 - Practice mode never fails. A wrong answer just lets the player retry the
-  same puzzle in place; running out of time ends the run neutrally.
+  same puzzle in place; reaching the hard cap ends the run neutrally.
 - Practice runs a reduced 2-module set; the daily challenge runs the full 4
   modules.
 - "Play Again" is the most prominent CTA on the results page.

@@ -1,7 +1,9 @@
-# BombSquad game modes — the daily challenge (4 modules, 3-strike fail rule,
-# 10:00 countdown, bomb explosion on failure) and practice mode (2 modules,
-# never-fails, 05:00 countdown). Also carries the two homepage-originated game
-# entry flows.
+# BombSquad game modes — the daily challenge (4 modules, 3-strike fail rule as
+# the ONLY failure path, a count-up stopwatch where faster ranks higher) and
+# practice mode (2 modules, never-fails, the same count-up stopwatch). Time is a
+# score, not a detonator: reaching the 1-hour hard cap ends either mode
+# neutrally, never with an explosion. Also carries the two homepage-originated
+# game entry flows.
 #
 # Restructured for the e2e harness: each scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
@@ -50,7 +52,7 @@ Feature: BombSquad daily challenge and practice mode
     And the immersive game flow renders without the platform shell
     And I see the prompt "准备好了吗？"
     When I tap "开始"
-    Then the timer starts at the daily budget 10:00 and counts down toward 00:00
+    Then the timer starts at 00:00 and counts up
     And the SceneInfoBar shows the "暗号：" and "电池：" fields
     And the module progress bar shows 4 segments
     When I solve the 光弦 module correctly
@@ -74,7 +76,7 @@ Feature: BombSquad daily challenge and practice mode
     Then the URL path is /bombsquad/run
     And the query string carries "mode=practice"
     When I tap "开始"
-    Then the timer starts at the practice budget 05:00 and counts down toward 00:00
+    Then the timer starts at 00:00 and counts up
     And the SceneInfoBar shows the "暗号：" field with a non-empty Chinese phrase
     And the "暗号：" value is one of the entries from the curated tongue-twister pool
     And the "暗号：" value does not match the pattern /^[A-Z0-9]{6}$/
@@ -112,20 +114,21 @@ Feature: BombSquad daily challenge and practice mode
     And no nickname modal appears
     And no score is submitted to the leaderboard
 
-  # Source: daily-fail-timeout
+  # Source: daily-timeout
   @playwright
-  Scenario: The daily countdown reaching zero detonates the bomb
+  Scenario: The daily run reaching the hard cap ends neutrally — never detonates
     Given I have started a daily challenge run
-    When the countdown timer reaches 00:00
-    Then a full-screen explosion animation plays
+    When the stopwatch reaches the 1-hour hard cap
+    Then no explosion animation plays
     And the result page opens with the heading "差一点"
     And the failure reason reads "时间走得比想象中快"
+    And no score is submitted to the leaderboard
 
   # Source: practice-timeout
   @playwright
-  Scenario: The practice countdown reaching zero ends the run gently
+  Scenario: The practice run reaching the hard cap ends the run gently
     Given I have started a practice run
-    When the countdown timer reaches 00:00
+    When the stopwatch reaches the 1-hour hard cap
     Then no explosion animation plays
     And the result page opens with the heading "差一点"
     And I see the subtitle "练习 · 卡在光弦"

@@ -275,23 +275,24 @@ describe('handleGetDashboard', () => {
     }
   })
 
-  it('renders game_failed_strikeout / game_failed_timeout columns with per-day and totals values', async () => {
+  it('renders game_failed_strikeout / game_ended_timeout columns with per-day and totals values', async () => {
     const store = {
       'events:2026-05-18:game_start': { count: 10 },
       'events:2026-05-18:game_failed_strikeout': { count: 3 },
-      'events:2026-05-18:game_failed_timeout': { count: 2 },
+      'events:2026-05-18:game_ended_timeout': { count: 2 },
       'events:2026-05-17:game_start': { count: 6 },
       'events:2026-05-17:game_failed_strikeout': { count: 1 },
-      'events:2026-05-17:game_failed_timeout': { count: 4 },
+      'events:2026-05-17:game_ended_timeout': { count: 4 },
     }
     const kv = makeKv(store)
     const res = await handleGetDashboard(makeRequest('?token=t'), kv, 't')
     expect(res.status).toBe(200)
     const html = await res.text()
 
-    // Both event names appear as their own column headers.
+    // Both event names appear as their own column headers. The timeout column
+    // is now the neutral game_ended_timeout (a cap-out is not a failure).
     expect(html).toContain('<th class="num">game_failed_strikeout</th>')
-    expect(html).toContain('<th class="num">game_failed_timeout</th>')
+    expect(html).toContain('<th class="num">game_ended_timeout</th>')
 
     // The two new columns are the last two cells of every row.
     // 2026-05-18: strikeout 3, timeout 2.

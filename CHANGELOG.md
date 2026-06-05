@@ -20,6 +20,15 @@ AI treats the 暗号, any indicator a rule doesn't name, and the button's previe
 color and display number as background it can safely ignore — so it asks you
 for less and never matches a rule against something that doesn't count.
 
+**The clock is now your score, not a fuse** — The timer counts up from 00:00
+instead of ticking down, and running long no longer blows up the bomb. In the
+daily challenge a faster run simply ranks higher on the leaderboard, so you can
+take the time to talk things through with your AI — ask for a second look,
+clear up an uncertain symbol — without a deadline detonating the bomb mid-
+sentence. The only way a daily run ends in failure is three wrong answers.
+Practice stays as gentle as ever. The timer also drops its old red
+"running-out" warning, since there's nothing left to run out of.
+
 **The manual reliably reaches your AI — and stays in its memory** — Some
 AI partners couldn't open the manual link at all: the page quietly bounced
 them with an empty redirect and they gave up with nothing to read. That

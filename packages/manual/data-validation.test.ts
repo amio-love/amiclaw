@@ -439,13 +439,21 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
     expect(firstKey, 'game_overview must be the first ai_instructions key').toBe('game_overview')
 
     // game_overview must carry the core game-mechanics vocabulary so the AI's
-    // mental model covers the run loop (模块 / 拆完), the countdown (倒计时), and
-    // the daily fail rule (失误).
+    // mental model covers the run loop (模块 / 拆完), the count-UP stopwatch
+    // (计时 / 正计时 — the timer no longer counts down), and the daily fail rule
+    // (失误 — now the ONLY daily fail path, since time is a score not a
+    // detonator).
     const overviewText = (instructions.game_overview ?? []).join('\n')
-    expect(overviewText, 'game_overview must name the countdown timer').toMatch(/倒计时/)
+    expect(overviewText, 'game_overview must name the count-up stopwatch (正计时/计时)').toMatch(
+      /正计时|计时/
+    )
     expect(overviewText, 'game_overview must name the strike/fail mechanic').toMatch(/失误/)
     expect(overviewText, 'game_overview must name the module structure').toMatch(/模块/)
     expect(overviewText, 'game_overview must convey clearing all modules to win').toMatch(/拆完/)
+    // The obsolete countdown framing must be gone — time no longer detonates.
+    expect(overviewText, 'game_overview must NOT call the timer a countdown (倒计时)').not.toMatch(
+      /倒计时/
+    )
 
     // Finding 3: the old "every fetch = a fresh game / no memory of any prior
     // session / never claim to remember the last round" framing was WRONG — the
@@ -528,6 +536,32 @@ describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () =
       gameContextText,
       'game_context must point the player at the scene info bar to read out'
     ).toMatch(/场景信息栏/)
+  })
+
+  it('game_context makes opening scene-bar collection a both-modes load-efficiency step (not practice-only onboarding)', () => {
+    // The scene-info bar read-out at the opening was previously coupled to the
+    // practice-only newbie-onboarding tone. It is decoupled into a load-bearing
+    // efficiency discipline that applies to BOTH modes: in either mode the AI
+    // asks the player to read the whole scene bar (序号 / 电池 / 指示灯) once at
+    // the start, then reuses those global values all run, never re-asking.
+    // Only the patient teaching tone stays practice-only.
+    const manual = extractEmbeddedYaml(join(MANUAL_DIST, 'practice/index.html'))
+    const gameContextText = (manual.ai_instructions?.game_context ?? []).join('\n')
+    // Names the scene-bar collection as applying to both modes (practice + daily).
+    expect(
+      gameContextText,
+      'game_context must mark opening scene-bar collection as both-modes (practice + daily)'
+    ).toMatch(/不论\s*practice\s*还是\s*daily|两种模式/)
+    // The reuse-don't-re-ask discipline: collect once, reuse all run.
+    expect(
+      gameContextText,
+      'game_context must tell the AI to collect the scene bar once and reuse it (not re-ask)'
+    ).toMatch(/复用|绝不反复追问|问一次/)
+    // Still points at the scene info bar contents the player reads out.
+    expect(
+      gameContextText,
+      'game_context must still name the scene-bar contents (电池 / 指示灯)'
+    ).toMatch(/电池/)
   })
 
   it('post_game_recap instructs the AI to proactively run an end-of-round debrief', () => {

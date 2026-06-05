@@ -72,7 +72,7 @@ vi.mock('@/utils/nickname', () => ({
 import ResultPage from './ResultPage'
 import { GameProvider, type GameState } from '@/store/game-context'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v2'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 
 function finishedPracticeState(): GameState {
   // Seed `attemptNumber` to a non-default value (7), distinct from

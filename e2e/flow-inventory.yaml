@@ -71,20 +71,23 @@ flows:
     steps: [game-daily, three-strikes, explosion, result-fail]
     status: active
 
-  - id: daily-fail-timeout
-    name: Daily timeout failure
+  - id: daily-timeout
+    name: Daily hard-cap neutral end
     description: >-
-      A daily run's countdown reaches zero — the bomb detonates and the failure
-      result page opens.
-    steps: [game-daily, countdown-zero, explosion, result-fail]
+      A daily run's count-up stopwatch reaches the 1-hour hard cap — time is a
+      score, not a detonator, so the run ends NEUTRALLY (no explosion), the
+      gentle 差一点 result page opens, and no score is submitted to the
+      leaderboard (the run never defused). The only daily failure path is the
+      3-strike rule (see daily-fail-strikeout).
+    steps: [game-daily, hard-cap, result-neutral, no-submit]
     status: active
 
   - id: practice-timeout
-    name: Practice timeout
+    name: Practice hard-cap neutral end
     description: >-
-      A practice run's countdown reaches zero — the run ends gently with no
-      explosion and the player can start another run.
-    steps: [game-practice, countdown-zero, result-timeout, play-again]
+      A practice run's count-up stopwatch reaches the 1-hour hard cap — the run
+      ends gently with no explosion and the player can start another run.
+    steps: [game-practice, hard-cap, result-neutral, play-again]
     status: active
 
   # Deprecated 2026-06-03 by the endgame-settlement rework: the player-copied

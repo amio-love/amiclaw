@@ -25,7 +25,7 @@ describe('validateEvent — event-name whitelist', () => {
     'manual_load_failed',
     'replay_intent',
     'game_failed_strikeout',
-    'game_failed_timeout',
+    'game_ended_timeout',
   ]
 
   for (const name of validNames) {

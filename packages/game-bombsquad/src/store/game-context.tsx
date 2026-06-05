@@ -24,11 +24,21 @@ export type ModuleKind = 'wire' | 'dial' | 'button' | 'keypad'
 /**
  * Terminal outcome of a run. The result page branches on this:
  * - `defused`           daily: every module solved → success + leaderboard
- * - `exploded`          daily: 3 strikes OR countdown hit zero → failure
+ * - `exploded`          daily: 3 strikes → failure (the ONLY daily fail path)
  * - `practice-cleared`  practice: every module solved → neutral success
- * - `practice-timeout`  practice: countdown hit zero → neutral, no explosion
+ * - `practice-timeout`  practice: hit the 1h hard cap → neutral, no explosion
+ * - `daily-timeout`     daily: hit the 1h hard cap unsolved → neutral, no
+ *                       explosion, no leaderboard submit (run never defused)
+ *
+ * The timer counts UP (a stopwatch): faster runs rank higher. Time is a score,
+ * not a detonator — only a 3rd strike ends a daily run in failure.
  */
-export type GameOutcome = 'defused' | 'exploded' | 'practice-cleared' | 'practice-timeout'
+export type GameOutcome =
+  | 'defused'
+  | 'exploded'
+  | 'practice-cleared'
+  | 'practice-timeout'
+  | 'daily-timeout'
 
 /** Ordered module kinds per mode. Length decides how many modules a run has. */
 export const MODULE_SEQUENCE: Record<GameMode, ModuleKind[]> = {
@@ -36,10 +46,18 @@ export const MODULE_SEQUENCE: Record<GameMode, ModuleKind[]> = {
   practice: ['wire', 'keypad'],
 }
 
-/** Countdown budget per mode, in milliseconds. */
+/**
+ * Hard time cap per mode, in milliseconds. The timer counts UP from zero; this
+ * is the upper bound at which a run ends neutrally (no explosion in either
+ * mode). Both modes share a 1-hour cap, aligned with the backend's
+ * `MAX_GAME_TIME_MS` so a displayed elapsed time can never exceed the
+ * submittable range. The field that stores this per run is `timeBudgetMs`
+ * (kept for persistence-shape stability); its meaning is now "elapsed hard
+ * cap", not "countdown budget".
+ */
 export const TIME_BUDGET_MS: Record<GameMode, number> = {
-  daily: 600_000, // 10 minutes
-  practice: 300_000, // 5 minutes
+  daily: 3_600_000, // 1 hour hard cap
+  practice: 3_600_000, // 1 hour hard cap
 }
 
 /** Daily challenge detonates on the 3rd strike. */
@@ -75,7 +93,11 @@ export interface GameState {
   currentModuleErrorCount: number
   /** Daily-challenge cumulative wrong answers across the whole run. */
   strikeCount: number
-  /** Countdown budget for this run, set on START_GAME from TIME_BUDGET_MS. */
+  /**
+   * Elapsed-time hard cap for this run, set on START_GAME from TIME_BUDGET_MS.
+   * The timer counts up toward this bound; reaching it ends the run neutrally.
+   * Field name kept as `timeBudgetMs` for persistence-shape stability.
+   */
   timeBudgetMs: number
   /** Terminal outcome, written when the run resolves. Null while in flight. */
   outcome: GameOutcome | null
@@ -222,10 +244,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'MODULE_COMPLETE': {
       // Terminal-state guard: only a live run can complete a module. Once the
-      // run has left PLAYING — EXPLODING after a 3rd strike or a countdown
-      // zero, or already at RESULT — a racing onComplete tap landing inside
-      // the 1.4s explosion-animation window must not revive an already-lost
-      // run into a win. Same guard shape as MODULE_ERROR / NEXT_MODULE.
+      // run has left PLAYING — EXPLODING after a 3rd strike, or already at
+      // RESULT — a racing onComplete tap landing inside the 1.4s
+      // explosion-animation window must not revive an already-lost run into a
+      // win. Same guard shape as MODULE_ERROR / NEXT_MODULE.
       if (state.status !== 'PLAYING') return state
       const now = Date.now()
       const startedAt = state.currentModuleStartTime ?? now
@@ -238,10 +260,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       })
       // Last-module win lock: the instant the final module is solved the run
       // is won — stamp totalEndTime + outcome here, before the 800ms
-      // MODULE_COMPLETE → ALL_COMPLETE auto-advance window. A countdown that
-      // hits zero inside that window then cannot reclassify an already-won
-      // run as a loss (TIME_EXPIRED no-ops once totalEndTime / outcome is set,
-      // and the GamePage countdown effect is short-circuited by totalEndTime).
+      // MODULE_COMPLETE → ALL_COMPLETE auto-advance window. A stopwatch that
+      // reaches the hard cap inside that window then cannot reclassify an
+      // already-won run (TIME_EXPIRED no-ops once totalEndTime / outcome is
+      // set, and the GamePage cap-detection effect is short-circuited by
+      // totalEndTime). The cap-out is neutral anyway, so this race could no
+      // longer produce a mis-classified loss — the lock is kept as defensive
+      // belt-and-braces against any future non-neutral cap behaviour.
       const isLastModule = state.currentModuleIndex >= state.moduleConfigs.length - 1
       return {
         ...state,
@@ -350,19 +375,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'TIME_EXPIRED': {
-      // The countdown reached zero. No-op once the run is already resolved —
-      // this is what protects the MODULE_COMPLETE → ALL_COMPLETE auto-advance
-      // window of a freshly-won last module (see MODULE_COMPLETE above).
+      // The stopwatch reached the 1-hour hard cap. No-op once the run is
+      // already resolved — this is what protects the MODULE_COMPLETE →
+      // ALL_COMPLETE auto-advance window of a freshly-won last module (see
+      // MODULE_COMPLETE above).
       if (state.status !== 'PLAYING' && state.status !== 'MODULE_COMPLETE') return state
       if (state.totalEndTime !== null || state.outcome !== null) return state
       const now = Date.now()
+      // Hitting the cap NEVER detonates the bomb — in either mode it ends the
+      // run neutrally. Time is a score, not a detonator; the only daily failure
+      // path is the 3-strike rule in MODULE_ERROR above.
       if (state.mode === 'daily') {
-        // Countdown hit zero on the daily challenge — the bomb detonates.
-        // This emit sits after the two terminal-state guards above, so a
-        // no-op TIME_EXPIRED never logs and a real transition logs exactly
-        // once.
+        // A neutral `game_ended_timeout` is logged on the daily cap-out (after
+        // the two terminal-state guards, so a no-op never logs and a real
+        // transition logs exactly once) so the beta dashboard can still count
+        // daily cap-outs apart from clean completes — without treating them as
+        // failures. Practice cap-outs stay silent, as the timeout path always
+        // was for practice.
         const totalTimeMs = state.totalStartTime !== null ? now - state.totalStartTime : 0
-        logEvent('game_failed_timeout', {
+        logEvent('game_ended_timeout', {
           mode: state.mode,
           totalTimeMs,
           attemptNumber: state.attemptNumber,
@@ -370,9 +401,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           moduleStats: state.moduleStats,
           moduleIndex: state.currentModuleIndex,
         })
-        return { ...state, status: 'EXPLODING', totalEndTime: now, outcome: 'exploded' }
+        return { ...state, status: 'RESULT', totalEndTime: now, outcome: 'daily-timeout' }
       }
-      // Practice never fails — running out of time gently ends the run.
       return { ...state, status: 'RESULT', totalEndTime: now, outcome: 'practice-timeout' }
     }
 
