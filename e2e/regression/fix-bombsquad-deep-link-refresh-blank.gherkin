@@ -1,0 +1,85 @@
+# Regression guard for the fix-bombsquad-deep-link-refresh-blank fix
+# (task fix-bombsquad-deep-link-refresh-blank, 2026-06-05).
+#
+# This file documents the regression scenarios over the source SPA-fallback
+# config packages/platform/public/_redirects. The executable assertions live in
+# the companion node script
+# `e2e/regression/fix-bombsquad-deep-link-refresh-blank.assert.mjs`, run via
+# `node e2e/regression/fix-bombsquad-deep-link-refresh-blank.assert.mjs`. The
+# script exits 0 on full pass and non-zero on any failure, naming the failing
+# scenario in stderr — capture format matches the rest of the repository's
+# data-assertion regression scenarios in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: the rule shape is
+# a pure read of the _redirects text. The end-to-end behaviour (hard-load of
+# /bombsquad/connect renders the game with its real JS/CSS bundle, not the
+# platform shell) is a property of Cloudflare Pages' production redirect engine
+# and cannot be reproduced by a local data assertion — it is verified on the
+# PR's Cloudflare Pages preview deployment. This guard locks the config facts
+# that drive that behaviour so the fix cannot silently revert.
+
+Feature: bombsquad-deep-link-refresh-blank regression coverage
+  As a player who hard-loads, refreshes, or opens a shared link to a BombSquad
+  deep route (/bombsquad/connect, /bombsquad/run, /bombsquad/result)
+  I want the _redirects rules to serve the real asset bundle AND fall deep
+  routes back to the /bombsquad/ directory
+  So that Cloudflare Pages serves the working BombSquad SPA instead of shadowing
+  the JS/CSS with index HTML or 308-bouncing the request to the blank shell
+
+  Background:
+    Given the source SPA-fallback config at packages/platform/public/_redirects is loaded
+
+  # bug: a broad /bombsquad/* 200 rewrite is evaluated before the real file and
+  #   wins even when a file exists, so it shadows the real /bombsquad/assets/*
+  #   bundle and serves the SPA index HTML (text/html) in place of the JS/CSS —
+  #   the whole bundle loads as HTML and the game renders blank. (Note: the
+  #   "Pages serves real files first" intuition does NOT hold for a 200 rewrite.)
+  # fix: an explicit /bombsquad/assets/* pass-through (200 to the same path),
+  #   ordered BEFORE the broad fallback, returns the real asset files.
+  # retire-when: Vite stops emitting the bundle under /bombsquad/assets/ or the
+  #   platform moves off Cloudflare Pages.
+  Scenario: asset pass-through protects the real bundle files
+    Given the source _redirects file
+    When reading the rule whose source is "/bombsquad/assets/*"
+    Then the destination must be a /bombsquad/assets/ pass-through (e.g. "/bombsquad/assets/:splat")
+    And the status code must be "200"
+
+  # bug-adjacent: Cloudflare Pages applies the first matching rule, and the broad
+  #   /bombsquad/* also matches /bombsquad/assets/.... If the asset rule came
+  #   second, the broad fallback would shadow the assets before the asset rule
+  #   was ever consulted.
+  # fix: order /bombsquad/assets/* before /bombsquad/*.
+  # retire-when: the broad fallback is removed or the matching algorithm changes.
+  Scenario: asset pass-through precedes the broad /bombsquad/* fallback
+    Given the source _redirects file
+    When comparing the order of the "/bombsquad/assets/*" rule and the "/bombsquad/*" rule
+    Then "/bombsquad/assets/*" must appear before "/bombsquad/*"
+
+  # bug: the BombSquad deep-route fallback proxied to /bombsquad/index.html.
+  #   Cloudflare Pages auto-redirects an index-file request to its extension-
+  #   less directory form (/bombsquad/index.html -> 308 -> /bombsquad/), so the
+  #   200 rewrite resolved to a redirect rather than serving the SPA, and the
+  #   follow-up request fell through to the /* platform-shell catch-all. Every
+  #   hard-load / refresh of a BombSquad deep route rendered the blank platform
+  #   shell (HTTP 200, title "AmiClaw — 和 AI 一起玩点新的") instead of the game.
+  # fix: target the directory /bombsquad/ instead of /bombsquad/index.html, so
+  #   Pages serves /bombsquad/index.html cleanly with no canonicalization bounce.
+  # retire-when: BombSquad stops being a BrowserRouter sub-app under /bombsquad/
+  #   (e.g. migrates to HashRouter like the oracle sub-app, which needs no
+  #   server-side SPA fallback) or the platform moves off Cloudflare Pages.
+  Scenario: BombSquad deep-route fallback targets the directory, not the index file
+    Given the source _redirects file
+    When reading the rule whose source is "/bombsquad/*"
+    Then the destination must NOT be "/bombsquad/index.html"
+    And the destination must be the directory "/bombsquad/"
+    And the status code must be "200" (a proxy rewrite, not a redirect)
+
+  # bug-adjacent: Cloudflare Pages applies the first matching _redirects rule.
+  #   If the /* catch-all preceded /bombsquad/*, the catch-all would swallow
+  #   every BombSquad deep route into the platform shell regardless of target.
+  # fix: keep the more specific /bombsquad/* rule ordered before /*.
+  # retire-when: the catch-all is removed or the matching algorithm changes.
+  Scenario: BombSquad fallback precedes the platform-shell catch-all
+    Given the source _redirects file
+    When comparing the order of the "/bombsquad/*" rule and the "/*" catch-all
+    Then "/bombsquad/*" must appear before "/*"
