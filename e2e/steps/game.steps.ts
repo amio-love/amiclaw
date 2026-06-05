@@ -76,17 +76,16 @@ Then('I see the prompt {string}', async ({ page }, text: string) => {
   await expect(page.getByText(text)).toBeVisible()
 })
 
-Then(
-  /^the timer starts at the (daily|practice) budget (\d+:\d+) and counts down toward 00:00$/,
-  async ({ world, page }, _mode: string, budget: string) => {
-    const timer = page.getByRole('timer')
-    await expect(timer).toHaveText(budget)
-    await world.advance(3000)
-    const after = mmssToSeconds(await timer.innerText())
-    expect(after).toBeLessThan(mmssToSeconds(budget))
-    expect(after).toBeGreaterThan(0)
-  }
-)
+Then('the timer starts at 00:00 and counts up', async ({ world, page }) => {
+  const timer = page.getByRole('timer')
+  // A count-up stopwatch shows 00:00 at the start — not a per-mode budget a
+  // countdown would have shown.
+  await expect(timer).toHaveText('00:00')
+  await world.advance(3000)
+  const after = mmssToSeconds(await timer.innerText())
+  // The elapsed display has increased away from zero (the run's score).
+  expect(after).toBeGreaterThan(0)
+})
 
 Then('the SceneInfoBar shows the "暗号：" and "电池：" fields', async ({ page }) => {
   const bar = page.locator(SCENE_BAR)
@@ -253,9 +252,12 @@ Then('the run still continues', async ({ page }) => {
   await expect.poll(() => new URL(page.url()).pathname).toBe('/bombsquad/run')
 })
 
-When('the countdown timer reaches 00:00', async ({ world }) => {
-  const budget = world.runMode === 'daily' ? 600_000 : 300_000
-  await world.fastForwardPast(budget + 1_000)
+When('the stopwatch reaches the 1-hour hard cap', async ({ world }) => {
+  // Both modes share a 1-hour hard cap (TIME_BUDGET_MS). Reaching it fires
+  // TIME_EXPIRED, which ends the run neutrally in either mode — never an
+  // explosion. Time is a score, not a detonator.
+  const HARD_CAP_MS = 3_600_000
+  await world.fastForwardPast(HARD_CAP_MS + 1_000)
 })
 
 Then('a full-screen explosion animation plays over the bomb panel', async ({ page }) => {

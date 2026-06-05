@@ -1,10 +1,12 @@
 /**
  * gameReducer unit tests — the game-modes rework state machine.
  *
- * Covers the new daily/practice branching: the 3-strike fail rule, the
- * countdown TIME_EXPIRED branch, the EXPLODING transition, module-sequence
- * generalisation (practice runs fewer modules), and the last-module win lock
- * that protects an already-won daily run from a racing TIME_EXPIRED.
+ * Covers the daily/practice branching: the 3-strike fail rule (the only daily
+ * failure path), the stopwatch TIME_EXPIRED branch (hitting the 1-hour hard
+ * cap ends BOTH modes neutrally — never an explosion), the EXPLODING
+ * transition, module-sequence generalisation (practice runs fewer modules),
+ * and the last-module win lock that protects an already-won daily run from a
+ * racing TIME_EXPIRED.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -69,6 +71,20 @@ describe('gameReducer — START_LOADING', () => {
     })
     expect(practice.moduleSequence).toEqual(MODULE_SEQUENCE.practice)
     expect(practice.moduleConfigs).toHaveLength(2)
+  })
+})
+
+describe('TIME_BUDGET_MS — 1-hour hard cap per mode', () => {
+  // Pin the literal hard-cap value so a silent change to the constant fails
+  // loudly (same guard-everything posture as the wire/button preamble guards).
+  // Both modes share a 1-hour cap aligned with the backend MAX_GAME_TIME_MS so
+  // a displayed elapsed time can never exceed the submittable range. The timer
+  // counts UP toward this bound; reaching it ends the run neutrally.
+  const ONE_HOUR_MS = 3_600_000
+
+  it('daily and practice both cap at exactly 1 hour', () => {
+    expect(TIME_BUDGET_MS.daily).toBe(ONE_HOUR_MS)
+    expect(TIME_BUDGET_MS.practice).toBe(ONE_HOUR_MS)
   })
 })
 
@@ -145,16 +161,19 @@ describe('gameReducer — MODULE_ERROR (practice never fails)', () => {
   })
 })
 
-describe('gameReducer — TIME_EXPIRED', () => {
-  it('daily: countdown hitting zero detonates the bomb', () => {
+describe('gameReducer — TIME_EXPIRED (hard cap ends both modes neutrally)', () => {
+  it('daily: hitting the hard cap ends the run neutrally — NO explosion', () => {
     const s = baseState({ mode: 'daily', status: 'PLAYING' })
     const after = gameReducer(s, { type: 'TIME_EXPIRED' })
-    expect(after.status).toBe('EXPLODING')
-    expect(after.outcome).toBe('exploded')
+    // Time is no longer a detonator: the cap-out goes straight to RESULT with a
+    // neutral daily-timeout outcome, never EXPLODING / exploded.
+    expect(after.status).toBe('RESULT')
+    expect(after.status).not.toBe('EXPLODING')
+    expect(after.outcome).toBe('daily-timeout')
     expect(after.totalEndTime).not.toBeNull()
   })
 
-  it('practice: countdown hitting zero gently ends the run, no explosion', () => {
+  it('practice: hitting the hard cap gently ends the run, no explosion', () => {
     const s = baseState({ mode: 'practice', status: 'PLAYING', moduleSequence: ['wire', 'keypad'] })
     const after = gameReducer(s, { type: 'TIME_EXPIRED' })
     expect(after.status).toBe('RESULT')
@@ -182,23 +201,27 @@ describe('gameReducer — last-module win lock', () => {
     expect(afterComplete.outcome).toBe('defused')
     expect(afterComplete.totalEndTime).not.toBeNull()
 
-    // The countdown hits zero inside the 800ms MODULE_COMPLETE → ALL_COMPLETE
-    // auto-advance window. The already-won run must NOT become exploded.
+    // The stopwatch reaches the hard cap inside the 800ms MODULE_COMPLETE →
+    // ALL_COMPLETE auto-advance window. The already-won run must stay defused
+    // (the win lock no-ops the racing TIME_EXPIRED).
     const afterExpire = gameReducer(afterComplete, { type: 'TIME_EXPIRED' })
     expect(afterExpire).toBe(afterComplete) // no-op
     expect(afterExpire.outcome).toBe('defused')
     expect(afterExpire.status).not.toBe('EXPLODING')
   })
 
-  it('a non-final module solve leaves the run unresolved (timeout can still explode)', () => {
+  it('a non-final module solve leaves the run unresolved (a later cap-out ends it neutrally)', () => {
     const playing = baseState({ mode: 'daily', status: 'PLAYING', currentModuleIndex: 1 })
     const afterComplete = gameReducer(playing, { type: 'MODULE_COMPLETE', moduleType: 'dial' })
     expect(afterComplete.outcome).toBeNull()
     expect(afterComplete.totalEndTime).toBeNull()
 
+    // The run is still in flight, so a hard-cap TIME_EXPIRED resolves it — but
+    // neutrally (daily-timeout), never as an explosion.
     const afterExpire = gameReducer(afterComplete, { type: 'TIME_EXPIRED' })
-    expect(afterExpire.status).toBe('EXPLODING')
-    expect(afterExpire.outcome).toBe('exploded')
+    expect(afterExpire.status).toBe('RESULT')
+    expect(afterExpire.status).not.toBe('EXPLODING')
+    expect(afterExpire.outcome).toBe('daily-timeout')
   })
 })
 
@@ -300,21 +323,26 @@ describe('gameReducer — failure telemetry', () => {
     })
   })
 
-  it('daily: TIME_EXPIRED emits game_failed_timeout exactly once', () => {
+  it('daily: hitting the hard cap emits the neutral game_ended_timeout exactly once (no explosion)', () => {
     const s = baseState({ mode: 'daily', status: 'PLAYING' })
     const after = gameReducer(s, { type: 'TIME_EXPIRED' })
 
-    expect(after.status).toBe('EXPLODING')
-    expect(callsFor('game_failed_timeout')).toHaveLength(1)
-    expect(callsFor('game_failed_timeout')[0][1]).toMatchObject({
+    // The cap-out is neutral: RESULT, not EXPLODING, and the telemetry is the
+    // renamed neutral event (timeout is no longer a failure).
+    expect(after.status).toBe('RESULT')
+    expect(after.status).not.toBe('EXPLODING')
+    expect(callsFor('game_ended_timeout')).toHaveLength(1)
+    expect(callsFor('game_ended_timeout')[0][1]).toMatchObject({
       mode: 'daily',
       attemptNumber: 1,
       strikeCount: 0,
       moduleIndex: 0,
     })
+    // The old failure-named event is gone entirely.
+    expect(callsFor('game_failed_timeout')).toHaveLength(0)
   })
 
-  it('practice: TIME_EXPIRED emits neither failure event', () => {
+  it('practice: hitting the hard cap emits no telemetry at all', () => {
     const s = baseState({
       mode: 'practice',
       status: 'PLAYING',
@@ -322,6 +350,9 @@ describe('gameReducer — failure telemetry', () => {
     })
     gameReducer(s, { type: 'TIME_EXPIRED' })
 
+    // The practice cap-out stays silent, as the practice timeout path always
+    // was — no failure event, and no neutral cap-out event either.
+    expect(callsFor('game_ended_timeout')).toHaveLength(0)
     expect(callsFor('game_failed_strikeout')).toHaveLength(0)
     expect(callsFor('game_failed_timeout')).toHaveLength(0)
   })
@@ -340,6 +371,6 @@ describe('gameReducer — failure telemetry', () => {
     gameReducer(exploded, { type: 'TIME_EXPIRED' })
 
     expect(callsFor('game_failed_strikeout')).toHaveLength(0)
-    expect(callsFor('game_failed_timeout')).toHaveLength(0)
+    expect(callsFor('game_ended_timeout')).toHaveLength(0)
   })
 })

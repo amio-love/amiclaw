@@ -14,12 +14,20 @@ import type { GameState } from './game-context'
  * — but GameState never carries those.
  */
 
-// v2: the GameState shape gained `moduleSequence` / `strikeCount` /
-// `timeBudgetMs` / `outcome` in the game-modes rework. A v1 blob persisted by
-// the previous build lacks those fields and would crash the generalised
-// renderer on restore, so the key is bumped — a stale v1 entry is simply
-// ignored and the player gets a clean fresh run.
-const KEY = 'bombsquad:game-state:v2'
+// Version history:
+//   v2 — the GameState shape gained `moduleSequence` / `strikeCount` /
+//        `timeBudgetMs` / `outcome` in the game-modes rework.
+//   v3 — the stopwatch rework REUSED the `timeBudgetMs` field but flipped its
+//        meaning: it was a per-mode COUNTDOWN budget (600000 / 300000 ms), it
+//        is now the 1-hour POSITIVE-COUNT hard cap (3600000 ms). The shape is
+//        unchanged, so a stale v2 blob would not crash on restore — but its
+//        old 600000 / 300000 value would be read as a hard cap, and the new
+//        count-up timer ends the run the instant `elapsedMs >= timeBudgetMs`
+//        (GamePage cap-detection). A daily run restored from a v2 blob would
+//        therefore neutrally end at 10 minutes instead of running on. Bumping
+//        the key forces any stale v2 entry to be ignored so the player gets a
+//        clean fresh run carrying the correct 1-hour cap.
+const KEY = 'bombsquad:game-state:v3'
 
 export function loadPersistedState(): GameState | null {
   if (typeof sessionStorage === 'undefined') return null
