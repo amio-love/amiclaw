@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The trident symbol finally looks like a trident** — One of the star-panel
+symbols used to draw a muddled shape — a pole with two little hooks — that
+matched nothing you could put into words, so describing it to your AI led
+nowhere and it was easy to mix up with the bowl-and-stem symbol next to it.
+It's now a clean three-prong trident: three separate spikes on a crossbar with
+a handle running down. Describe what you see and your AI lands on the right
+symbol the first time.
+
 **Your AI partner now calls the modules by the names you see** — The manual
 used to name the puzzles by old internal labels, so when you said "光弦" or
 "星符" your AI had never heard of them and stalled on your very first sentence.
