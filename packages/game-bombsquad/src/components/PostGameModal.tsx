@@ -1,11 +1,18 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import type { SurveyAnswers } from '@shared/event-types'
 import { NICKNAME_MAX_LENGTH, isValidNickname, setStoredNickname } from '@/utils/nickname'
+import {
+  LEADERBOARD_AI_MODEL_MAX_LENGTH,
+  LEADERBOARD_AI_TOOL_MAX_LENGTH,
+  type LeaderboardPlayerMetadata,
+  isValidLeaderboardAiTool,
+  normalizeLeaderboardAiModel,
+  setStoredLeaderboardPlayerMetadata,
+} from '@/utils/leaderboard-player-metadata'
 import Button from '@/components/bombsquad/Button'
 import styles from './PostGameModal.module.css'
 
 /** Hard caps mirroring the `survey_submit` wire contract (data payload ≤ 1KB). */
-const AI_TOOL_MAX_LENGTH = 40
 const AI_ISSUE_MAX_LENGTH = 200
 
 /** Q1 — single-select AI tool. `other` reveals a free-text input. */
@@ -34,6 +41,7 @@ type DifficultyValue = SurveyAnswers['difficulty']
  */
 export interface PostGameModalResult {
   nickname?: string
+  leaderboardMetadata?: LeaderboardPlayerMetadata
   survey?: SurveyAnswers
 }
 
@@ -45,6 +53,11 @@ interface PostGameModalProps {
    * because a daily score cannot post without a nickname.
    */
   showNickname: boolean
+  /**
+   * Render the leaderboard AI metadata section. When true, AI tool is required
+   * and gates confirm; model is optional and omitted when blank.
+   */
+  showLeaderboardMetadata?: boolean
   /** Render the 4-question survey section. */
   showSurvey: boolean
   /**
@@ -75,6 +88,7 @@ interface PostGameModalProps {
 export default function PostGameModal({
   open,
   showNickname,
+  showLeaderboardMetadata = false,
   showSurvey,
   onConfirm,
   onSkip,
@@ -86,6 +100,8 @@ export default function PostGameModal({
   // Survey section state. Empty string / 0 / null mean "not yet answered".
   const [aiTool, setAiTool] = useState<string>('')
   const [aiToolOther, setAiToolOther] = useState('')
+  const [aiModel, setAiModel] = useState('')
+  const [leaderboardMetadataError, setLeaderboardMetadataError] = useState<string | null>(null)
   const [fun, setFun] = useState(0)
   const [difficulty, setDifficulty] = useState<DifficultyValue | null>(null)
   const [aiIssue, setAiIssue] = useState('')
@@ -93,13 +109,14 @@ export default function PostGameModal({
   const baseId = useId()
   const titleId = `${baseId}-title`
   const nicknameTipId = `${baseId}-nickname-tip`
+  const leaderboardMetadataTipId = `${baseId}-leaderboard-metadata-tip`
   const q1Id = `${baseId}-q1`
   const q2Id = `${baseId}-q2`
   const q3Id = `${baseId}-q3`
   const q4Id = `${baseId}-q4`
 
-  // Non-dismissable whenever the nickname gate is present.
-  const dismissable = showSurvey && !showNickname
+  // Non-dismissable whenever a leaderboard submission gate is present.
+  const dismissable = showSurvey && !showNickname && !showLeaderboardMetadata
 
   // Esc closes a survey-only modal. Registered before the early return so the
   // hook order stays stable across renders.
@@ -117,7 +134,12 @@ export default function PostGameModal({
   const trimmedNickname = nickname.trim()
   const nicknameOk = !showNickname || isValidNickname(nickname)
 
-  const aiToolOk = aiTool !== '' && (aiTool !== 'other' || aiToolOther.trim().length > 0)
+  const resolvedAiTool = (aiTool === 'other' ? aiToolOther.trim() : aiTool).slice(
+    0,
+    LEADERBOARD_AI_TOOL_MAX_LENGTH
+  )
+  const aiToolOk = isValidLeaderboardAiTool(resolvedAiTool)
+  const leaderboardMetadataOk = !showLeaderboardMetadata || aiToolOk
   // The survey is "complete" only when all three required questions (Q1/Q2/Q3)
   // are answered; Q4 is always optional.
   const surveyComplete = aiToolOk && fun >= 1 && difficulty !== null
@@ -126,7 +148,7 @@ export default function PostGameModal({
   // the survey-only modal — which always offers a separate skip affordance
   // anyway. Whenever the nickname section is present, confirm needs only a
   // valid nickname; a partially-filled survey is dropped silently on confirm.
-  const canConfirm = nicknameOk && (dismissable ? surveyComplete : true)
+  const canConfirm = nicknameOk && leaderboardMetadataOk && (dismissable ? surveyComplete : true)
 
   const handleConfirm = () => {
     if (!canConfirm) return
@@ -142,14 +164,24 @@ export default function PostGameModal({
       result.nickname = trimmedNickname
     }
 
+    if (showLeaderboardMetadata) {
+      const metadata: LeaderboardPlayerMetadata = {
+        aiTool: resolvedAiTool,
+      }
+      const resolvedAiModel = normalizeLeaderboardAiModel(aiModel)
+      if (resolvedAiModel) metadata.aiModel = resolvedAiModel
+      const ok = setStoredLeaderboardPlayerMetadata(metadata)
+      if (!ok) {
+        setLeaderboardMetadataError('保存失败，请重试。')
+        return
+      }
+      result.leaderboardMetadata = metadata
+    }
+
     // Emit survey answers only when the survey section was shown AND fully
     // answered. Confirming a merged modal with an untouched/partial survey
     // simply omits `result.survey` — no `survey_submit` fires for it.
     if (showSurvey && surveyComplete) {
-      const resolvedAiTool = (aiTool === 'other' ? aiToolOther.trim() : aiTool).slice(
-        0,
-        AI_TOOL_MAX_LENGTH
-      )
       const survey: SurveyAnswers = {
         ai_tool: resolvedAiTool,
         fun,
@@ -161,6 +193,7 @@ export default function PostGameModal({
     }
 
     setNicknameError(null)
+    setLeaderboardMetadataError(null)
     onConfirm(result)
   }
 
@@ -186,7 +219,11 @@ export default function PostGameModal({
         )}
 
         <h2 id={titleId} className={styles.title}>
-          {showNickname ? '给自己起个名字' : '聊聊这一局'}
+          {showNickname
+            ? '给自己起个名字'
+            : showLeaderboardMetadata
+              ? '记录你的 AI 搭档'
+              : '聊聊这一局'}
         </h2>
 
         <form className={styles.form} onSubmit={handleSubmit}>
@@ -222,17 +259,15 @@ export default function PostGameModal({
             </section>
           )}
 
-          {showNickname && showSurvey && <hr className={styles.divider} />}
+          {showNickname && (showLeaderboardMetadata || showSurvey) && (
+            <hr className={styles.divider} />
+          )}
 
-          {showSurvey && (
+          {showLeaderboardMetadata && (
             <section className={styles.section}>
-              {showNickname && (
-                <p className={styles.surveyIntro}>
-                  顺便聊聊这一局 —— 以下问卷选填，想跳过直接点「确认」即可。
-                </p>
-              )}
-
-              {/* Q1 — AI tool */}
+              <p id={leaderboardMetadataTipId} className={styles.tip}>
+                排行榜需要记录你这局使用的 AI 助手；具体模型选填。
+              </p>
               <fieldset className={styles.question}>
                 <legend id={q1Id} className={styles.questionLabel}>
                   你这局用的是哪个 AI 工具？
@@ -246,7 +281,10 @@ export default function PostGameModal({
                         aiTool === opt.value ? styles.optionSelected : ''
                       }`}
                       aria-pressed={aiTool === opt.value}
-                      onClick={() => setAiTool(opt.value)}
+                      onClick={() => {
+                        setAiTool(opt.value)
+                        if (leaderboardMetadataError) setLeaderboardMetadataError(null)
+                      }}
                     >
                       {opt.label}
                     </button>
@@ -257,13 +295,83 @@ export default function PostGameModal({
                     className={styles.input}
                     type="text"
                     value={aiToolOther}
-                    onChange={(e) => setAiToolOther(e.target.value)}
-                    maxLength={AI_TOOL_MAX_LENGTH}
+                    onChange={(e) => {
+                      setAiToolOther(e.target.value)
+                      if (leaderboardMetadataError) setLeaderboardMetadataError(null)
+                    }}
+                    maxLength={LEADERBOARD_AI_TOOL_MAX_LENGTH}
                     placeholder="请填写工具名称"
                     aria-label="其他 AI 工具名称"
                   />
                 )}
               </fieldset>
+              <label className={styles.label}>
+                <span className={styles.labelText}>具体模型（选填）</span>
+                <input
+                  className={styles.input}
+                  type="text"
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  maxLength={LEADERBOARD_AI_MODEL_MAX_LENGTH}
+                  placeholder="例如：Claude Sonnet 4.5"
+                />
+              </label>
+              <div className={styles.meta}>
+                <span className={styles.counter} aria-live="polite">
+                  {aiModel.trim().length} / {LEADERBOARD_AI_MODEL_MAX_LENGTH}
+                </span>
+                {leaderboardMetadataError && (
+                  <span className={styles.error} role="alert">
+                    {leaderboardMetadataError}
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
+
+          {showLeaderboardMetadata && showSurvey && <hr className={styles.divider} />}
+
+          {showSurvey && (
+            <section className={styles.section}>
+              {showNickname && (
+                <p className={styles.surveyIntro}>
+                  顺便聊聊这一局 —— 以下问卷选填，想跳过直接点「确认」即可。
+                </p>
+              )}
+
+              {!showLeaderboardMetadata && (
+                <fieldset className={styles.question}>
+                  <legend id={q1Id} className={styles.questionLabel}>
+                    你这局用的是哪个 AI 工具？
+                  </legend>
+                  <div className={styles.options}>
+                    {AI_TOOL_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`${styles.optionBtn} ${
+                          aiTool === opt.value ? styles.optionSelected : ''
+                        }`}
+                        aria-pressed={aiTool === opt.value}
+                        onClick={() => setAiTool(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {aiTool === 'other' && (
+                    <input
+                      className={styles.input}
+                      type="text"
+                      value={aiToolOther}
+                      onChange={(e) => setAiToolOther(e.target.value)}
+                      maxLength={LEADERBOARD_AI_TOOL_MAX_LENGTH}
+                      placeholder="请填写工具名称"
+                      aria-label="其他 AI 工具名称"
+                    />
+                  )}
+                </fieldset>
+              )}
 
               {/* Q2 — fun rating */}
               <fieldset className={styles.question}>

@@ -75,6 +75,7 @@ interface LeaderboardEntry {
   time_ms: number
   attempt_number: number
   ai_tool?: string
+  ai_model?: string
 }
 interface LeaderboardGetResponse {
   date: string

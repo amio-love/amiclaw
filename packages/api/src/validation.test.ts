@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateEvent, validateSubmission } from './validation'
+import { sanitizeNickname, validateEvent, validateSubmission } from './validation'
 import type { ScoreSubmission } from '../../../shared/leaderboard-types'
 
 // A valid UUID v4 — `validateEvent` checks the canonical 36-char shape.
@@ -57,6 +57,7 @@ function dailySubmission(offsetMs: number): ScoreSubmission {
     attempt_number: 1,
     module_times: moduleTimes,
     operations_hash: 'mvp-placeholder',
+    ai_tool: 'claude',
     device_id: VALID_DEVICE_ID,
   }
 }
@@ -112,5 +113,40 @@ describe('validateSubmission — module-sum tolerance', () => {
     const result = validateSubmission(dailySubmission(-2_001))
     expect(result.ok).toBe(false)
     expect(result.error).toBe('Module times do not match total time')
+  })
+})
+
+describe('validateSubmission — leaderboard AI metadata', () => {
+  it('requires ai_tool on new score submissions', () => {
+    const { ai_tool: _aiTool, ...submission } = dailySubmission(0)
+    const result = validateSubmission(submission as ScoreSubmission)
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('Invalid ai_tool')
+  })
+
+  it('rejects a blank ai_tool after sanitization', () => {
+    const result = validateSubmission({ ...dailySubmission(0), ai_tool: '  <b></b>  ' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('Invalid ai_tool')
+  })
+
+  it('accepts an omitted optional ai_model', () => {
+    expect(validateSubmission(dailySubmission(0))).toEqual({ ok: true })
+  })
+
+  it('accepts a blank optional ai_model so the write path can omit it', () => {
+    expect(validateSubmission({ ...dailySubmission(0), ai_model: '  <b></b>  ' })).toEqual({
+      ok: true,
+    })
+  })
+})
+
+describe('sanitizeNickname', () => {
+  it('preserves Chinese letters while stripping markup and emoji', () => {
+    expect(sanitizeNickname('<b>小明_42✨</b>')).toBe('小明_42')
+  })
+
+  it('falls back to Anonymous when no display-safe characters remain', () => {
+    expect(sanitizeNickname('✨🔥')).toBe('Anonymous')
   })
 })

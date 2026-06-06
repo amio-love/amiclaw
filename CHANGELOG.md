@@ -13,6 +13,13 @@ It's now a clean three-prong trident: three separate spikes on a crossbar with
 a handle running down. Describe what you see and your AI lands on the right
 symbol the first time.
 
+**Leaderboard rows now remember who you played with** — When you clear the
+daily challenge, the result screen now asks which AI assistant helped you and
+lets you add an optional model name. Your leaderboard row shows that AI context
+next to your time, so friends can compare Claude / ChatGPT / Gemini + model
+runs instead of just names. Chinese nicknames also survive the save path now,
+so names like 小明 stay visible instead of turning into Anonymous.
+
 **Your AI partner now calls the modules by the names you see** — The manual
 used to name the puzzles by old internal labels, so when you said "光弦" or
 "星符" your AI had never heard of them and stalled on your very first sentence.
