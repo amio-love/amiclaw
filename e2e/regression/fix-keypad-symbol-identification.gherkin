@@ -1,0 +1,110 @@
+# Regression guards for the fix-keypad-symbol-identification bundle
+# (task fix-keypad-symbol-identification, 2026-06-07).
+#
+# This file documents 4 regression scenarios over the shipped practice
+# manual's keypad.rule preamble. The executable assertions live in the
+# companion node script
+# `e2e/regression/fix-keypad-symbol-identification.assert.mjs`,
+# run via
+# `node e2e/regression/fix-keypad-symbol-identification.assert.mjs`.
+# The script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Bisect contract: on the pre-fix HEAD this script FAILS — the keypad preamble
+# still carries the absolute 「玩家不需要理解"位置"或"序号"」 phrasing and offers
+# NO grid-position fallback, so when the visible 4-symbol set holds a known
+# confusable pair (trident+psi / hourglass+delta, self-flagged in
+# shared/symbols.ts) the AI is locked to the symbol-NAME channel and "先点那个
+# 三叉戟" can land on the psi cell → mis-tap → (on daily) a strike toward
+# detonation. That is identification noise, not design difficulty. After the
+# fix the preamble keeps the symbol name as the DEFAULT channel but adds a grid
+# quadrant (左上/右上/左下/右下) FALLBACK, so this script PASSES.
+#
+# Why a thin node script instead of playwright-bdd step defs: every assertion
+# here is a pure read of YAML — no browser, no preview server, no DOM. The
+# Feature has no @playwright tag, so the playwright-bdd harness (configured in
+# playwright.config.ts with `tags: '@playwright'`) skips this file entirely —
+# only the .assert.mjs sibling is executable.
+
+Feature: keypad preamble adds a grid-position fallback for confusable symbols without losing the symbol-name default
+  As an AI partner relying on the bomb manual to talk a player through the keypad
+  I want the rule preamble to keep the symbol NAME as the default instruction
+  channel, but, when the visible set holds a known easily-confused pair or the
+  player cannot tell two similar shapes apart, to switch to the grid quadrant
+  (左上/右上/左下/右下) the player can see and report — issuing every tap by that
+  player-reported position
+  So that I stop mis-tapping when "先点那个三叉戟" is ambiguous between trident and
+  psi (or hourglass and delta), without touching the set→sequence lookup
+  difficulty and without inventing any screen detail the player never reported
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+
+  # bug: Bug A — the keypad preamble offered only the symbol-NAME channel. When
+  #   the visible 4-symbol set held a known confusable pair (trident+psi /
+  #   hourglass+delta), "先点那个三叉戟" could land on the psi cell → mis-tap,
+  #   and three mis-taps detonate the daily bomb. There was no positional
+  #   referent to fall back on.
+  # fix: practice.yaml keypad.rule preamble adds a grid-position FALLBACK — on a
+  #   confusable pair (or when the player cannot disambiguate two similar
+  #   shapes) the AI asks which quadrant (左上/右上/左下/右下) each symbol sits in
+  #   and issues every tap by position.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` keypad (h)/(i) clause is removed.
+  Scenario: keypad rule preamble offers a grid-position fallback for confusable symbols (Bug A)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the keypad.rule field
+    Then the field is a non-empty string
+    And it names all four grid quadrants (左上 / 右上 / 左下 / 右下)
+    And it names a confusable trigger (易混 / 误描述 / 辨不下 / 相似)
+    And it names both confusable pairs by symbol id (trident+psi / hourglass+delta)
+
+  # bug: Bug B — the fallback must NOT cannibalise the existing design. The
+  #   symbol NAME stays the default channel, the describe-the-shape learning
+  #   loop stays, and the set→unique-sequence lookup difficulty is unchanged;
+  #   position is only a fallback.
+  # fix: practice.yaml keypad.rule preamble marks the symbol name as the default
+  #   channel, keeps the shape-description loop and the 交集不超过 3 lookup
+  #   framing, and frames position as a 兜底 (fallback), not the primary
+  #   referent.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` keypad (h)/(i) clause is removed.
+  Scenario: keypad rule keeps the symbol-name default channel and the set→sequence lookup (Bug B)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the keypad.rule field
+    Then the field is a non-empty string
+    And it marks the symbol name as the default channel (默认 + 符号名)
+    And it keeps the shape-description channel (描述 + 形状/笔画/弧线)
+    And it keeps the set→sequence lookup framing (交集不超过 / 唯一一条 sequence)
+    And it frames position as a fallback only (兜底 + 不是默认主指代 / 才启用)
+
+  # bug: Bug C — the old absolute 「玩家不需要理解"位置"或"序号"」 directly fought
+  #   the position fallback: it kept the AI self-bound to the symbol-name channel
+  #   even when names were ambiguous. It must be stripped.
+  # fix: practice.yaml keypad.rule preamble no longer contains the
+  #   不需要理解位置/序号 absolute.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` keypad (h)/(i) clause is removed.
+  Scenario: keypad rule no longer forbids the player understanding position/sequence (Bug C)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the keypad.rule field
+    Then the field is a non-empty string
+    And it does NOT carry the stripped absolute 不需要理解位置/序号
+
+  # bug: Bug D — RED LINE (玩家可报性 / 前言不得描述画面). Position must read as a
+  #   stable layout fact the player can SEE and REPORT (like wire's top-to-bottom
+  #   order), used by the AI only as a referent — NOT a screen the AI imagines,
+  #   and NOT a dial-style invented mechanism (pointer / clock / unified target).
+  # fix: practice.yaml keypad.rule preamble keeps the "you cannot see the screen,
+  #   ask the player" discipline and frames the quadrant as a player-reported,
+  #   eyes-visible cell fact mirroring wire's legitimate positional referent.
+  # retire-when: docs/architecture/arch-component-manual-system.md
+  #   §Invariants `每模块规则前言不变量` 玩家可报性 RED LINE is removed.
+  Scenario: keypad position reads as a player-reported visible layout fact, not an imagined screen (Bug D)
+    Given the practice manual YAML at packages/manual/data/practice.yaml
+    When parsing the keypad.rule field
+    Then the field is a non-empty string
+    And it states the AI cannot see the screen (看不到屏幕 / 看不见屏幕 / 你看不到)
+    And it frames position as a player-reported visible layout fact (亲眼可见 / 亲口报 / 报给你)
+    And it anchors position to the player-visible cell (格子 / 象限 / 哪一格)

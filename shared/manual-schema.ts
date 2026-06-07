@@ -61,7 +61,7 @@ export interface ButtonAnswer {
 
 // --- Keypad module ---
 export interface KeypadConfig {
-  symbols: string[] // 4 symbol ids in the 2×2 grid (row-major: TL, TR, BL, BR)
+  symbols: string[] // 4 symbol ids, index → visual cell per KeypadModule STAR_MAP (TL, TR, BR, BL)
 }
 
 export interface KeypadAnswer {
