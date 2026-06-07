@@ -707,6 +707,16 @@ run; a later release adds a real AI partner, voice I/O, and the full
   rule-engine state for that indicator since same-named lights overwrote each
   other. Indicators are now sampled without replacement, so every indicator in
   a bomb is unique.
+- **Preview deployments can submit scores again** Score submission and
+  telemetry from a Cloudflare Pages preview build (served on
+  `*.amiclaw.pages.dev`) were blocked by the API's single-origin CORS, which
+  only ever allowed the production `claw.amio.fans` domain — so a preview page
+  calling the production API got a cross-origin rejection. The API now matches
+  the request origin against an allowlist (the production domain plus this
+  project's `*.amiclaw.pages.dev` preview subdomains) and echoes a matching
+  origin back, falling back to the canonical domain for anything else. A new
+  regression test guards the allowlist so the policy can't silently break
+  again. Players on `claw.amio.fans` are unaffected.
 
 <!-- Add every change that will land on main directly below this header. -->
 <!-- Entries below are maintained manually -->
