@@ -18,9 +18,7 @@ export default function FooterPitch({ onRegister }: FooterPitchProps) {
       <h2 className={styles.title}>
         找个人，找一只 AI，<span className={styles.accent}>一起玩。</span>
       </h2>
-      <p className={styles.subtitle}>
-        Amiclaw 一周一次新游戏 · 永久免费 · 不卖你的对话也不存档你的对话。
-      </p>
+      <p className={styles.subtitle}>永久免费，不存档也不出售你的对话。</p>
       <Button variant="primary" onClick={onRegister}>
         免注册，直接开始玩
       </Button>

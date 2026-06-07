@@ -6,7 +6,7 @@
 
 .section {
   margin: 0 0 72px;
-  padding: 60px 0 0;
+  padding: 24px 0 0;
 }
 
 .grid {
@@ -16,19 +16,19 @@
 }
 
 .card {
-  padding: 28px;
+  padding: 24px;
 }
 
 .number {
-  font: 400 56px/0.9 var(--font-display);
+  font: 400 36px/0.9 var(--font-display);
   font-style: italic;
   letter-spacing: -0.04em;
-  color: var(--amio-yellow);
+  color: var(--text-4);
 }
 
 .cardTitle {
-  margin: 14px 0 8px;
-  font: 500 18px var(--font-display);
+  margin: 12px 0 8px;
+  font: 500 17px var(--font-display);
   color: #fff;
 }
 
@@ -51,6 +51,6 @@
   }
 
   .number {
-    font-size: 44px;
+    font-size: 32px;
   }
 }

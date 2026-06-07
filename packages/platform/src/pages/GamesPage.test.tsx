@@ -4,10 +4,9 @@
  * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
  *   2. the daily-challenge CTA routes to the BombSquad landing (/bombsquad)
- *   3. the featured-BombSquad「开始一局」CTA routes to /bombsquad
- *   4. the featured-BombSquad「练习」CTA routes to /bombsquad
- *   5. the anonymous hero「开启旅程」CTA routes to /bombsquad
- *   6. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
+ *   3. the featured-BombSquad「游戏页 →」action routes to /bombsquad
+ *   4. the anonymous hero「开启旅程」CTA routes to /bombsquad
+ *   5. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
  *
  * Every BombSquad CTA on the homepage now routes to the BombSquad landing
  * page; the landing owns the daily/practice choice and the connect-AI
@@ -95,18 +94,10 @@ describe('GamesPage homepage', () => {
     expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
 
-  it('routes to the BombSquad landing from the featured「开始一局」CTA', () => {
+  it('routes to the BombSquad landing from the featured「游戏页 →」action', () => {
     renderHomepage('/')
 
-    fireEvent.click(screen.getByRole('button', { name: '开始一局' }))
-
-    expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
-  })
-
-  it('routes to the BombSquad landing from the featured「练习」CTA', () => {
-    renderHomepage('/')
-
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '游戏页 →' }))
 
     expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
@@ -138,9 +129,7 @@ describe('GamesPage homepage', () => {
     // FeaturedBombSquad shows the daily board's own empty-state copy, not rows.
     expect(screen.getByText('今日还没有成绩，来抢第一！')).toBeInTheDocument()
 
-    // None of the old fabricated stats / mock leaderboard rows render. (The
-    // community feed at the bottom is a separate parked domain and keeps its
-    // own mock names — out of scope here, so it is NOT asserted against.)
+    // None of the old fabricated stats / mock leaderboard rows render.
     expect(screen.queryByText(/1,287/)).not.toBeInTheDocument()
     expect(screen.queryByText(/本周在线/)).not.toBeInTheDocument()
     expect(screen.queryByText('林星海（你）')).not.toBeInTheDocument()
