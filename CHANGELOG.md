@@ -18,6 +18,13 @@ never been a login or a sign-up here — you just play — so that button now re
 button that said「注册 · 30 秒」now reads「免注册，直接开始玩」: no account, no
 form, you start playing right away.
 
+**Your AI no longer guesses a wire cut it can't pin down** — On one rare wire
+layout, the manual could point your AI at a wire color that wasn't on the
+board, leaving it to improvise — and a guess there could cost you a strike. The
+manual now only ever names a wire your AI can actually find, so it always has a
+definite cut to tell you. The puzzles and their answers are exactly the same;
+your AI just never gets cornered into a guess.
+
 **When two star-panel symbols look alike, your AI can point you by grid cell** —
 A few of the star-panel symbols are easy to mix up by name — the three-prong
 trident and the bowl-and-stem beside it, or the hourglass and the triangle. If

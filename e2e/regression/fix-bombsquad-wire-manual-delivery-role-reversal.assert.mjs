@@ -14,9 +14,20 @@
  * Exits 0 on full pass, non-zero on any failure with every failed
  * scenario named in stderr.
  *
- * Bisect contract: on the pre-fix HEAD this script FAILS — the wire
- * preamble carries none of the three hardened elements and AI_INSTRUCTIONS
- * has no `recover_after_failure` key. After the fix it PASSES.
+ * Bisect contract: on the original pre-fix HEAD this script FAILS — the wire
+ * preamble carries none of the three hardened elements and AI_INSTRUCTIONS has
+ * no `recover_after_failure` key. After the original fix it PASSES.
+ *
+ * Scenario B was later SUPERSEDED by fix-manual-color-filter-controlflow: that
+ * task removed the manual's sole match-then-fall-through control flow at the
+ * source (the offending yellow rule's condition gained `count_red: {gt: 0}`),
+ * making PR #114's worked all-yellow "skip" example dead. Scenario B no longer
+ * guards the skip example — it now guards the structural-supersede state:
+ * color-filter is framed as a structural guarantee (condition ensures the
+ * target color exists), arbitrary color substitution is still forbidden, and
+ * the dead skip example (绝不改成剪黄) is gone. Scenarios A / C / D are
+ * unchanged. The new structural invariant itself is guarded by
+ * e2e/regression/fix-manual-color-filter-controlflow.assert.mjs.
  *
  * Usage:
  *   node e2e/regression/fix-bombsquad-wire-manual-delivery-role-reversal.assert.mjs
@@ -97,41 +108,40 @@ function scenarioA() {
   }
 }
 
-// ---------- Scenario B: worked color-filter SKIP example ----------
+// ---------- Scenario B: color-filter structural-guarantee (post-supersede) ----------
 function scenarioB() {
-  const name = 'Bug B — wire rule preamble works the color-filter SKIP example (all-yellow)'
+  const name =
+    'Bug B — wire rule preamble frames color-filter as a structural guarantee (skip clause superseded)'
   const rule = loadWireRule()
   if (typeof rule !== 'string' || rule.length === 0) {
     record(name, `wire_routing.rule is missing or empty (got: ${JSON.stringify(rule)})`)
     return
   }
-  // The example must concretely reference both the yellow trigger and the
-  // absent red action color — the condition-color ≠ action-color case.
-  if (!/黄/.test(rule)) {
+  // fix-manual-color-filter-controlflow superseded the PR #114 worked all-yellow
+  // SKIP example with a STRUCTURAL fix: the offending yellow rule's condition
+  // gained `count_red: {gt: 0}`, so a color-targeted rule only matches when that
+  // color is present → its target is always resolvable → the manual's sole
+  // match-then-fall-through control flow is gone. The preamble must reflect the
+  // superseded state.
+  //
+  // (1) It must reframe color-filter as a structural guarantee.
+  if (!/condition 已保证|condition 必保证|已保证该色存在|保证该色至少/.test(rule)) {
     record(
       name,
-      'rule preamble color-filter example does not reference 黄 (the all-yellow trigger)'
+      'rule preamble does not reframe color-filter as a structural guarantee (condition 已保证该色存在)'
     )
   }
-  if (!/红/.test(rule)) {
+  // (2) It must still forbid arbitrary color substitution.
+  const hasAntiSubstitution = /绝不擅自换色|绝不擅自把要剪的颜色换成|不得擅自换色/.test(rule)
+  if (!hasAntiSubstitution) {
+    record(name, 'rule preamble does not forbid arbitrary color substitution (绝不擅自换色)')
+  }
+  // (3) The dead all-yellow skip example must be GONE — its presence means the
+  // skip control flow survived the structural supersede.
+  if (/绝不改成剪黄|改成剪黄/.test(rule)) {
     record(
       name,
-      'rule preamble color-filter example does not reference 红 (the absent action color)'
-    )
-  }
-  // The "rule does not apply, continue" skip semantics.
-  if (!/不适用/.test(rule)) {
-    record(name, 'rule preamble does not state the rule "不适用" when the action color is absent')
-  }
-  if (!/继续/.test(rule)) {
-    record(name, 'rule preamble does not tell the AI to 继续 (continue to the next rule) on a skip')
-  }
-  // The explicit anti-repair: never "fix" the action to an available color.
-  const hasAntiRepair = /绝不改成剪黄|不要改成剪黄|绝不改剪黄|不能改成剪黄/.test(rule)
-  if (!hasAntiRepair) {
-    record(
-      name,
-      'rule preamble does not forbid "repairing" the action to the available color (绝不改成剪黄)'
+      'rule preamble still carries the dead all-yellow skip example (改成剪黄) — the structural fix removed that fall-through'
     )
   }
 }

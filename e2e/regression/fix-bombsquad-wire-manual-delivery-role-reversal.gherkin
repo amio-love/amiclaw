@@ -40,8 +40,9 @@
 Feature: wire preamble + recover_after_failure stop the manual-reading AI from a wrong cut and a role reversal
   As an AI partner relying on the bomb manual to talk a player through wire_routing
   I want the rule preamble to force a strict top-down first-match-wins walk, to
-  work the color-filter SKIP case so I never "repair" an absent action color, and
-  to gate scene-info-dependent rules behind an explicit ask
+  frame color-filter as a structural guarantee so I never "repair" a cut color
+  (the match-then-fall-through case was removed at the source), and to gate
+  scene-info-dependent rules behind an explicit ask
   And I want a global failure-recovery discipline so that after a wrong cut I
   re-walk the rules myself and stay in role
   So that I stop producing a wrong cut on the all-yellow scene and stop
@@ -71,27 +72,26 @@ Feature: wire preamble + recover_after_failure stop the manual-reading AI from a
     And it forbids jumping ahead via 不要跳 / 绝不跳 / 别跳
     And the anti-jump pairs with the salient-feature object 显眼 / 最相关 / 最像 / 最突出
 
-  # bug: Bug B — wire rule preamble buries the color-filter SKIP semantics.
-  #   A rule whose condition keys on one color (color_at_last: yellow) but
-  #   whose action cuts a different color (position: last, color: red) does
-  #   NOT apply when no wire of the action color exists — but a reader
-  #   "repairs" the action to an available color and cuts the last yellow.
-  # fix: practice.yaml wire_routing.rule preamble works the all-yellow
-  #   example explicitly: the yellow trigger fires a rule that cuts the last
-  #   RED wire, no red wire exists → rule 不适用, 继续 to the next rule, and
-  #   绝不改成剪黄.
+  # bug: Bug B (SUPERSEDED by fix-manual-color-filter-controlflow) — the wire
+  #   preamble used to teach a worked all-yellow SKIP example: a rule keying on
+  #   color_at_last:yellow but cutting the last RED wire does NOT apply when no
+  #   red wire exists, so 继续 to the next rule and 绝不改成剪黄. That skip clause
+  #   is now DEAD: the offending yellow rule's condition gained `count_red:
+  #   {gt: 0}`, so it only matches when a red wire exists and its target is
+  #   always resolvable — the match-then-fall-through control flow is gone.
+  # fix: practice.yaml wire_routing.rule preamble reframes color-filter as a
+  #   STRUCTURAL guarantee (a color-targeted rule's condition ensures that color
+  #   is present → target always resolvable), still forbids arbitrary color
+  #   substitution (绝不擅自换色), and DROPS the dead skip example (no 改成剪黄).
   # retire-when: docs/architecture/arch-component-manual-system.md
-  #   §Invariants `每模块规则前言不变量` drops the color-filter-skip example
-  #   requirement.
-  Scenario: wire rule preamble works the color-filter SKIP example (Bug B)
+  #   §Invariants drops the color-filter structural-guarantee preamble element.
+  Scenario: wire rule preamble frames color-filter as a structural guarantee (Bug B, superseded)
     Given the practice manual YAML at packages/manual/data/practice.yaml
     When parsing the wire_routing.rule field
     Then the field is a non-empty string
-    And the color-filter example references the yellow trigger 黄
-    And the color-filter example references the absent action color 红
-    And it states the rule 不适用 when the action color is absent
-    And it tells the AI to 继续 to the next rule on a skip
-    And it forbids repairing the action to the available color via 绝不改成剪黄
+    And it reframes color-filter as a structural guarantee via condition 已保证该色存在
+    And it still forbids arbitrary color substitution via 绝不擅自换色
+    And the dead all-yellow skip example is gone (no 改成剪黄)
 
   # bug: Bug C — wire rule preamble has no scene-info ask-gate. Rules can
   #   depend on battery count / indicators (global scene info reported once
