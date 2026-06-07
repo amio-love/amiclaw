@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The small labels on the home page are easier to read** — The little tags
+around the landing page — the section eyebrows, the orbit-stat captions, the
+status and preview badges — used to sit at 10–11px, which left the Chinese ones
+cramped and hard to read, and on phones some of them shrank even further. They
+now all render a notch larger so the text is comfortable to read everywhere,
+including on mobile. Nothing moved or changed color; the labels are just bigger.
+
 **The 星盘 now shows how many right-arrow presses you've dialed in** — Each of the
 three dials used to leave you guessing whether you'd turned it the right amount,
 with only the shifting center symbol to go on — which isn't the answer. Every dial
