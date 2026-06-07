@@ -1,4 +1,5 @@
 import { Chip, SectionHeader } from '@amiclaw/ui'
+import { DISCORD_INVITE_URL } from '@/config/links'
 import { type GameStatus, type UpcomingGame, upcomingGames } from '@/mocks/upcoming-games'
 import styles from './UpcomingGames.module.css'
 
@@ -24,8 +25,10 @@ function StatusBadge({ status }: { status: GameStatus }) {
 }
 
 /* Inner tile body — shared by both the anchor-wrapped and plain forms so
-   the markup stays in sync. */
-function TileBody({ game }: { game: UpcomingGame }) {
+   the markup stays in sync. `discordCue` renders the「加入 Discord」click
+   affordance and is set only on the Game Lab tile's clickable (linked) form;
+   the non-clickable placeholder leaves it off so its markup is unchanged. */
+function TileBody({ game, discordCue = false }: { game: UpcomingGame; discordCue?: boolean }) {
   const isLab = game.artVariant === 'lab'
   /* echo / draw / yijing show the game's Chinese name; Game Lab shows a
      bespoke Latin-flavored label, matching the atlas.html prototype.
@@ -42,6 +45,7 @@ function TileBody({ game }: { game: UpcomingGame }) {
         <StatusBadge status={game.status} />
       </h5>
       <p className={styles.blurb}>{game.blurb}</p>
+      {discordCue && <span className={styles.discordCue}>加入 Discord →</span>}
     </>
   )
 }
@@ -52,6 +56,12 @@ function TileBody({ game }: { game: UpcomingGame }) {
 
    Round 5 (Yijing Oracle wiring): tiles with `href` + `status === 'preview'`
    render as `<a>` so users can click into the sibling-deployed prototype.
+
+   Game Lab tile: when DISCORD_INVITE_URL is configured (non-empty), it renders
+   as a clickable `<a>` into the Discord invite (new tab); while the constant is
+   the empty-string sentinel it stays a non-clickable placeholder — byte-for-byte
+   the same output as before, so the placeholder state is a zero-regression no-op.
+
    Other tiles stay non-clickable. */
 export default function UpcomingGames() {
   return (
@@ -64,6 +74,20 @@ export default function UpcomingGames() {
             return (
               <a key={game.id} href={game.href} className={`${styles.tile} ${styles.tilePreview}`}>
                 <TileBody game={game} />
+              </a>
+            )
+          }
+          const isDiscordLink = game.artVariant === 'lab' && DISCORD_INVITE_URL !== ''
+          if (isDiscordLink) {
+            return (
+              <a
+                key={game.id}
+                href={DISCORD_INVITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${styles.tile} ${styles.tilePreview}`}
+              >
+                <TileBody game={game} discordCue />
               </a>
             )
           }

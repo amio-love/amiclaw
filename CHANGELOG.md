@@ -5,6 +5,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Game Lab 区块准备好接上 Discord** — 落地页的 Game Lab 区块写着「在 Discord 写下你
+想和 AI 一起玩的小游戏」,现在这块卡片可以变成真正能点的 Discord 入口:填上邀请链接后,
+卡片就带上「加入 Discord」的提示、点一下在新标签页打开邀请。在链接配置好之前,卡片和原来
+一模一样、不可点,所以这次改动对你看到的页面没有任何影响。
+
 **The small labels on the home page are easier to read** — The little tags
 around the landing page — the section eyebrows, the orbit-stat captions, the
 status and preview badges, the daily-challenge countdown units, the featured
