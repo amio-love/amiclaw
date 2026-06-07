@@ -23,7 +23,7 @@ export const upcomingGames: UpcomingGame[] = [
   {
     id: 'yijing',
     name: '易经签卜',
-    blurb: '五屏占卜原型 · 念问 → 投币 → 起卦 → 解读。CSS-only 动画，体验版可试玩。',
+    blurb: '念问、投币、起卦、解读，体验版可试玩。',
     status: 'preview',
     artVariant: 'oracle',
     href: '/oracle/',
@@ -31,21 +31,21 @@ export const upcomingGames: UpcomingGame[] = [
   {
     id: 'echo',
     name: '星海回声',
-    blurb: '多人合奏 · 节拍呼应。和朋友＋AI 一起组一支临时乐队，60 秒一首。',
+    blurb: '多人合奏，和朋友加 AI 组一支临时乐队。',
     status: 'soon',
     artVariant: 'echo',
   },
   {
     id: 'draw',
     name: '共绘星图',
-    blurb: '协作绘画 · 你描述、AI 落笔。和陌生人接力，把一个想法画成壁纸。',
+    blurb: '你描述、AI 落笔，把一个想法画成壁纸。',
     status: 'soon',
     artVariant: 'draw',
   },
   {
     id: 'lab',
     name: 'Game Lab',
-    blurb: '社区提案，我们来做。在 Discord 里写下你想和 AI 一起玩的小游戏。',
+    blurb: '在 Discord 写下你想和 AI 一起玩的小游戏。',
     status: 'dev',
     artVariant: 'lab',
   },

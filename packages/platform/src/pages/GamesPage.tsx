@@ -4,7 +4,6 @@ import DailyChallenge from '@/components/home/DailyChallenge'
 import FeaturedBombSquad from '@/components/home/FeaturedBombSquad'
 import WhatIsAmiclaw from '@/components/home/WhatIsAmiclaw'
 import UpcomingGames from '@/components/home/UpcomingGames'
-import CommunityFeedCarousel from '@/components/home/CommunityFeedCarousel'
 import FooterPitch from '@/components/home/FooterPitch'
 import { useAuth } from '@/hooks/useAuth'
 import { useDailyBoard } from '@/hooks/useDailyBoard'
@@ -48,15 +47,9 @@ export default function GamesPage() {
       )}
 
       <DailyChallenge onChallenge={enterBombSquad} board={board} />
-      <FeaturedBombSquad
-        onStartDaily={enterBombSquad}
-        onStartPractice={enterBombSquad}
-        onOpenGamePage={enterBombSquad}
-        board={board}
-      />
+      <FeaturedBombSquad onOpenGamePage={enterBombSquad} board={board} />
       {!signedIn && <WhatIsAmiclaw />}
       <UpcomingGames />
-      <CommunityFeedCarousel />
       {!signedIn && <FooterPitch onRegister={enterBombSquad} />}
     </>
   )

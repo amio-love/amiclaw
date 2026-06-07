@@ -3,14 +3,14 @@ meta:
   type: daily
 modules:
   wire_routing:
-    rule: '光弦模块（玩家屏幕上叫光弦，就是一排彩色电线）面前有一排自上而下 4 到 5 根彩色电线（颜色可重复）。你看不到屏幕，所以让玩家从上到下把每根线的颜色依次报给你，再据此查表。在下方 rules 里按出现顺序找第一条 condition 与当前局面匹配的规则——first-match-wins，匹配到就停，绝不再尝试后续规则。condition 可能涉及 wire_count（电线数量）、color_at_last（最底端电线颜色）、count_red / count_blue / count_yellow / count_green / count_white / count_black 这类颜色计数、battery_count（电池数量,可用 { gt: N } / { lte: N } 这类比较）、indicator_FRK_lit 这类指示灯状态；空 condition: {} 是 catchall，恒为真，永远是最后一条兜底。target.position 是 0-indexed 自上而下编号：0 = 最上面那根，N-1 = 最底下那根（4 根线时 last = 3，5 根线时 last = 4）；关键字 first 与整数等价：first ≡ position 0；关键字 last 也与整数等价：last ≡ position length-1。如果 target 同时带 color 字段（例如 { position: ''last'', color: ''red'' }），含义是「按 position 方向（first 从顶部出发、last 从底部出发）找第一根该颜色的线」——color 是更强的过滤而不是位置覆盖；带 color 的规则其 condition 已保证该色在场上至少存在一根，所以一旦命中、沿 position 方向必定找得到那根目标色的线，color 目标恒可解。指示玩家时把 0-indexed 翻译成自然语言（position 0 = "从上数第 1 根"，last = "最底下那根"）——玩家不会读 YAML。【严格按序，绝不跳读】必须严格自上而下逐条走规则，命中的判据是「这一条 condition 的每一个键都成立」；绝不因为某个特征最显眼、看起来最相关（例如全是黄线就直奔那条带 yellow 的规则）就跳过它前面的规则——哪怕前面那条看起来不起眼，只要它先命中就用它、并立即停止。举个会出错的反例：4 根线、电池 4、底端黄线时，按序第一条命中的是 battery_count>2 那条（剪 position 2，即从上数第 3 根），绝不能跳到后面那条 color_at_last:yellow 的规则。【颜色过滤是更强的过滤——绝不擅自换色】当一条规则的 target 带 color 字段时，它要剪的是「沿 position 方向（first 从顶部、last 从底部出发）找到的第一根该颜色的线」，触发它的 condition 颜色和它要剪的 action 颜色可以不一样。这类带 color 的规则其 condition 已保证该色在场上至少存在一根（例如要剪红线的规则，其 condition 必含一个保证红线存在的判据），所以一旦命中，沿 position 方向总能找到那根目标色的线、color 目标恒可解。color 是更强的过滤而不是位置覆盖：先按 position 方向走、只在该方向上挑出该颜色的线。绝不擅自把要剪的颜色换成场上有的别的颜色——要剪红就剪红，绝不因为某色更显眼或更顺手就改剪它。【场景信息缺了就先问，别猜】有些规则依赖电池数量、指示灯这类全局场景信息（玩家开局只会念一次）。轮到这类规则、而你手上没有对应数值时，先问玩家「现在电池几个 / 某指示灯亮没亮」，拿到确切值再回答；绝不靠猜一个场景信息去硬套规则——猜错会直接引爆。【只取被点名的指示灯，其余忽略】只有被规则 condition 点名的指示灯（如 indicator_FRK_lit 里的 FRK）才与本模块相关；场景信息栏里其余指示灯玩家照念无妨，你按规则只取需要的那一个、其余一律忽略，绝不拿没被点名的指示灯去套规则。【被点名的指示灯本局若没有，按"不亮"处理】被规则 condition 点名的指示灯（如 indicator_FRK_lit 里的 FRK）若不在玩家开局念出的那串指示灯里，就是本局根本没有这颗灯；一律按"该灯未亮"处理——凡是要求它亮（indicator_FRK_lit: true）的 condition 直接判为不成立，按 first-match 继续往下走下一条规则，绝不卡在这条、也绝不反过来假设它亮。注意和「缺了就先问」的区别：只有玩家还没报过指示灯、你确实不知道某灯亮没亮时才追问；玩家已经把本局指示灯报全、那串里没有它，就是确定它不存在=不亮，无须再问。'
+    rule: '光弦模块（玩家屏幕上叫光弦，就是一排彩色电线）面前有一排自上而下 4 到 5 根彩色电线（颜色可重复）。你看不到屏幕，所以让玩家从上到下把每根线的颜色依次报给你，再据此查表。在下方 rules 里按出现顺序找第一条 condition 与当前局面匹配的规则——first-match-wins，匹配到就停，绝不再尝试后续规则。condition 可能涉及 wire_count（电线数量）、color_at_last（最底端电线颜色）、count_red / count_blue / count_yellow / count_green / count_white / count_black 这类颜色计数、battery_count（电池数量,可用 { gt: N } / { lte: N } 这类比较）、indicator_FRK_lit 这类指示灯状态；空 condition: {} 是 catchall，恒为真，永远是最后一条兜底。target.position 是 1-indexed 自上而下编号：1 = 最上面那根，length = 最底下那根；position N 字面就是「从上数第 N 根」，与你念给玩家的自然语言指令逐字同构，无需任何换算。关键字 first 与整数等价：first ≡ position 1；关键字 last 也与整数等价：last ≡ position length（4 根线时 last = position 4，5 根线时 last = position 5）。如果 target 同时带 color 字段（例如 { position: ''last'', color: ''red'' }），含义是「按 position 方向（first 从顶部出发、last 从底部出发）找第一根该颜色的线」——color 是更强的过滤而不是位置覆盖；带 color 的规则其 condition 已保证该色在场上至少存在一根，所以一旦命中、沿 position 方向必定找得到那根目标色的线，color 目标恒可解。【严格按序，绝不跳读】必须严格自上而下逐条走规则，命中的判据是「这一条 condition 的每一个键都成立」；绝不因为某个特征最显眼、看起来最相关（例如全是黄线就直奔那条带 yellow 的规则）就跳过它前面的规则——哪怕前面那条看起来不起眼，只要它先命中就用它、并立即停止。举个会出错的反例：4 根线、电池 4、底端黄线时，按序第一条命中的是 battery_count>2 那条（剪 position 3，即从上数第 3 根），绝不能跳到后面那条 color_at_last:yellow 的规则。【颜色过滤是更强的过滤——绝不擅自换色】当一条规则的 target 带 color 字段时，它要剪的是「沿 position 方向（first 从顶部、last 从底部出发）找到的第一根该颜色的线」，触发它的 condition 颜色和它要剪的 action 颜色可以不一样。这类带 color 的规则其 condition 已保证该色在场上至少存在一根（例如要剪红线的规则，其 condition 必含一个保证红线存在的判据），所以一旦命中，沿 position 方向总能找到那根目标色的线、color 目标恒可解。color 是更强的过滤而不是位置覆盖：先按 position 方向走、只在该方向上挑出该颜色的线。绝不擅自把要剪的颜色换成场上有的别的颜色——要剪红就剪红，绝不因为某色更显眼或更顺手就改剪它。【场景信息缺了就先问，别猜】有些规则依赖电池数量、指示灯这类全局场景信息（玩家开局只会念一次）。轮到这类规则、而你手上没有对应数值时，先问玩家「现在电池几个 / 某指示灯亮没亮」，拿到确切值再回答；绝不靠猜一个场景信息去硬套规则——猜错会直接引爆。【只取被点名的指示灯，其余忽略】只有被规则 condition 点名的指示灯（如 indicator_FRK_lit 里的 FRK）才与本模块相关；场景信息栏里其余指示灯玩家照念无妨，你按规则只取需要的那一个、其余一律忽略，绝不拿没被点名的指示灯去套规则。【被点名的指示灯本局若没有，按"不亮"处理】被规则 condition 点名的指示灯（如 indicator_FRK_lit 里的 FRK）若不在玩家开局念出的那串指示灯里，就是本局根本没有这颗灯；一律按"该灯未亮"处理——凡是要求它亮（indicator_FRK_lit: true）的 condition 直接判为不成立，按 first-match 继续往下走下一条规则，绝不卡在这条、也绝不反过来假设它亮。注意和「缺了就先问」的区别：只有玩家还没报过指示灯、你确实不知道某灯亮没亮时才追问；玩家已经把本局指示灯报全、那串里没有它，就是确定它不存在=不亮，无须再问。'
     rules:
       - condition:
           wire_count: 4
           color_at_last: white
         action: cut_wire
         target:
-          position: 1
+          position: 2
       - condition:
           wire_count: 4
           count_red:
@@ -46,7 +46,7 @@ modules:
             gt: 2
         action: cut_wire
         target:
-          position: 2
+          position: 3
       - condition:
           wire_count: 4
           color_at_last: blue
@@ -75,7 +75,7 @@ modules:
           indicator_FRK_lit: true
         action: cut_wire
         target:
-          position: 2
+          position: 3
       - condition:
           wire_count: 5
           color_at_last: blue
@@ -87,7 +87,7 @@ modules:
           color_at_last: red
         action: cut_wire
         target:
-          position: 3
+          position: 4
       - condition:
           wire_count: 5
           count_blue:
@@ -100,7 +100,7 @@ modules:
           wire_count: 5
         action: cut_wire
         target:
-          position: 2
+          position: 3
       - condition: {}
         action: cut_wire
         target:

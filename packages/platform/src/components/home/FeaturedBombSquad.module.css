@@ -166,17 +166,6 @@
   color: rgba(255, 255, 255, 0.45);
 }
 
-/* ----------  CTA row  ---------- */
-.ctaRow {
-  display: flex;
-  gap: 10px;
-  margin-top: auto;
-}
-
-.ctaPrimary {
-  flex: 1;
-}
-
 /* ----------  responsive: medium  ---------- */
 @media (max-width: 1080px) {
   .card {
@@ -214,12 +203,5 @@
 
   .side {
     padding: 24px;
-  }
-
-  /* atlas mobile .btn-primary,.btn-ghost flex:1 — both featured CTAs
-     split the row. .ctaPrimary already carries flex:1; this also covers
-     the ghost button. */
-  .ctaRow button {
-    flex: 1;
   }
 }

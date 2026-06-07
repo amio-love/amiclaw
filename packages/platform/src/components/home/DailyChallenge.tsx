@@ -29,10 +29,8 @@ export default function DailyChallenge({ onChallenge, board }: DailyChallengePro
       <div className={styles.card}>
         <div className={styles.left}>
           <EyebrowTag variant="daily">每日挑战 · DAILY DROP</EyebrowTag>
-          <h2 className={styles.title}>今日：四模块连拆 · 90 秒内通关</h2>
-          <p className={styles.desc}>
-            全球玩家挑战同一套谜题。AI 是你的耳朵和直觉 —— 用最少的时间和最少的失误冲上日榜。
-          </p>
+          <h2 className={styles.title}>今日：四模块连拆</h2>
+          <p className={styles.desc}>全球玩家同一套谜题，AI 做你的耳朵。用时越短，名次越高。</p>
           <div className={styles.foot}>
             <div className={styles.footItem}>
               今日上榜 <strong>{board.participantCount}</strong>
