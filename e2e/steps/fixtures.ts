@@ -202,22 +202,33 @@ export class World {
     await this.openConnect(mode)
   }
 
-  /** Connect step 1 — click the copy card and wait for its copied state. */
+  /**
+   * Connect step 1 — click the primary copy CTA and wait for its copied state.
+   * The copy action now lives on the most prominent element (the bottom
+   * 复制手册 CTA); the URL above is a passive preview, not a button.
+   */
   async copyManualLink(): Promise<void> {
-    await this.page.locator('button[class*="copyCard"]').first().click()
+    await this.page.getByRole('button', { name: '复制手册' }).click()
     await this.page.getByText('已复制到剪贴板').first().waitFor()
   }
 
   /**
-   * Connect steps 1→2→run. The controlled clock is paused, so the post-copy
-   * 700ms auto-advance to step 2 never fires — the step is advanced by an
-   * explicit 下一步 click instead. The single readiness confirm was removed
-   * (it now lives once on GamePage's 开始), so step 2 ends with a plain
-   * 进入游戏 navigation. Assumes the manual link is already copied.
+   * Connect steps 1→2→run. The primary CTA itself performs the copy, so step 1
+   * is already in its copied state. The redundant manual 下一步 control was
+   * removed — step 2 is now reached only via the post-copy 700ms auto-advance
+   * effect. The controlled clock is paused, so fire that timer explicitly with
+   * advance(700); that also pushes Date.now() to seedT+700, so re-pin the clock
+   * back to seedT with setSystemTime (which fires no timers and keeps the clock
+   * paused) before the run navigation — otherwise GamePage's getRunSeed reads a
+   * shifted Date.now() and generates a daily puzzle that no longer matches
+   * answers.json. The single readiness confirm was removed (it now lives once on
+   * GamePage's 开始), so step 2 ends with a plain 进入游戏 navigation. Assumes
+   * the manual link is already copied.
    */
   async finishConnectFlow(): Promise<void> {
-    await this.page.getByRole('button', { name: '下一步 →' }).click()
+    await this.advance(700)
     await this.page.getByText('第 2/2 步').first().waitFor()
+    await this.page.clock.setSystemTime(this.seedT)
     await this.page.getByRole('button', { name: '进入游戏 →' }).click()
     await this.page.waitForURL((url) => new URL(url).pathname === '/bombsquad/run', {
       timeout: 12_000,

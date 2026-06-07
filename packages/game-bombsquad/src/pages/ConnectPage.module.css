@@ -176,8 +176,12 @@
   flex-direction: column;
 }
 
-/* ----------  copy / voice-mode card  ---------- */
-.copyCard {
+/* ----------  manual-URL preview (passive)  ----------
+   A non-interactive preview of the manual link. The copy action lives on the
+   bottom primary CTA, so this card has no pointer, no hover, and no focus
+   ring — it only shows the URL (trust requirement) and turns green once the
+   CTA has copied it. */
+.urlPreview {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -191,23 +195,11 @@
   font-family: var(--font-body);
   color: #fff;
   text-align: left;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.copyCard:hover {
-  background: var(--glass-strong);
-  border-color: rgba(255, 229, 62, 0.3);
-}
-
-.copyCard:focus-visible {
-  outline: 2px solid var(--y);
-  outline-offset: 2px;
-}
-
 /* done — the card turns green the moment the link is copied. */
-.copyCardDone,
-.copyCardDone:hover {
+.urlPreviewDone {
   background: rgba(20, 30, 22, 0.6);
   border-color: rgba(75, 210, 102, 0.4);
 }
@@ -224,7 +216,7 @@
   color: var(--y);
 }
 
-.copyCardDone .copyCardLabel {
+.urlPreviewDone .copyCardLabel {
   color: var(--green);
 }
 
@@ -247,14 +239,14 @@
   color: var(--y);
 }
 
-.copyCardDone .copyCardIcon {
+.urlPreviewDone .copyCardIcon {
   background: rgba(75, 210, 102, 0.15);
   color: var(--green);
 }
 
 /* ----------  step-2 voice-mode reminder (passive)  ----------
-   A non-interactive instruction, visually distinct from the actionable
-   copyCard: flat fill, dashed hairline, muted (not yellow) icon, no hover
+   A non-interactive instruction, visually distinct from the step-1 copy
+   CTA: flat fill, dashed hairline, muted (not yellow) icon, no hover
    and no pointer. The player performs "切到语音模式" on their own AI; this
    only reminds — it must not look tappable. */
 .voiceStep {
@@ -428,7 +420,7 @@
     font-size: 28px;
   }
 
-  .copyCard {
+  .urlPreview {
     padding: 22px 26px;
   }
 

@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The big button on the connect screen now actually copies the manual** — On the
+first step of handing the manual to your AI, the largest, brightest button at the
+bottom used to do nothing until you found a smaller card above it — so a first tap
+felt like the screen had frozen. That button is now the real action: tap「复制手册」,
+it copies the link, turns green, and moves you straight to the next step. The link
+still shows above it so you can see exactly what gets sent.
+
 **The dark wire is finally readable** — The darkest of the six wires used to all
 but vanish into the panel, so "cut the black one" turned into a guessing game.
 Every wire now sits on a thin light casing that lifts it off the background, so
