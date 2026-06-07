@@ -69,6 +69,47 @@ describe('DialModule', () => {
     vi.useRealTimers()
   })
 
+  it('step reading starts at 0 and tracks right (+1) / left (-1) like the position', () => {
+    render(
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
+    )
+    const reading = screen.getByTestId('dial-0-steps')
+    // Reading is 0-indexed: it equals the number of right presses from the start.
+    expect(reading).toHaveTextContent('0')
+    fireEvent.click(screen.getByTestId('dial-0-right'))
+    expect(reading).toHaveTextContent('1')
+    fireEvent.click(screen.getByTestId('dial-0-right'))
+    expect(reading).toHaveTextContent('2')
+    fireEvent.click(screen.getByTestId('dial-0-left'))
+    expect(reading).toHaveTextContent('1')
+    // Left past the start wraps with the position (mod 6): 0 -> 5.
+    fireEvent.click(screen.getByTestId('dial-0-left'))
+    fireEvent.click(screen.getByTestId('dial-0-left'))
+    expect(reading).toHaveTextContent('5')
+  })
+
+  it('each dial has its own independent step reading', () => {
+    render(
+      <DialModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
+    )
+    fireEvent.click(screen.getByTestId('dial-1-right'))
+    expect(screen.getByTestId('dial-0-steps')).toHaveTextContent('0')
+    expect(screen.getByTestId('dial-1-steps')).toHaveTextContent('1')
+    expect(screen.getByTestId('dial-2-steps')).toHaveTextContent('0')
+  })
+
   it('Confirm resets positions after error', () => {
     vi.useFakeTimers()
     const onComplete = vi.fn()

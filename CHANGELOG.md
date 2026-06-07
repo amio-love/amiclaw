@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The 星盘 now shows how many right-arrow presses you've dialed in** — Each of the
+three dials used to leave you guessing whether you'd turned it the right amount,
+with only the shifting center symbol to go on — which isn't the answer. Every dial
+now carries a live「右拨」counter, and a line above the dials reminds you it's the
+number of right-arrow presses that matters, not the symbol in the middle. So when your
+AI says「按右箭头 3 次」, you just turn until the counter reads 3. The left and
+right buttons also swapped their old swirl icons for plain left / right arrows, so
+there's no doubt which way each one turns. The puzzle and its answers are exactly
+the same.
+
 **There's now a real privacy policy and terms page** — The 隐私 and 条款 links
 in the footer used to be dead text. They now open proper pages that spell out
 exactly what we collect (your nickname and chosen AI tool go on the public

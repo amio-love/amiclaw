@@ -40,6 +40,16 @@
   }
 }
 
+/* Static reminder: the score is right-rotation steps, not the center symbol. */
+.hint {
+  margin: 0;
+  max-width: 320px;
+  text-align: center;
+  font: 400 13px var(--font-body);
+  line-height: 1.4;
+  color: var(--soft);
+}
+
 .dials {
   display: flex;
   flex-wrap: wrap;
@@ -165,6 +175,32 @@
 .symbolFallback {
   font: 500 12px var(--amio-font-mono);
   color: var(--soft);
+}
+
+/* ----------  right-rotation step reading  ---------- */
+.steps {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline);
+  background: rgba(255, 229, 62, 0.05);
+}
+
+.stepsLabel {
+  font: 400 11px var(--font-body);
+  color: var(--soft);
+}
+
+.stepsValue {
+  font: 600 18px var(--amio-font-mono);
+  color: var(--y);
+  font-variant-numeric: tabular-nums;
+}
+
+.wrapper.success .stepsValue {
+  color: var(--green);
 }
 
 /* ----------  rotate knobs  ---------- */

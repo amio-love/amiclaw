@@ -58,6 +58,7 @@ export default function DialModule({
     <div
       className={`${styles.wrapper} ${flashState === 'error' ? styles.error : ''} ${flashState === 'success' ? styles.success : ''}`}
     >
+      <p className={styles.hint}>数的是右拨的格数,不是正中符号</p>
       <div className={styles.dials}>
         {config.dials.map((dial, dialIndex) => {
           const position = positions[dialIndex]
@@ -102,6 +103,10 @@ export default function DialModule({
                   )}
                 </div>
               </div>
+              <div className={styles.steps} data-testid={`dial-${dialIndex}-steps`}>
+                <span className={styles.stepsLabel}>右拨</span>
+                <span className={styles.stepsValue}>{position}</span>
+              </div>
               <div className={styles.knobs}>
                 <button
                   type="button"
@@ -120,8 +125,7 @@ export default function DialModule({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M15 5a8 8 0 1 0 8 9" />
-                    <path d="M23 8v6h-6" />
+                    <path d="M15 5l-7 7 7 7" />
                   </svg>
                 </button>
                 <button
@@ -141,8 +145,7 @@ export default function DialModule({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M9 5a8 8 0 1 1 -8 9" />
-                    <path d="M1 8v6h6" />
+                    <path d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
               </div>
