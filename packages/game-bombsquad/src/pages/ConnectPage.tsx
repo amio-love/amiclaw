@@ -149,21 +149,21 @@ export default function ConnectPage() {
             </div>
           </div>
 
-          {/* Step 1 — copy the manual link. */}
+          {/* Step 1 — copy the manual link. The copy action lives on the
+              bottom primary CTA (the most prominent element); this card is a
+              passive read-only preview of the URL so the link stays visible
+              and trustworthy. It is deliberately NOT a button — the only copy
+              control on this step is the CTA below. */}
           {step === 1 && (
             <div className={styles.action}>
-              <button
-                type="button"
-                className={`${styles.copyCard} ${copied ? styles.copyCardDone : ''}`}
-                onClick={handleCopy}
-              >
+              <div className={`${styles.urlPreview} ${copied ? styles.urlPreviewDone : ''}`}>
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>
                     {copied ? '已复制到剪贴板' : '手册链接'}
                   </div>
                   <div className={styles.copyCardUrl}>{manualUrl}</div>
                 </div>
-                <div className={styles.copyCardIcon}>
+                <div className={styles.copyCardIcon} aria-hidden="true">
                   {copied ? (
                     <svg
                       viewBox="0 0 24 24"
@@ -191,7 +191,7 @@ export default function ConnectPage() {
                     </svg>
                   )}
                 </div>
-              </button>
+              </div>
 
               <p className={styles.hint}>粘贴到你常用的 AI，让它读完手册后说「好了」。</p>
               {/* /compatibility discovery link — re-homed here from the
@@ -235,8 +235,17 @@ export default function ConnectPage() {
 
           <div className={styles.cta}>
             {step === 1 ? (
-              <Button variant="primary" full disabled={!copied} onClick={() => setStep(2)}>
-                {copied ? '下一步 →' : '先复制手册'}
+              /* The most prominent element IS the copy action: tap copies the
+                 manual URL, flips to the green confirmed state, and the 0.7s
+                 effect above auto-advances to step 2. No disabled / dead
+                 control on this step. */
+              <Button
+                variant="primary"
+                full
+                accent={copied ? 'green' : 'yellow'}
+                onClick={handleCopy}
+              >
+                {copied ? '已复制 ✓' : '复制手册'}
               </Button>
             ) : (
               <Button variant="primary" full onClick={confirmStart}>

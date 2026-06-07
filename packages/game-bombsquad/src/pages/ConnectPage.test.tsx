@@ -3,13 +3,16 @@
  *
  * Covers the connect-AI flow at /bombsquad/connect — the Atlas redesign's
  * 2-step handoff (design_handoff_bombsquad README §6.2):
- *   1. step 1 renders the copy card with the manual URL.
- *   2. copying the manual link shows the copied feedback and auto-advances
- *      to step 2 after ~0.7s; the clipboard payload is the manual URL.
- *   3. the 2-step state machine reaches the voice-mode step and hands off.
- *   4. daily mode hands off to the run carrying the manual URL as ?url=.
- *   5. practice mode hands off without a ?url= param.
- *   6. step 1 surfaces the /bombsquad/compatibility discovery link
+ *   1. step 1 renders the URL preview with the manual URL.
+ *   2. the most prominent element (the bottom primary CTA「复制手册」) IS the
+ *      copy action: tapping it copies the manual link, shows the copied
+ *      feedback, and auto-advances to step 2 after ~0.7s; the clipboard
+ *      payload is the manual URL.
+ *   3. step 1 has no disabled / dead control — the affordance-inversion guard.
+ *   4. the 2-step state machine reaches the voice-mode step and hands off.
+ *   5. daily mode hands off to the run carrying the manual URL as ?url=.
+ *   6. practice mode hands off without a ?url= param.
+ *   7. step 1 surfaces the /bombsquad/compatibility discovery link
  *      (re-homed from the retired PromptModal).
  *
  * The readiness gate now lives once on GamePage's "开始" button, so this flow
@@ -61,12 +64,12 @@ function renderConnect(mode: 'daily' | 'practice') {
   )
 }
 
-/* Drive the flow from step 1 to step 2 by copying the handoff message and
+/* Drive the flow from step 1 to step 2 by tapping the primary copy CTA and
    waiting for the ~0.7s auto-advance to settle. Waiting for step 2 to actually
    render means the auto-advance timer has already fired, so it can never
    race a later manual step change. */
 async function copyAndReachStep2() {
-  fireEvent.click(screen.getByRole('button', { name: /手册链接/ }))
+  fireEvent.click(screen.getByRole('button', { name: '复制手册' }))
   await waitFor(() => {
     expect(screen.getByText('切到语音模式')).toBeInTheDocument()
   })
@@ -78,14 +81,34 @@ describe('ConnectPage', () => {
     vi.mocked(copyToClipboard).mockResolvedValue(true)
   })
 
-  it('renders step 1 with the copy card and manual URL', () => {
+  it('renders step 1 with the URL preview and manual URL', () => {
     renderConnect('daily')
 
     expect(screen.getByText('第 1/2 步')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: /发给 AI/ })).toBeInTheDocument()
-    // The copy card surfaces the manual link only — no opening prompt.
+    // The preview surfaces the manual link only — no opening prompt.
     expect(screen.getByText('手册链接')).toBeInTheDocument()
     expect(screen.getByText(DAILY_URL)).toBeInTheDocument()
+  })
+
+  it('makes the most prominent CTA the copy action with no dead control on step 1', () => {
+    renderConnect('daily')
+
+    // The affordance-inversion guard: the bottom primary CTA is the real copy
+    // action ("复制手册"), and step 1 has no disabled / dead control — the old
+    // "biggest button does nothing until you find the smaller card" trap.
+    const copyCta = screen.getByRole('button', { name: '复制手册' })
+    expect(copyCta).toBeInTheDocument()
+    expect(copyCta).not.toBeDisabled()
+
+    // No button on step 1 is disabled (the back-arrow icon button is enabled
+    // too, so the assertion covers every button rendered here).
+    for (const btn of screen.getAllByRole('button')) {
+      expect(btn).not.toBeDisabled()
+    }
+
+    // The URL preview is no longer a button — the only copy control is the CTA.
+    expect(screen.queryByRole('button', { name: /手册链接/ })).not.toBeInTheDocument()
   })
 
   it('surfaces the /bombsquad/compatibility discovery link on step 1', () => {
@@ -99,15 +122,17 @@ describe('ConnectPage', () => {
     expect(compatLink).toHaveAttribute('href', '/bombsquad/compatibility')
   })
 
-  it('copies the manual link and auto-advances to step 2 after ~0.7s', async () => {
+  it('copies the manual link from the primary CTA and auto-advances to step 2 after ~0.7s', async () => {
     renderConnect('practice')
 
-    fireEvent.click(screen.getByRole('button', { name: /手册链接/ }))
+    fireEvent.click(screen.getByRole('button', { name: '复制手册' }))
 
-    // Copy action — the card flips to its copied state.
+    // Copy action — the CTA flips to its copied state and the preview turns
+    // green ("已复制到剪贴板").
     await waitFor(() => {
-      expect(screen.getByText('已复制到剪贴板')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '已复制 ✓' })).toBeInTheDocument()
     })
+    expect(screen.getByText('已复制到剪贴板')).toBeInTheDocument()
     expect(copyToClipboard).toHaveBeenCalledTimes(1)
     // The clipboard payload is the manual URL alone.
     expect(copyToClipboard).toHaveBeenCalledWith(PRACTICE_URL)
