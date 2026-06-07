@@ -7,10 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 **The small labels on the home page are easier to read** — The little tags
 around the landing page — the section eyebrows, the orbit-stat captions, the
-status and preview badges — used to sit at 10–11px, which left the Chinese ones
-cramped and hard to read, and on phones some of them shrank even further. They
-now all render a notch larger so the text is comfortable to read everywhere,
-including on mobile. Nothing moved or changed color; the labels are just bigger.
+status and preview badges, the daily-challenge countdown units, the featured
+leaderboard's column headers, and the returning-player welcome line — used to
+sit at 10–11px, which left the Chinese ones cramped and hard to read, and on
+phones some of them shrank even further. They now all render a notch larger so
+the text is comfortable to read everywhere, including on mobile. Nothing moved
+or changed color; the labels are just bigger.
 
 **The homepage is calmer and easier to read** — The fabricated community feed
 at the bottom is gone — those posts were made up, so there was nothing real to
