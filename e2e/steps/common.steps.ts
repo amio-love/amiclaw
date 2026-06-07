@@ -48,8 +48,8 @@ export async function tapByLabel(page: Page, raw: string): Promise<void> {
 
   if (await clickFirstPresent()) return
 
-  // Slow path: the control may render a beat late (e.g. the GamePage READY
-  // "开始" button only paints after the LOADING→READY transition), so the
+  // Slow path: the control may render a beat late (e.g. the ConnectPage
+  // "进入游戏" CTA only paints after the copy → step-2 auto-advance), so the
   // instantaneous count-check above can miss it. Wait — bounded — for any
   // candidate to become visible, then re-run the selection.
   let combined = candidates[0]

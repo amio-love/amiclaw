@@ -50,8 +50,6 @@ Feature: BombSquad daily challenge and practice mode
     Then the URL path is /bombsquad/run
     And the query string carries "mode=daily"
     And the immersive game flow renders without the platform shell
-    And I see the prompt "准备好了吗？"
-    When I tap "开始"
     Then the timer starts at 00:00 and counts up
     And the SceneInfoBar shows the "暗号：" and "电池：" fields
     And the module progress bar shows 4 segments
@@ -75,7 +73,6 @@ Feature: BombSquad daily challenge and practice mode
     When I complete the connect-AI flow
     Then the URL path is /bombsquad/run
     And the query string carries "mode=practice"
-    When I tap "开始"
     Then the timer starts at 00:00 and counts up
     And the SceneInfoBar shows the "暗号：" field with a non-empty Chinese phrase
     And the "暗号：" value is one of the entries from the curated tongue-twister pool

@@ -221,8 +221,8 @@ export class World {
    * back to seedT with setSystemTime (which fires no timers and keeps the clock
    * paused) before the run navigation — otherwise GamePage's getRunSeed reads a
    * shifted Date.now() and generates a daily puzzle that no longer matches
-   * answers.json. The single readiness confirm was removed (it now lives once on
-   * GamePage's 开始), so step 2 ends with a plain 进入游戏 navigation. Assumes
+   * answers.json. Step 2 ends with a plain 进入游戏 navigation; the run then
+   * auto-starts on the GamePage side (no separate 开始 gate any more). Assumes
    * the manual link is already copied.
    */
   async finishConnectFlow(): Promise<void> {
@@ -241,21 +241,26 @@ export class World {
     await this.finishConnectFlow()
   }
 
-  /** READY -> PLAYING. The 开始 button waits out the route-mocked manual load. */
-  async pressStart(): Promise<void> {
-    await this.page.getByRole('button', { name: '开始', exact: true }).click()
+  /**
+   * Wait out the route-mocked manual load until the run auto-starts. There is
+   * no 开始 gate any more: GamePage dispatches START_GAME the instant the manual
+   * loads (READY), so PLAYING is reached on its own. The running stopwatch
+   * (role=timer) is the observable proof the run entered PLAYING.
+   */
+  async waitForRunStarted(): Promise<void> {
+    await this.page.getByRole('timer').waitFor({ state: 'visible', timeout: 12_000 })
   }
 
   async startDailyRun(): Promise<void> {
     await this.enterConnect('daily')
     await this.runConnectFlow()
-    await this.pressStart()
+    await this.waitForRunStarted()
   }
 
   async startPracticeRun(): Promise<void> {
     await this.enterConnect('practice')
     await this.runConnectFlow()
-    await this.pressStart()
+    await this.waitForRunStarted()
   }
 
   // --- Module solving --------------------------------------------------------

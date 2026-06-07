@@ -2,9 +2,15 @@
  * Lazy, shared AudioContext with iOS unlock and a decoded-buffer cache.
  *
  * Why lazy: browsers (Safari especially) refuse to create / resume an
- * AudioContext outside a user gesture. We create it on the first call to
- * `getAudioContext()` — which itself is only invoked from inside a click /
- * pointer handler — and resume it once.
+ * AudioContext outside a user gesture. The PRIMARY unlock therefore happens
+ * inside a real user gesture — the ConnectPage 进入游戏 tap calls
+ * `getAudioContext()` before navigating to the run, creating + resuming the
+ * context while a gesture is in scope. Because the call is idempotent (it
+ * returns the existing context and only re-resumes if suspended), later
+ * fallback calls are safe even when they run OUTSIDE a gesture — e.g. the
+ * GamePage START_GAME effect calls it again at game start as a belt-and-braces
+ * fallback. On a browser that already unlocked during the gesture that
+ * fallback is a no-op; on one that did not, the resume is retried.
  *
  * Why a buffer cache: each AudioBufferSourceNode is single-use, but the
  * decoded AudioBuffer is reusable. We decode each of the 4 samples once,

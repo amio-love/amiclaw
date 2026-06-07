@@ -4,14 +4,17 @@
  * daily manual loader (so the daily run resolves a manual without a network).
  *
  * Covers two runs:
- *   1. practice → START → 2 module completions → result page (拆弹成功)
- *   2. daily    → START → 4 module completions → result page (拆弹成功)
+ *   1. practice → auto-start → 2 module completions → result page (拆弹成功)
+ *   2. daily    → auto-start → 4 module completions → result page (拆弹成功)
  *
- * Practice runs a reduced 2-module sequence (wire + keypad); daily runs the
- * full 4 (wire + dial + button + keypad). Each module has a unique testid so
- * the loop waits for the correct module to be mounted before clicking — this
- * prevents accidentally clicking the previous module's button while the
- * MODULE_COMPLETE overlay is still visible (800 ms auto-advance).
+ * The run auto-starts: once the manual loads (READY), GamePage dispatches
+ * START_GAME from an effect, so PLAYING is reached with no "准备好了吗？"/开始
+ * gate. The first module mounting is the observable proof the run entered
+ * PLAYING. Practice runs a reduced 2-module sequence (wire + keypad); daily
+ * runs the full 4 (wire + dial + button + keypad). Each module has a unique
+ * testid so the loop waits for the correct module to be mounted before
+ * clicking — this prevents accidentally clicking the previous module's button
+ * while the MODULE_COMPLETE overlay is still visible (800 ms auto-advance).
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -100,11 +103,12 @@ describe('full game flow', () => {
       </MemoryRouter>
     )
 
-    // Practice manual is inlined via ?raw — wait for the standard ready
-    // prompt to render, then start the run. Both modes show the same
-    // "ready?" screen; the game page never onboards the player.
-    await waitFor(() => expect(screen.getByText('准备好了吗？')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /^开始$/ }))
+    // Practice manual is inlined via ?raw — the run auto-starts the moment it
+    // loads, so the first module mounts with no 开始 gate. Waiting for it is
+    // proof the run reached PLAYING on its own.
+    await waitFor(() => expect(screen.getByTestId('mock-wire-complete')).toBeInTheDocument(), {
+      timeout: 3000,
+    })
 
     // Practice runs only the reduced 2-module sequence.
     await completeModules(PRACTICE_MODULE_TESTIDS)
@@ -124,9 +128,11 @@ describe('full game flow', () => {
       </MemoryRouter>
     )
 
-    // The terse "ready?" prompt appears once the mocked manual resolves.
-    await waitFor(() => expect(screen.getByText('准备好了吗？')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /^开始$/ }))
+    // The run auto-starts once the mocked manual resolves — the first module
+    // mounts with no 开始 gate, which is proof the run reached PLAYING on its own.
+    await waitFor(() => expect(screen.getByTestId('mock-wire-complete')).toBeInTheDocument(), {
+      timeout: 3000,
+    })
 
     // Daily runs the full 4-module sequence.
     await completeModules(DAILY_MODULE_TESTIDS)
