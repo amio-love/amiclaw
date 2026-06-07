@@ -1,0 +1,60 @@
+# Regression guard for the keypad symbol-glyph ↔ manual-description mismatch fix
+# (task fix-bombsquad-keypad-symbol-glyph-manual-mismatch, 2026-06-05).
+#
+# Regression scenarios trace to a fixed bug, not flow-inventory flows — they
+# carry per-scenario bug / fix / retire-when labels instead of a flow-source
+# comment. The coverage audit excludes regression/ from the journey bijection
+# check.
+#
+# Why no @playwright tag: these assertions are a pure read of shared/symbols.ts
+# (description + path) — no browser, no preview server, no DOM. The
+# playwright-bdd harness (playwright.config.ts, tags: '@playwright') therefore
+# skips this file entirely; the executable guard is the .assert.mjs sibling,
+# run via `pnpm test:regression`. This Gherkin documents the scenarios; the
+# .assert.mjs enforces them.
+
+Feature: Keypad symbol glyph truthfully matches its manual description
+  As an AI partner who can only read the bomb manual
+  I want every keypad-pool symbol's description to truthfully name the shape its
+    SVG path actually draws, and the psi/trident Ψ-family pair to carry mutual
+    disambiguation anchors
+  So that an honest player description maps to exactly one symbol id without
+    fragile reverse-inference, and the keypad stays solvable
+
+  Background:
+    Given shared/symbols.ts is the SSOT for symbol path + description
+
+  # bug: keypad symbol identifiability floor BLOCKER — the trident glyph's SVG
+  #   path drew an incoherent hybrid (a central pole + two downward ∩ Bézier
+  #   hooks) while its description claimed a "5 根并排竖刺 / 展开折扇 / 三叉戟"
+  #   with connecting top arcs. The description was fiction relative to the path,
+  #   so a player honestly describing the screen could not be mapped to the
+  #   trident id; combined with psi (also a central-vertical Ψ-family shape) the
+  #   solver's exact-id match had no honest input and the keypad deadlocked when
+  #   no unique-column fallback existed.
+  # fix: redraw trident as a real 3-prong trident (three separate straight
+  #   prongs + a horizontal crossbar + a central shaft, all straight lines, no
+  #   Bézier curve) and rewrite its description to truthfully name that shape;
+  #   add explicit psi-vs-trident disambiguation anchors in BOTH descriptions
+  #   (trident = 三股分离的直尖齿 connected by a 横梁; psi = 单竖线穿过 U 形碗).
+  # retire-when: shared/symbols.ts trident/psi descriptions are reworked AND
+  #   replacement coverage of the description↔path fidelity + Ψ-family
+  #   disambiguation invariant is provided (e.g. a data-validation.test.ts
+  #   assertion), reviewed and confirmed.
+  Scenario: The trident description truthfully names a real 3-prong trident
+    Then the trident description names three separated prongs and a crossbar/shaft
+    And the trident description carries no "5 根" / "折扇" fiction from the old glyph
+    And the trident path is drawn with straight lines only (no Bézier ∩ hooks)
+
+  # bug: the psi/trident pair is intrinsically a Ψ-family central-vertical
+  #   cluster; without an explicit per-symbol discriminator anchor the AI partner
+  #   cannot tell an honest "central vertical with flanks" description apart, so
+  #   the cluster forced reverse-inference.
+  # fix: both psi and trident descriptions now carry a mutual disambiguation
+  #   anchor that contrasts the U-bowl (psi) against the separated straight
+  #   prongs + crossbar (trident).
+  # retire-when: same as above — both descriptions reworked with replacement
+  #   coverage of the mutual-anchor invariant.
+  Scenario: psi and trident each carry a mutual disambiguation anchor
+    Then the psi description references a U-bowl and names trident as the contrast
+    And the trident description references separated prongs and names psi as the contrast

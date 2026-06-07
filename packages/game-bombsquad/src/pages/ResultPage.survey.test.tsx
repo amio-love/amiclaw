@@ -47,6 +47,25 @@ vi.mock('@/utils/nickname', () => ({
     typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 20,
 }))
 
+vi.mock('@/utils/leaderboard-player-metadata', () => ({
+  LEADERBOARD_AI_MODEL_MAX_LENGTH: 80,
+  LEADERBOARD_AI_TOOL_MAX_LENGTH: 40,
+  getStoredLeaderboardPlayerMetadata: () => null,
+  isValidLeaderboardAiTool: (value: unknown): boolean =>
+    typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 40,
+  normalizeLeaderboardAiModel: (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed.slice(0, 80) : undefined
+  },
+  setStoredLeaderboardPlayerMetadata: (value: unknown): boolean =>
+    typeof value === 'object' &&
+    value !== null &&
+    'aiTool' in value &&
+    typeof (value as { aiTool?: unknown }).aiTool === 'string' &&
+    (value as { aiTool: string }).aiTool.trim().length > 0,
+}))
+
 import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { submitScore } from '@shared/leaderboard-api'
@@ -188,7 +207,7 @@ describe('ResultPage endgame survey', () => {
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
     expect(screen.getByLabelText(/昵称/)).toBeInTheDocument()
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
-    // Score is gated behind the nickname while the modal is open.
+    // Score is gated behind the nickname and AI metadata while the modal is open.
     expect(submitScore).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
@@ -197,7 +216,10 @@ describe('ResultPage endgame survey', () => {
 
     // Nickname path fires the score submission; survey path emits telemetry.
     await waitFor(() => expect(submitScore).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({ nickname: '小测' })
+    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
+      nickname: '小测',
+      ai_tool: 'claude',
+    })
     expect(logEvent).toHaveBeenCalledWith('survey_submit', {
       ai_tool: 'claude',
       fun: 4,
@@ -207,20 +229,24 @@ describe('ResultPage endgame survey', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('merged modal is confirmable with the nickname alone — survey skipped, no survey_submit', async () => {
+  it('merged modal is confirmable with nickname and AI tool — survey skipped, no survey_submit', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
 
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
 
-    // Fill only the nickname; leave the whole survey untouched.
+    // Fill only the leaderboard gate; leave the survey-only questions untouched.
     fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
     // Score still submits, the device is marked answered, but a skipped
     // survey fires no `survey_submit`.
     await waitFor(() => expect(submitScore).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({ nickname: '小测' })
+    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
+      nickname: '小测',
+      ai_tool: 'claude',
+    })
     expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
     expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

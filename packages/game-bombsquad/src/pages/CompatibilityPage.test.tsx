@@ -1,27 +1,17 @@
 /**
  * CompatibilityPage unit tests.
  *
- * Covers the four IA acceptance points for the discovery-side rendering:
+ * Covers the IA acceptance points for the discovery-side rendering:
  *   1. Title + subtitle render.
  *   2. Exactly the three AI rows (Claude / ChatGPT / Gemini) appear, with
  *      Claude flagged as 已验证.
- *   3. Recommended opening-prompt block renders multi-line Chinese text.
- *   4. Copy button click triggers success feedback ("已复制！").
- *   5. Return-home link points to `/bombsquad` (the BombSquad landing page).
- *
- * Clipboard helper is stubbed so the test doesn't depend on jsdom's
- * Clipboard API surface and the success branch is exercised deterministically.
+ *   3. Return-home link points to `/bombsquad` (the BombSquad landing page).
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-vi.mock('@/utils/clipboard', () => ({
-  copyToClipboard: vi.fn().mockResolvedValue(true),
-}))
-
 import CompatibilityPage from './CompatibilityPage'
-import { copyToClipboard } from '@/utils/clipboard'
 
 function renderPage() {
   return render(
@@ -32,15 +22,6 @@ function renderPage() {
 }
 
 describe('CompatibilityPage', () => {
-  beforeEach(() => {
-    vi.mocked(copyToClipboard).mockClear()
-    vi.mocked(copyToClipboard).mockResolvedValue(true)
-  })
-
-  afterEach(() => {
-    vi.clearAllTimers()
-  })
-
   it('renders the H1 title and subtitle', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: '支持的 AI 工具' })).toBeInTheDocument()
@@ -60,29 +41,6 @@ describe('CompatibilityPage', () => {
     renderPage()
     const claudeRow = screen.getAllByRole('listitem')[0]
     expect(claudeRow).toHaveTextContent('已验证')
-  })
-
-  it('renders the recommended opening-prompt block with multi-line Chinese text', () => {
-    renderPage()
-    expect(screen.getByRole('heading', { level: 2, name: '告诉 AI 该怎么做' })).toBeInTheDocument()
-    // Prompt must include the signature lines from the recommended template.
-    expect(screen.getByText(/等会儿我会发你一个 URL/)).toBeInTheDocument()
-    expect(screen.getByText(/每次只回复一步指令/)).toBeInTheDocument()
-  })
-
-  it('shows "已复制！" feedback after clicking the copy button', async () => {
-    renderPage()
-    const button = screen.getByRole('button', { name: /复制推荐开场白到剪贴板/ })
-    expect(button).toHaveTextContent('复制开场白')
-
-    fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(button).toHaveTextContent('已复制！')
-    })
-    expect(copyToClipboard).toHaveBeenCalledTimes(1)
-    const copiedArg = vi.mocked(copyToClipboard).mock.calls[0][0]
-    expect(copiedArg).toMatch(/等会儿我会发你一个 URL/)
   })
 
   it('renders a return-home link pointing to /bombsquad', () => {

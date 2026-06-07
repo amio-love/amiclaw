@@ -17,6 +17,17 @@ function isOptimistic(entry: LeaderboardEntry): entry is OptimisticLeaderboardEn
   return (entry as OptimisticLeaderboardEntry)._justSubmitted === true
 }
 
+function formatAiMetadata(entry: LeaderboardEntry): string | null {
+  if (!entry.ai_tool) return null
+  const toolLabels: Record<string, string> = {
+    claude: 'Claude',
+    chatgpt: 'ChatGPT',
+    gemini: 'Gemini',
+  }
+  const tool = toolLabels[entry.ai_tool] ?? entry.ai_tool
+  return entry.ai_model ? `${tool} · ${entry.ai_model}` : tool
+}
+
 /* The Atlas grid-row list — a CSS-grid table (not a <table>) carrying ARIA
    roles so the structure stays test-queryable: container role="table", a
    header role="row" with role="columnheader" cells, each entry role="row"
@@ -34,6 +45,7 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
       </div>
       {entries.map((row) => {
         const isYou = row.nickname.includes('你')
+        const aiMetadata = formatAiMetadata(row)
         const rowClass = [
           styles.row,
           row.rank <= 3 ? styles.rowTop : '',
@@ -51,8 +63,9 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
             <span className={styles.rank} role="cell">
               #{String(row.rank).padStart(3, '0')}
             </span>
-            <span className={styles.name} role="cell">
-              {row.nickname}
+            <span className={styles.nameCell} role="cell">
+              <span className={styles.name}>{row.nickname}</span>
+              {aiMetadata && <span className={styles.aiMeta}>{aiMetadata}</span>}
             </span>
             <span className={styles.score} role="cell">
               {formatMs(row.time_ms)} · {row.attempt_number} 次

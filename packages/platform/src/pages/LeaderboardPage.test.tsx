@@ -57,6 +57,7 @@ describe('LeaderboardPage optimistic flow', () => {
       time_ms: 91234,
       attempt_number: 3,
       ai_tool: 'claude',
+      ai_model: 'Sonnet 4.5',
     })
 
     // GET returns the cached (pre-submission) leaderboard — optimistic entry
@@ -80,6 +81,7 @@ describe('LeaderboardPage optimistic flow', () => {
     const bodyRows = screen.getAllByRole('row').slice(1)
     expect(bodyRows[0]).toHaveTextContent('Alpha')
     expect(bodyRows[1]).toHaveTextContent('Anonymous')
+    expect(bodyRows[1]).toHaveTextContent('Claude · Sonnet 4.5')
     expect(bodyRows[1]).toHaveAttribute('data-just-submitted', 'true')
     expect(bodyRows[2]).toHaveTextContent('Beta')
 
@@ -140,5 +142,26 @@ describe('LeaderboardPage optimistic flow', () => {
     bodyRows.forEach((row) => {
       expect(row).not.toHaveAttribute('data-just-submitted')
     })
+  })
+
+  it('renders AI metadata when present and keeps legacy rows readable', async () => {
+    const today = getTodayString()
+    mockedFetch.mockResolvedValueOnce({
+      date: today,
+      entries: [
+        { rank: 1, nickname: '小明', time_ms: 80000, attempt_number: 1, ai_tool: 'chatgpt' },
+        { rank: 2, nickname: 'Legacy', time_ms: 110000, attempt_number: 1 },
+      ],
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('小明')).toBeInTheDocument()
+    })
+    const bodyRows = screen.getAllByRole('row').slice(1)
+    expect(bodyRows[0]).toHaveTextContent('ChatGPT')
+    expect(bodyRows[1]).toHaveTextContent('Legacy')
+    expect(bodyRows[1]).not.toHaveTextContent('ChatGPT')
   })
 })

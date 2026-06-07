@@ -5,6 +5,9 @@ import { Given, When, Then } from './fixtures'
 /** Stable test nickname — no '你' so it is not flagged as the "you" row. */
 const E2E_NICKNAME = 'E2ERunner'
 
+/** Stable test AI assistant for leaderboard-gated e2e submissions. */
+const E2E_AI_ASSISTANT_LABEL = 'Claude'
+
 /** Nickname injected by the regression leaderboard scenario. */
 let regressionNickname = ''
 
@@ -44,6 +47,15 @@ Given('no nickname is stored on this device', async ({ page }) => {
   expect(stored).toBeNull()
 })
 
+Given('no leaderboard AI metadata is stored on this device', async ({ page }) => {
+  const stored = await page.evaluate(() => ({
+    tool: localStorage.getItem('bombsquad-leaderboard-ai-tool'),
+    model: localStorage.getItem('bombsquad-leaderboard-ai-model'),
+  }))
+  expect(stored.tool).toBeNull()
+  expect(stored.model).toBeNull()
+})
+
 Then('I see the total run time', async ({ page }) => {
   const total = page.locator('[class*="totalTime"]').first()
   await expect(total).toBeVisible()
@@ -78,7 +90,25 @@ Then(
 )
 
 When('I type a nickname into the NicknameModal input', async ({ page }) => {
-  await page.getByRole('dialog').getByRole('textbox').fill(E2E_NICKNAME)
+  await page.getByRole('dialog').getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
+})
+
+When(
+  'I type the Chinese nickname {string} into the NicknameModal input',
+  async ({ page }, nickname: string) => {
+    await page.getByRole('dialog').getByRole('textbox', { name: '昵称' }).fill(nickname)
+  }
+)
+
+When('I choose AI assistant {string}', async ({ page }, assistant: string) => {
+  await page.getByRole('dialog').getByRole('button', { name: assistant, exact: true }).click()
+})
+
+When('I type AI model {string}', async ({ page }, model: string) => {
+  await page
+    .getByRole('dialog')
+    .getByRole('textbox', { name: /具体模型/ })
+    .fill(model)
 })
 
 Then('the NicknameModal closes', async ({ page }) => {
@@ -119,13 +149,39 @@ Then('the leaderboard submission carries a plausible time', async ({ world, page
   if (world.leaderboard.submissions.length === 0) {
     const dialog = page.getByRole('dialog')
     if ((await dialog.count()) > 0 && (await dialog.getByRole('textbox').count()) > 0) {
-      await dialog.getByRole('textbox').fill(E2E_NICKNAME)
+      await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
+      const assistant = dialog.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true })
+      if ((await assistant.count()) > 0) {
+        await assistant.click()
+      }
       await dialog.getByRole('button', { name: '确认' }).click()
     }
     await expect.poll(() => world.leaderboard.submissions.length).toBeGreaterThan(0)
   }
   assertPlausibleSubmission(world.leaderboard.submissions.at(-1))
 })
+
+Then(
+  'the leaderboard submission carries nickname {string}, AI assistant {string}, and model {string}',
+  async ({ world }, nickname: string, aiTool: string, aiModel: string) => {
+    const submission = world.leaderboard.submissions.at(-1)
+    assertPlausibleSubmission(submission)
+    expect(submission).toMatchObject({
+      nickname,
+      ai_tool: aiTool,
+      ai_model: aiModel,
+    })
+  }
+)
+
+Then(
+  'the leaderboard table shows a row with nickname {string} and AI metadata {string}',
+  async ({ page }, nickname: string, metadata: string) => {
+    const row = page.getByRole('row').filter({ hasText: nickname })
+    await expect(row).toHaveCount(1)
+    await expect(row).toContainText(metadata)
+  }
+)
 
 // --- Voice-AI compatibility page ---------------------------------------------
 
@@ -141,16 +197,6 @@ Then('no row mentions a required browser or "Clipboard API"', async ({ page }) =
   const toolsText = await page.locator('[aria-label="已验证的 AI 工具"]').innerText()
   expect(toolsText).not.toContain('Clipboard API')
   expect(toolsText).not.toContain('浏览器')
-})
-
-Then('the recommended opening prompt contains {string}', async ({ page }, fragment: string) => {
-  await expect(page.locator('[class*="promptText"]')).toContainText(fragment)
-})
-
-Then('the system clipboard contains the recommended opening prompt text', async ({ page }) => {
-  const promptText = (await page.locator('[class*="promptText"]').innerText()).trim()
-  const clipboard = (await readClipboard(page)).trim()
-  expect(clipboard).toBe(promptText)
 })
 
 Then('I am back on the BombSquad landing page', async ({ page }) => {

@@ -1,6 +1,6 @@
 # Voice-AI compatibility page — the /bombsquad/compatibility reference page reached from
-# the connect-AI flow's first step: the Claude=已验证 marker, the recommended
-# opening-prompt block with copy-to-clipboard feedback, and the return link.
+# the connect-AI flow's first step: the Claude=已验证 marker, the supported-AI
+# tool list, and the return link.
 #
 # Restructured for the e2e harness: the scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
@@ -14,15 +14,14 @@
 Feature: Voice AI compatibility reference page
   As a new BombSquad player who is unsure which AI to use
   I want a one-click path from the connect-AI flow to a list of supported AIs
-  And a copy-ready opening prompt to send my AI partner
-  So that I can pick a voice AI and brief it without guessing
+  So that I can pick a voice AI for my run
 
   Background:
     Given I open /
 
   # Source: prompt-modal-to-compatibility
   @playwright
-  Scenario: Player discovers the compatibility page from the connect flow and copies the opening prompt
+  Scenario: Player discovers the compatibility page from the connect-AI flow
     When I enter practice mode from the homepage
     Then the connect-AI flow opens at step 1
     And I see the link "不确定用哪个 AI？查看支持工具"
@@ -36,14 +35,6 @@ Feature: Voice AI compatibility reference page
     And the AI tool list shows the row "ChatGPT" marked "未测试 · 邀请反馈"
     And the AI tool list shows the row "Gemini" marked "未测试 · 邀请反馈"
     And no row mentions a required browser or "Clipboard API"
-
-    And I see a heading "告诉 AI 该怎么做"
-    And the recommended opening prompt contains "等会儿我会发你一个 URL"
-    And the recommended opening prompt contains "每次只回复一步指令"
-
-    When I tap "复制开场白"
-    Then the button label changes to "已复制！" within 1 second
-    And the system clipboard contains the recommended opening prompt text
 
     When I click "← 返回 BombSquad 首页"
     Then the URL path is /bombsquad
