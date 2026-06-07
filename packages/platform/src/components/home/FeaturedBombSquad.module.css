@@ -159,16 +159,11 @@
   color: var(--text-1);
 }
 
-.lbRowYou {
-  padding-right: 8px;
-  padding-left: 8px;
-  border-color: transparent;
-  border-radius: 10px;
-  background: rgba(255, 229, 62, 0.06);
-}
-
-.lbRowYou .nm {
-  color: var(--amio-yellow);
+.lbEmpty {
+  margin: 0;
+  padding: 24px 4px;
+  font: 400 13px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.45);
 }
 
 /* ----------  CTA row  ---------- */

@@ -31,8 +31,8 @@ function formatAiMetadata(entry: LeaderboardEntry): string | null {
 /* The Atlas grid-row list — a CSS-grid table (not a <table>) carrying ARIA
    roles so the structure stays test-queryable: container role="table", a
    header role="row" with role="columnheader" cells, each entry role="row"
-   with role="cell" cells. Shared by the real daily board below and the mock
-   week / month / 历史 boards (MockLeaderboardList). */
+   with role="cell" cells. Rendered by the real daily board below; exported so
+   other real-data surfaces can reuse the same grid markup. */
 export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
   return (
     <div className={styles.list} role="table" aria-label="排行榜">

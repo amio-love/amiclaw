@@ -112,18 +112,6 @@
   color: #fff;
   margin-top: 4px;
 }
-.todayR {
-  text-align: right;
-  line-height: 1.5;
-}
-.todayR div {
-  font: 400 11px var(--font-body);
-  color: rgba(255, 255, 255, 0.55);
-}
-.todayR strong {
-  color: #fff;
-  font-weight: 600;
-}
 
 /* ───── draw-of-the-day card ───── */
 .drawCard {

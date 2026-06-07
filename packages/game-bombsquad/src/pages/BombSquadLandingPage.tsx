@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import { Scenery, useDailyCountdown } from '@amiclaw/ui'
+import { formatMs } from '@shared/format-time'
 import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
 import Glyph from '@/components/bombsquad/Glyph'
+import { useDailyBoardStats } from '@/hooks/useDailyBoardStats'
 import styles from './BombSquadLandingPage.module.css'
 
 /* BombSquad game landing page — Atlas star-chart visual language
@@ -13,6 +15,11 @@ import styles from './BombSquadLandingPage.module.css'
 export default function BombSquadLandingPage() {
   const navigate = useNavigate()
   const [hours, minutes, seconds] = useDailyCountdown()
+  /* Same daily leaderboard API the platform homepage and /leaderboard read.
+     Empty board → 日榜首 — and 今日上榜 0; never a fabricated number. The board
+     holds only successful defusals, so the count is labelled 今日上榜 (matches
+     the platform hero), not 参与. */
+  const { participantCount, leaderTimeMs } = useDailyBoardStats()
 
   /* Each CTA picks a mode and enters the connect-AI flow; the connect
      screen copies the manual link and hands off to the run. */
@@ -93,10 +100,10 @@ export default function BombSquadLandingPage() {
               </div>
               <div className={styles.dailyRight}>
                 <div className={styles.dailyRank}>
-                  日榜首 <strong>00:42</strong>
+                  日榜首 <strong>{leaderTimeMs !== null ? formatMs(leaderTimeMs) : '—'}</strong>
                 </div>
                 <div className={styles.dailyRank}>
-                  参与 <strong>1,287</strong>
+                  今日上榜 <strong>{participantCount}</strong>
                 </div>
               </div>
             </div>

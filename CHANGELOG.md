@@ -92,6 +92,16 @@ link back to the home page — a dead end that pushed you out of the game. It no
 greets you with a way back in: 开始今日挑战, 练习一局, or 返回主页, so you can
 jump straight into a run instead of starting over from scratch.
 
+**The numbers you see are now real** — The homepage, the BombSquad landing,
+and the leaderboard used to show placeholder figures — a "本周在线" count, a
+"最快拆弹" time, a mini board of made-up players — that had nothing to do with
+the actual daily leaderboard. Now every "今日 / 在线 / 日榜" figure reads the
+one real daily board: when today has no scores yet, you see an honest empty
+state ("今日还没有成绩，来抢第一！") and a zero count instead of invented
+numbers. The leaderboard page drops the 本周 / 本月 / 历史 tabs, which were
+never backed by any real aggregation, and keeps just the 每日 board. The Yijing
+home no longer shows a fake "已问卦" counter either.
+
 **The trident symbol finally looks like a trident** — One of the star-panel
 symbols used to draw a muddled shape — a pole with two little hooks — that
 matched nothing you could put into words, so describing it to your AI led
