@@ -3,7 +3,7 @@
   display: block;
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-4);
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -17,7 +17,7 @@
   gap: 8px;
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--amio-yellow);
   letter-spacing: 0.16em;
   text-transform: uppercase;

@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The small labels on the home page are easier to read** — The little tags
+around the landing page — the section eyebrows, the orbit-stat captions, the
+status and preview badges, the daily-challenge countdown units, the featured
+leaderboard's column headers, and the returning-player welcome line — used to
+sit at 10–11px, which left the Chinese ones cramped and hard to read, and on
+phones some of them shrank even further. They now all render a notch larger so
+the text is comfortable to read everywhere, including on mobile. Nothing moved
+or changed color; the labels are just bigger.
+
 **进入游戏，直接开局，少点一次** — 对接 AI 的最后一步现在多了一句提醒：等你的 AI
 读完手册说「好了」，点「进入游戏」就开始，计时也随之启动。点下去就直接进入这一局，
 不再跳出一块「准备好了吗？」的黑屏让你再确认一次。该确认 AI 的提示，正好出现在你

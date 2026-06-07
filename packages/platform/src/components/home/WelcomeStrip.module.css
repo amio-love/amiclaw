@@ -57,7 +57,7 @@
 
 .label {
   margin-top: 6px;
-  font: 500 11px var(--font-body);
+  font: 500 12px var(--font-body);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-4);
