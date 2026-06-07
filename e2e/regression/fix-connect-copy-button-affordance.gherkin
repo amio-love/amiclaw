@@ -1,0 +1,74 @@
+# Regression guard for fix-connect-copy-button-affordance
+# (task fix-connect-copy-button-affordance, 2026-06-07).
+#
+# Bug: on /bombsquad/connect step 1 the most prominent element — the bottom
+#   full-width yellow primary CTA — was a DEAD control (disabled until copied,
+#   label「先复制手册」), while the real copy action lived on a smaller, less
+#   prominent URL card above it. Classic affordance inversion: a player taps
+#   the biggest, brightest, bottom-anchored CTA first, gets no feedback, and
+#   assumes the page is frozen.
+# Fix (Option ①): the bottom primary CTA IS the copy action now — label
+#   「复制手册」, tapping it copies the manual URL, flips to the green
+#   「已复制 ✓」 confirmed state, and the existing 0.7s effect auto-advances to
+#   step 2. The former copy card was demoted from a <button> to a passive
+#   read-only <div> preview (keeps the URL visible + turns green on copy). The
+#   redundant manual「下一步 →」step was removed (auto-advance covers it). Step 2
+#   is untouched.
+#
+# Executable home: this behavior is interaction-natured, so its authoritative
+#   executable guard is the React Testing Library unit test in
+#   packages/game-bombsquad/src/pages/ConnectPage.test.tsx — specifically the
+#   "makes the most prominent CTA the copy action with no dead control on step 1"
+#   and "copies the manual link from the primary CTA and auto-advances ..."
+#   cases. Run it via:
+#     pnpm --filter @amiclaw/game-bombsquad run test:run src/pages/ConnectPage.test.tsx
+#
+# Companion static guard: fix-connect-copy-button-affordance.assert.mjs in this
+#   directory is a cheap source-read backstop (no browser, no preview server) —
+#   it asserts the step-1 primary CTA is not rendered with `disabled` and that
+#   the URL preview is no longer a <button>. Run via:
+#     node e2e/regression/fix-connect-copy-button-affordance.assert.mjs
+#   It exits 0 on full pass and non-zero on any failure, naming the failing
+#   scenario in stderr — matching the rest of this directory's data-assertion
+#   regression scenarios.
+
+Feature: connect-page copy-button affordance regression coverage
+  As a player handing the bomb manual to my AI partner on /bombsquad/connect
+  I want the single most prominent element on step 1 to be the real copy action
+  So that my first tap on the biggest, brightest control succeeds instead of
+  hitting a dead disabled CTA while the real copy hides in a smaller card
+
+  Background:
+    Given the connect page component packages/game-bombsquad/src/pages/ConnectPage.tsx is loaded
+
+  # Behavior verified executably by ConnectPage.test.tsx
+  # ("makes the most prominent CTA the copy action with no dead control on step 1").
+  # retire-when: ConnectPage step 1 stops surfacing a copy action, or the
+  #   connect flow is redesigned away from the "copy manual → auto-advance" model.
+  Scenario: step-1 primary CTA is the copy action, not a dead control
+    Given /bombsquad/connect on step 1
+    When the player looks at the most prominent (bottom full-width primary) control
+    Then that control's label is「复制手册」
+    And tapping it copies the manual URL to the clipboard
+    And the payload is the manual URL itself
+    And the control flips to the「已复制 ✓」green confirmed state
+    And the flow auto-advances to step 2 after ~0.7s
+    And no control on step 1 is disabled
+
+  # Behavior verified executably by ConnectPage.test.tsx
+  # ("renders step 1 with the URL preview and manual URL").
+  # retire-when: the manual URL is no longer shown on the connect page (it is a
+  #   trust requirement that the link stays visible before the player copies it).
+  Scenario: the URL preview is a passive preview, not a second copy button
+    Given /bombsquad/connect on step 1
+    When inspecting the manual-URL card above the CTA
+    Then it renders the manual URL (still visible for trust)
+    And it is NOT a <button> (no second/competing copy control)
+
+  # Behavior verified executably by ConnectPage.test.tsx
+  # ("surfaces the /bombsquad/compatibility discovery link on step 1").
+  # retire-when: the /bombsquad/compatibility page is removed.
+  Scenario: the /compatibility discovery link stays reachable from step 1
+    Given /bombsquad/connect on step 1
+    When inspecting the discovery link under the hint
+    Then a link「查看支持工具 →」points at /bombsquad/compatibility
