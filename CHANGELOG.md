@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**「我的」no longer shows a stranger's stats before you have any of your own** —
+Opening「我的」used to greet every visitor with a complete profile — 42 games
+cleared, a 6-day streak, a wall of badges — that belonged to someone who wasn't
+you, sitting right under the line「所有数据只属于你」. Before you have a profile of
+your own, the page now shows a clean prompt and a preview of what your 星轨 will
+hold — your record, streak, and badges — instead of another player's numbers.
+
 **The Yijing home no longer shows a settings button that does nothing** — The
 gear icon in the top corner of the 易经 oracle home looked tappable but had
 nothing behind it — there are no settings to open. It's gone now, so every
