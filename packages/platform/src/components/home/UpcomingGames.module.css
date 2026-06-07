@@ -113,6 +113,18 @@
   color: var(--text-3);
 }
 
+/* Click affordance for the Game Lab Discord tile. Reuses the same violet
+   (yj-yin) accent as .tilePreview / .previewChip so it reads as part of the
+   existing clickable-tile language rather than a new visual element. */
+.discordCue {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 12px;
+  font: 600 13px var(--font-body);
+  letter-spacing: 0.02em;
+  color: #d6c0ff;
+}
+
 /* Local preview-status pill — sized to match Chip.module.css `.soon/.dev/.live`
    for visual parity but tinted with yj-yin to read distinct from the
    yellow `soon` chip. Kept inside this module so the @amiclaw/ui Chip
