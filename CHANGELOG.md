@@ -10,6 +10,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 卡片就带上「加入 Discord」的提示、点一下在新标签页打开邀请。在链接配置好之前,卡片和原来
 一模一样、不可点,所以这次改动对你看到的页面没有任何影响。
 
+**Practice mode hands your AI only the two modules you'll play** — In practice
+you only ever face the 光弦 and 星符 modules, but the manual your AI partner reads
+still listed all four. If you misspoke or the screen hiccupped, the AI could
+confidently walk you through a 星盘 or 按钮 step that a practice run never shows.
+The practice manual now carries only the 光弦 and 星符 rules, so your partner stays
+on the two modules in front of you. Daily challenges are unchanged — they still
+use all four.
+
 **The small labels on the home page are easier to read** — The little tags
 around the landing page — the section eyebrows, the orbit-stat captions, the
 status and preview badges, the daily-challenge countdown units, the featured

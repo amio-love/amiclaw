@@ -30,7 +30,7 @@ interface MinimalModules {
   keypad?: { sequences?: string[][] }
 }
 interface MinimalManual {
-  meta?: { version?: string }
+  meta?: { version?: string; type?: string }
   modules: MinimalModules
   symbols?: Record<string, { description?: string }>
   ai_instructions?: Record<string, string[]>
@@ -133,6 +133,37 @@ function validateReferencedSymbolsAgainstSSOT(manual: MinimalManual): void {
   }
 }
 
+/**
+ * The module set a PRACTICE run actually plays. The source `practice.yaml`
+ * keeps all four modules (the daily generator derives every daily manual from
+ * it, and the frontend parses the full source), but a practice RUN only
+ * surfaces these two. This is the build-side mirror of `MODULE_SEQUENCE.practice`
+ * in `packages/game-bombsquad/src/store/game-context.tsx` (`practice: ['wire',
+ * 'keypad']`, with the ModuleKind→manual-key mapping wire→wire_routing,
+ * keypad→keypad). The RENDERED practice manual is scoped to this set so the AI
+ * never loads — and so can never confidently match against — rules for a module
+ * (星盘/symbol_dial, 按钮/button) a practice run cannot present. Keep this in
+ * sync with that frontend constant; a drift between the two is the bug this
+ * guards against. Declared here as a build.ts constant rather than a source
+ * `meta` field on purpose: a source field would propagate into all 366 derived
+ * daily YAMLs and break their byte-identical invariant.
+ */
+const PRACTICE_ACTIVE_MODULE_KEYS: ReadonlySet<string> = new Set(['wire_routing', 'keypad'])
+
+/**
+ * Scope a manual's `modules` to the keys in `keep`, preserving the source's
+ * authored key order. Returns a new object; the input is not mutated. Keys not
+ * present in the source are simply absent from the result.
+ */
+function scopeModules(modules: MinimalModules, keep: ReadonlySet<string>): MinimalModules {
+  const all = modules as Record<string, unknown>
+  const scoped: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (keep.has(key)) scoped[key] = value
+  }
+  return scoped as MinimalModules
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const templatePath = resolve(__dirname, 'src/template.html')
@@ -164,6 +195,20 @@ function buildPage(yamlPath: string, slug: string) {
   // a source-level copy would leak descriptions to the dist raw yaml path
   // (Option C invariant).
   validateNoSourceSymbols(parsed)
+
+  // Scope the RENDERED practice manual to the modules a practice run actually
+  // plays (wire_routing + keypad). The source practice.yaml keeps all four
+  // modules for daily derivation + the frontend; only the AI-facing render is
+  // narrowed. This runs AFTER the three validators (so the full source is still
+  // integrity-checked) and BEFORE collectReferencedSymbolIds + the payload
+  // assembly below, so symbol injection and the emitted `modules` block narrow
+  // together — once symbol_dial is gone, only keypad-referenced symbols inject.
+  // Reassigning the existing `modules` key preserves the source's authored
+  // key order (meta / modules / decoy_modules); `decoy_modules` and `meta` are
+  // untouched. Daily manuals (meta.type === 'daily') pass through unchanged.
+  if (parsed.meta?.type === 'practice') {
+    parsed.modules = scopeModules(parsed.modules, PRACTICE_ACTIVE_MODULE_KEYS)
+  }
 
   // Build the symbol-description block from the SYMBOLS SSOT for every id the
   // modules reference. This is the AI's vocabulary bridge from an abstract id
