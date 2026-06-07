@@ -908,6 +908,47 @@ describe('button preamble carries the two readability-trap hardenings', () => {
       `daily button preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
     ).toEqual([])
   })
+
+  // The button.rule once overloaded「指示灯」for two physically distinct lights:
+  // the scene's NAMED indicators (FRK etc., matched in rule conditions) and the
+  // button's own press-and-hold RELEASE light (release_on_light — watch until it
+  // turns the target color, then release). A literal manual-reading AI could
+  // conflate them: watch the wrong light, or apply a scene indicator's color to
+  // the release condition. The release light is now named「灯条」, terminologically
+  // distinct from the scene「指示灯」(and aligned with build.ts's existing
+  // 「等灯条变红再松手」). These four substrings were UNIQUE to the release-light
+  // references — none appears in any scene-indicator reference — so this lock is
+  // non-tautological and never touches the scene assertions above.
+  const RELEASE_LIGHT_LEGACY_PHRASINGS = [
+    '指示灯亮起',
+    '指示灯变成',
+    '指示灯会连续轮换',
+    '指示灯并不会停',
+  ]
+
+  function assertReleaseLightRename(label: string, rule: string): void {
+    // The release-light term is present.
+    expect(rule, `${label}: release light must be named「灯条」`).toMatch(/灯条/)
+    // None of the old release-light「指示灯」phrasings survive.
+    for (const phrasing of RELEASE_LIGHT_LEGACY_PHRASINGS) {
+      expect(
+        rule.includes(phrasing),
+        `${label}: release light must not be read as「指示灯」(found legacy phrasing「${phrasing}」)`
+      ).toBe(false)
+    }
+  }
+
+  it('practice.yaml button preamble names the release light「灯条」, not「指示灯」', () => {
+    assertReleaseLightRename('practice.yaml', loadButtonPreamble(PRACTICE_YAML))
+  })
+
+  it('every daily button preamble names the release light「灯条」, not「指示灯」', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      assertReleaseLightRename(file, loadButtonPreamble(join(DAILY_DIR, file)))
+    }
+  })
 })
 
 describe('wire + button preambles carry the named-indicator absence equivalence clause', () => {
