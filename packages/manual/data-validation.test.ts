@@ -910,6 +910,106 @@ describe('button preamble carries the two readability-trap hardenings', () => {
   })
 })
 
+describe('wire + button preambles carry the named-indicator absence equivalence clause', () => {
+  // A capable manual-reading AI, on a round whose scene info bar lists some
+  // indicators but NOT FRK, hit a gap: the wire/button rulebook names
+  // indicator_FRK_lit, but FRK is one of 8 indicator labels and shows up in only
+  // some rounds. The prior「只取被点名的指示灯，其余忽略」clause covers the OTHER
+  // half (which indicators to ignore) but never says what to do when a *named*
+  // indicator is itself absent this round. A literal AI could then stall
+  // (repeatedly asking "is FRK lit?") or assume it lit. The wire and button
+  // preambles gain the complementary clause: a named indicator absent from the
+  // round's reported list counts as "not lit" — every condition requiring it lit
+  // (indicator_FRK_lit: true) fails, first-match continues, never stall, never
+  // assume lit — demarcated from the ask-gate (ask only when the player has not
+  // yet reported indicators; once the round's indicators are fully reported and
+  // FRK is not among them, it is known-absent = not lit, no need to re-ask). This
+  // documents the rule engine's existing behavior verbatim: buildContext only
+  // adds indicator_{label}_lit for PRESENT indicators, and matchCondition returns
+  // false for an absent key — so no engine change is needed. The「未亮处理」framing
+  // (not a static「该灯不存在=条件恒假」absolute) stays correct for any future
+  // indicator_*_lit: false condition. The clause is carried verbatim into every
+  // daily by the deterministic generator (only rule ORDER is permuted), so this
+  // guard runs over practice + every daily: a future practice edit that drops it,
+  // or a stale daily that predates it, fails loudly.
+  function loadModulePreamble(path: string, moduleKey: 'wire_routing' | 'button'): string {
+    const manual = yaml.load(readFileSync(path, 'utf8')) as Manual
+    const rule = (manual.modules as unknown as Record<string, { rule?: string }>)[moduleKey]?.rule
+    expect(typeof rule, `${path}: ${moduleKey}.rule must be a string`).toBe('string')
+    return rule as string
+  }
+
+  function assertAbsenceClause(label: string, rule: string): void {
+    // (1) Trigger: a named indicator NOT in the round's reported list = absent.
+    expect(
+      rule,
+      `${label}: must name the absence trigger (不在玩家开局念出的那串指示灯里)`
+    ).toMatch(/不在玩家开局念出的那串指示灯里/)
+    // (2) Handling: treat an absent named indicator as "not lit" (未亮处理) — the
+    // engine-faithful framing, NOT a static 恒假 absolute.
+    expect(rule, `${label}: must treat an absent named indicator as not-lit (未亮)`).toMatch(/未亮/)
+    // (3) The requiring-lit condition fails (不成立).
+    expect(rule, `${label}: must state the requiring-lit condition fails (判为不成立)`).toMatch(
+      /判为不成立|不成立/
+    )
+    // (4) First-match continues down the list — never stall on this rule.
+    expect(
+      rule,
+      `${label}: must continue first-match down the list (first-match 继续往下走)`
+    ).toMatch(/first-match 继续往下走|继续往下走|继续往下/)
+    // (5) Never reverse-assume it is lit.
+    expect(rule, `${label}: must forbid assuming it lit (绝不…假设它亮)`).toMatch(
+      /绝不[^。]*假设它亮/
+    )
+    // (6) Ask-gate demarcation: once the round's indicators are fully reported and
+    // it is not among them, it is known-absent — no need to ask again.
+    expect(rule, `${label}: must demarcate from the ask-gate (报全)`).toMatch(/报全/)
+    expect(rule, `${label}: must state no need to re-ask once known absent (无须再问)`).toMatch(
+      /无须再问|无需再问/
+    )
+  }
+
+  it('practice.yaml wire_routing preamble carries the absence equivalence clause', () => {
+    assertAbsenceClause('practice.yaml wire', loadModulePreamble(PRACTICE_YAML, 'wire_routing'))
+  })
+
+  it('practice.yaml button preamble carries the absence equivalence clause', () => {
+    assertAbsenceClause('practice.yaml button', loadModulePreamble(PRACTICE_YAML, 'button'))
+  })
+
+  it('every daily wire_routing preamble carries the clause and char-equals practice', () => {
+    const practiceRule = loadModulePreamble(PRACTICE_YAML, 'wire_routing')
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const file of dailyFiles) {
+      const rule = loadModulePreamble(join(DAILY_DIR, file), 'wire_routing')
+      assertAbsenceClause(`daily ${file} wire`, rule)
+      if (rule !== practiceRule) offenders.push(file)
+    }
+    expect(
+      offenders,
+      `daily wire preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+
+  it('every daily button preamble carries the clause and char-equals practice', () => {
+    const practiceRule = loadModulePreamble(PRACTICE_YAML, 'button')
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const file of dailyFiles) {
+      const rule = loadModulePreamble(join(DAILY_DIR, file), 'button')
+      assertAbsenceClause(`daily ${file} button`, rule)
+      if (rule !== practiceRule) offenders.push(file)
+    }
+    expect(
+      offenders,
+      `daily button preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+})
+
 describe('keypad preamble carries the position-fallback hardening', () => {
   // The keypad (星符) module's only instruction channel used to be the symbol
   // NAME. When the visible 4-symbol set contains a known easily-confused pair

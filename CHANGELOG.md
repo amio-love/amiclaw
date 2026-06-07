@@ -58,6 +58,14 @@ manual now only ever names a wire your AI can actually find, so it always has a
 definite cut to tell you. The puzzles and their answers are exactly the same;
 your AI just never gets cornered into a guess.
 
+**Your AI no longer gets stuck on a light that isn't in this round** — Some wire
+and button rules hinge on an indicator light like FRK, and that light only shows
+up in some rounds. When the round didn't have it, your AI could stall — asking
+over and over whether it's lit — or assume it was on and follow the wrong rule.
+The manual now tells your AI that a named light missing from the round counts as
+off, so it moves on to the rule that actually applies instead of getting stuck.
+The puzzles and their answers are exactly the same.
+
 **When two star-panel symbols look alike, your AI can point you by grid cell** —
 A few of the star-panel symbols are easy to mix up by name — the three-prong
 trident and the bowl-and-stem beside it, or the hourglass and the triangle. If
