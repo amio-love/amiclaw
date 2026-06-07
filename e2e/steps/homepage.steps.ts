@@ -89,7 +89,7 @@ Then('I see the community-feed section', async ({ page }) => {
 })
 
 Then('I see the registration footer pitch', async ({ page }) => {
-  await expect(page.getByRole('button', { name: '注册 · 30 秒' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '免注册，直接开始玩' })).toBeVisible()
 })
 
 Then('the page is dark-only with no light-mode variant', async ({ page }) => {
@@ -196,7 +196,7 @@ Then('the anonymous hero is not shown', async ({ page }) => {
 
 Then('the "什么是 Amiclaw" section and the footer pitch are not shown', async ({ page }) => {
   await expect(page.getByText('关于 · WHAT IS AMICLAW')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '注册 · 30 秒' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '免注册，直接开始玩' })).toHaveCount(0)
 })
 
 Then(

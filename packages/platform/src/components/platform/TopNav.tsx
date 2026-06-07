@@ -39,8 +39,19 @@ export default function TopNav() {
               <ConicAvatar size={36} spin letter={user?.avatarLetter} ariaHidden />
             </Link>
           ) : (
-            <Button variant="primary" size="sm">
-              登录 / 开始
+            /* Anonymous-by-design: there is no login/registration (roadmap:
+               nickname + device fingerprint, no login or registration). The
+               right slot is a real entry straight into play — into the
+               BombSquad SPA via window.location.assign('/bombsquad/'), the
+               same cross-app entry every other play CTA uses (a client-side
+               Link to "/" would no-op on the homepage). Not a dead auth
+               placeholder. */
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => window.location.assign('/bombsquad/')}
+            >
+              开始玩
             </Button>
           )}
         </div>

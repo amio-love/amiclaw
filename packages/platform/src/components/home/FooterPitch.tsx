@@ -3,8 +3,10 @@ import styles from './FooterPitch.module.css'
 
 interface FooterPitchProps {
   /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the「注册 · 30 秒」CTA. There is no real auth yet, so registration routes
-     into BombSquad, consistent with the other anonymous-homepage CTAs. */
+     — the play CTA. Anonymous-by-design: there is no registration (roadmap:
+     nickname + device fingerprint, no login or registration), so the CTA is an
+     honest entry straight into play, consistent with the other anonymous-
+     homepage CTAs. The prop name is kept for call-site stability. */
   onRegister: () => void
 }
 
@@ -20,7 +22,7 @@ export default function FooterPitch({ onRegister }: FooterPitchProps) {
         Amiclaw 一周一次新游戏 · 永久免费 · 不卖你的对话也不存档你的对话。
       </p>
       <Button variant="primary" onClick={onRegister}>
-        注册 · 30 秒
+        免注册，直接开始玩
       </Button>
     </section>
   )
