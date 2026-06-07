@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The dark wire is finally readable** — The darkest of the six wires used to all
+but vanish into the panel, so "cut the black one" turned into a guessing game.
+Every wire now sits on a thin light casing that lifts it off the background, so
+all six colors read at a glance and the dark wire stays clearly the dark
+one — no hue lost, just visible now.
+
 **Refreshing or sharing a game link no longer lands on a blank page** —
 Reloading mid-run, opening a bookmark, or following a link a friend sent you
 used to drop you on an empty platform screen instead of the game. Now those

@@ -100,6 +100,13 @@
   pointer-events: none;
 }
 
+/* Neutral cable casing drawn under the colored strand. Static (no animation),
+   so it is unaffected by prefers-reduced-motion. Clicks land on .hitTarget,
+   which sits above it. */
+.casing {
+  pointer-events: none;
+}
+
 .pin {
   stroke: rgba(0, 0, 0, 0.55);
   stroke-width: 2;

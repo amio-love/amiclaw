@@ -19,6 +19,19 @@ const COLOR_MAP: Record<string, string> = {
   black: '#333344',
 }
 
+/* Neutral under-casing for every strand. A light, color-agnostic stroke drawn
+   one layer beneath the colored strand and made wider than it, so each wire
+   keeps a luminance silhouette against the dark glass stage regardless of hue.
+   Without it the dark `black` wire (#333344) has near-zero contrast on the
+   rgba(5,5,17,0.5) stage and is effectively invisible — a fairness defect,
+   since "which wire to cut" depends entirely on reading the wire's color.
+   The colored strand still sits on top and dominates naming (black stays the
+   only dark-centered wire), while the casing edge makes it readable at a glance.
+   Value mirrors the --amio-fg-3 design token (white @ 50%); exported so the
+   co-located contrast-floor test asserts the exact rendered color. */
+export const STRAND_CASING = 'rgba(255, 255, 255, 0.5)'
+const STRAND_CASING_WIDTH = 7
+
 type WireState = 'idle' | 'cut' | 'error'
 
 export default function WireModule({
@@ -99,6 +112,20 @@ export default function WireModule({
                     opacity={0.32}
                     filter="url(#wire-glow)"
                     className={styles.halo}
+                  />
+                )}
+                {/* Neutral under-casing — wider than the colored strand and
+                    drawn beneath it, so every wire (including the dark one)
+                    keeps a luminance silhouette against the dark stage. */}
+                {!isCut && (
+                  <path
+                    d={d}
+                    stroke={STRAND_CASING}
+                    strokeWidth={STRAND_CASING_WIDTH}
+                    fill="none"
+                    strokeLinecap="round"
+                    className={styles.casing}
+                    data-testid={`strand-casing-${i}`}
                   />
                 )}
                 {isCut ? (
