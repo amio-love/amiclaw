@@ -11,6 +11,21 @@ used to drop you on an empty platform screen instead of the game. Now those
 links open straight into BombSquad, and a mid-game refresh picks your run back
 up where you left off.
 
+**The trident symbol finally looks like a trident** — One of the star-panel
+symbols used to draw a muddled shape — a pole with two little hooks — that
+matched nothing you could put into words, so describing it to your AI led
+nowhere and it was easy to mix up with the bowl-and-stem symbol next to it.
+It's now a clean three-prong trident: three separate spikes on a crossbar with
+a handle running down. Describe what you see and your AI lands on the right
+symbol the first time.
+
+**Leaderboard rows now remember who you played with** — When you clear the
+daily challenge, the result screen now asks which AI assistant helped you and
+lets you add an optional model name. Your leaderboard row shows that AI context
+next to your time, so friends can compare Claude / ChatGPT / Gemini + model
+runs instead of just names. Chinese nicknames also survive the save path now,
+so names like 小明 stay visible instead of turning into Anonymous.
+
 **Your AI partner now calls the modules by the names you see** — The manual
 used to name the puzzles by old internal labels, so when you said "光弦" or
 "星符" your AI had never heard of them and stalled on your very first sentence.
@@ -116,6 +131,12 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Changed
 
+- **Drop the redundant opening-prompt panel from the AI compatibility page**
+  The supported-AI page no longer shows a copy-ready opening prompt, and the
+  vestigial `OPENING_PROMPT` constant behind it is removed. Your AI now gets
+  everything it needs from the manual itself, which already frames its role,
+  so a second hand-copied script was only a stale duplicate. The page still
+  lists which voice AIs work and which are verified.
 - **Yijing Oracle gets its own vanity domain** The Yijing Oracle now has a
   memorable own-domain entry at `oracle.amio.fans` that 301-redirects to
   `claw.amio.fans/oracle/*` — root lands on `/oracle`, deep links are
@@ -692,6 +713,16 @@ run; a later release adds a real AI partner, voice I/O, and the full
   rule-engine state for that indicator since same-named lights overwrote each
   other. Indicators are now sampled without replacement, so every indicator in
   a bomb is unique.
+- **Preview deployments can submit scores again** Score submission and
+  telemetry from a Cloudflare Pages preview build (served on
+  `*.amiclaw.pages.dev`) were blocked by the API's single-origin CORS, which
+  only ever allowed the production `claw.amio.fans` domain — so a preview page
+  calling the production API got a cross-origin rejection. The API now matches
+  the request origin against an allowlist (the production domain plus this
+  project's `*.amiclaw.pages.dev` preview subdomains) and echoes a matching
+  origin back, falling back to the canonical domain for anything else. A new
+  regression test guards the allowlist so the policy can't silently break
+  again. Players on `claw.amio.fans` are unaffected.
 
 <!-- Add every change that will land on main directly below this header. -->
 <!-- Entries below are maintained manually -->

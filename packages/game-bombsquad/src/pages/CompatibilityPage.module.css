@@ -107,76 +107,6 @@
   line-height: 1.5;
 }
 
-.promptSection {
-  width: 100%;
-  max-width: 640px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.promptTitle {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.promptIntro {
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  color: var(--color-text-primary);
-}
-
-.promptBox {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-left: 2px solid var(--y);
-  border-radius: 4px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.promptText {
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
-  color: var(--color-text-primary);
-  line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
-}
-
-.copyBtn {
-  align-self: flex-end;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  padding: 8px 16px;
-  background: transparent;
-  color: var(--y);
-  border: 1px solid var(--y);
-  border-radius: 3px;
-  cursor: pointer;
-  letter-spacing: 0.05em;
-  min-height: var(--touch-target);
-  transition: background 0.15s ease;
-}
-
-.copyBtn:hover,
-.copyBtn:focus-visible {
-  background: rgba(255, 229, 62, 0.08);
-  outline: 2px solid var(--y);
-  outline-offset: 2px;
-}
-
-.copied {
-  color: var(--positive);
-  border-color: var(--positive);
-}
-
 .homeLink {
   font-family: var(--font-mono);
   font-size: 0.85rem;
@@ -206,15 +136,12 @@
   }
 
   .header,
-  .toolsSection,
-  .promptSection {
+  .toolsSection {
     max-width: 100%;
   }
 
   .subtitle,
-  .toolTip,
-  .promptIntro,
-  .promptText {
+  .toolTip {
     font-size: 0.875rem;
   }
 
@@ -224,15 +151,9 @@
     gap: 6px;
   }
 
-  .copyBtn {
-    align-self: stretch;
-    font-size: 0.875rem;
-  }
-
   /* Floor secondary text at 14px on mobile so Chinese stays legible at 375px;
      primary text already meets the floor via base rules. */
   .statusBadge,
-  .promptTitle,
   .homeLink {
     font-size: 0.875rem;
   }

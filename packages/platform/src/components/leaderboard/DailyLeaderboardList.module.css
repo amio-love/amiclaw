@@ -55,10 +55,24 @@
   color: var(--amio-yellow);
 }
 
+.nameCell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .name {
   color: var(--text-1);
   /* Wrap a long no-space nickname instead of widening the track and
      pushing the score column off a narrow viewport. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aiMeta {
+  color: var(--text-3);
+  font: 400 11px var(--font-body);
   overflow-wrap: anywhere;
   word-break: break-word;
 }

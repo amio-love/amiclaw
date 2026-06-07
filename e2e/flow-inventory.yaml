@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 13 active flows <-> 13 journey
-# scenarios, the regression size budget is 26 (2026-06-03, after the
-# result-to-recap flow was deprecated by the endgame-settlement rework).
+# 2 x the journey-scenario count. With 14 active flows <-> 14 journey
+# scenarios, the regression size budget is 28 (2026-06-06, after the
+# leaderboard AI metadata flow was added).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -61,6 +61,15 @@ flows:
       first submission, posts the score, and the player navigates to the
       leaderboard to find their own row.
     steps: [result-win, nickname-modal, score-submit, global-rank, leaderboard]
+    status: active
+
+  - id: leaderboard-ai-metadata
+    name: Leaderboard AI metadata
+    description: >-
+      After a first daily win the result page collects the player nickname,
+      required AI assistant, and optional model, submits them with the score,
+      and the leaderboard row displays the Chinese nickname and AI metadata.
+    steps: [result-win, nickname-modal, ai-metadata, score-submit, leaderboard]
     status: active
 
   - id: daily-fail-strikeout
@@ -125,10 +134,9 @@ flows:
     name: Connect flow to compatibility page
     description: >-
       From the connect-AI flow's first step a new player opens the voice-AI
-      compatibility page, copies the recommended opening prompt, and returns to
-      the BombSquad landing page.
-    steps:
-      [connect-step-1, compatibility-link, compatibility-page, copy-opening-prompt, back-to-landing]
+      compatibility page to see the supported AIs, and returns to the BombSquad
+      landing page.
+    steps: [connect-step-1, compatibility-link, compatibility-page, back-to-landing]
     status: active
 
   # === Atlas platform-shell flows =============================================

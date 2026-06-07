@@ -1,0 +1,34 @@
+# Leaderboard AI metadata — the score row keeps the player-facing context that
+# matters for comparing daily runs: who played, which AI assistant helped, and
+# which model was used when the player knows it.
+
+Feature: Leaderboard AI metadata
+  As a BombSquad daily player
+  I want my leaderboard score to carry the AI assistant and model I used
+  So that leaderboard rows compare runs with their AI context intact
+
+  Background:
+    Given my viewport width is 375 pixels
+    And I open /
+
+  # Source: leaderboard-ai-metadata
+  @playwright
+  Scenario: A first daily win submits and displays Chinese nickname AI metadata
+    Given I have just defused the bomb in a daily run and the result page is open
+    And no nickname is stored on this device
+    And no leaderboard AI metadata is stored on this device
+    Then the NicknameModal is open and covers the screen
+    And the NicknameModal has no close button and cannot be dismissed by tapping the backdrop
+
+    When I type the Chinese nickname "小明" into the NicknameModal input
+    And I choose AI assistant "Claude"
+    And I type AI model "Claude Sonnet 4.5"
+    And I tap "确认"
+    Then the NicknameModal closes
+    And the leaderboard submission carries nickname "小明", AI assistant "claude", and model "Claude Sonnet 4.5"
+
+    When I tap "回主页"
+    Then I am back on the BombSquad landing page
+    When I tap "排行榜"
+    Then the URL path is /leaderboard
+    And the leaderboard table shows a row with nickname "小明" and AI metadata "Claude · Claude Sonnet 4.5"

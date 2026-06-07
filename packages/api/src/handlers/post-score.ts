@@ -4,7 +4,13 @@ import type {
   ScoreSubmissionResponse,
 } from '../../../../shared/leaderboard-types'
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
-import { validateSubmission, sanitizeNickname } from '../validation'
+import {
+  MAX_AI_MODEL_LEN,
+  MAX_AI_TOOL_LEN,
+  sanitizeLeaderboardText,
+  sanitizeNickname,
+  validateSubmission,
+} from '../validation'
 
 const RATE_LIMIT_MS = 10_000
 const MAX_ENTRIES = 100
@@ -53,8 +59,12 @@ export async function handlePostScore(request: Request, kv: KVNamespace): Promis
     nickname: sanitizeNickname(body.nickname),
     time_ms: body.time_ms,
     attempt_number: body.attempt_number,
-    ai_tool: body.ai_tool,
+    ai_tool: sanitizeLeaderboardText(body.ai_tool, MAX_AI_TOOL_LEN),
   }
+  const aiModel = body.ai_model
+    ? sanitizeLeaderboardText(body.ai_model, MAX_AI_MODEL_LEN)
+    : undefined
+  if (aiModel) newEntry.ai_model = aiModel
 
   const updated = [...existing, newEntry]
     .sort((a, b) => a.time_ms - b.time_ms)

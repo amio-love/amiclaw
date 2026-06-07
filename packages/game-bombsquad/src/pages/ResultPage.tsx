@@ -12,6 +12,10 @@ import { formatMs } from '@shared/format-time'
 import { submitScore, type SubmitScoreResult } from '@shared/leaderboard-api'
 import { saveOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
+import {
+  getStoredLeaderboardPlayerMetadata,
+  type LeaderboardPlayerMetadata,
+} from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
@@ -112,30 +116,41 @@ export default function ResultPage() {
     state.moduleStats.length > 0
 
   // Lazy initializers: read the stored nickname once on mount. Subsequent
-  // useState calls reuse the captured value so the three pieces of mount
+  // useState calls reuse the captured value so the pieces of mount
   // state stay consistent without triple-reading localStorage.
   const [nickname, setNickname] = useState<string | null>(() => getStoredNickname())
+  const [leaderboardMetadata, setLeaderboardMetadata] = useState<LeaderboardPlayerMetadata | null>(
+    () => getStoredLeaderboardPlayerMetadata()
+  )
 
   // The unified post-game modal composes two optional sections. The nickname
-  // section is the existing daily-leaderboard gate; the survey section is
-  // shown once per device after any outcome. The modal opens when either is
-  // needed — never as two stacked dialogs. Both `need*` flags are captured
-  // once on mount; the modal closes on confirm/skip rather than re-deriving.
+  // and AI metadata sections are the daily-leaderboard gates; the survey
+  // section is shown once per device after any outcome. The modal opens when
+  // any section is needed — never as two stacked dialogs. Both `need*` flags
+  // are captured once on mount; the modal closes on confirm/skip rather than
+  // re-deriving.
   const [needNickname] = useState(() => hasFinishedDailyRun && nickname === null)
+  const [needLeaderboardMetadata] = useState(
+    () => hasFinishedDailyRun && leaderboardMetadata === null
+  )
   const [needSurvey] = useState(() => !hasAnsweredSurvey())
-  const [modalOpen, setModalOpen] = useState(() => needNickname || needSurvey)
+  const [modalOpen, setModalOpen] = useState(
+    () => needNickname || needLeaderboardMetadata || needSurvey
+  )
   // Initialize submitting=true only when the effect below will actually fire a
   // request, so we avoid a synchronous setState in the effect body
   // (react-hooks/set-state-in-effect). First-visit daily runs wait for the
   // modal confirmation before flipping submitting=true.
-  const [submitting, setSubmitting] = useState(() => hasFinishedDailyRun && nickname !== null)
+  const [submitting, setSubmitting] = useState(
+    () => hasFinishedDailyRun && nickname !== null && leaderboardMetadata !== null
+  )
 
-  // The daily score is still gated on the nickname while the modal is open
-  // with the nickname section present.
-  const nicknamePending = needNickname && modalOpen
+  // The daily score is still gated while the modal is open with a leaderboard
+  // submission section present.
+  const leaderboardGatePending = (needNickname || needLeaderboardMetadata) && modalOpen
 
   const buildSubmission = useCallback(
-    (nicknameValue: string): ScoreSubmission | null => {
+    (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
       if (totalMs === null) return null
       return {
         date: getTodayString(),
@@ -144,6 +159,8 @@ export default function ResultPage() {
         attempt_number: state.attemptNumber,
         module_times: state.moduleStats.map((s) => Math.round(s.timeMs)),
         operations_hash: 'mvp-placeholder', // temporary placeholder until real run hashing is implemented
+        ai_tool: metadataValue.aiTool,
+        ...(metadataValue.aiModel ? { ai_model: metadataValue.aiModel } : {}),
         device_id: getDeviceId(),
       }
     },
@@ -158,6 +175,7 @@ export default function ResultPage() {
         time_ms: submission.time_ms,
         attempt_number: submission.attempt_number,
         ai_tool: submission.ai_tool,
+        ...(submission.ai_model ? { ai_model: submission.ai_model } : {}),
       })
     },
     []
@@ -195,8 +213,8 @@ export default function ResultPage() {
   // Keeping `setSubmitting(true)` out of this function lets us call it from
   // inside `useEffect` without tripping react-hooks/set-state-in-effect.
   const performSubmission = useCallback(
-    (nicknameValue: string) => {
-      const submission = buildSubmission(nicknameValue)
+    (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata) => {
+      const submission = buildSubmission(nicknameValue, metadataValue)
       if (!submission) return
 
       // Persist locally so a retry can succeed even if user navigates back
@@ -216,7 +234,8 @@ export default function ResultPage() {
   useEffect(() => {
     if (!hasFinishedDailyRun) return
     if (nickname === null) return
-    performSubmission(nickname)
+    if (leaderboardMetadata === null) return
+    performSubmission(nickname, leaderboardMetadata)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -229,8 +248,15 @@ export default function ResultPage() {
     (result: PostGameModalResult) => {
       if (result.nickname !== undefined) {
         setNickname(result.nickname)
+      }
+      if (result.leaderboardMetadata !== undefined) {
+        setLeaderboardMetadata(result.leaderboardMetadata)
+      }
+      const confirmedNickname = result.nickname ?? nickname
+      const confirmedMetadata = result.leaderboardMetadata ?? leaderboardMetadata
+      if (confirmedNickname !== null && confirmedMetadata !== null && hasFinishedDailyRun) {
         setSubmitting(true)
-        performSubmission(result.nickname)
+        performSubmission(confirmedNickname, confirmedMetadata)
       }
       if (result.survey !== undefined) {
         logEvent('survey_submit', { ...result.survey })
@@ -240,7 +266,7 @@ export default function ResultPage() {
       }
       setModalOpen(false)
     },
-    [performSubmission, needSurvey]
+    [performSubmission, needSurvey, nickname, leaderboardMetadata, hasFinishedDailyRun]
   )
 
   // Survey-only dismissal. The device is marked answered so the survey does
@@ -253,18 +279,19 @@ export default function ResultPage() {
 
   const handleRetrySubmit = useCallback(() => {
     if (nickname === null) return
+    if (leaderboardMetadata === null) return
     setRetried(true)
     setSubmitFailed(false)
     setSubmitFailKind(null)
     setSubmitFailMessage(null)
     setSubmitting(true)
-    const submission = buildSubmission(nickname)
+    const submission = buildSubmission(nickname, leaderboardMetadata)
     if (!submission) {
       setSubmitting(false)
       return
     }
     submitScore(submission).then((result) => applySubmitResult(submission, result))
-  }, [buildSubmission, applySubmitResult, nickname])
+  }, [buildSubmission, applySubmitResult, nickname, leaderboardMetadata])
 
   const handlePlayAgain = () => {
     // Emit BEFORE the RESET so we still capture the just-finished run's mode
@@ -360,9 +387,9 @@ export default function ResultPage() {
               ) : (
                 <div className={styles.rankCell}>
                   <div className={styles.rankPending}>
-                    {nicknamePending && '提交前请填写昵称'}
-                    {!nicknamePending && submitting && '提交成绩中…'}
-                    {!nicknamePending &&
+                    {leaderboardGatePending && '提交前请填写昵称和 AI 搭档'}
+                    {!leaderboardGatePending && submitting && '提交成绩中…'}
+                    {!leaderboardGatePending &&
                       !submitting &&
                       submitFailed &&
                       (submitFailKind === 'rejected' ? (
@@ -472,6 +499,7 @@ export default function ResultPage() {
       <PostGameModal
         open={modalOpen}
         showNickname={needNickname}
+        showLeaderboardMetadata={needLeaderboardMetadata}
         showSurvey={needSurvey}
         onConfirm={handleModalConfirm}
         onSkip={handleModalSkip}

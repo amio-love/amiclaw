@@ -5,7 +5,8 @@ export interface ScoreSubmission {
   attempt_number: number // which attempt this was today
   module_times: number[] // time per module in ms (length 4)
   operations_hash: string // SHA-256 of operation log for post-hoc verification
-  ai_tool?: string // optional: 'claude' | 'chatgpt' | 'gemini' | string
+  ai_tool: string // required: 'claude' | 'chatgpt' | 'gemini' | string
+  ai_model?: string // optional concrete model/version, omitted when blank
   device_id: string // UUID from localStorage
 }
 
@@ -25,6 +26,7 @@ export interface LeaderboardEntry {
   time_ms: number
   attempt_number: number
   ai_tool?: string
+  ai_model?: string
 }
 
 export interface LeaderboardResponse {

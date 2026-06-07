@@ -1,7 +1,4 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { copyToClipboard } from '@/utils/clipboard'
-import { OPENING_PROMPT } from '@/constants/opening-prompt'
 import styles from './CompatibilityPage.module.css'
 
 type Verification = 'verified' | 'untested'
@@ -35,16 +32,6 @@ const AI_TOOLS: AiTool[] = [
 ]
 
 export default function CompatibilityPage() {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = async () => {
-    const ok = await copyToClipboard(OPENING_PROMPT)
-    if (ok) {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -81,22 +68,6 @@ export default function CompatibilityPage() {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className={styles.promptSection} aria-label="推荐开场白">
-        <h2 className={styles.promptTitle}>告诉 AI 该怎么做</h2>
-        <p className={styles.promptIntro}>把下面这段话先念给你的 AI 听，再把手册地址发过去。</p>
-        <div className={styles.promptBox}>
-          <pre className={styles.promptText}>{OPENING_PROMPT}</pre>
-          <button
-            type="button"
-            className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
-            onClick={handleCopy}
-            aria-label="复制推荐开场白到剪贴板"
-          >
-            {copied ? '已复制！' : '复制开场白'}
-          </button>
-        </div>
       </section>
 
       <Link to="/bombsquad" className={styles.homeLink}>
