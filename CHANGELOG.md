@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**When two star-panel symbols look alike, your AI can point you by grid cell** —
+A few of the star-panel symbols are easy to mix up by name — the three-prong
+trident and the bowl-and-stem beside it, or the hourglass and the triangle. If
+you couldn't tell your AI which was which, "tap the trident" could land on the
+wrong cell and cost you a strike. Now, whenever a look-alike pair is on the
+panel, your AI can switch to pointing by position — "tap the top-left one" — so
+a confusable pair never turns into a wrong tap. The puzzle itself is unchanged;
+your AI just has a surer way to tell you which cell it means.
+
 **The big button on the connect screen now actually copies the manual** — On the
 first step of handing the manual to your AI, the largest, brightest button at the
 bottom used to do nothing until you found a smaller card above it — so a first tap

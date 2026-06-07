@@ -896,6 +896,114 @@ describe('button preamble carries the two readability-trap hardenings', () => {
   })
 })
 
+describe('keypad preamble carries the position-fallback hardening', () => {
+  // The keypad (星符) module's only instruction channel used to be the symbol
+  // NAME. When the visible 4-symbol set contains a known easily-confused pair
+  // (trident+psi / hourglass+delta — self-flagged in shared/symbols.ts), "先点
+  // 那个三叉戟" can land on the psi cell → mis-tap, and three mis-taps detonate
+  // the daily bomb. That is identification noise, not design difficulty. The
+  // keypad.rule preamble gains a position FALLBACK: symbol name stays the
+  // DEFAULT channel, but on a confusable pair (or when the player can't tell two
+  // similar shapes apart) the AI switches to grid quadrant (左上/右上/左下/右下)
+  // as a stable, player-reported referent — decoupling "which cell" from "what
+  // symbol" without touching the set→sequence lookup difficulty. These guards
+  // run over practice.yaml AND every daily file (the preamble is carried
+  // verbatim by the deterministic daily generator, which permutes only the
+  // sequence rows), so a future practice edit that drops an element — or a stale
+  // daily that predates the edit — fails loudly.
+  function loadKeypadPreamble(path: string): string {
+    const manual = yaml.load(readFileSync(path, 'utf8')) as Manual
+    const rule = (manual.modules as unknown as { keypad?: { rule?: string } }).keypad?.rule
+    expect(typeof rule, `${path}: keypad.rule must be a string`).toBe('string')
+    return rule as string
+  }
+
+  function assertKeypadPositionFallback(label: string, rule: string): void {
+    // (h) Symbol NAME stays the DEFAULT channel: keep the describe-the-shape /
+    // align-to-name learning loop, and mark the symbol name as the default.
+    expect(rule, `${label}: must keep the shape-description channel (描述 + 形状)`).toMatch(/描述/)
+    expect(rule, `${label}: must keep the shape vocabulary (形状/笔画/弧线)`).toMatch(
+      /形状|笔画|弧线/
+    )
+    expect(
+      rule,
+      `${label}: must mark the symbol name as the DEFAULT channel (默认 + 符号名)`
+    ).toMatch(/默认/)
+    expect(rule, `${label}: must name the symbol-name default channel (符号名)`).toMatch(/符号名/)
+    // The set→unique-sequence lookup difficulty must be UNCHANGED.
+    expect(rule, `${label}: must keep the set→sequence lookup framing (交集不超过 / 唯一)`).toMatch(
+      /交集不超过|唯一一条 sequence/
+    )
+
+    // (i) Position FALLBACK clause — the position vocabulary (all four
+    // quadrants), a confusable-trigger phrasing, and the two known confusable
+    // pairs named via their shared/symbols.ts ids.
+    for (const quadrant of ['左上', '右上', '左下', '右下']) {
+      expect(rule, `${label}: position vocabulary must include ${quadrant}`).toContain(quadrant)
+    }
+    expect(
+      rule,
+      `${label}: must name a confusable trigger (易混 / 误描述 / 辨不下 / 相似)`
+    ).toMatch(/易混|误描述|辨不下|相似/)
+    expect(rule, `${label}: must name the trident half of the trident+psi pair`).toMatch(/trident/)
+    expect(rule, `${label}: must name the psi half of the trident+psi pair`).toMatch(/psi/)
+    expect(rule, `${label}: must name the hourglass half of the hourglass+delta pair`).toMatch(
+      /hourglass/
+    )
+    expect(rule, `${label}: must name the delta half of the hourglass+delta pair`).toMatch(/delta/)
+    // Symbol-default / position-fallback 主次: position is a 兜底, not primary.
+    expect(rule, `${label}: must frame position as a 兜底 (fallback)`).toMatch(/兜底/)
+    expect(
+      rule,
+      `${label}: position must be fallback, NOT the primary referent (不是默认主指代 / 才启用)`
+    ).toMatch(/不是默认主指代|不是主指代|才启用|而非主指代/)
+    // RED LINE (玩家可报性): position is a player-REPORTED visible layout fact,
+    // mirroring wire's top-to-bottom legitimacy — not an AI-imagined screen.
+    expect(
+      rule,
+      `${label}: position must read as a player-reported visible layout fact (亲眼可见 / 亲口报 / 报给你)`
+    ).toMatch(/亲眼可见|亲口报|报给你/)
+
+    // (ii) The stripped absolute "玩家不需要理解位置 / 序号" phrasing — which
+    // fights the position fallback — must be GONE.
+    expect(rule, `${label}: must NOT carry the stripped 不需要理解位置/序号 absolute`).not.toMatch(
+      /不需要理解/
+    )
+  }
+
+  it('practice.yaml keypad preamble carries the position-fallback hardening', () => {
+    assertKeypadPositionFallback('practice.yaml', loadKeypadPreamble(PRACTICE_YAML))
+  })
+
+  it('every daily YAML keypad preamble carries the position-fallback hardening', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      assertKeypadPositionFallback(file, loadKeypadPreamble(join(DAILY_DIR, file)))
+    }
+  })
+
+  it("today's daily keypad preamble equals practice's (regen propagated the edit)", () => {
+    // The daily generator carries the keypad.rule string verbatim
+    // (structuredClone) — only the sequence ROWS are permuted. So every daily's
+    // keypad preamble must be character-equal to practice's. This catches a
+    // stale daily that predates a practice preamble edit (regen not run /
+    // partial) — the same 派生漏更 guard wire and button carry.
+    const practiceRule = loadKeypadPreamble(PRACTICE_YAML)
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const file of dailyFiles) {
+      const dailyRule = loadKeypadPreamble(join(DAILY_DIR, file))
+      if (dailyRule !== practiceRule) offenders.push(file)
+    }
+    expect(
+      offenders,
+      `daily keypad preambles differ from practice (stale — rerun gen:daily):\n  ${offenders.join('\n  ')}`
+    ).toEqual([])
+  })
+})
+
 describe('source yaml ai_instructions block is rejected (build-time fail-loud)', () => {
   // AI_INSTRUCTIONS is owned by `build.ts` as a single hard-coded constant and
   // injected into every rendered manual. `validateNoSourceAiInstructions` is
