@@ -14,6 +14,8 @@ export function solveWire(
   for (const rule of rules) {
     if (matchCondition(rule.condition, config as unknown as Record<string, unknown>, sceneInfo)) {
       const pos = resolvePosition(rule.target, config)
+      // null = a defensive skip for an invalid manual (e.g. an out-of-range
+      // numeric position or a color not present); fall through to the next rule.
       if (pos === null) continue
       return { type: 'wire', cutPosition: pos }
     }
@@ -44,5 +46,5 @@ function resolvePosition(
     return wires.length - 1
   }
   const n = target.position as number
-  return n >= 0 && n < wires.length ? n : null
+  return n >= 1 && n <= wires.length ? n - 1 : null
 }

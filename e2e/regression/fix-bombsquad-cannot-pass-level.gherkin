@@ -32,20 +32,23 @@ Feature: bombsquad-cannot-pass-level regression coverage
   #   matching condition" + 1-indexed positions and produced wrong cut
   #   instructions.
   # fix: practice.yaml wire_routing.rule preamble (Chinese, modeled on
-  #   keypad/dial rule strings) declares first-match-wins, 0-indexed
-  #   top-down positions, first ≡ 0, last ≡ length-1, and the
-  #   target.color refinement semantics. Propagates to 366 daily files via
-  #   the seeded shuffle generator. The corresponding solver enforcement
-  #   lives in packages/game-bombsquad/src/modules/wire/solver.ts:resolvePosition.
+  #   keypad/dial rule strings) declares first-match-wins, 1-indexed
+  #   top-down positions, first ≡ position 1, last ≡ position length, and the
+  #   target.color refinement semantics. (The position convention was later
+  #   flipped from 0-indexed to 1-indexed top-down so `position N` literally
+  #   reads as "从上数第 N 根" with no 0→1 translation step — the prior source of
+  #   off-by-one drift.) Propagates to 366 daily files via the seeded shuffle
+  #   generator. The corresponding solver enforcement lives in
+  #   packages/game-bombsquad/src/modules/wire/solver.ts:resolvePosition.
   # retire-when: docs/architecture/arch-component-manual-system.md
   #   §Invariants `每模块规则前言不变量` + `Wire 下标语义不变量` are removed.
-  Scenario: wire_routing manual declares 0-indexed position + first-match-wins (Bug A)
+  Scenario: wire_routing manual declares 1-indexed position + first-match-wins (Bug A)
     Given the practice manual YAML at packages/manual/data/practice.yaml
     When parsing the wire_routing.rule field
     Then the field is a non-empty string
-    And it declares 0-indexed position semantics in Chinese
+    And it declares 1-indexed position semantics in Chinese
     And it declares first-match-wins in Chinese
-    And it declares first ≡ 0 and last ≡ length-1 in Chinese
+    And it declares first ≡ position 1 and last ≡ position length in Chinese
 
   # bug: Bug B — button manual had no rule preamble. Without a preamble the
   #   AI partner could not infer first-match-wins; it tried multiple

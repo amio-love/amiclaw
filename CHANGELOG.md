@@ -13,6 +13,14 @@ at the same destination three times. And the copy across the hero, daily
 challenge, and footer is tightened, with a clearer hierarchy so the first thing
 you read is what Amiclaw is and how to start playing.
 
+**The wire manual now numbers wires the way your AI partner talks** — In the
+光弦 module the manual used to number wires starting from 0, so the AI had to
+silently translate "position 0" into "the first wire from the top" every time it
+read you a cut — a quiet off-by-one waiting to happen. The manual now numbers
+wires from 1 top-down, so "position N" reads as exactly「从上数第 N 根」, the same
+words the AI says out loud. The correct wire to cut is unchanged on every board;
+this only removes a translation step that could trip the AI up.
+
 **The 星盘 now shows how many right-arrow presses you've dialed in** — Each of the
 three dials used to leave you guessing whether you'd turned it the right amount,
 with only the shifting center symbol to go on — which isn't the answer. Every dial

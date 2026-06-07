@@ -48,38 +48,50 @@ function loadPractice() {
 
 // ---------- Scenario A: wire_routing rule preamble ----------
 function scenarioA() {
-  const name = 'Bug A — wire_routing manual declares 0-indexed position + first-match-wins'
+  const name = 'Bug A — wire_routing manual declares 1-indexed position + first-match-wins'
   const manual = loadPractice()
   const rule = manual?.modules?.wire_routing?.rule
   if (typeof rule !== 'string' || rule.length === 0) {
     record(name, `wire_routing.rule is missing or empty (got: ${JSON.stringify(rule)})`)
     return
   }
-  // 0-indexed declaration in Chinese — accept either the phrase 0-indexed
-  // or an explicit "0 = 最上" style statement.
-  if (!/0[\s-]*indexed/i.test(rule) && !/0\s*=\s*最/.test(rule)) {
+  // 1-indexed declaration in Chinese — accept either the phrase 1-indexed
+  // or an explicit "1 = 最上" style statement. The convention was changed from
+  // 0-indexed to 1-indexed top-down so `position N` literally means "从上数第 N
+  // 根" with no 0→1 translation step (the source of off-by-one drift).
+  if (!/1[\s-]*indexed/i.test(rule) && !/1\s*=\s*最/.test(rule)) {
     record(
       name,
-      'rule preamble does not declare 0-indexed semantics (expected "0-indexed" or "0 = 最…" phrasing in Chinese)'
+      'rule preamble does not declare 1-indexed semantics (expected "1-indexed" or "1 = 最…" phrasing in Chinese)'
+    )
+  }
+  // The obsolete 0-indexed semantics + the dead 0→1 translation step must be gone.
+  if (/0[\s-]*indexed/i.test(rule)) {
+    record(name, 'rule preamble still declares obsolete 0-indexed semantics')
+  }
+  if (/翻译成自然语言/.test(rule)) {
+    record(
+      name,
+      'rule preamble still carries the dead 0→1 translation instruction (翻译成自然语言)'
     )
   }
   // first-match-wins declaration.
   if (!/first[\s-]*match[\s-]*wins/i.test(rule)) {
     record(name, 'rule preamble does not declare "first-match-wins"')
   }
-  // first ≡ 0 and last ≡ length-1 equivalence — accept either Chinese 等价 phrasing
-  // or the literal ≡ glyph.
+  // first ≡ position 1 and last ≡ position length equivalence — accept either
+  // Chinese 等价 phrasing or the literal ≡ glyph.
   const declaresFirst =
-    /first\s*[≡=]\s*(?:position\s*)?0/i.test(rule) ||
-    /关键字\s*first[^。]*?(?:等价|≡|=)[^。]*?0/i.test(rule)
+    /first\s*[≡=]\s*(?:position\s*)?1/i.test(rule) ||
+    /关键字\s*first[^。]*?(?:等价|≡|=)[^。]*?1/i.test(rule)
   const declaresLast =
-    /last\s*[≡=]\s*(?:position\s*)?length\s*[-－]\s*1/i.test(rule) ||
-    /关键字\s*last[^。]*?(?:等价|≡|=)[^。]*?length\s*[-－]\s*1/i.test(rule)
+    /last\s*[≡=]\s*(?:position\s*)?length(?!\s*[-－]\s*1)/i.test(rule) ||
+    /关键字\s*last[^。]*?(?:等价|≡|=)[^。]*?length(?!\s*[-－]\s*1)/i.test(rule)
   if (!declaresFirst) {
-    record(name, 'rule preamble does not declare "first ≡ 0" equivalence')
+    record(name, 'rule preamble does not declare "first ≡ position 1" equivalence')
   }
   if (!declaresLast) {
-    record(name, 'rule preamble does not declare "last ≡ length-1" equivalence')
+    record(name, 'rule preamble does not declare "last ≡ position length" equivalence')
   }
 }
 

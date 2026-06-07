@@ -4,6 +4,12 @@ pnpm-lock.yaml
 # Generated golden fixture — build-answers.mjs owns its format
 e2e/fixtures/answers.json
 
+# Manual rulebook data — js-yaml dump owns its format (hand-authored practice
+# source + generate-daily-from-practice.mjs output). Byte-stable single-quote
+# YAML must not be re-quoted by prettier, or committed files diverge from
+# generator output and `gen:daily` can no longer cleanly re-derive them.
+packages/manual/data/
+
 # Playwright-bdd generated dirs (mirror .gitignore)
 .features-gen/
 .features-mirror/
