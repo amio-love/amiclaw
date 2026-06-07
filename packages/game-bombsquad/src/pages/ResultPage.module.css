@@ -330,22 +330,27 @@
   margin-top: 12px;
 }
 
-/* ----------  no-data fallback  ---------- */
+/* ----------  no-data recovery state  ----------
+   Reached when ResultPage opens with no live run (direct link / refresh /
+   odd back-nav). A gentle one-line explanation above the three landing-page
+   entry points, so the empty state is recoverable rather than a dead end.
+   Centered in the stage; the actions reuse the shared `.cta` stack so they
+   match the "再来一局" CTA visual hierarchy. */
 .noData {
   margin: auto;
+  width: 100%;
+  max-width: 360px;
   padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   text-align: center;
-  font: 400 15px var(--font-body);
+}
+
+.noDataText {
+  margin: 0;
+  font: 400 15px/1.6 var(--font-body);
   color: var(--soft);
-}
-
-.noDataLink {
-  color: var(--y);
-  text-decoration: none;
-}
-
-.noDataLink:hover {
-  text-decoration: underline;
 }
 
 /* `breathe` is BombSquad-specific (not in atlas-animations.css); CSS

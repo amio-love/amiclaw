@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The results screen is no longer a dead end** — Opening the results screen
+directly, or landing on it after a refresh, used to show "暂无数据" with only a
+link back to the home page — a dead end that pushed you out of the game. It now
+greets you with a way back in: 开始今日挑战, 练习一局, or 返回主页, so you can
+jump straight into a run instead of starting over from scratch.
+
 **The trident symbol finally looks like a trident** — One of the star-panel
 symbols used to draw a muddled shape — a pole with two little hooks — that
 matched nothing you could put into words, so describing it to your AI led
