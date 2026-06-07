@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The top-right button does something now, and no button lies about signing up**
+— The yellow「登录 / 开始」button in the top-right corner used to do nothing when
+tapped, which made you wonder what else on the page was just for show. There's
+never been a login or a sign-up here — you just play — so that button now reads
+「开始玩」and takes you straight into a game. For the same reason, the footer
+button that said「注册 · 30 秒」now reads「免注册，直接开始玩」: no account, no
+form, you start playing right away.
+
 **When two star-panel symbols look alike, your AI can point you by grid cell** —
 A few of the star-panel symbols are easy to mix up by name — the three-prong
 trident and the bowl-and-stem beside it, or the hourglass and the triangle. If

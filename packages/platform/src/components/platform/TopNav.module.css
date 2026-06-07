@@ -106,7 +106,7 @@
     font-size: 19px;
   }
 
-  /* the 登录 / 开始 button — atlas .signin-btn mobile size. .right button
+  /* the 开始玩 entry button — atlas .signin-btn mobile size. .right button
      (0,1,1) outranks Button's .sm / .primary (0,1,0). */
   .right button {
     padding: 8px 14px;
