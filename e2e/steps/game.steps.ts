@@ -72,10 +72,6 @@ Then('the immersive game flow renders without the platform shell', async ({ page
   await expect(page.getByRole('navigation', { name: '主导航' })).toHaveCount(0)
 })
 
-Then('I see the prompt {string}', async ({ page }, text: string) => {
-  await expect(page.getByText(text)).toBeVisible()
-})
-
 Then('the timer starts at 00:00 and counts up', async ({ world, page }) => {
   const timer = page.getByRole('timer')
   // A count-up stopwatch shows 00:00 at the start — not a per-mode budget a

@@ -15,8 +15,9 @@
  *   7. step 1 surfaces the /bombsquad/compatibility discovery link
  *      (re-homed from the retired PromptModal).
  *
- * The readiness gate now lives once on GamePage's "开始" button, so this flow
- * ends with a plain "进入游戏" navigation — there is no second confirm here.
+ * The AI-readiness sync prompt now lives here on step 2, and "进入游戏" starts
+ * the run directly — there is no separate GamePage 开始 gate, so this flow ends
+ * with a plain navigation and the run auto-starts on the other side.
  *
  * useDailyChallenge is mocked to deterministic URLs; copyToClipboard is
  * stubbed to its success branch so the copy → auto-advance path runs
@@ -43,8 +44,19 @@ vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
+// The 进入游戏 tap unlocks the shared AudioContext inside the user gesture (iOS
+// Safari needs the gesture). Mock the singleton so the test can assert the call
+// without a real Web Audio context in jsdom.
+vi.mock('@/audio/audio-context', () => ({
+  getAudioContext: vi.fn().mockReturnValue(null),
+}))
+
 import ConnectPage from './ConnectPage'
 import { copyToClipboard } from '@/utils/clipboard'
+import { getAudioContext } from '@/audio/audio-context'
+
+/** The exact AI-readiness sync prompt copy rendered on step 2. */
+const SYNC_PROMPT = '等 AI 说完「好了」，点「进入游戏」就开始，计时随即启动。'
 
 /* Renders the current location so the run-handoff target is assertable
    without mounting the real GamePage. */
@@ -79,6 +91,7 @@ describe('ConnectPage', () => {
   beforeEach(() => {
     vi.mocked(copyToClipboard).mockClear()
     vi.mocked(copyToClipboard).mockResolvedValue(true)
+    vi.mocked(getAudioContext).mockClear()
   })
 
   it('renders step 1 with the URL preview and manual URL', () => {
@@ -149,11 +162,41 @@ describe('ConnectPage', () => {
     // Step 1 → step 2 via copy + auto-advance.
     await copyAndReachStep2()
 
-    // Step 2 — the voice-mode step, with the run handoff CTA. No second
-    // readiness confirm — that gate lives on GamePage's "开始" button.
+    // Step 2 — the voice-mode step, carrying the AI-readiness sync prompt and
+    // the run handoff CTA. 进入游戏 starts the run directly; there is no separate
+    // GamePage 开始 gate.
     expect(screen.getByText('第 2/2 步')).toBeInTheDocument()
     expect(screen.getByText('切到语音模式')).toBeInTheDocument()
+    // The sync prompt re-homed from the deleted GamePage 开始 gate: it confirms
+    // the AI said「好了」and names the one consequence of the next tap (进入即计时).
+    expect(screen.getByText(SYNC_PROMPT)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /进入游戏/ })).toBeInTheDocument()
+  })
+
+  it('unlocks the AudioContext when 进入游戏 is tapped (daily)', async () => {
+    renderConnect('daily')
+
+    await copyAndReachStep2()
+    // No audio unlock has happened yet — it must fire on the run-handoff gesture,
+    // not on render or on the copy step.
+    expect(getAudioContext).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
+
+    // iOS Safari only permits audio to start from inside a user gesture, so the
+    // 进入游戏 tap is where the shared AudioContext gets unlocked.
+    expect(getAudioContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('unlocks the AudioContext when 进入游戏 is tapped (practice)', async () => {
+    renderConnect('practice')
+
+    await copyAndReachStep2()
+    expect(getAudioContext).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
+
+    expect(getAudioContext).toHaveBeenCalledTimes(1)
   })
 
   it('hands daily mode off to the run carrying the manual URL as ?url=', async () => {
