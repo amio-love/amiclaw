@@ -322,6 +322,72 @@ describe('manual set-discrimination invariant', () => {
   })
 })
 
+describe('rendered practice manual is scoped to the practice-active module set', () => {
+  // Practice gameplay runs only wire_routing + keypad (MODULE_SEQUENCE.practice
+  // in packages/game-bombsquad/src/store/game-context.tsx — practice:
+  // ['wire','keypad']). The source practice.yaml keeps all four modules (the
+  // daily generator derives every daily manual from it, and the frontend parses
+  // the full source), but build.ts scopes the RENDERED practice manual to the
+  // practice-active set so the AI never loads — and so can never confidently
+  // match against — rules for a module (星盘/symbol_dial, 按钮/button) a practice
+  // run cannot present. This guards BOTH render paths (dist raw YAML + the
+  // HTML-embedded yaml, which build.ts serialises from one canonical payload)
+  // and confirms the scoping is practice-only: every daily manual still ships
+  // all four modules, and the practice render keeps decoy_modules.
+  beforeAll(() => {
+    buildManualForTests()
+  })
+
+  // Sorted alphabetically to match Object.keys(...).sort() below.
+  const PRACTICE_ACTIVE = ['keypad', 'wire_routing']
+  const DAILY_ALL = ['button', 'keypad', 'symbol_dial', 'wire_routing']
+
+  function distRawModuleKeys(distRawPath: string): string[] {
+    const manual = yaml.load(readFileSync(distRawPath, 'utf8')) as Manual
+    return Object.keys(manual.modules).sort()
+  }
+
+  function embeddedModuleKeys(htmlPath: string): string[] {
+    const html = readFileSync(htmlPath, 'utf8')
+    const m = html.match(/<pre class="anti-human">([\s\S]*?)<\/pre>/)
+    if (!m) throw new Error(`No <pre class="anti-human"> block found in ${htmlPath}`)
+    const manual = yaml.load(m[1]) as Manual
+    return Object.keys(manual.modules).sort()
+  }
+
+  it('practice dist raw YAML modules are exactly { wire_routing, keypad }', () => {
+    expect(distRawModuleKeys(join(MANUAL_DIST, 'data/practice.yaml'))).toEqual(PRACTICE_ACTIVE)
+  })
+
+  it('practice HTML-embedded yaml modules are exactly { wire_routing, keypad }', () => {
+    expect(embeddedModuleKeys(join(MANUAL_DIST, 'practice/index.html'))).toEqual(PRACTICE_ACTIVE)
+  })
+
+  it('practice render drops symbol_dial and button (no stale module rules reach the AI)', () => {
+    const keys = distRawModuleKeys(join(MANUAL_DIST, 'data/practice.yaml'))
+    expect(keys, 'symbol_dial must not ship in the practice render').not.toContain('symbol_dial')
+    expect(keys, 'button must not ship in the practice render').not.toContain('button')
+  })
+
+  it('practice render still carries decoy_modules (universal fake-module content)', () => {
+    const manual = yaml.load(
+      readFileSync(join(MANUAL_DIST, 'data/practice.yaml'), 'utf8')
+    ) as Manual & { decoy_modules?: unknown }
+    expect(manual.decoy_modules, 'decoy_modules must survive the practice scoping').toBeDefined()
+  })
+
+  it('every daily dist raw YAML still ships all four modules (scoping is practice-only)', () => {
+    const dailyFiles = readdirSync(DAILY_DIR).filter((f) => f.endsWith('.yaml'))
+    expect(dailyFiles.length).toBeGreaterThan(0)
+    for (const file of dailyFiles) {
+      expect(
+        distRawModuleKeys(join(MANUAL_DIST, 'data', file)),
+        `${file} should still carry all four modules`
+      ).toEqual(DAILY_ALL)
+    }
+  })
+})
+
 describe('AI_INSTRUCTIONS carries game framing + collaboration philosophy', () => {
   // build.ts injects AI_INSTRUCTIONS into the HTML-embedded yaml AND the dist
   // raw yaml on every render. This block locks in the required-key schema
