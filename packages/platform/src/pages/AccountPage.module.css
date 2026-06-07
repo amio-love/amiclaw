@@ -198,6 +198,59 @@
   text-align: center;
 }
 
+/* ----------  signed-out — login-guide empty state  ----------
+   Shown to anonymous visitors instead of a fake profile. A single
+   centered card: heading + a plain-text unlock preview + a primary CTA
+   linking to the platform homepage. Brand yellow accent, no fake data. */
+.guideCard {
+  max-width: 480px;
+  padding: 40px 36px;
+  text-align: center;
+}
+
+.guideTitle {
+  margin: 0;
+  font: 400 26px var(--font-display);
+  color: var(--text-1);
+}
+
+.unlockList {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.unlockItem {
+  font: 500 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+}
+
+/* CTA — mirrors the primary Button affordance (yellow pill, dark text,
+   glow-lift on hover). CSS-only animation; rendered as a react-router
+   Link so it navigates to the homepage / onboarding surface. */
+.guideCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 30px;
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: var(--amio-yellow);
+  color: #000;
+  font: 600 15px var(--font-body);
+  text-decoration: none;
+  transition: all 0.25s;
+}
+
+.guideCta:hover {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
+}
+
 /* ----------  responsive: mobile  ----------
    atlas.html ≤768px — .acct-grid collapses to one column (profile card
    stacks above the recent-runs / badges detail column). */
