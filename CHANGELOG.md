@@ -5,6 +5,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The Yijing home no longer shows a settings button that does nothing** — The
+gear icon in the top corner of the 易经 oracle home looked tappable but had
+nothing behind it — there are no settings to open. It's gone now, so every
+control on the page does something.
+
 **The top-right button does something now, and no button lies about signing up**
 — The yellow「登录 / 开始」button in the top-right corner used to do nothing when
 tapped, which made you wonder what else on the page was just for show. There's
