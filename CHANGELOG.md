@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The button's light now visibly keeps cycling, so you don't let go too early**
+— On the button module, holding the button runs its little light through a
+sequence of colors, and you're meant to release on one specific color. The
+light could look like it had simply settled, so it was easy to let go on the
+first color you saw and take a strike. Now a thin ring sweeps around the light
+and it pulses on every change, making it obvious the colors are still cycling —
+wait for the one your AI told you and release then. The colors and timing are
+unchanged, and the cue gives away nothing about which color is the right one.
+
 **There's now a real privacy policy and terms page** — The 隐私 and 条款 links
 in the footer used to be dead text. They now open proper pages that spell out
 exactly what we collect (your nickname and chosen AI tool go on the public

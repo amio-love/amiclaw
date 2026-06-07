@@ -54,6 +54,42 @@
   backdrop-filter: blur(20px);
 }
 
+/* Indicator well — hosts the status pip and, while holding, a continuous
+   sweep ring. The ring gives the player a target-agnostic "still cycling"
+   signal so a held color is never misread as a settled answer. The well is
+   slightly larger than the pip to leave room for the surrounding ring. */
+.indicatorWell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+}
+
+/* Sweep ring — a thin yellow-brand arc that orbits the pip, completing one
+   revolution per full 4-color cycle (4 x 800ms = 3.2s). It is rendered as a
+   masked conic-gradient annulus on a pseudo element so the pip itself never
+   rotates. Motion, color, and geometry are identical for every indicator
+   color — it never reads answer.releaseOnColor, so it leaks no target. */
+.indicatorWell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--y-glow-50) 300deg, var(--y) 360deg);
+  /* Mask to a thin ring: opaque outside the inner radius, transparent inside. */
+  -webkit-mask: radial-gradient(circle, transparent 13px, #000 14px);
+  mask: radial-gradient(circle, transparent 13px, #000 14px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.indicatorWell.cycling::before {
+  opacity: 1;
+  animation: button-cycle-sweep 3200ms linear infinite;
+}
+
 /* Status indicator pip — color + glow are supplied inline. */
 .indicator {
   width: 22px;
@@ -63,6 +99,31 @@
   transition:
     background-color 0.2s ease,
     box-shadow 0.2s ease;
+}
+
+/* Per-color-change tick — a brief uniform scale pulse replayed on every cycle
+   step (the pip is keyed on the color index, so it remounts each change). The
+   pulse is identical for white/yellow/blue/red and reveals no target. */
+.indicator.advancePulse {
+  animation: button-cycle-tick 320ms ease-out;
+}
+
+@keyframes button-cycle-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes button-cycle-tick {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Button cradle — a slow dashed orbit ring rendered as a pseudo
@@ -139,6 +200,14 @@
     animation: none;
   }
   .buttonOrbit::before {
+    animation: none;
+  }
+  /* Drop the per-change pulse and the sweep rotation, but keep the ring
+     visible while holding so the "cycling" affordance survives motion-off. */
+  .indicator.advancePulse {
+    animation: none;
+  }
+  .indicatorWell.cycling::before {
     animation: none;
   }
 }
