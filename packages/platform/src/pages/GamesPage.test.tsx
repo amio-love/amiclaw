@@ -3,14 +3,15 @@
  *
  * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
- *   2. the daily-challenge CTA routes to the BombSquad landing (/bombsquad)
- *   3. the featured-BombSquad「游戏页 →」action routes to /bombsquad
- *   4. the anonymous hero「开启旅程」CTA routes to /bombsquad
- *   5. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
+ *   2. the anonymous hero「开始玩」CTA routes to /bombsquad
+ *   3. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
  *
- * Every BombSquad CTA on the homepage now routes to the BombSquad landing
- * page; the landing owns the daily/practice choice and the connect-AI
- * flow, so the homepage no longer opens a pre-game modal. The
+ * The homepage has a single in-page play CTA — the AnonHero primary「开始玩」
+ * (the other play entry is the TopNav, rendered by the app shell, not here).
+ * The DailyChallenge / FeaturedBombSquad / FooterPitch sections are pure
+ * info / pitch blocks with no play button. The CTA routes to the BombSquad
+ * landing page; the landing owns the daily/practice choice and the
+ * connect-AI flow, so the homepage no longer opens a pre-game modal. The
  * landing → connect → run path is covered by the screen tests.
  *
  * Render the page directly inside a MemoryRouter. A sibling `/bombsquad`
@@ -78,34 +79,18 @@ describe('GamesPage homepage', () => {
   it('renders the anonymous hero on / for a signed-out visitor', () => {
     renderHomepage('/')
 
-    // AnonHero markers: the hero eyebrow pill and the primary「开启旅程」CTA.
+    // AnonHero markers: the hero eyebrow pill and the primary「开始玩」CTA.
     expect(screen.getByText('本周开服 · BOMBSQUAD 公测中')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /开启旅程/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /开始玩/ })).toBeInTheDocument()
     // The signed-in WelcomeStrip greets the mock user by name — it must NOT
     // be present for an anonymous visitor.
     expect(screen.queryByText('星海')).not.toBeInTheDocument()
   })
 
-  it('routes to the BombSquad landing when the daily-challenge CTA is clicked', () => {
+  it('routes to the BombSquad landing from the anonymous hero「开始玩」CTA', () => {
     renderHomepage('/')
 
-    fireEvent.click(screen.getByRole('button', { name: /立即挑战/ }))
-
-    expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
-  })
-
-  it('routes to the BombSquad landing from the featured「游戏页 →」action', () => {
-    renderHomepage('/')
-
-    fireEvent.click(screen.getByRole('button', { name: '游戏页 →' }))
-
-    expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
-  })
-
-  it('routes to the BombSquad landing from the anonymous hero「开启旅程」CTA', () => {
-    renderHomepage('/')
-
-    fireEvent.click(screen.getByRole('button', { name: /开启旅程/ }))
+    fireEvent.click(screen.getByRole('button', { name: /开始玩/ }))
 
     expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
@@ -116,7 +101,7 @@ describe('GamesPage homepage', () => {
     // WelcomeStrip greets the mock user by display name.
     expect(screen.getByText('星海')).toBeInTheDocument()
     // The anonymous hero CTA must NOT be present.
-    expect(screen.queryByRole('button', { name: /开启旅程/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /开始玩/ })).not.toBeInTheDocument()
   })
 
   it('shows honest empty / zero states when the real daily board is empty', async () => {

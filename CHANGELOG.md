@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The home page now says one thing about how to start, and says it
+honestly** — The landing page used to describe your AI partner as your eyes or
+your ears, which gets the game backwards: you are the one looking at the bomb,
+and the AI is the one reading the manual. The daily-challenge and featured
+sections now say it straight — you describe the panel, the AI looks it up in
+the manual. And the five different buttons that all led to the same place are
+down to two, both reading「开始玩」, so it's obvious where to go to start a game.
+The daily and featured cards are now plain info cards, and the footer is a plain
+pitch — none of them tries to send you off with its own button anymore.
+
 **页脚不再留两个点不动的死链接** — 页脚里的「关于」和「Discord」过去只是两段不能点的
 文字。「关于」没有对应的页面,直接拿掉了。「Discord」改成接上社区邀请链接:邀请链接填好
 之前它不出现,填好之后就变成一个能点、在新标签页打开的入口。隐私和条款两个链接照常可用。
