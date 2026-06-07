@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The 星盘 now shows how many right-arrow presses you've dialed in** — Each of the
+three dials used to leave you guessing whether you'd turned it the right amount,
+with only the shifting center symbol to go on — which isn't the answer. Every dial
+now carries a live「右拨」counter, and a line above the dials reminds you it's the
+number of right-arrow presses that matters, not the symbol in the middle. So when your
+AI says「按右箭头 3 次」, you just turn until the counter reads 3. The left and
+right buttons also swapped their old swirl icons for plain left / right arrows, so
+there's no doubt which way each one turns. The puzzle and its answers are exactly
+the same.
+
 **The button's light now visibly keeps cycling, so you don't let go too early**
 — On the button module, holding the button runs its little light through a
 sequence of colors, and you're meant to release on one specific color. The
