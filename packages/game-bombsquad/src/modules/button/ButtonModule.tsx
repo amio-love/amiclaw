@@ -118,6 +118,8 @@ export default function ButtonModule({
   const indicatorColor = CSS_COLORS[INDICATOR_COLORS[indicatorColorIdx]] ?? '#888'
   const buttonBg = CSS_COLORS[config.color] ?? '#444'
   const isPressed = buttonState === 'pressed' || buttonState === 'holding'
+  const isHolding = buttonState === 'holding'
+  const litColor = isHolding ? indicatorColor : (CSS_COLORS[config.indicatorColor] ?? '#888')
 
   return (
     <div
@@ -125,21 +127,25 @@ export default function ButtonModule({
       data-testid="button-module"
     >
       <div className={styles.stage}>
-        <div
-          className={styles.indicator}
-          style={{
-            backgroundColor:
-              buttonState === 'holding'
-                ? indicatorColor
-                : (CSS_COLORS[config.indicatorColor] ?? '#888'),
-            boxShadow: `0 0 14px ${
-              buttonState === 'holding'
-                ? indicatorColor
-                : (CSS_COLORS[config.indicatorColor] ?? '#888')
-            }`,
-          }}
-          data-testid="button-indicator"
-        />
+        {/* The sweep ring runs continuously while holding — one revolution per
+            full 4-color cycle — so a held color reads as "still cycling" rather
+            than "settled". The ring is target-agnostic: its motion and color are
+            identical for every indicator color and never reference the answer. */}
+        <div className={`${styles.indicatorWell} ${isHolding ? styles.cycling : ''}`}>
+          {/* Keyed on the color index so every color change remounts and replays
+              the same brief pulse — a uniform "the light just advanced" tick.
+              The key only changes while holding, so the pulse fires per cycle
+              step and the cue is the same for white/yellow/blue/red. */}
+          <div
+            key={isHolding ? indicatorColorIdx : 'idle'}
+            className={`${styles.indicator} ${isHolding ? styles.advancePulse : ''}`}
+            style={{
+              backgroundColor: litColor,
+              boxShadow: `0 0 14px ${litColor}`,
+            }}
+            data-testid="button-indicator"
+          />
+        </div>
         <div className={styles.buttonOrbit}>
           <button
             type="button"
