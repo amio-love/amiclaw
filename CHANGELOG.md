@@ -433,6 +433,15 @@ run; a later release adds a real AI partner, voice I/O, and the full
 
 ### Improvements
 
+- **AI partner no longer confuses the button's two lights** The button-module
+  manual used to call both the scene's named indicators and the button's own
+  press-and-hold release light「指示灯」, so a literal AI could watch the wrong
+  light or apply a scene indicator's color to the release condition. The release
+  light is now named「灯条」throughout the manual, terminologically distinct from
+  the scene「指示灯」, so your AI tells you which light to watch on release without
+  conflating it with which scene indicator a rule names. No change to puzzles,
+  answers, or the game screen. Source task
+  `fix-manual-light-terminology-collision`.
 - **Clearing a module finally feels good** Solving a module now lands with a
   bright two-note rising chime and a quick green bloom on the panel and the
   just-filled progress segment, instead of the near-silent thunk it used to
