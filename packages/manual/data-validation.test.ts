@@ -728,12 +728,20 @@ describe('wire_routing preamble carries the three readability-trap hardenings', 
   // battery 4), produced a wrong cut and then reverse-asked the player for the
   // rules. Root cause was a manual-content readability trap, not a logic bug —
   // solver.ts and the published rules agree on the answer (rule#2
-  // battery_count>2 → position 2). The wire_routing.rule preamble gains three
+  // battery_count>2 → position 2). The wire_routing.rule preamble carries three
   // hardened elements so a literal, time-pressured AI reader walks the rules
-  // correctly. These guards run over practice.yaml AND every daily file (the
-  // preamble is carried verbatim by the deterministic daily generator), so a
-  // future practice edit that drops an element — or a stale daily that predates
-  // the edit — fails loudly.
+  // correctly: (a) strict top-down first-match-wins, (b) the color-filter
+  // STRUCTURAL guarantee, (c) the scene-info ask-gate. Element (b) was
+  // superseded by fix-manual-color-filter-controlflow: the offending yellow
+  // rule's condition gained `count_red: {gt: 0}`, removing the manual's sole
+  // match-then-fall-through control flow at the source, so the preamble no
+  // longer teaches a "skip on color absence" example and instead states the
+  // structural guarantee (a color-targeted rule's condition ensures that color
+  // is present → the target is always resolvable) while still forbidding
+  // arbitrary color substitution. These guards run over practice.yaml AND every
+  // daily file (the preamble is carried verbatim by the deterministic daily
+  // generator), so a future practice edit that drops an element — or a stale
+  // daily that predates the edit — fails loudly.
   function loadWirePreamble(path: string): string {
     const manual = yaml.load(readFileSync(path, 'utf8')) as Manual
     const rule = (manual.modules as unknown as { wire_routing?: { rule?: string } }).wire_routing
@@ -755,22 +763,28 @@ describe('wire_routing preamble carries the three readability-trap hardenings', 
       /显眼|最相关|最像|最突出/
     )
 
-    // Element (b): worked color-filter SKIP example — condition color and
-    // action color can differ; if no wire of the action color exists the rule
-    // does NOT apply, continue; never repair the action to an available color.
-    // The all-yellow / no-red example must be concrete.
-    expect(rule, `${label}: color-filter example must reference the yellow trigger`).toMatch(/黄/)
+    // Element (b): color-filter is a STRUCTURAL guarantee, not a skip control
+    // flow. The match-then-fall-through hazard was removed at the source — the
+    // offending yellow rule's condition gained `count_red: {gt: 0}`, so every
+    // color-targeted wire rule's condition now guarantees the target color is
+    // present and the target is always resolvable. The preamble must (1) reframe
+    // color-filter as that structural guarantee (condition 已保证该色存在), (2)
+    // still forbid arbitrary color substitution (绝不擅自换色), and (3) NO LONGER
+    // carry the dead all-yellow "skip to the next rule" example (绝不改成剪黄) —
+    // the structural fix makes that fall-through impossible. (The machine-checked
+    // structural invariant itself is guarded by
+    // e2e/regression/fix-manual-color-filter-controlflow.assert.mjs.)
     expect(
       rule,
-      `${label}: color-filter example must reference the absent red action color`
-    ).toMatch(/红/)
-    expect(rule, `${label}: must state the rule 不适用 when the action color is absent`).toMatch(
-      /不适用/
+      `${label}: must reframe color-filter as a structural guarantee (condition 已保证该色存在)`
+    ).toMatch(/condition 已保证|condition 必保证|已保证该色存在|保证该色至少/)
+    expect(rule, `${label}: must forbid arbitrary color substitution (绝不擅自换色)`).toMatch(
+      /绝不擅自换色|绝不擅自把要剪的颜色换成|不得擅自换色/
     )
-    expect(rule, `${label}: must tell the AI to 继续 to the next rule on a skip`).toMatch(/继续/)
-    expect(rule, `${label}: must forbid repairing the action to the available color`).toMatch(
-      /绝不改成剪黄|不要改成剪黄|绝不改剪黄|不能改成剪黄/
-    )
+    expect(
+      rule,
+      `${label}: must NOT carry the dead all-yellow skip example (改成剪黄) — the structural fix removed that fall-through`
+    ).not.toMatch(/改成剪黄/)
 
     // Element (c): scene-info ask-gate — rules can depend on battery /
     // indicators; if the AI lacks the value it must ASK the player before

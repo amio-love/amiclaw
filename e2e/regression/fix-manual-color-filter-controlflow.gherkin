@@ -1,0 +1,95 @@
+# Regression guards for the fix-manual-color-filter-controlflow task
+# (task fix-manual-color-filter-controlflow, 2026-06-07).
+#
+# This file documents 2 regression scenarios guarding the structural-supersede
+# state of the wire_routing rulebook. The executable assertions live in the
+# companion node script
+# `e2e/regression/fix-manual-color-filter-controlflow.assert.mjs`, run via
+# `node e2e/regression/fix-manual-color-filter-controlflow.assert.mjs`.
+# The script exits 0 on full pass and non-zero on any failure, naming the
+# failing scenario in stderr — capture format matches the rest of the
+# repository's data-assertion regression scenarios in this directory.
+#
+# Bisect contract: on the pre-fix practice.yaml the script FAILS — the
+# `{wire_count:4, color_at_last:yellow} → {position:last, color:red}` rule keys
+# on yellow but cuts red with no guarantee a red wire exists (Scenario A), and
+# the preamble still carries the all-yellow "skip to the next rule" example
+# (Scenario B). After the fix (the rule's condition gains `count_red: {gt: 0}`
+# and the preamble drops the skip clause while reframing color-filter as a
+# structural guarantee) it PASSES. It exists as failure evidence before the
+# companion fix, giving a bisect-friendly history — identical in shape to the
+# other data-assertion regression sisters in this directory.
+#
+# Why a thin node script instead of playwright-bdd step defs: both assertions
+# are a pure read of YAML (practice + every daily) — no browser, no preview
+# server, no DOM. Spinning up the full playwright harness would add minutes of
+# webserver boot per scenario without any added coverage. The Feature has no
+# @playwright tag, so the playwright-bdd harness (configured in
+# playwright.config.ts with `tags: '@playwright'`) skips this file entirely —
+# only the .assert.mjs sibling is executable.
+#
+# Context: the wire manual had exactly ONE rule whose condition could match
+# while its color-filtered target was unresolvable — the all-yellow/no-red
+# board, where the yellow-trigger rule asks to cut the last RED wire that does
+# not exist. solver.ts already fell through (resolvePosition → null → continue)
+# so the COMPUTED answer was always correct; the hazard was AI-side: a weaker
+# manual-reading partner hit the rule, found no red wire, and improvised a wrong
+# cut. PR #114 hardened this with a loud worked "skip" example in the preamble.
+# This task supersedes that readability hardening with a STRUCTURAL fix: adding
+# `count_red: {gt: 0}` to the rule's condition makes it match only when a red
+# wire exists, so its target is always resolvable and the manual's sole
+# match-then-fall-through control flow disappears — every wire rule becomes
+# clean first-match-wins. The loud-warning preamble version becomes moot and is
+# replaced by this machine-checkable structural invariant.
+
+Feature: wire manual is uniformly first-match-wins (no color-targeted rule can match yet fail to resolve)
+  As an AI partner relying on the bomb manual to talk a player through wire_routing
+  I want every rule whose target filters by color to be guaranteed resolvable
+  whenever its condition matches, so there is no "matched the rule but the target
+  color is not on the board" fall-through to improvise around
+  And I want the preamble to stop instructing a now-impossible skip while still
+  forbidding any arbitrary color substitution
+  So that a weaker manual-reading AI never hits a match-then-fall-through rule and
+  guesses a wrong cut on the all-yellow/no-red board
+
+  Background:
+    Given the practice manual YAML at packages/manual/data/practice.yaml is loaded
+    And every daily manual YAML under packages/manual/data/daily/ is loaded
+
+  # bug: The rule {wire_count:4, color_at_last:yellow} → {position:last,
+  #   color:red} matches whenever the bottom wire is yellow, but cuts the last
+  #   RED wire — which need not exist. When no red wire is present the rule
+  #   matches its condition yet cannot resolve its target: the manual's sole
+  #   match-then-fall-through control flow, conflicting with the dominant
+  #   first-match-wins model and detonation-prone on the AI side.
+  # fix: the rule's condition gains `count_red: {gt: 0}`, so it only matches
+  #   when a red wire exists; its color-filtered target is then always
+  #   resolvable. Every color-targeted wire rule now carries a condition that
+  #   guarantees the target color is present.
+  # retire-when: docs/architecture/arch-component-manual-system.md §Invariants
+  #   drops the "凡 target 带 color 的 wire 规则，其 condition 必保证该色至少一根存在"
+  #   structural invariant.
+  Scenario: every color-targeted wire rule has a condition guaranteeing that color exists
+    Given the wire_routing.rules array of practice.yaml and every daily file
+    When scanning every rule whose target carries a `color` field
+    Then the rule's condition guarantees at least one wire of that color exists
+    And so no rule can match its condition yet fail to resolve its color-filtered target
+
+  # bug: PR #114's preamble taught the AI a worked all-yellow "skip" example —
+  #   on color absence the rule is 不适用 and the AI should 继续 to the next
+  #   rule (and 绝不改成剪黄). The structural fix makes that fall-through
+  #   impossible, so the skip clause is now dead and misleading.
+  # fix: the preamble drops the all-yellow skip example (no more 改成剪黄) and
+  #   reframes color-filter as a structural guarantee — a color-targeted rule's
+  #   condition already ensures that color is present, so the target is always
+  #   resolvable — while still forbidding arbitrary color substitution
+  #   (绝不擅自换色). The strict-no-jump (a) and scene-info ask-gate (c)
+  #   elements stay intact.
+  # retire-when: docs/architecture/arch-component-manual-system.md §Invariants
+  #   drops the structural-guarantee preamble element for wire color-filter.
+  Scenario: wire preamble dropped the dead skip clause but kept anti-substitution
+    Given the wire_routing.rule preamble of practice.yaml and every daily file
+    When reading the color-filter explanation
+    Then it no longer instructs skipping a color-filter rule on color absence (no 改成剪黄)
+    And it still forbids arbitrary color substitution via 绝不擅自换色
+    And it reframes color-filter as a structural guarantee (condition 已保证该色存在)
