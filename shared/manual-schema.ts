@@ -79,7 +79,7 @@ export interface WireRule {
   condition: Record<string, unknown> // flexible — matched by rule engine
   action: 'cut_wire'
   target: {
-    position: 'first' | 'last' | number // 0-indexed number or keyword
+    position: 'first' | 'last' | number // 1-indexed top-down (1 = top, length = bottom); first ≡ position 1, last ≡ position length
     color?: WireColor
   }
 }

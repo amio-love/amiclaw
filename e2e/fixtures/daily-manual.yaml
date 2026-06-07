@@ -16,7 +16,7 @@ modules:
         target: { position: 'last', color: 'red' }
       - condition: { wire_count: 4, color_at_last: 'white' }
         action: 'cut_wire'
-        target: { position: 1 }
+        target: { position: 2 }
       - condition: { wire_count: 4, color_at_last: 'green' }
         action: 'cut_wire'
         target: { position: 'last' }
@@ -28,13 +28,13 @@ modules:
         target: { position: 'last', color: 'red' }
       - condition: { wire_count: 4, battery_count: { gt: 2 } }
         action: 'cut_wire'
-        target: { position: 2 }
+        target: { position: 3 }
       - condition: { wire_count: 4 }
         action: 'cut_wire'
         target: { position: 'first' }
       - condition: { wire_count: 5, color_at_last: 'red' }
         action: 'cut_wire'
-        target: { position: 3 }
+        target: { position: 4 }
       - condition: { wire_count: 5, color_at_last: 'blue' }
         action: 'cut_wire'
         target: { position: 'last' }
@@ -46,10 +46,10 @@ modules:
         target: { position: 'first', color: 'blue' }
       - condition: { wire_count: 5, indicator_FRK_lit: true }
         action: 'cut_wire'
-        target: { position: 2 }
+        target: { position: 3 }
       - condition: { wire_count: 5 }
         action: 'cut_wire'
-        target: { position: 2 }
+        target: { position: 3 }
       - condition: {}
         action: 'cut_wire'
         target: { position: 'first' }
