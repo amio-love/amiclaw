@@ -83,12 +83,21 @@ Feature: bombsquad-cannot-pass-level regression coverage
   #   outer wings (x=15 / x=85). The AI partner relayed the wrong shape
   #   description, the player's "saw a fan with outward arcs" did not match,
   #   and the symbol was misidentified.
-  # fix: description rewritten to describe 5 vertical bars + outward arcs,
-  #   matching what the SVG path actually draws.
-  # retire-when: the trident SVG path itself is redrawn or the symbol is
-  #   removed from the manual-referenced set.
+  # fix (2026-06-05 supersession): the trident glyph was REDRAWN — the
+  #   incoherent "central pole + two ∩ outward-sweeping hooks" hybrid became a
+  #   real 3-prong trident (three separated straight prongs + a crossbar + a
+  #   central shaft). The description was rewritten to truthfully name THAT
+  #   shape, so the old "5 vertical bars + outward arcs" wording is dead. This
+  #   scenario's positive check is updated to the redrawn glyph's vocabulary
+  #   (三股分离尖齿 + 横梁/长柄). The historical 左-中 / 中-右 negative guard stays.
+  #   The deeper description↔path fidelity + psi-vs-trident Ψ-family
+  #   disambiguation invariant is owned by the dedicated bundle
+  #   fix-bombsquad-keypad-symbol-glyph-manual-mismatch.
+  # retire-when: the trident SVG path is redrawn again or the symbol is removed
+  #   from the manual-referenced set (review-gated — replacement coverage of the
+  #   description↔SVG match required).
   Scenario: trident description matches SVG (Bug D)
     Given shared/symbols.ts SYMBOLS for symbol id "trident"
     When reading the description field
     Then the description must NOT claim arcs connect 左-中 and 中-右
-    And the description must mention 外 or 外侧 (OUTER wing semantics)
+    And the description must name the redrawn glyph's 三股分离尖齿 + 横梁/长柄

@@ -16,6 +16,7 @@ const baseEntry: LeaderboardEntry = {
   time_ms: 91234,
   attempt_number: 3,
   ai_tool: 'claude',
+  ai_model: 'Sonnet 4.5',
 }
 
 describe('leaderboard-optimistic', () => {

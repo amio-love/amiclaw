@@ -4,9 +4,10 @@
  * Covers the three branches of the daily-mode submission flow:
  *   1. First-visit daily run, localStorage empty → PostGameModal renders the
  *      nickname section, the score is NOT submitted, and submission only fires
- *      after the player types a valid nickname and confirms.
- *   2. Returning daily run, localStorage already has a nickname → no modal,
- *      the score is submitted immediately with the cached nickname.
+ *      after the player types a valid nickname, chooses an AI tool, and
+ *      confirms.
+ *   2. Returning daily run, localStorage already has nickname + AI metadata
+ *      → no modal, the score is submitted immediately with cached values.
  *   3. Practice mode → no modal, no submit (practice never posts a score).
  *
  * Setup mirrors `ResultPage.test.tsx`: pre-seed sessionStorage with a finished
@@ -52,6 +53,7 @@ import { GameProvider, type GameState } from '@/store/game-context'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
 const NICKNAME_KEY = 'bombsquad-nickname'
+const AI_TOOL_KEY = 'bombsquad-leaderboard-ai-tool'
 
 const mockedSubmit = vi.mocked(submitScore)
 
@@ -147,7 +149,7 @@ describe('ResultPage nickname gate', () => {
     expect(screen.getByRole('dialog', { name: /给自己起个名字/ })).toBeInTheDocument()
     expect(mockedSubmit).not.toHaveBeenCalled()
 
-    // The confirm button is disabled until a valid nickname is typed.
+    // The confirm button is disabled until a valid nickname and AI tool are set.
     const confirmBtn = screen.getByRole('button', { name: /^确认$/ })
     expect(confirmBtn).toBeDisabled()
 
@@ -156,6 +158,9 @@ describe('ResultPage nickname gate', () => {
     expect(confirmBtn).toBeDisabled() // whitespace-only stays disabled
 
     fireEvent.change(input, { target: { value: '小明' } })
+    expect(confirmBtn).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
     expect(confirmBtn).toBeEnabled()
     fireEvent.click(confirmBtn)
 
@@ -163,6 +168,7 @@ describe('ResultPage nickname gate', () => {
     await waitFor(() => expect(mockedSubmit).toHaveBeenCalledTimes(1))
     expect(mockedSubmit.mock.calls[0][0]).toMatchObject({
       nickname: '小明',
+      ai_tool: 'claude',
       device_id: STUB_DEVICE_ID,
     })
 
@@ -171,8 +177,9 @@ describe('ResultPage nickname gate', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('returning daily run: cached nickname → modal does not render, submit fires immediately', async () => {
+  it('returning daily run: cached nickname and AI metadata → submit fires immediately', async () => {
     localStorage.setItem(NICKNAME_KEY, '小红')
+    localStorage.setItem(AI_TOOL_KEY, 'chatgpt')
     sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
 
     renderResultPage()
@@ -181,6 +188,7 @@ describe('ResultPage nickname gate', () => {
     await waitFor(() => expect(mockedSubmit).toHaveBeenCalledTimes(1))
     expect(mockedSubmit.mock.calls[0][0]).toMatchObject({
       nickname: '小红',
+      ai_tool: 'chatgpt',
       device_id: STUB_DEVICE_ID,
     })
   })

@@ -5,6 +5,8 @@ import { MODULE_ADVANCE_DELAY_MS } from '../../../shared/game-timing'
 const MIN_GAME_TIME_MS = 15_000 // 15 seconds minimum — reject obvious cheats
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max
 const MAX_NICKNAME_LEN = 20
+export const MAX_AI_TOOL_LEN = 40
+export const MAX_AI_MODEL_LEN = 80
 
 // Module-sum tolerance. The wall-clock `time_ms` is always ≥ the sum of the
 // per-module times because each MODULE_COMPLETE → NEXT_MODULE transition adds a
@@ -46,6 +48,13 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
   if (typeof submission.date !== 'string') return fail('Invalid date')
   if (typeof submission.device_id !== 'string') return fail('Invalid device_id')
   if (typeof submission.nickname !== 'string') return fail('Invalid nickname')
+  if (typeof submission.ai_tool !== 'string') return fail('Invalid ai_tool')
+  if (sanitizeLeaderboardText(submission.ai_tool, MAX_AI_TOOL_LEN).length === 0) {
+    return fail('Invalid ai_tool')
+  }
+  if (submission.ai_model !== undefined && typeof submission.ai_model !== 'string') {
+    return fail('Invalid ai_model')
+  }
 
   if (submission.time_ms < MIN_GAME_TIME_MS) return fail('Time too short — minimum 15 seconds')
   if (submission.time_ms > MAX_GAME_TIME_MS) return fail('Time exceeds maximum')
@@ -102,12 +111,23 @@ export function sanitizeNickname(raw: string): string {
     stripped = stripped.replace(/<[^>]*>/g, '')
   } while (stripped !== prev)
 
-  return (
-    stripped
-      .replace(/[^\w\s\-_.!?]/g, '') // allow alphanumeric + safe punctuation
-      .trim()
-      .slice(0, MAX_NICKNAME_LEN) || 'Anonymous'
-  )
+  return sanitizeLeaderboardText(stripped, MAX_NICKNAME_LEN) || 'Anonymous'
+}
+
+export function sanitizeLeaderboardText(raw: string, maxLength: number): string {
+  // Strip HTML tags iteratively. Keep Unicode letters/numbers (including CJK)
+  // plus a small punctuation set that is safe in plain text leaderboard rows.
+  let stripped = raw
+  let prev: string
+  do {
+    prev = stripped
+    stripped = stripped.replace(/<[^>]*>/g, '')
+  } while (stripped !== prev)
+
+  return stripped
+    .replace(/[^\p{L}\p{N}\s\-_.!?]/gu, '')
+    .trim()
+    .slice(0, maxLength)
 }
 
 function fail(error: string): ValidationResult {

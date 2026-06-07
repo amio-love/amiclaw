@@ -156,8 +156,8 @@ function scenarioD() {
     return
   }
   const descRaw = descMatch[1]
-  // The mis-statement we are guarding against: arcs claimed to connect
-  // 左-中 AND 中-右 inner spikes. The actual SVG sweeps outward.
+  // The historical mis-statement we still guard against: arcs claimed to
+  // connect 左-中 AND 中-右 inner spikes (the pre-2026-06-05 glyph fiction).
   const claimsLeftMiddle = /左[-－]中/.test(descRaw)
   const claimsMiddleRight = /中[-－]右/.test(descRaw)
   if (claimsLeftMiddle && claimsMiddleRight) {
@@ -166,11 +166,26 @@ function scenarioD() {
       'trident description still claims arcs connect 左-中 AND 中-右 inner spikes (the historical mis-statement)'
     )
   }
-  // Positive check: the description must mention outward-wing semantics.
-  if (!/(外侧|外翼|向外)/.test(descRaw)) {
+  // Positive check (updated 2026-06-05): the trident glyph was redrawn from the
+  // incoherent "central pole + two ∩ outward-sweeping hooks" into a real
+  // 3-prong trident (three separated straight prongs + a crossbar + a central
+  // shaft). The old "outward-wing" semantics (外侧 / 外翼 / 向外) described the
+  // dead glyph's sweeping arcs and no longer matches the SVG. The truthful
+  // description↔SVG match is now the separated-prongs + crossbar/shaft
+  // vocabulary. The deeper fidelity + Ψ-family disambiguation invariant is
+  // owned by
+  // fix-bombsquad-keypad-symbol-glyph-manual-mismatch.assert.mjs; this scenario
+  // keeps a light "description still names the real trident shape" guard.
+  if (!/三股|三叉|三齿/.test(descRaw)) {
     record(
       name,
-      'trident description does not mention outer / outward semantics (expected 外侧 / 外翼 / 向外)'
+      'trident description does not name three separated prongs (三股 / 三叉 / 三齿) of the redrawn glyph'
+    )
+  }
+  if (!/横梁|长柄/.test(descRaw)) {
+    record(
+      name,
+      'trident description does not name the crossbar / central shaft (横梁 / 长柄) of the redrawn glyph'
     )
   }
 }
