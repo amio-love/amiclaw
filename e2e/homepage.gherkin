@@ -24,12 +24,12 @@ Feature: Amiclaw platform homepage
   Scenario: An anonymous visitor lands on the Atlas homepage
     Given I am not signed in
     When the `/` route renders
-    Then I see the anonymous hero with the「开启旅程 →」and「看看 BombSquad」CTAs
+    Then I see the anonymous hero with the「开始玩 →」and「看看 BombSquad」CTAs
     And I see the daily-challenge section
     And I see the featured BombSquad section
     And I see the "什么是 Amiclaw" section
     And I see the upcoming-games section
-    And I see the registration footer pitch
+    And I see the footer pitch
     And the page is dark-only with no light-mode variant
     And the homepage does not scroll horizontally at a 375-pixel phone viewport
 

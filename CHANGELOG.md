@@ -104,9 +104,7 @@ control on the page does something.
 — The yellow「登录 / 开始」button in the top-right corner used to do nothing when
 tapped, which made you wonder what else on the page was just for show. There's
 never been a login or a sign-up here — you just play — so that button now reads
-「开始玩」and takes you straight into a game. For the same reason, the footer
-button that said「注册 · 30 秒」now reads「免注册，直接开始玩」: no account, no
-form, you start playing right away.
+「开始玩」and takes you straight into a game.
 
 **Your AI no longer guesses a wire cut it can't pin down** — On one rare wire
 layout, the manual could point your AI at a wire color that wasn't on the
