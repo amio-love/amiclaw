@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The homepage is calmer and easier to read** — The fabricated community feed
+at the bottom is gone — those posts were made up, so there was nothing real to
+show. The featured BombSquad section no longer stacks two extra play buttons on
+top of its header link; it now has a single「游戏页」link, so you're not staring
+at the same destination three times. And the copy across the hero, daily
+challenge, and footer is tightened, with a clearer hierarchy so the first thing
+you read is what Amiclaw is and how to start playing.
+
 **The 星盘 now shows how many right-arrow presses you've dialed in** — Each of the
 three dials used to leave you guessing whether you'd turned it the right amount,
 with only the shifting center symbol to go on — which isn't the answer. Every dial

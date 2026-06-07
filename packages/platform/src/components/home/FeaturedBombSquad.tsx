@@ -1,4 +1,4 @@
-import { Button, Chip, SectionHeader, accentClass } from '@amiclaw/ui'
+import { Chip, SectionHeader, accentClass } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './FeaturedBombSquad.module.css'
@@ -13,14 +13,9 @@ const MINI_ROW_BUDGET = 4
 
 interface FeaturedBombSquadProps {
   /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the「开始一局」CTA. */
-  onStartDaily: () => void
-  /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the「练习」CTA. */
-  onStartPractice: () => void
-  /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the section header's「游戏页 →」action. The landing page owns the daily /
-     practice choice. */
+     — the section header's「游戏页 →」action. This is the section's single
+     contextual entry: the showcase points to the game page, the landing page
+     owns the daily / practice choice. */
   onOpenGamePage: () => void
   /* Today's real daily board, fetched once in GamesPage. The mini panel
      renders its top rows — or an honest empty state — never mock players. */
@@ -37,12 +32,7 @@ interface FeaturedBombSquadProps {
    empty it shows the daily board's own empty-state wording instead of
    fabricated rows; the panel is labelled 今日日榜 because the data resets
    daily at UTC 0. */
-export default function FeaturedBombSquad({
-  onStartDaily,
-  onStartPractice,
-  onOpenGamePage,
-  board,
-}: FeaturedBombSquadProps) {
+export default function FeaturedBombSquad({ onOpenGamePage, board }: FeaturedBombSquadProps) {
   const topRows = board.entries.slice(0, MINI_ROW_BUDGET)
 
   return (
@@ -108,20 +98,6 @@ export default function FeaturedBombSquad({
           ) : (
             <p className={styles.lbEmpty}>今日还没有成绩，来抢第一！</p>
           )}
-
-          <div className={styles.ctaRow}>
-            <Button
-              variant="primary"
-              size="sm"
-              className={styles.ctaPrimary}
-              onClick={onStartDaily}
-            >
-              开始一局
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onStartPractice}>
-              练习
-            </Button>
-          </div>
         </div>
       </div>
     </section>

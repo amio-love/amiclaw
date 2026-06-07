@@ -1,7 +1,8 @@
-/* Mock data for the community surfaces — handoff §6.7 (the homepage
-   feed carousel) and §6.10 (the Phase 8 community page). `feedItems`
-   feeds components/home/CommunityFeedCarousel; `communityPosts` is
-   consumed by the community page built in Phase 8. */
+/* Mock data for the community surfaces. `communityPosts` is consumed by
+   the community page (pages/CommunityPage). `feedItems` previously fed the
+   homepage feed carousel; that fabricated-post section has been removed
+   from the homepage, so `feedItems` is currently unused — kept here as a
+   sample shape for a future, real-data community feed. */
 
 /* A feed-card body is either plain text, or text carrying one fragment
    the carousel renders as a yellow `.high` highlight. Mock data stays

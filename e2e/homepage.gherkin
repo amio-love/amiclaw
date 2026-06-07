@@ -29,7 +29,6 @@ Feature: Amiclaw platform homepage
     And I see the featured BombSquad section
     And I see the "什么是 Amiclaw" section
     And I see the upcoming-games section
-    And I see the community-feed section
     And I see the registration footer pitch
     And the page is dark-only with no light-mode variant
     And the homepage does not scroll horizontally at a 375-pixel phone viewport

@@ -84,10 +84,6 @@ Then('I see the upcoming-games section', async ({ page }) => {
   await expect(page.getByText('即将上线 · IN ORBIT')).toBeVisible()
 })
 
-Then('I see the community-feed section', async ({ page }) => {
-  await expect(page.getByText('社区 · 最近的玩家')).toBeVisible()
-})
-
 Then('I see the registration footer pitch', async ({ page }) => {
   await expect(page.getByRole('button', { name: '免注册，直接开始玩' })).toBeVisible()
 })

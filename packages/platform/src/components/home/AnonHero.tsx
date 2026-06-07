@@ -33,8 +33,7 @@ export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroPro
           <span className={styles.line2}>a place to play with AI · together</span>
         </h1>
         <p className={styles.sub}>
-          Amiclaw 是 AMIO 旗下的人机协作游戏平台。你描述、AI 协助 ——
-          一起拆弹、一起合奏、一起把一个想法画进星空。
+          你描述、AI 协助，一起拆弹。Amiclaw 是 AMIO 的人机协作游戏平台。
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>
