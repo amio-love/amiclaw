@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 14 active flows <-> 14 journey
-# scenarios, the regression size budget is 28 (2026-06-06, after the
-# leaderboard AI metadata flow was added).
+# 2 x the journey-scenario count. With 16 active flows <-> 16 journey
+# scenarios, the regression size budget is 32 (2026-06-07, after the
+# footer privacy / terms page flows were added).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -181,4 +181,22 @@ flows:
       The BombSquad cyan accent stays confined to the featured BombSquad art
       panel and never leaks into the platform chrome.
     steps: [landing, featured-bombsquad-zone, chrome-no-cyan]
+    status: active
+
+  - id: footer-to-privacy-policy
+    name: Footer privacy policy navigation
+    description: >-
+      A visitor clicks the 隐私 link in the platform footer and lands on the
+      /privacy route, where the full privacy policy renders inside the platform
+      shell.
+    steps: [landing, footer-privacy-link, privacy-page]
+    status: active
+
+  - id: footer-to-terms
+    name: Footer terms-of-service navigation
+    description: >-
+      A visitor clicks the 条款 link in the platform footer and lands on the
+      /terms route, where the full user agreement renders inside the platform
+      shell.
+    steps: [landing, footer-terms-link, terms-page]
     status: active

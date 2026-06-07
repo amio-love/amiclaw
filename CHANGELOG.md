@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**There's now a real privacy policy and terms page** — The 隐私 and 条款 links
+in the footer used to be dead text. They now open proper pages that spell out
+exactly what we collect (your nickname and chosen AI tool go on the public
+leaderboard; an anonymous device id and game events; an optional survey), how
+long we keep it, and how to ask us to delete it — so you can see what happens to
+your data before you play.
+
 **「我的」no longer shows a stranger's stats before you have any of your own** —
 Opening「我的」used to greet every visitor with a complete profile — 42 games
 cleared, a 6-day streak, a wall of badges — that belonged to someone who wasn't

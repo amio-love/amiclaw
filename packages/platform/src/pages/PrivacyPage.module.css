@@ -1,0 +1,118 @@
+/* Privacy policy page — a long-form legal document on one glass card.
+   Header mirrors the other platform pages (.page / .title / .accent /
+   .lead); the card carries readable prose with a constrained measure for
+   legibility. Dark-only, brand-yellow accents, no BombSquad cyan. */
+
+.page {
+  padding: 60px 0;
+}
+
+.title {
+  margin: 0;
+  font: 400 44px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.lead {
+  margin: 10px 0 36px;
+  max-width: 640px;
+  font: 400 16px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.card {
+  padding: 36px 40px;
+}
+
+.prose {
+  max-width: 720px;
+}
+
+.section {
+  margin-top: 32px;
+}
+
+.section:first-child {
+  margin-top: 0;
+}
+
+.heading {
+  margin: 0 0 12px;
+  font: 600 20px/1.4 var(--font-display);
+  color: var(--text-1);
+}
+
+.subheading {
+  margin: 20px 0 8px;
+  font: 600 15px/1.5 var(--font-body);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.prose p {
+  margin: 0 0 12px;
+  font: 400 15px/1.7 var(--font-body);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.list {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.list li {
+  margin-bottom: 8px;
+  font: 400 15px/1.7 var(--font-body);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.list li:last-child {
+  margin-bottom: 0;
+}
+
+.list strong,
+.prose strong {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.note {
+  padding: 12px 16px;
+  border-left: 2px solid var(--border-yellow-soft);
+  border-radius: var(--radius-md);
+  background: var(--amio-yellow-glow-10);
+}
+
+.link {
+  color: var(--amio-yellow);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.effective {
+  margin-top: 20px;
+  font: 400 13px var(--font-body);
+  color: var(--text-4);
+}
+
+/* ----------  responsive: mobile  ---------- */
+@media (max-width: 768px) {
+  .title {
+    font-size: 32px;
+  }
+
+  .card {
+    padding: 24px 20px;
+  }
+}
