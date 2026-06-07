@@ -199,16 +199,6 @@ Then('no row mentions a required browser or "Clipboard API"', async ({ page }) =
   expect(toolsText).not.toContain('浏览器')
 })
 
-Then('the recommended opening prompt contains {string}', async ({ page }, fragment: string) => {
-  await expect(page.locator('[class*="promptText"]')).toContainText(fragment)
-})
-
-Then('the system clipboard contains the recommended opening prompt text', async ({ page }) => {
-  const promptText = (await page.locator('[class*="promptText"]').innerText()).trim()
-  const clipboard = (await readClipboard(page)).trim()
-  expect(clipboard).toBe(promptText)
-})
-
 Then('I am back on the BombSquad landing page', async ({ page }) => {
   // The compatibility page's 返回 link lands on the BombSquad landing (/bombsquad),
   // not the Amiclaw platform homepage — the landing carries the mode CTAs.

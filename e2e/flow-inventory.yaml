@@ -134,10 +134,9 @@ flows:
     name: Connect flow to compatibility page
     description: >-
       From the connect-AI flow's first step a new player opens the voice-AI
-      compatibility page, copies the recommended opening prompt, and returns to
-      the BombSquad landing page.
-    steps:
-      [connect-step-1, compatibility-link, compatibility-page, copy-opening-prompt, back-to-landing]
+      compatibility page to see the supported AIs, and returns to the BombSquad
+      landing page.
+    steps: [connect-step-1, compatibility-link, compatibility-page, back-to-landing]
     status: active
 
   # === Atlas platform-shell flows =============================================
