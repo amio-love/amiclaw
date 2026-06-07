@@ -24,6 +24,13 @@ vi.mock('@amiclaw/ui', async (importOriginal) => ({
   useDailyCountdown: () => ['07', '30', '00'],
 }))
 
+// The landing now reads the real daily board for its 日榜首 / 参与 stats.
+// Mock the shared API to an empty board so the suite carries no live fetch and
+// the stats render their honest empty / zero states.
+vi.mock('@shared/leaderboard-api', () => ({
+  fetchLeaderboard: vi.fn().mockResolvedValue({ date: '2026-06-07', entries: [] }),
+}))
+
 /* Renders the current location so the navigation target after a CTA
    click is assertable without mounting the real ConnectPage. */
 function LocationProbe() {
@@ -60,6 +67,17 @@ describe('BombSquadLandingPage', () => {
     expect(screen.getByText('今日挑战 · 重置')).toBeInTheDocument()
     expect(screen.getByText((_, el) => el?.textContent === '07:30:00')).toBeInTheDocument()
     expect(screen.getByText(/日榜首/)).toBeInTheDocument()
+  })
+
+  it('shows honest empty-board stats — never the fabricated 1,287 / 00:42', async () => {
+    renderLanding()
+
+    // 今日上榜 reflects the real (empty) board: 0, not the old fabricated 1,287.
+    await screen.findByText((_, el) => el?.textContent === '今日上榜 0')
+    // 日榜首 shows the no-leader placeholder, not the old fabricated 00:42.
+    expect(screen.getByText((_, el) => el?.textContent === '日榜首 —')).toBeInTheDocument()
+    expect(screen.queryByText(/1,287/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/00:42/)).not.toBeInTheDocument()
   })
 
   it('renders both the 练习 and 每日挑战 CTAs', () => {

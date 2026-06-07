@@ -1,4 +1,6 @@
 import { Button, EyebrowTag, StatPill } from '@amiclaw/ui'
+import { formatMs } from '@shared/format-time'
+import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './AnonHero.module.css'
 
 interface AnonHeroProps {
@@ -7,12 +9,19 @@ interface AnonHeroProps {
   onStart: () => void
   /* Scrolls to the FeaturedBombSquad section — the ghost「看看 BombSquad」CTA. */
   onSeeBombSquad: () => void
+  /* Today's real daily board, fetched once in GamesPage. The floating stat
+     pills derive from it — no fabricated numbers. */
+  board: DailyBoardState
 }
 
 /* Anonymous homepage hero — left copy column + right planet stage.
    Handoff §6.1. The planet, rings and BombSquad wordmark are decorative
-   (aria-hidden); the three floating StatPills carry real platform stats. */
-export default function AnonHero({ onStart, onSeeBombSquad }: AnonHeroProps) {
+   (aria-hidden). The floating StatPills only ever show data we actually
+   track: 今日上榜 (real daily participation) and 最快拆弹 (today's #1 time)
+   come from the daily board — the leader pill hides until the board has a
+   score — and 支持 AI 模型 is an honest static fact. There is NO weekly /
+   online metric anywhere in the product, so no pill claims one. */
+export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroProps) {
   return (
     <section className={styles.hero}>
       <div>
@@ -41,16 +50,10 @@ export default function AnonHero({ onStart, onSeeBombSquad }: AnonHeroProps) {
         <div className={styles.planetRing2} aria-hidden="true" />
         <div className={styles.planetRing} aria-hidden="true" />
         <div className={styles.planet} aria-hidden="true" />
-        <StatPill className={styles.s1} value="1,287" label="本周在线" />
-        <StatPill
-          className={styles.s2}
-          value={
-            <>
-              42<small className={styles.statUnit}>秒</small>
-            </>
-          }
-          label="最快拆弹"
-        />
+        <StatPill className={styles.s1} value={board.participantCount} label="今日上榜" />
+        {board.leaderTimeMs !== null && (
+          <StatPill className={styles.s2} value={formatMs(board.leaderTimeMs)} label="最快拆弹" />
+        )}
         <StatPill className={styles.s3} value="3" label="支持 AI 模型" />
       </div>
     </section>

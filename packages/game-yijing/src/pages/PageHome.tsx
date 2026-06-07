@@ -6,8 +6,8 @@ import styles from './PageHome.module.css'
 
 /* Home — handoff §6.1. Cosmic stage + Scenery backdrop, taiji hero, today
    strip, draw-card CTA, past-row preview, BombSquad cross-link.
-   Past-row hexagram values + ask-counts are stub data (Phase-1 placeholder
-   per task IA Boundary §Out — historical persistence is Phase-2 work). */
+   Past-row hexagram values are stub data (Phase-1 placeholder per task IA
+   Boundary §Out — historical persistence is Phase-2 work). */
 
 interface PastEntry {
   date: string
@@ -60,14 +60,8 @@ export function PageHome() {
               <div className={styles.todayLbl}>今日 · {gz}日</div>
               <div className={styles.todayCd}>{todayCN()}</div>
             </div>
-            <div className={styles.todayR}>
-              <div>
-                已问卦 <strong>1,287</strong>
-              </div>
-              <div>
-                你 <strong>第 38 次</strong>
-              </div>
-            </div>
+            {/* No ask-count stats here: Yijing has no counter backend, so any
+                「已问卦 / 你 第 N 次」number would be fabricated. */}
           </div>
 
           <div className={styles.drawCard}>

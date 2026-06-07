@@ -1,11 +1,15 @@
 import { Button, Chip, SectionHeader, accentClass } from '@amiclaw/ui'
-import { featuredMini } from '@/mocks/leaderboard'
 import { formatMs } from '@shared/format-time'
+import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './FeaturedBombSquad.module.css'
 
 /* The AI tools BombSquad supports — rendered as cyan chips inside the
    art panel. Mono, uppercase, neon: the BombSquad register. */
 const AI_CHIPS = ['CLAUDE', 'CHATGPT', 'GEMINI', 'VOICE_MODE']
+
+/* The mini board mirrors the daily leaderboard's visual budget: a handful
+   of top rows. The full board lives at /leaderboard. */
+const MINI_ROW_BUDGET = 4
 
 interface FeaturedBombSquadProps {
   /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
@@ -18,17 +22,29 @@ interface FeaturedBombSquadProps {
      — the section header's「游戏页 →」action. The landing page owns the daily /
      practice choice. */
   onOpenGamePage: () => void
+  /* Today's real daily board, fetched once in GamesPage. The mini panel
+     renders its top rows — or an honest empty state — never mock players. */
+  board: DailyBoardState
 }
 
 /* Featured BombSquad section — handoff §6.4. The left art panel is the
    BombSquad zone: the cyan wordmark, mono mark, cyan chips and scanline
    overlay all stay inside it. The right mini-leaderboard panel and the
-   section header are platform chrome — no cyan there. */
+   section header are platform chrome — no cyan there.
+
+   The mini board reads the real daily leaderboard (same source as
+   /leaderboard 每日 and the rest of the homepage). When today's board is
+   empty it shows the daily board's own empty-state wording instead of
+   fabricated rows; the panel is labelled 今日日榜 because the data resets
+   daily at UTC 0. */
 export default function FeaturedBombSquad({
   onStartDaily,
   onStartPractice,
   onOpenGamePage,
+  board,
 }: FeaturedBombSquadProps) {
+  const topRows = board.entries.slice(0, MINI_ROW_BUDGET)
+
   return (
     <section className={styles.section} id="featured">
       <SectionHeader
@@ -63,36 +79,35 @@ export default function FeaturedBombSquad({
 
         <div className={styles.side}>
           <div>
-            <h3 className={styles.sideTitle}>本周日榜</h3>
+            <h3 className={styles.sideTitle}>今日日榜</h3>
             <p className={styles.sideBlurb}>
               每天零点重置。把手册念给 AI 听，让它做你的眼睛 —— 用时越短，名次越高。
             </p>
           </div>
 
-          <div className={styles.lbMini}>
-            <div className={styles.lbHead}>
-              <span>名次</span>
-              <span>玩家</span>
-              <span className={styles.lbScoreHead}>用时</span>
+          {topRows.length > 0 ? (
+            <div className={styles.lbMini}>
+              <div className={styles.lbHead}>
+                <span>名次</span>
+                <span>玩家</span>
+                <span className={styles.lbScoreHead}>用时</span>
+              </div>
+              {topRows.map((row) => {
+                const rowClass = [styles.lbRow, row.rank <= 3 ? styles.lbRowTop : '']
+                  .filter(Boolean)
+                  .join(' ')
+                return (
+                  <div key={row.rank} className={rowClass}>
+                    <span className={styles.rk}>#{String(row.rank).padStart(2, '0')}</span>
+                    <span className={styles.nm}>{row.nickname}</span>
+                    <span className={styles.sc}>{formatMs(row.time_ms)}</span>
+                  </div>
+                )
+              })}
             </div>
-            {featuredMini.map((row) => {
-              const isYou = row.nickname.includes('你')
-              const rowClass = [
-                styles.lbRow,
-                row.rank <= 3 ? styles.lbRowTop : '',
-                isYou ? styles.lbRowYou : '',
-              ]
-                .filter(Boolean)
-                .join(' ')
-              return (
-                <div key={row.rank} className={rowClass}>
-                  <span className={styles.rk}>#{String(row.rank).padStart(2, '0')}</span>
-                  <span className={styles.nm}>{row.nickname}</span>
-                  <span className={styles.sc}>{formatMs(row.time_ms)}</span>
-                </div>
-              )
-            })}
-          </div>
+          ) : (
+            <p className={styles.lbEmpty}>今日还没有成绩，来抢第一！</p>
+          )}
 
           <div className={styles.ctaRow}>
             <Button
