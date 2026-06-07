@@ -381,6 +381,23 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
+  // Auto-start once the manual has loaded. READY is a transient bridge state —
+  // the player already committed to the run on the ConnectPage 进入游戏 tap, so
+  // there is no separate GamePage gate. The instant the reducer reaches READY
+  // (only ever via MANUAL_LOADED, which has already populated every
+  // moduleConfig), dispatch START_GAME to enter PLAYING. Keyed on
+  // `state.status`, so it fires exactly once per READY entry; START_GAME's own
+  // READY→PLAYING transition makes a second dispatch a no-op even before this
+  // effect re-runs. A run refresh-restored mid-play comes back at
+  // PLAYING/MODULE_COMPLETE/… (not READY), so this never re-triggers a
+  // restored run. getAudioContext() is an idempotent iOS-audio fallback —
+  // the primary unlock happened inside the ConnectPage 进入游戏 user gesture.
+  useEffect(() => {
+    if (state.status !== 'READY') return
+    getAudioContext()
+    dispatch({ type: 'START_GAME' })
+  }, [state.status, dispatch])
+
   // Navigate to result when ALL_COMPLETE transitions to RESULT
   useEffect(() => {
     if (state.status === 'ALL_COMPLETE') {
@@ -554,25 +571,19 @@ export default function GamePage() {
     )
   }
 
-  // READY state — waiting for the player to start. Both modes show the same
-  // terse "ready?" prompt; the game page never teaches the player — all
-  // guidance comes from the AI voice partner.
+  // READY state — the run auto-starts the instant the manual loads (the
+  // auto-start effect above dispatches START_GAME on entering READY). There is
+  // no separate "ready?" gate any more; the player already committed on the
+  // ConnectPage 进入游戏 tap. READY is therefore a sub-frame bridge between
+  // MANUAL_LOADED and PLAYING — keep showing the loading spinner over it so the
+  // handoff reads as one continuous "加载手册中…" rather than flashing a
+  // half-mounted module panel before the stopwatch starts.
   if (state.status === 'READY') {
-    // Unlock the shared AudioContext inside this user-gesture handler so iOS
-    // Safari permits audio to start when the stopwatch loop begins (the
-    // stopwatch effect itself runs outside a gesture).
-    const handleStart = () => {
-      getAudioContext()
-      dispatch({ type: 'START_GAME' })
-    }
     return (
       <main className={styles.page}>
         {refreshBanner}
         <div className={styles.overlay}>
-          <p className={styles.readyText}>准备好了吗？</p>
-          <button className={styles.startBtn} onClick={handleStart}>
-            开始
-          </button>
+          <p className={styles.loadingText}>加载手册中…</p>
         </div>
       </main>
     )

@@ -5,17 +5,19 @@ import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { copyToClipboard } from '@/utils/clipboard'
+import { getAudioContext } from '@/audio/audio-context'
 import styles from './ConnectPage.module.css'
 
 type ConnectMode = 'daily' | 'practice'
 
 /* Connect-AI flow — design_handoff_bombsquad README §6.2. Two steps swap in
    place: copy the manual link in one tap, then switch the AI to voice mode and
-   hand off to the run. The readiness gate lives once, on the GamePage "开始"
-   button (which also unlocks iOS audio inside the user gesture), so this flow
-   ends with a plain "进入游戏" navigation, not a second confirm. The manual URL
-   is derived by useDailyChallenge; voice AIs auto-read a bare pasted link and
-   adopt the role from the now-self-framing manual, so the link alone suffices. */
+   hand off to the run. The AI-readiness sync prompt now lives here, on step 2
+   (where the player is actually setting their AI up); there is no separate
+   GamePage gate — "进入游戏" starts the run directly. Tapping it also unlocks
+   iOS audio inside the user gesture. The manual URL is derived by
+   useDailyChallenge; voice AIs auto-read a bare pasted link and adopt the role
+   from the now-self-framing manual, so the link alone suffices. */
 export default function ConnectPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -48,9 +50,13 @@ export default function ConnectPage() {
 
   /* Final step → the existing run. Daily carries the manual URL as ?url= so
      the AI partner and the run fetch the same manual; practice loads its
-     bundled manual and needs no URL. The run's READY "开始" button is the
-     single readiness gate and unlocks iOS audio on tap. */
+     bundled manual and needs no URL. This tap is the run's only gesture, so
+     unlock the shared AudioContext here — iOS Safari only permits audio to
+     start from inside a user gesture, and the run's stopwatch SFX loop runs
+     outside one. getAudioContext() is idempotent; the run calls it again at
+     game start as a fallback. */
   const confirmStart = () => {
+    getAudioContext()
     if (mode === 'daily') {
       navigate(`/bombsquad/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
     } else {
@@ -230,6 +236,15 @@ export default function ConnectPage() {
                 </div>
               </div>
               <p className={styles.hint}>这样你描述、AI 回应，全程不用手离开屏幕。</p>
+              {/* AI-readiness sync prompt — re-homed from the deleted GamePage
+                  「开始」gate to the place the player is actually setting up
+                  their AI. Anchors to step 1's canonical「让它读完手册后说
+                  『好了』」wording and names the one consequence of the next
+                  tap: 进入游戏 starts the run, and the stopwatch starts with
+                  it. Calm, not a countdown — time is a score, not a deadline. */}
+              <p className={styles.hint}>
+                等 AI 说完「好了」，点「进入游戏」就开始，计时随即启动。
+              </p>
             </div>
           )}
 

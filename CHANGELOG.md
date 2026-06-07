@@ -5,6 +5,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**进入游戏，直接开局，少点一次** — 对接 AI 的最后一步现在多了一句提醒：等你的 AI
+读完手册说「好了」，点「进入游戏」就开始，计时也随之启动。点下去就直接进入这一局，
+不再跳出一块「准备好了吗？」的黑屏让你再确认一次。该确认 AI 的提示，正好出现在你
+设置 AI 的那一页。
+
 **The homepage is calmer and easier to read** — The fabricated community feed
 at the bottom is gone — those posts were made up, so there was nothing real to
 show. The featured BombSquad section no longer stacks two extra play buttons on

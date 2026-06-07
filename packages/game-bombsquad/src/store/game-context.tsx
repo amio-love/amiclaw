@@ -215,6 +215,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'START_GAME': {
+      // Idempotency guard: START_GAME only starts a run from READY. The GamePage
+      // auto-start effect dispatches it on entering READY, and React StrictMode
+      // can double-invoke that effect — without this guard the second dispatch
+      // would reset a now-live run (currentModuleIndex:0, totalStartTime:now,
+      // strikeCount:0, a second game_start event). Mirrors the
+      // MODULE_COMPLETE / MODULE_ERROR / NEXT_MODULE status guards. Play Again
+      // never reaches here from PLAYING — it dispatches RESET, then a fresh
+      // LOADING → MANUAL_LOADED → READY cycle re-arms this case.
+      if (state.status !== 'READY') return state
       if (import.meta.env.DEV) {
         const missingConfig = state.moduleConfigs.some((c) => c === null)
         if (missingConfig) {

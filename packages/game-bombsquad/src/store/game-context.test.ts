@@ -114,6 +114,28 @@ describe('gameReducer — START_GAME', () => {
     )
     expect(practice.timeBudgetMs).toBe(TIME_BUDGET_MS.practice)
   })
+
+  it('is a no-op when dispatched from a live PLAYING run (idempotency guard)', () => {
+    // The GamePage auto-start effect dispatches START_GAME on entering READY,
+    // and React StrictMode can double-invoke it. The second dispatch lands while
+    // the run is already PLAYING; the guard must return the live state untouched
+    // so a duplicate never resets the run or re-logs game_start.
+    vi.mocked(logEvent).mockClear()
+    const live = baseState({
+      status: 'PLAYING',
+      currentModuleIndex: 2,
+      strikeCount: 1,
+      moduleStats: [{ moduleType: 'wire', timeMs: 1234, errorCount: 0 }],
+      totalStartTime: 1_700_000_000_000,
+      moduleConfigs: filled4,
+    })
+    const after = gameReducer(live, { type: 'START_GAME' })
+    expect(after).toBe(live) // same reference — no new state object
+    expect(after.currentModuleIndex).toBe(2)
+    expect(after.strikeCount).toBe(1)
+    expect(after.moduleStats).toHaveLength(1)
+    expect(logEvent).not.toHaveBeenCalled()
+  })
 })
 
 describe('gameReducer — MODULE_ERROR (daily 3-strike rule)', () => {
