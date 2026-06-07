@@ -32,8 +32,8 @@
   text-decoration: none;
 }
 
-/* Only the real <a> links (隐私 / 条款) are interactive; the dead <span>s
-   (关于 / Discord) keep the default cursor and never brighten on hover. */
+/* Every footer link is an anchor (隐私 / 条款 via react-router <Link>, plus the
+   conditional external Discord <a>), so all of them brighten on hover. */
 a.link:hover {
   color: rgba(255, 255, 255, 0.85);
 }

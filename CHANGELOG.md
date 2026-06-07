@@ -5,6 +5,10 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**页脚不再留两个点不动的死链接** — 页脚里的「关于」和「Discord」过去只是两段不能点的
+文字。「关于」没有对应的页面,直接拿掉了。「Discord」改成接上社区邀请链接:邀请链接填好
+之前它不出现,填好之后就变成一个能点、在新标签页打开的入口。隐私和条款两个链接照常可用。
+
 **Game Lab 区块准备好接上 Discord** — 落地页的 Game Lab 区块写着「在 Discord 写下你
 想和 AI 一起玩的小游戏」,现在这块卡片可以变成真正能点的 Discord 入口:填上邀请链接后,
 卡片就带上「加入 Discord」的提示、点一下在新标签页打开邀请。在链接配置好之前,卡片和原来
