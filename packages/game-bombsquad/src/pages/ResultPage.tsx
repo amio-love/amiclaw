@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import { Scenery } from '@amiclaw/ui'
 import Button from '@/components/bombsquad/Button'
@@ -88,7 +88,7 @@ export default function ResultPage() {
 
   // True only when ResultPage was opened with no run in memory at all (distinct
   // from a finished run that solved zero modules — that still carries an
-  // outcome). Gates both the "暂无数据" fallback and the success payoff below.
+  // outcome). Gates both the no-run recovery state and the success payoff below.
   const noRunData = state.moduleStats.length === 0 && state.outcome === null
 
   // Success sting on entry — a short, restrained rising chime that marks the
@@ -306,18 +306,41 @@ export default function ResultPage() {
   }
 
   // No game in memory at all — distinct from a finished run that solved zero
-  // modules (an exploded run, which still carries an `outcome`).
+  // modules (an exploded run, which still carries an `outcome`). Reached when
+  // the result page is opened with no live run: a direct link to
+  // /bombsquad/result, a refresh that cleared the run context, or an odd
+  // back-navigation. Instead of a dead "返回主页" link, offer the same three
+  // entry points the landing page funnels through, so the player is never
+  // pushed out of the game. Daily is the primary CTA; both connect entries go
+  // through /bombsquad/connect (not a deep link into /bombsquad/run) so the
+  // copy-manual handoff still runs.
   if (noRunData) {
     return (
       <main className={styles.page}>
         <Scenery accent="yellow" />
         <div className={styles.stage}>
-          <p className={styles.noData}>
-            暂无数据。{' '}
-            <Link to="/bombsquad" className={styles.noDataLink}>
-              返回主页
-            </Link>
-          </p>
+          <div className={styles.noData}>
+            <p className={styles.noDataText}>这一局没有数据，可能是刷新或直接打开了结算页。</p>
+            <div className={styles.cta}>
+              <Button
+                variant="primary"
+                full
+                onClick={() => navigate('/bombsquad/connect?mode=daily')}
+              >
+                开始今日挑战<span aria-hidden="true"> →</span>
+              </Button>
+              <Button
+                variant="ghost"
+                full
+                onClick={() => navigate('/bombsquad/connect?mode=practice')}
+              >
+                练习一局
+              </Button>
+              <Button variant="ghost" full onClick={() => navigate('/bombsquad')}>
+                返回主页
+              </Button>
+            </div>
+          </div>
         </div>
       </main>
     )
