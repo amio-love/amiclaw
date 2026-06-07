@@ -1,0 +1,33 @@
+# Privacy & Terms pages — the platform footer 隐私 / 条款 links route to the
+# /privacy and /terms routes, which render the full legal documents inside the
+# platform shell.
+#
+# Each scenario carries a per-scenario flow-source comment tracing to
+# e2e/flow-inventory.yaml plus the @playwright consumption-layer tag. Every
+# step reuses an existing common step definition (I open / I click {string} /
+# the URL path is {path} / I see the heading {string} / I see the subtitle
+# {string}), so this file adds no new step bindings.
+
+Feature: Platform privacy and terms pages
+  As a visitor to claw.amio.fans
+  I want the footer 隐私 and 条款 links to open the real legal pages
+  So that I can read how my data is handled and the rules of the service
+
+  Background:
+    Given I open /
+
+  # Source: footer-to-privacy-policy
+  @playwright
+  Scenario: The footer 隐私 link opens the privacy policy
+    When I click "隐私"
+    Then the URL path is /privacy
+    And I see the heading "隐私政策 · PRIVACY"
+    And I see the subtitle "本政策说明 AmiClaw 收集哪些信息、为什么收集、如何使用与保存，以及你对这些信息拥有的权利。"
+
+  # Source: footer-to-terms
+  @playwright
+  Scenario: The footer 条款 link opens the user agreement
+    When I click "条款"
+    Then the URL path is /terms
+    And I see the heading "用户条款 · TERMS"
+    And I see the subtitle "本条款是你与运营方就使用 AmiClaw 平台达成的协议。请在使用本服务前阅读并接受。"

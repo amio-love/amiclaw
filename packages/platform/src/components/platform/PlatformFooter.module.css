@@ -29,6 +29,13 @@
 
 .link {
   color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+}
+
+/* Only the real <a> links (隐私 / 条款) are interactive; the dead <span>s
+   (关于 / Discord) keep the default cursor and never brighten on hover. */
+a.link:hover {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* ----------  responsive: mobile  ----------
