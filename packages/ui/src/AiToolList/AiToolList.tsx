@@ -5,12 +5,21 @@ import styles from './AiToolList.module.css'
 /* The single ordered source of the supported voice-AI tools. Official
    title-case; consumed everywhere — no surface re-declares this list. See
    DesignSystem.md §Brand → AI-Tools List. */
-export const AI_TOOLS = ['Claude', 'ChatGPT', 'Gemini'] as const
+export const AI_TOOLS = [
+  'Claude',
+  'ChatGPT',
+  'Gemini',
+  'Openclaw',
+  'Hermes',
+  '豆包',
+  '千问',
+  'DeepSeek',
+] as const
 
 interface AiToolListProps {
   /* Optional leading label supplied by the consumer (e.g. `支持`). */
   prefix?: ReactNode
-  /* `inline` → `Claude · ChatGPT · Gemini` (names emphasized, ` · ` joined).
+  /* `inline` → names emphasized and ` · ` joined.
      `chips` → brand-yellow pills. */
   variant?: 'inline' | 'chips'
   className?: string

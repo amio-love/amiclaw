@@ -8,9 +8,10 @@
  *
  * The homepage has a single in-page play CTA — the AnonHero primary「开始玩」
  * (the other play entry is the TopNav, rendered by the app shell, not here).
- * The DailyChallenge / FeaturedBombSquad / FooterPitch sections are pure
- * info / pitch blocks with no play button. The CTA routes to the BombSquad
- * landing page; the landing owns the daily/practice choice and the
+ * FeaturedBombSquad is the single BombSquad overview block: it combines the
+ * game pitch and daily countdown without repeating leaderboard data.
+ * FooterPitch is a pure pitch block with no play button. The CTA routes to the
+ * BombSquad landing page; the landing owns the daily/practice choice and the
  * connect-AI flow, so the homepage no longer opens a pre-game modal. The
  * landing → connect → run path is covered by the screen tests.
  *
@@ -24,11 +25,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { fetchLeaderboard } from '@shared/leaderboard-api'
 import GamesPage from './GamesPage'
 
-// The daily countdown ticks on a setInterval; these tests never assert on it.
-// DailyChallenge renders @amiclaw/ui's DailyCountdown, which consumes the
-// useDailyCountdown hook directly — so mock the hook module (the same one
-// DailyCountdown imports) to a static tuple, the same pattern
-// BombSquadLandingPage.test.tsx uses, so the suite carries no live timer.
+// The daily countdown ticks on a setInterval; these tests never assert on live
+// time. FeaturedBombSquad renders @amiclaw/ui's DailyCountdown, which consumes
+// the useDailyCountdown hook directly, so mock the hook module to a static
+// tuple and keep the suite deterministic.
 vi.mock('../../../ui/src/useDailyCountdown', () => ({
   useDailyCountdown: () => ['12', '00', '00'],
 }))
@@ -80,9 +80,19 @@ describe('GamesPage homepage', () => {
   it('renders the anonymous hero on / for a signed-out visitor', () => {
     renderHomepage('/')
 
-    // AnonHero markers: the hero eyebrow pill and the primary「开始玩」CTA.
+    // AnonHero markers: the hero eyebrow pill, platform description, and the
+    // single primary「开始玩」CTA.
     expect(screen.getByText('本周开服 · BOMBSQUAD 公测中')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.textContent ===
+          'AmiClaw 是 AMIO 的人机协作游戏平台。带上你的 AI，一起进入不同小游戏。'
+      )
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /开始玩/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /看看 BombSquad/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/一起拆弹/)).not.toBeInTheDocument()
     // The signed-in WelcomeStrip greets the mock user by name — it must NOT
     // be present for an anonymous visitor.
     expect(screen.queryByText('星海')).not.toBeInTheDocument()
@@ -108,12 +118,26 @@ describe('GamesPage homepage', () => {
   it('shows honest empty / zero states when the real daily board is empty', async () => {
     renderHomepage('/')
 
-    // DailyChallenge derives 今日上榜 from the board: 0 on an empty board.
-    await screen.findByText((_, el) => el?.textContent === '今日上榜 0')
-    // 日榜首 shows the no-leader placeholder, not a fabricated time.
-    expect(screen.getByText((_, el) => el?.textContent === '日榜首 —')).toBeInTheDocument()
-    // FeaturedBombSquad shows the daily board's own empty-state copy, not rows.
-    expect(screen.getByText('今日还没有成绩，来抢第一！')).toBeInTheDocument()
+    // FeaturedBombSquad is the only BombSquad homepage block: the former
+    // standalone daily card is gone, and this block no longer includes
+    // leaderboard surfaces.
+    await screen.findByText('正在开放 · NOW PLAYING')
+    expect(screen.getByText('正在开放 · NOW PLAYING')).toBeInTheDocument()
+    expect(screen.getByText('今日挑战')).toBeInTheDocument()
+    expect(screen.queryByText(/4 模块/)).not.toBeInTheDocument()
+    expect(screen.queryByText('每日同题')).not.toBeInTheDocument()
+    expect(screen.queryByText('每日挑战 · DAILY DROP')).not.toBeInTheDocument()
+    expect(screen.queryByText('今日：四模块连拆')).not.toBeInTheDocument()
+    // The hero's static platform stat counts playable games, not supported AI
+    // tools.
+    expect(
+      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, '') === '2已上线游戏')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/支持 AI 模型/)).not.toBeInTheDocument()
+    // Leaderboard data is not repeated inside the BombSquad card.
+    expect(screen.queryByText('日榜首')).not.toBeInTheDocument()
+    expect(screen.queryByText('今日日榜')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无成绩')).not.toBeInTheDocument()
 
     // None of the old fabricated stats / mock leaderboard rows render.
     expect(screen.queryByText(/1,287/)).not.toBeInTheDocument()
@@ -122,7 +146,7 @@ describe('GamesPage homepage', () => {
     expect(screen.queryByText(/42秒|最快拆弹/)).not.toBeInTheDocument()
   })
 
-  it('renders real board rows in the featured panel when the daily board has scores', async () => {
+  it('does not repeat leaderboard rows in the featured panel when the daily board has scores', async () => {
     mockedFetch.mockResolvedValue({
       date: '2026-06-07',
       entries: [
@@ -133,13 +157,10 @@ describe('GamesPage homepage', () => {
 
     renderHomepage('/')
 
-    // The mini board shows the real top rows.
-    await screen.findByText('阿尔法')
-    expect(screen.getByText('beta')).toBeInTheDocument()
-    // DailyChallenge reflects the real on-board count and leader time.
-    expect(screen.getByText((_, el) => el?.textContent === '今日上榜 2')).toBeInTheDocument()
-    expect(screen.getByText((_, el) => el?.textContent === '日榜首 01:05')).toBeInTheDocument()
-    // The empty-state copy is gone once there are rows.
-    expect(screen.queryByText('今日还没有成绩，来抢第一！')).not.toBeInTheDocument()
+    await screen.findByText('正在开放 · NOW PLAYING')
+    expect(screen.queryByText('阿尔法')).not.toBeInTheDocument()
+    expect(screen.queryByText('beta')).not.toBeInTheDocument()
+    expect(screen.queryByText('日榜首')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无成绩')).not.toBeInTheDocument()
   })
 })

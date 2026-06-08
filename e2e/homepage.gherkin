@@ -1,7 +1,7 @@
 # Amiclaw platform homepage — the `/` route is a 4-tab platform shell
 # (游戏 / 排行榜 / 社区 / 我的). It shows an anonymous hero or a signed-in welcome
-# strip per login state, a live daily-challenge countdown, and the featured
-# BombSquad section whose CTAs enter the BombSquad game flow.
+# strip per login state, and a featured BombSquad overview with the live
+# daily challenge countdown.
 #
 # Restructured for the e2e harness: each scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
@@ -24,9 +24,8 @@ Feature: Amiclaw platform homepage
   Scenario: An anonymous visitor lands on the Atlas homepage
     Given I am not signed in
     When the `/` route renders
-    Then I see the anonymous hero with the「开始玩 →」and「看看 BombSquad」CTAs
-    And I see the daily-challenge section
-    And I see the featured BombSquad section
+    Then I see the anonymous hero with a single「开始玩 →」CTA
+    And I see the featured BombSquad overview
     And I see the "什么是 Amiclaw" section
     And I see the upcoming-games section
     And I see the footer pitch
@@ -58,9 +57,9 @@ Feature: Amiclaw platform homepage
 
   # Source: daily-countdown-display
   @playwright
-  Scenario: The daily challenge shows a live countdown to the next reset
+  Scenario: The BombSquad overview shows a live countdown to the next reset
     Given I am on the homepage
-    Then the daily-challenge section shows a countdown in 时 / 分 / 秒
+    Then the BombSquad overview shows a countdown in 时 / 分 / 秒
     And the countdown counts down toward the next UTC 00:00 reset
 
   # Source: home-signed-in-welcome
@@ -72,7 +71,7 @@ Feature: Amiclaw platform homepage
     And the welcome strip shows my streak, completed count, and weekly rank
     And the anonymous hero is not shown
     And the "什么是 Amiclaw" section and the footer pitch are not shown
-    And I can still reach the daily challenge and the featured BombSquad section
+    And I can still reach the featured BombSquad overview
 
   # Source: bombsquad-zone-styling
   @playwright

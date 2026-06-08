@@ -170,9 +170,9 @@ flows:
   - id: daily-countdown-display
     name: Daily countdown display
     description: >-
-      The homepage daily-challenge card shows a live 时 / 分 / 秒 countdown
-      ticking toward the next daily reset.
-    steps: [landing, daily-challenge-card, countdown-tick]
+      The homepage featured BombSquad overview shows a live 时 / 分 / 秒
+      countdown ticking toward the next daily reset.
+    steps: [landing, featured-bombsquad-overview, countdown-tick]
     status: active
 
   - id: bombsquad-zone-styling

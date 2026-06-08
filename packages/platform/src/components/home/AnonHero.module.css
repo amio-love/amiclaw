@@ -36,10 +36,14 @@
 }
 
 .sub {
-  max-width: 460px;
+  max-width: 540px;
   margin-top: 28px;
   font: 400 17px/1.7 var(--font-body);
   color: var(--text-2);
+}
+
+.subLine {
+  display: block;
 }
 
 .cta {
