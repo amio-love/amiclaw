@@ -53,48 +53,22 @@
   text-align: center;
 }
 
+/* Identity sub-line under the name — the real session email. */
 .rank {
   margin-top: 4px;
   font: 500 12px var(--font-body);
   color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   text-align: center;
+  word-break: break-all;
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin-top: 22px;
+/* ----------  right — detail column  ---------- */
+.detail {
+  display: flex;
+  flex-direction: column;
 }
 
-.stat {
-  padding: 14px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.25);
-  text-align: center;
-}
-
-.statValue {
-  font: 400 22px var(--font-display);
-  font-style: italic;
-  color: var(--amio-yellow);
-}
-
-.statLabel {
-  margin-top: 4px;
-  font: 500 10px var(--font-body);
-  color: rgba(255, 255, 255, 0.45);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.settingsBtn {
-  width: 100%;
-  margin-top: 22px;
-}
-
-/* ----------  right — recent runs + badges  ---------- */
 .section + .section {
   margin-top: 28px;
 }
@@ -107,95 +81,42 @@
   text-transform: uppercase;
 }
 
-.runCard {
-  padding: 6px;
-}
-
-.runs {
+/* Honest empty stats state — shown to a real logged-in user until the
+   leaderboard user_id migration lands real per-user stats. No fake numbers,
+   no「即将推出」placeholder: a plain prompt and a play CTA. */
+.emptyCard {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 36px 32px;
 }
 
-.run {
-  display: grid;
-  grid-template-columns: 40px 1fr 80px 80px;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-radius: 14px;
-  font: 500 13px var(--font-body);
+.emptyText {
+  margin: 0;
+  font: 400 16px var(--font-body);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.run:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* Run badge — BombSquad cyan. A recent-run icon surfaces BombSquad
-   gameplay content (the same carve-out as the CommunityPage DEFUSED /
-   EXPLODED img-block), so the cyan-confinement rule does not exclude it. */
-.runIcon {
-  display: flex;
+/* CTA — mirrors the primary Button affordance (yellow pill, dark text,
+   glow-lift on hover). CSS-only animation. Plain anchor: it crosses the app
+   boundary into the BombSquad SPA at /bombsquad/. */
+.emptyCta {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: rgba(0, 255, 255, 0.12);
-  font: 600 11px var(--amio-font-mono);
-  color: var(--bs-cyan);
+  padding: 14px 26px;
+  border-radius: 999px;
+  background: var(--amio-yellow);
+  color: #000;
+  font: 600 15px var(--font-body);
+  text-decoration: none;
+  transition: all 0.25s;
 }
 
-.runGame {
-  font-family: var(--amio-font-mono);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  color: #fff;
-}
-
-.runMode {
-  margin-top: 2px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.runTime {
-  font-family: var(--amio-font-mono);
-  color: var(--amio-yellow);
-  text-align: right;
-}
-
-.runRank {
-  font-family: var(--amio-font-mono);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  text-align: right;
-}
-
-.badgeCard {
-  padding: 28px;
-}
-
-.badgeGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-}
-
-.badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.badgeStar {
-  font-size: 18px;
-}
-
-.badgeName {
-  margin-top: 8px;
-  font: 500 11px var(--font-body);
-  color: rgba(255, 255, 255, 0.6);
-  text-align: center;
+.emptyCta:hover {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
 }
 
 /* ----------  signed-out — login-guide empty state  ----------

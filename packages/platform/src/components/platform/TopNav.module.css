@@ -84,6 +84,20 @@
   border-radius: 50%;
 }
 
+/* Restrained text-link login affordance, sat beside the 开始玩 CTA. Matches the
+   inactive nav-tab register — no brand-yellow fill, brightens on hover. */
+.loginLink {
+  font: 500 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.loginLink:hover {
+  color: #fff;
+}
+
 /* ---------- mobile: simplify nav; BottomNav takes over the center tabs ---------- */
 @media (max-width: 768px) {
   .nav {
@@ -103,6 +117,10 @@
      (0,1,1) outranks Button's .sm / .primary (0,1,0). */
   .right button {
     padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .loginLink {
     font-size: 12px;
   }
 }

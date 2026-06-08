@@ -3,8 +3,7 @@ import type {
   ScoreSubmissionResponse,
   LeaderboardResponse,
 } from '@shared/leaderboard-types'
-
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://claw.amio.fans'
+import { API_BASE } from '@shared/api-base'
 
 /**
  * Outcome of a score submission, discriminated on `ok` so callers can tell a

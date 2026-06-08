@@ -72,8 +72,11 @@ Given('I am not signed in', async () => {
 })
 
 Given('I am signed in', async ({ world }) => {
-  // useAuth() resolves signed-in from `?auth=in` (a kept dev affordance).
-  await world.openPath('/?auth=in')
+  // The real useAuth reads GET /api/auth/session (route-mocked in the fixture).
+  // signIn() must run BEFORE the navigation so the first session read returns
+  // authenticated. The email local-part `nova` is the derived display name.
+  world.signIn({ user_id: 'e2e-user', email: 'nova@amio.fans' })
+  await world.openPath('/')
 })
 
 Given('I am on the homepage', async ({ page }) => {
@@ -208,13 +211,15 @@ Then('the countdown counts down toward the next UTC 00:00 reset', async ({ world
 
 Then('I see the welcome strip greeting me by name', async ({ page }) => {
   await expect(page.getByText('你好，', { exact: false })).toBeVisible()
-  await expect(page.getByText('星海').first()).toBeVisible()
+  // The display name is the session email local-part (nova@... -> nova).
+  await expect(page.getByText('nova').first()).toBeVisible()
 })
 
-Then('the welcome strip shows my streak, completed count, and weekly rank', async ({ page }) => {
-  for (const label of ['连胜', '已完成', '本周排名']) {
-    await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
-  }
+Then('the welcome strip shows an honest no-scores prompt and a play CTA', async ({ page }) => {
+  // Per-user stats need the leaderboard user_id migration (not yet built), so
+  // the strip shows an honest empty state rather than fabricated figures.
+  await expect(page.getByText('还没有成绩，去玩一局，这里会记录你的战绩。')).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始玩' })).toBeVisible()
 })
 
 Then('the anonymous hero is not shown', async ({ page }) => {

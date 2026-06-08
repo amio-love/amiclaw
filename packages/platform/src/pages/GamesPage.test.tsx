@@ -4,7 +4,8 @@
  * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
  *   2. the anonymous hero「开始玩」CTA routes to /bombsquad
- *   3. a signed-in visitor (?auth=in) renders the WelcomeStrip, not the hero
+ *   3. a signed-in visitor renders the WelcomeStrip (greeting by the
+ *      session-derived display name), not the hero
  *
  * The homepage has a single in-page play CTA — the AnonHero primary「开始玩」
  * (the other play entry is the TopNav, rendered by the app shell, not here).
@@ -15,14 +16,14 @@
  * connect-AI flow, so the homepage no longer opens a pre-game modal. The
  * landing → connect → run path is covered by the screen tests.
  *
- * Render the page directly inside a MemoryRouter. A sibling `/bombsquad`
- * route renders a location probe so the navigation target is assertable
- * without mounting the real BombSquad landing page.
+ * Render the page directly inside a MemoryRouter. Auth is the real session
+ * fetch: each test stubs global.fetch (anonymous by default) before render.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { fetchLeaderboard } from '@shared/leaderboard-api'
+import type { SessionResponse } from '@shared/auth-types'
 import GamesPage from './GamesPage'
 
 // The daily countdown ticks on a setInterval; these tests never assert on live
@@ -48,6 +49,20 @@ const mockedFetch = vi.mocked(fetchLeaderboard)
 // push. Spy on window.location.assign to assert the target.
 const assignSpy = vi.fn()
 
+const ANON: SessionResponse = { authenticated: false, identity: null }
+const AUTHED: SessionResponse = {
+  authenticated: true,
+  identity: { user_id: 'u_1', email: 'nova@amio.fans' },
+}
+
+/** Stub the useAuth session read (GET /api/auth/session). */
+function stubSession(body: SessionResponse) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status: 200 })))
+  )
+}
+
 function renderHomepage(entry = '/') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
@@ -61,28 +76,26 @@ function renderHomepage(entry = '/') {
 describe('GamesPage homepage', () => {
   beforeEach(() => {
     assignSpy.mockClear()
+    // Default to anonymous; the signed-in test overrides before rendering.
+    stubSession(ANON)
     vi.stubGlobal('location', { ...window.location, assign: assignSpy })
     // Default every test to an empty daily board (beta reality). Individual
     // tests can override before rendering when they need populated rows.
     mockedFetch.mockReset()
     mockedFetch.mockResolvedValue({ date: '2026-06-07', entries: [] })
     sessionStorage.clear()
-    // ?auth=in persists to localStorage; clear it so each test starts signed
-    // out. The jsdom localStorage in this workspace can be non-functional —
-    // ignore failures.
-    try {
-      localStorage.clear()
-    } catch {
-      // ignore storage failures (private mode, non-functional jsdom stub)
-    }
   })
 
-  it('renders the anonymous hero on / for a signed-out visitor', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('renders the anonymous hero on / for a signed-out visitor', async () => {
     renderHomepage('/')
 
     // AnonHero markers: the hero eyebrow pill, platform description, and the
     // single primary「开始玩」CTA.
-    expect(screen.getByText('本周开服 · BOMBSQUAD 公测中')).toBeInTheDocument()
+    expect(await screen.findByText('本周开服 · BOMBSQUAD 公测中')).toBeInTheDocument()
     expect(
       screen.getByText(
         (_, el) =>
@@ -93,26 +106,24 @@ describe('GamesPage homepage', () => {
     expect(screen.getByRole('button', { name: /开始玩/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /看看 BombSquad/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/一起拆弹/)).not.toBeInTheDocument()
-    // The signed-in WelcomeStrip greets the mock user by name — it must NOT
-    // be present for an anonymous visitor.
-    expect(screen.queryByText('星海')).not.toBeInTheDocument()
   })
 
-  it('routes to the BombSquad landing from the anonymous hero「开始玩」CTA', () => {
+  it('routes to the BombSquad landing from the anonymous hero「开始玩」CTA', async () => {
     renderHomepage('/')
 
-    fireEvent.click(screen.getByRole('button', { name: /开始玩/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /开始玩/ }))
 
     expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
 
-  it('renders the WelcomeStrip instead of the hero for a signed-in visitor', () => {
-    renderHomepage('/?auth=in')
+  it('renders the WelcomeStrip instead of the hero for a signed-in visitor', async () => {
+    stubSession(AUTHED)
+    renderHomepage('/')
 
-    // WelcomeStrip greets the mock user by display name.
-    expect(screen.getByText('星海')).toBeInTheDocument()
-    // The anonymous hero CTA must NOT be present.
-    expect(screen.queryByRole('button', { name: /开始玩/ })).not.toBeInTheDocument()
+    // WelcomeStrip greets by the session-derived display name (nova@... → nova).
+    expect(await screen.findByText('nova', { exact: true })).toBeInTheDocument()
+    // The anonymous hero eyebrow must NOT be present.
+    expect(screen.queryByText('本周开服 · BOMBSQUAD 公测中')).not.toBeInTheDocument()
   })
 
   it('shows honest empty / zero states when the real daily board is empty', async () => {

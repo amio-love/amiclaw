@@ -1,13 +1,20 @@
-import { ConicAvatar } from '@amiclaw/ui'
-import type { MockUser } from '@/mocks/auth'
+import { Button, ConicAvatar } from '@amiclaw/ui'
+import type { DisplayUser } from '@/hooks/useAuth'
 import styles from './WelcomeStrip.module.css'
 
 interface WelcomeStripProps {
-  user: MockUser
+  user: DisplayUser
 }
 
 /* Signed-in welcome strip — replaces the anonymous hero on the logged-in
-   homepage. Handoff §6.2. All copy is derived from the mock user. */
+   homepage. Greets the real user by their derived display name.
+
+   Per-user stats (streak / completed / rank) are NOT shown: real per-user
+   stats need the leaderboard user_id migration (migrate-leaderboard-to-user-id,
+   not yet built), and showing mock numbers to a real logged-in user would
+   re-introduce the fake-data problem PR #133 fixed for the signed-out state.
+   So the right side is an honest「还没有成绩」prompt with a play CTA, not
+   fabricated figures and not a「即将推出」placeholder. */
 export default function WelcomeStrip({ user }: WelcomeStripProps) {
   return (
     <section className={styles.strip}>
@@ -17,29 +24,13 @@ export default function WelcomeStrip({ user }: WelcomeStripProps) {
           <div className={styles.greet}>
             你好，<span className={styles.name}>{user.displayName}</span>。
           </div>
-          <div className={styles.meta}>
-            连续登陆 {user.streakDays} 天 · 上一次拆弹 {user.lastDefuse} · 本周 #{user.weekRank}
-          </div>
+          <div className={styles.meta}>还没有成绩，去玩一局，这里会记录你的战绩。</div>
         </div>
       </div>
 
-      <div className={styles.stats}>
-        <div className={styles.stat}>
-          <div className={styles.value}>
-            {user.streakDays}
-            <small className={styles.unit}>天</small>
-          </div>
-          <div className={styles.label}>连胜</div>
-        </div>
-        <div className={styles.stat}>
-          <div className={styles.value}>{user.completed}</div>
-          <div className={styles.label}>已完成</div>
-        </div>
-        <div className={styles.stat}>
-          <div className={styles.value}>#{user.weekRank}</div>
-          <div className={styles.label}>本周排名</div>
-        </div>
-      </div>
+      <Button variant="primary" size="sm" onClick={() => window.location.assign('/bombsquad/')}>
+        开始玩
+      </Button>
     </section>
   )
 }

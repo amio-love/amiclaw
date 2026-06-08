@@ -22,7 +22,7 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
    derived stats + real rows. No homepage surface fabricates participation
    counts, leader times, or player rows. */
 export default function GamesPage() {
-  const { signedIn, user } = useAuth()
+  const { status, user } = useAuth()
   const board = useDailyBoard()
 
   /* The AnonHero primary CTA's target — the BombSquad landing page. Mode is
@@ -34,9 +34,16 @@ export default function GamesPage() {
     window.location.assign('/bombsquad/')
   }
 
+  /* The session read is async. While `loading`, show the anonymous hero's
+     shell-neutral default rather than flashing the signed-in welcome strip:
+     the hero is the safe default since most visitors are anonymous, and a
+     loading→authed transition swaps it in without a jarring signed-in flash.
+     `authed` requires a resolved `user`. */
+  const signedIn = status === 'authed' && user !== null
+
   return (
     <>
-      {signedIn && user ? (
+      {signedIn ? (
         <WelcomeStrip user={user} />
       ) : (
         <AnonHero onStart={enterBombSquad} board={board} />

@@ -4,6 +4,7 @@ import GamesPage from './pages/GamesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import CommunityPage from './pages/CommunityPage'
 import AccountPage from './pages/AccountPage'
+import LoginPage from './pages/LoginPage'
 import PrivacyPage from './pages/PrivacyPage'
 import TermsPage from './pages/TermsPage'
 
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/me" element={<AccountPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
       </Route>

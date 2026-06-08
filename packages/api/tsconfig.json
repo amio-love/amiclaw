@@ -12,5 +12,9 @@
     }
   },
   "include": ["src", "../../shared"],
-  "exclude": ["../../shared/leaderboard-api.ts", "../../shared/leaderboard-optimistic.ts"]
+  "exclude": [
+    "../../shared/api-base.ts",
+    "../../shared/leaderboard-api.ts",
+    "../../shared/leaderboard-optimistic.ts"
+  ]
 }

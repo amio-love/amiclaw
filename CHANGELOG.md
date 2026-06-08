@@ -33,6 +33,20 @@ only — the Google sign-in option and the sign-in UI land in later changes. See
 `functions/api/auth/PROVISIONING.md` for the one-time setup (Resend key + `AUTH`
 namespace).
 
+**Magic-link sign-in UI, wired to the real session** - The site now reads the
+real sign-in state from the server instead of a development mock. A new
+`/login` page takes an email and sends the magic link; after you submit it
+always shows the same "如果该邮箱可用，你会收到一封登录邮件" message, so the page
+never reveals which addresses have an account. The 登录 entry points (top
+navigation and the account page) route here. Email sign-in only for now — the
+Google button arrives with Google sign-in in a later change. The account page
+and home page now show your real identity once you are signed in: your name is
+derived from your email, and because per-user stats are not built yet, signed-in
+pages show an honest "还没有成绩，去玩一局" empty state rather than placeholder
+numbers. The old `?auth=in` URL mock is gone from the shipped site; a
+development-only sign-in shortcut remains for local work and is compiled out of
+the production build.
+
 **The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
 hero description now explains AmiClaw instead of describing only the defusal game, and
 the hero keeps a single start button. The former daily challenge and weekly feature

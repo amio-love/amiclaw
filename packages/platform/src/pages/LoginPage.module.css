@@ -1,0 +1,86 @@
+/* Magic-link login page — a single email-input card. Header mirrors the other
+   platform pages (.page / .title / .accent / .lead). Dark-only, brand-yellow
+   accents, no BombSquad cyan. CSS-only transitions. */
+
+.page {
+  padding: 60px 0;
+}
+
+.title {
+  margin: 0;
+  font: 400 44px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.lead {
+  margin: 10px 0 36px;
+  max-width: 540px;
+  font: 400 16px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.card {
+  max-width: 440px;
+  padding: 36px 32px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.label {
+  font: 500 12px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-hairline);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-1);
+  font: 400 16px var(--font-body);
+  transition: border-color 0.2s;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--amio-yellow);
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.errorText {
+  margin: 0;
+  font: 400 13px var(--font-body);
+  color: #ff8a8a;
+}
+
+/* The unified anti-enumeration confirmation replacing the form on send. */
+.confirmation {
+  margin: 0;
+  font: 400 16px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 768px) {
+  .title {
+    font-size: 32px;
+  }
+}

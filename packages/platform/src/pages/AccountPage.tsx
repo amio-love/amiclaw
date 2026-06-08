@@ -1,32 +1,39 @@
 import { Link } from 'react-router-dom'
-import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
-import { badges, recentRuns } from '@/mocks/account'
-import type { MockUser } from '@/mocks/auth'
-import { useAuth } from '@/hooks/useAuth'
+import { ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
+import { useAuth, type DisplayUser } from '@/hooks/useAuth'
 import styles from './AccountPage.module.css'
 
-/* Account page — handoff §6.11. A profile card (identity + stats) beside
-   a「最近 5 局」run table and a 勋章 badge grid. Platform chrome — every
-   accent is brand yellow; no BombSquad cyan on this surface.
+/* Account page — handoff §6.11. Reads identity from useAuth():
+     - loading → hold the page chrome only (no profile, no guide) so neither
+       state flashes before the session resolves.
+     - signed-in → the real-identity profile with an honest empty stats state.
+     - anonymous → a login-guide empty state routing to /login.
 
-   The page reads identity from useAuth(): a signed-in visitor sees the
-   profile; an anonymous visitor gets a login-guide empty state instead of
-   another user's profile (mirrors GamesPage's signed-in / anonymous split). */
+   Platform chrome — every accent is brand yellow; no BombSquad cyan here. */
 export default function AccountPage() {
-  const { signedIn, user } = useAuth()
+  const { status, user } = useAuth()
 
   return (
     <div className={styles.page}>
       <EyebrowTag variant="section">我的 · ACCOUNT</EyebrowTag>
-      {signedIn && user ? <SignedInProfile user={user} /> : <SignedOutGuide />}
+      {status === 'loading' ? null : status === 'authed' && user ? (
+        <SignedInProfile user={user} />
+      ) : (
+        <SignedOutGuide />
+      )}
     </div>
   )
 }
 
-/* The signed-in profile — identity and stats come from the authenticated
-   `user`; recentRuns / badges are the demo user's run history and badge wall. */
-function SignedInProfile({ user }: { user: MockUser }) {
-  const fullName = `${user.avatarLetter}${user.displayName}`
+/* The signed-in profile — identity is the real session's derived display name.
+
+   Per-user stats (recent runs / badges / rank / streak) are NOT shown: real
+   per-user stats need the leaderboard user_id migration (not yet built), and
+   showing mock numbers to a real logged-in user would re-introduce the exact
+   fake-data problem PR #133 fixed for the signed-out state. So the detail
+   column is an honest empty state — "还没有成绩，去玩一局" with a play CTA —
+   not mock numbers and not a「即将推出」placeholder. */
+function SignedInProfile({ user }: { user: DisplayUser }) {
   return (
     <>
       <h2 className={styles.title}>
@@ -39,62 +46,18 @@ function SignedInProfile({ user }: { user: MockUser }) {
           <div className={styles.avatar}>
             <ConicAvatar size={96} letter={user.avatarLetter} ariaHidden />
           </div>
-          <div className={styles.name}>{fullName}</div>
-          <div className={styles.rank}>
-            本周 #{user.weekRank} · 累计 #{user.totalRank.toLocaleString('en-US')}
-          </div>
-          <div className={styles.stats}>
-            <div className={styles.stat}>
-              <div className={styles.statValue}>{user.streakDays}</div>
-              <div className={styles.statLabel}>连胜</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statValue}>{user.completed}</div>
-              <div className={styles.statLabel}>已完成</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statValue}>{user.fastest}</div>
-              <div className={styles.statLabel}>最快</div>
-            </div>
-          </div>
-          <Button variant="ghost" className={styles.settingsBtn}>
-            账户设置
-          </Button>
+          <div className={styles.name}>{user.displayName}</div>
+          <div className={styles.rank}>{user.email}</div>
         </GlassCard>
 
         <div className={styles.detail}>
           <section className={styles.section}>
-            <h3 className={styles.sectionTitle}>最近 5 局</h3>
-            <GlassCard radius="2xl" className={styles.runCard}>
-              <div className={styles.runs}>
-                {recentRuns.map((run) => (
-                  <div key={run.id} className={styles.run}>
-                    <div className={styles.runIcon}>{run.icon}</div>
-                    <div>
-                      <div className={styles.runGame}>{run.game}</div>
-                      <div className={styles.runMode}>{run.mode}</div>
-                    </div>
-                    <div className={styles.runTime}>{run.time}</div>
-                    <div className={styles.runRank}>{run.rank}</div>
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
-          </section>
-
-          <section className={styles.section}>
-            <h3 className={styles.sectionTitle}>勋章</h3>
-            <GlassCard radius="2xl" className={styles.badgeCard}>
-              <div className={styles.badgeGrid}>
-                {badges.map((badge) => (
-                  <div key={badge.id} className={styles.badge}>
-                    <ConicAvatar size={56} ariaHidden>
-                      <span className={styles.badgeStar}>★</span>
-                    </ConicAvatar>
-                    <div className={styles.badgeName}>{badge.name}</div>
-                  </div>
-                ))}
-              </div>
+            <h3 className={styles.sectionTitle}>战绩</h3>
+            <GlassCard radius="2xl" className={styles.emptyCard}>
+              <p className={styles.emptyText}>还没有成绩，去玩一局。</p>
+              <a className={styles.emptyCta} href="/bombsquad/">
+                开始玩
+              </a>
             </GlassCard>
           </section>
         </div>
@@ -109,7 +72,7 @@ function SignedInProfile({ user }: { user: MockUser }) {
 const UNLOCK_PREVIEW = ['战绩与单局完成率', '连胜与最快记录', '勋章墙']
 
 /* The anonymous empty state — a single login-guide card. Routes to the
-   platform homepage (the onboarding/entry surface) via react-router. */
+   magic-link /login page via react-router. */
 function SignedOutGuide() {
   return (
     <>
@@ -125,8 +88,8 @@ function SignedOutGuide() {
             </li>
           ))}
         </ul>
-        <Link to="/" className={styles.guideCta}>
-          登录 / 开始
+        <Link to="/login" className={styles.guideCta}>
+          登录
         </Link>
       </GlassCard>
     </>
