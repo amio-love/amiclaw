@@ -15,6 +15,24 @@ clear immediately. The mobile BombSquad lobby also keeps its top chrome inside
 the viewport, and the button and keypad modules expose shorter, more useful
 accessible labels for the state a player needs to describe.
 
+**Magic-link sign-in backend (server side)** - AmiClaw now has a real,
+revocable sign-in backend for the paid (platform-AI) path. A player enters
+their email at `/api/auth/magic-link/request`, receives a one-time link by
+email (sent via Resend), and lands on `/api/auth/magic-link/verify`, which
+creates an opaque server-side session and sets a secure session cookie.
+`/api/auth/session` reports who is signed in and `/api/auth/logout` revokes the
+session. The one-time token is single-use and expires within 15 minutes, the
+server stores only its SHA-256 hash (never the plaintext), the request endpoint
+returns the same response whether or not the email is known (no account
+enumeration), send and verify are rate-limited, the cookie is
+HttpOnly + Secure + SameSite=Lax, and sign-in / sign-out / verify events are
+written to an audit log in a dedicated `AUTH` KV namespace. Leaderboard score
+submissions now reject any request that claims a `user_id` without a valid
+session; anonymous device-UUID submissions are unaffected. This is the backend
+only — the Google sign-in option and the sign-in UI land in later changes. See
+`functions/api/auth/PROVISIONING.md` for the one-time setup (Resend key + `AUTH`
+namespace).
+
 **The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
 hero description now explains AmiClaw instead of describing only the defusal game, and
 the hero keeps a single start button. The former daily challenge and weekly feature

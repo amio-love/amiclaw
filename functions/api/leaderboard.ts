@@ -1,9 +1,16 @@
 import { handleGetLeaderboard } from '../../packages/api/src/handlers/get-leaderboard'
 import { handlePostScore } from '../../packages/api/src/handlers/post-score'
 import { applyCorsHeaders, buildCorsHeaders } from '../../packages/api/src/cors'
+import { extractClaimedUserId } from '../../packages/api/src/auth/extract-claim'
+import { guardClaimedUserId } from '../../packages/api/src/auth/guard'
 
 interface Env {
   LEADERBOARD: KVNamespace
+  // `AUTH` is the auth-session namespace. Optional here: the guard only needs
+  // it when a submission actually CLAIMS a `user_id`. Current device-UUID
+  // submissions claim none, so the guard never touches `AUTH` for them and the
+  // existing anonymous flow is unaffected even before `AUTH` is provisioned.
+  AUTH?: KVNamespace
 }
 
 interface Context {
@@ -22,6 +29,31 @@ export async function onRequest(context: Context): Promise<Response> {
   }
 
   if (request.method === 'POST') {
+    // Auth guard: reject only when a submission CLAIMS a `user_id` without a
+    // valid matching session. A claim-less (anonymous device-UUID) submission
+    // — the only kind today — passes straight through untouched.
+    const claimedUserId = await extractClaimedUserId(request)
+    if (claimedUserId) {
+      if (!env.AUTH) {
+        return applyCorsHeaders(
+          new Response(JSON.stringify({ error: 'Authentication unavailable' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          corsHeaders
+        )
+      }
+      const outcome = await guardClaimedUserId(env.AUTH, request, claimedUserId)
+      if (!outcome.ok) {
+        return applyCorsHeaders(
+          new Response(JSON.stringify({ error: outcome.reason }), {
+            status: outcome.status,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          corsHeaders
+        )
+      }
+    }
     return applyCorsHeaders(await handlePostScore(request, env.LEADERBOARD), corsHeaders)
   }
 
