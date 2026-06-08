@@ -1,4 +1,4 @@
-import { GlassCard, SectionHeader, accentClass } from '@amiclaw/ui'
+import { GlassCard, SectionHeader, Wordmark, accentClass } from '@amiclaw/ui'
 import styles from './WhatIsAmiclaw.module.css'
 
 interface ValueProp {
@@ -33,7 +33,11 @@ export default function WhatIsAmiclaw() {
   return (
     <section className={styles.section}>
       <SectionHeader
-        eyebrow="关于 · WHAT IS AMICLAW"
+        eyebrow={
+          <>
+            关于 · What is <Wordmark className={styles.brandToken} />
+          </>
+        }
         title={
           <>
             和 AI 一起，<span className={accentClass}>不止是工具</span>。

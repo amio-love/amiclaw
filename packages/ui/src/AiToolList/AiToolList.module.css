@@ -1,0 +1,30 @@
+/* inline — names joined by ` · `; color is inherited from the consumer
+   (works inside a yellow eyebrow or a dim footer strip alike). Tool names are
+   emphasized with weight 500; the prefix and separators stay at the inherited
+   weight. */
+.inline {
+  font-family: var(--font-body);
+}
+
+/* Tool names always render in their official title-case (`Claude`), even when
+   dropped inside an uppercasing parent (e.g. the BombSquad lobby eyebrow's
+   `text-transform: uppercase`). DesignSystem.md §Brand forbids all-caps tool
+   names (`CLAUDE`). */
+.tool {
+  font-weight: 500;
+  text-transform: none;
+}
+
+/* chips — brand-yellow pills laid out in a wrapping row. */
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chips .prefix {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+}

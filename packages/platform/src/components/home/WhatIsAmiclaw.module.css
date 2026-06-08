@@ -9,6 +9,13 @@
   padding: 24px 0 0;
 }
 
+/* The brand name in the eyebrow keeps its prose case (`AmiClaw`) instead of
+   inheriting the eyebrow's `text-transform: uppercase` — never `AMICLAW`
+   (DesignSystem.md §Brand → Product Name). */
+.brandToken {
+  text-transform: none;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

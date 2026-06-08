@@ -1,4 +1,4 @@
-import { Button, EyebrowTag, StatPill } from '@amiclaw/ui'
+import { Button, EyebrowTag, StatPill, Wordmark } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './AnonHero.module.css'
@@ -15,8 +15,10 @@ interface AnonHeroProps {
 }
 
 /* Anonymous homepage hero — left copy column + right planet stage.
-   Handoff §6.1. The planet, rings and BombSquad wordmark are decorative
-   (aria-hidden). The floating StatPills only ever show data we actually
+   Handoff §6.1. The planet and rings are a decorative warm-cosmic orb
+   (aria-hidden), matching the BombSquad lobby planet — no game wordmark is
+   baked onto the platform hero. The floating StatPills only ever show data we
+   actually
    track: 今日上榜 (real daily participation) and 最快拆弹 (today's #1 time)
    come from the daily board — the leader pill hides until the board has a
    score — and 支持 AI 模型 is an honest static fact. There is NO weekly /
@@ -33,7 +35,8 @@ export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroPro
           <span className={styles.line2}>a place to play with AI · together</span>
         </h1>
         <p className={styles.sub}>
-          你描述、AI 协助，一起拆弹。Amiclaw 是 AMIO 的人机协作游戏平台。
+          你描述、AI 协助，一起拆弹。
+          <Wordmark /> 是 AMIO 的人机协作游戏平台。
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>

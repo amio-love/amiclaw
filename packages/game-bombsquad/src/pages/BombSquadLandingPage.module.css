@@ -162,16 +162,9 @@
 }
 
 /* ----------  title block  ---------- */
+/* The BombSquadWordmark lobby variant owns the type; the h1 only resets margin. */
 .title {
   margin: 0;
-  font: 700 44px var(--font-display);
-  letter-spacing: 0.04em;
-  color: #fff;
-}
-
-.titleAccent {
-  color: var(--y);
-  text-shadow: 0 0 20px var(--y-glow-50);
 }
 
 .subtitle {
@@ -218,16 +211,9 @@
   color: var(--y);
 }
 
+/* Spacing only — the DailyCountdown sm variant owns the digit/unit type. */
 .countdown {
   margin-top: 4px;
-  font: 400 26px/1 var(--font-display);
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.sep {
-  margin: 0 2px;
-  color: rgba(255, 255, 255, 0.3);
 }
 
 .dailyRight {
@@ -328,10 +314,6 @@
     padding-right: 32px;
   }
 
-  .title {
-    font-size: 56px;
-  }
-
   .desc {
     font-size: 15px;
   }
@@ -416,11 +398,6 @@
     height: 240px;
   }
 
-  .title {
-    font-size: clamp(46px, 6.5vw, 72px);
-    letter-spacing: 0.06em;
-  }
-
   .subtitle {
     font-size: 15px;
   }
@@ -435,17 +412,13 @@
     padding: 20px 22px;
   }
 
-  .countdown {
-    font-size: 32px;
-  }
-
   .chips {
     margin-top: 0;
   }
 }
 
 /* ============================================================
-   RESPONSIVE — WIDE DESKTOP (≥ 1280px): larger planet + title.
+   RESPONSIVE — WIDE DESKTOP (≥ 1280px): larger planet.
    ============================================================ */
 @media (min-width: 1280px) {
   .planet {
@@ -466,9 +439,5 @@
   .ring2 {
     width: 320px;
     height: 320px;
-  }
-
-  .title {
-    font-size: 84px;
   }
 }

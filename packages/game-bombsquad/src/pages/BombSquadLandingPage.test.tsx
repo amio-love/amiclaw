@@ -18,9 +18,11 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import BombSquadLandingPage from './BombSquadLandingPage'
 
-// The hook now lives in @amiclaw/ui; preserve the rest of the barrel.
-vi.mock('@amiclaw/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@amiclaw/ui')>()),
+// The daily-reset clock now lives inside @amiclaw/ui's DailyCountdown, which
+// consumes the useDailyCountdown hook directly. Mock the hook module (the same
+// one DailyCountdown imports) to a static tuple so the suite carries no live
+// timer.
+vi.mock('../../../ui/src/useDailyCountdown', () => ({
   useDailyCountdown: () => ['07', '30', '00'],
 }))
 
@@ -59,8 +61,10 @@ describe('BombSquadLandingPage', () => {
     // Hero copy markers.
     expect(screen.getByText('拆弹小队')).toBeInTheDocument()
     expect(screen.getByText(/人机协作 · 语音拆弹挑战/)).toBeInTheDocument()
-    // Bring-your-own-AI premise eyebrow (not a status claim).
-    expect(screen.getByText(/自带语音 AI · 支持 Claude/)).toBeInTheDocument()
+    // Bring-your-own-AI premise eyebrow (not a status claim). The AI-tools
+    // list now emphasizes each tool name in its own span, so the prefix is its
+    // own text node.
+    expect(screen.getByText(/自带语音 AI · 支持/)).toBeInTheDocument()
     // Daily-countdown card — its label plus the mocked countdown digits.
     // The countdown splits the `:` separators into <span> elements, so the
     // digits are loose text nodes — match on the element's full textContent.

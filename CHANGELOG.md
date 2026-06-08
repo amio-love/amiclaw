@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**四个品牌元素现在全站只有一种长相** — 同一个名字、同一个标志，过去在首页、BombSquad
+大厅和平台导航里各画各的，凑在一起显得没收尾。现在它们都收敛到一套共享组件：产品名在正文里
+统一写作 AmiClaw;BombSquad 标志一律是白色 BOMB 配亮黄 SQUAD 的横排,首页那版刺眼的
+青色竖排不再出现;支持的 AI 工具固定写成 Claude · ChatGPT · Gemini,同一种间隔、同一种
+字重;每日重置倒计时在大厅也补上了「时 分 秒」标签,和首页每日卡片完全一致。首页主视觉那颗
+星球此前也是一身青光,现在跟 BombSquad 大厅的星球统一成暖黄配紫的宇宙色;首页「本周聚焦」
+那张卡片残留的青色氛围也一并清掉。还有几处小标签过去会把名字顶成全大写:大厅顶部把支持的 AI
+写成 CLAUDE、CHATGPT、GEMINI,「关于」那栏把产品名写成 AMICLAW;现在它们都回到正确的
+大小写,固定写作 Claude · ChatGPT · Gemini 与 AmiClaw。
+
 **The home page now says one thing about how to start, and says it
 honestly** — The landing page used to describe your AI partner as your eyes or
 your ears, which gets the game backwards: you are the one looking at the bomb,

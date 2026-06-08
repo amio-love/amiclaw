@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Scenery, useDailyCountdown } from '@amiclaw/ui'
+import { AiToolList, BombSquadWordmark, DailyCountdown, Scenery } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
@@ -14,7 +14,6 @@ import styles from './BombSquadLandingPage.module.css'
    which then hands off to the existing run. */
 export default function BombSquadLandingPage() {
   const navigate = useNavigate()
-  const [hours, minutes, seconds] = useDailyCountdown()
   /* Same daily leaderboard API the platform homepage and /leaderboard read.
      Empty board → 日榜首 — and 今日上榜 0; never a fabricated number. The board
      holds only successful defusals, so the count is labelled 今日上榜 (matches
@@ -38,7 +37,7 @@ export default function BombSquadLandingPage() {
               "ready/online" signal. */}
           <div className={styles.top}>
             <Eyebrow dot color="var(--y)">
-              自带语音 AI · 支持 Claude / ChatGPT / Gemini
+              <AiToolList prefix="自带语音 AI · 支持" />
             </Eyebrow>
             <button
               type="button"
@@ -77,7 +76,7 @@ export default function BombSquadLandingPage() {
               <div className={`${styles.orbitDot} ${styles.dot2}`} aria-hidden="true" />
             </div>
             <h1 className={styles.title}>
-              BOMB<span className={styles.titleAccent}>SQUAD</span>
+              <BombSquadWordmark size="lobby" />
             </h1>
             <div className={styles.subtitle}>拆弹小队</div>
             <p className={styles.desc}>人机协作 · 语音拆弹挑战 · 一局 5–8 分钟</p>
@@ -90,13 +89,7 @@ export default function BombSquadLandingPage() {
             <div className={styles.daily}>
               <div>
                 <div className={styles.dailyLabel}>今日挑战 · 重置</div>
-                <div className={styles.countdown}>
-                  {hours}
-                  <span className={styles.sep}>:</span>
-                  {minutes}
-                  <span className={styles.sep}>:</span>
-                  {seconds}
-                </div>
+                <DailyCountdown size="sm" className={styles.countdown} />
               </div>
               <div className={styles.dailyRight}>
                 <div className={styles.dailyRank}>
@@ -134,9 +127,7 @@ export default function BombSquadLandingPage() {
               </svg>
             </a>
 
-            <div className={styles.chips}>
-              支持 <span>Claude</span> · <span>ChatGPT</span> · <span>Gemini</span>
-            </div>
+            <AiToolList prefix="支持" className={styles.chips} />
           </div>
         </div>
       </div>

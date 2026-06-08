@@ -27,17 +27,10 @@
   text-decoration: none;
 }
 
+/* The Wordmark lockup carries the brand-mark recipe (font, color, glow); the
+   nav only sets its size. */
 .brandMark {
-  font: 700 22px var(--font-display);
-  letter-spacing: 0.04em;
-  color: var(--amio-yellow);
-  text-shadow: 0 0 18px rgba(255, 229, 62, 0.35);
-}
-
-.dot {
-  color: rgba(255, 255, 255, 0.45);
-  margin: 0 2px;
-  font-weight: 300;
+  font-size: 22px;
 }
 
 /* ---------- center tabs ---------- */

@@ -1,0 +1,57 @@
+/* Fixed treatment — white base + yellow accent half + glow, display font.
+   Only the `size` modifiers below change the scale. */
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--y);
+  text-shadow: 0 0 20px var(--y-glow-50);
+}
+
+/* lobby — rides the 44 → 56 → clamp(46px,6.5vw,72px) → 84px responsive ramp. */
+.lobby {
+  font-size: 44px;
+}
+
+@media (min-width: 600px) {
+  .lobby {
+    font-size: 56px;
+  }
+}
+
+@media (min-width: 900px) {
+  .lobby {
+    font-size: clamp(46px, 6.5vw, 72px);
+    letter-spacing: 0.06em;
+  }
+}
+
+@media (min-width: 1280px) {
+  .lobby {
+    font-size: 84px;
+  }
+}
+
+/* hero — homepage feature panel, the large (~84px) end of the ramp; shrinks on
+   narrower viewports to match the panel's prior responsive tiers. */
+.hero {
+  font-size: 84px;
+  line-height: 0.9;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 1080px) {
+  .hero {
+    font-size: 62px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero {
+    font-size: 50px;
+  }
+}

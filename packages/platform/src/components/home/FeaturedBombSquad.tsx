@@ -1,11 +1,7 @@
-import { Chip, SectionHeader, accentClass } from '@amiclaw/ui'
+import { AiToolList, BombSquadWordmark, SectionHeader, accentClass } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './FeaturedBombSquad.module.css'
-
-/* The AI tools BombSquad supports — rendered as cyan chips inside the
-   art panel. Mono, uppercase, neon: the BombSquad register. */
-const AI_CHIPS = ['CLAUDE', 'CHATGPT', 'GEMINI', 'VOICE_MODE']
 
 /* The mini board mirrors the daily leaderboard's visual budget: a handful
    of top rows. The full board lives at /leaderboard. */
@@ -18,9 +14,10 @@ interface FeaturedBombSquadProps {
 }
 
 /* Featured BombSquad section — handoff §6.4. The left art panel is the
-   BombSquad zone: the cyan wordmark, mono mark, cyan chips and scanline
-   overlay all stay inside it. The right mini-leaderboard panel and the
-   section header are platform chrome — no cyan there.
+   BombSquad zone: the white+yellow BombSquadWordmark, the brand-yellow AI
+   chips and the scanline overlay sit on a warm-cosmic atmosphere (no cyan —
+   DesignSystem.md §Brand). The right mini-leaderboard panel and the section
+   header are platform chrome.
 
    The mini board reads the real daily leaderboard (same source as
    /leaderboard 每日 and the rest of the homepage). When today's board is
@@ -43,21 +40,10 @@ export default function FeaturedBombSquad({ board }: FeaturedBombSquadProps) {
 
       <div className={styles.card}>
         <div className={styles.art}>
-          <div className={styles.mark}>// AMIO · CLAW / GAME_01</div>
-          <div className={styles.bigTitle}>
-            BOMB
-            <br />
-            SQUAD
-          </div>
+          <BombSquadWordmark size="hero" className={styles.bigTitle} />
           <div className={styles.meta}>
             <div className={styles.metaBlurb}>人机协作 · 语音拆弹 · 4 模块 · 5–8 分钟一局</div>
-            <div className={styles.chips}>
-              {AI_CHIPS.map((chip) => (
-                <Chip key={chip} variant="cyan">
-                  {chip}
-                </Chip>
-              ))}
-            </div>
+            <AiToolList variant="chips" />
           </div>
         </div>
 

@@ -4,6 +4,19 @@
   border-radius: 999px;
 }
 
+/* brand — yellow AI-tool pill. Title-case names (never all-caps), body font,
+   weight 500; uses the existing yellow tint + soft yellow border tokens. */
+.brand {
+  padding: 5px 11px;
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--amio-yellow);
+  letter-spacing: 0.08em;
+}
+
 /* cyan — BombSquad featured-art chip (mono, neon cyan). */
 .cyan {
   padding: 5px 11px;
