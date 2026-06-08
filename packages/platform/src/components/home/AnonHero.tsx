@@ -5,7 +5,7 @@ import styles from './AnonHero.module.css'
 
 interface AnonHeroProps {
   /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the primary「开启旅程」CTA. */
+     — the primary「开始玩」CTA. */
   onStart: () => void
   /* Scrolls to the FeaturedBombSquad section — the ghost「看看 BombSquad」CTA. */
   onSeeBombSquad: () => void
@@ -37,7 +37,7 @@ export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroPro
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>
-            开启旅程 →
+            开始玩 →
           </Button>
           <Button variant="ghost" onClick={onSeeBombSquad}>
             看看 BombSquad

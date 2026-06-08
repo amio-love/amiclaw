@@ -110,17 +110,6 @@
   color: var(--text-4);
 }
 
-/* atlas .daily-r .play-btn is 14px 28px. The shared Button .sm size is
-   13px 22px; this descendant selector (0,2,0) outranks .sm (0,1,0) so
-   the daily CTA keeps its own padding regardless of stylesheet order. */
-.cta {
-  margin-top: 20px;
-}
-
-.right .cta {
-  padding: 14px 28px;
-}
-
 /* ----------  responsive: medium  ---------- */
 @media (max-width: 1080px) {
   .title {
@@ -169,14 +158,5 @@
   .units {
     justify-content: flex-start;
     gap: 22px;
-  }
-
-  /* atlas .daily-r .play-btn — full-width CTA. Same specificity (0,2,0)
-     as the desktop .right .cta padding rule and later in source, so the
-     desktop 14px 28px padding still stands (separate declaration). */
-  .right .cta {
-    display: flex;
-    width: 100%;
-    justify-content: center;
   }
 }

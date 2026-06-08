@@ -12,11 +12,6 @@ const AI_CHIPS = ['CLAUDE', 'CHATGPT', 'GEMINI', 'VOICE_MODE']
 const MINI_ROW_BUDGET = 4
 
 interface FeaturedBombSquadProps {
-  /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
-     — the section header's「游戏页 →」action. This is the section's single
-     contextual entry: the showcase points to the game page, the landing page
-     owns the daily / practice choice. */
-  onOpenGamePage: () => void
   /* Today's real daily board, fetched once in GamesPage. The mini panel
      renders its top rows — or an honest empty state — never mock players. */
   board: DailyBoardState
@@ -32,7 +27,7 @@ interface FeaturedBombSquadProps {
    empty it shows the daily board's own empty-state wording instead of
    fabricated rows; the panel is labelled 今日日榜 because the data resets
    daily at UTC 0. */
-export default function FeaturedBombSquad({ onOpenGamePage, board }: FeaturedBombSquadProps) {
+export default function FeaturedBombSquad({ board }: FeaturedBombSquadProps) {
   const topRows = board.entries.slice(0, MINI_ROW_BUDGET)
 
   return (
@@ -44,7 +39,6 @@ export default function FeaturedBombSquad({ onOpenGamePage, board }: FeaturedBom
             BombSquad · <span className={accentClass}>拆弹小队</span>
           </>
         }
-        action={{ label: '游戏页 →', onClick: onOpenGamePage }}
       />
 
       <div className={styles.card}>
@@ -71,7 +65,7 @@ export default function FeaturedBombSquad({ onOpenGamePage, board }: FeaturedBom
           <div>
             <h3 className={styles.sideTitle}>今日日榜</h3>
             <p className={styles.sideBlurb}>
-              每天零点重置。把手册念给 AI 听，让它做你的眼睛 —— 用时越短，名次越高。
+              每天零点重置。你描述面板，AI 查手册指路。用时越短，名次越高。
             </p>
           </div>
 

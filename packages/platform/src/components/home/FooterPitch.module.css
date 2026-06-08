@@ -1,4 +1,4 @@
-/* Footer registration pitch — handoff §6.8; pixel values mirror
+/* Footer pitch — handoff §6.8; pixel values mirror
    prototype/atlas/atlas.html (.footer-pitch). Anonymous-only. The
    responsive @media tier (≤768px) carries atlas.html's exact values. */
 
@@ -30,9 +30,7 @@
 }
 
 /* ----------  responsive: mobile  ----------
-   atlas.html ≤768px — tighter card padding, smaller heading, and the
-   atlas mobile .btn-primary pill size on the CTA. .pitch button (0,1,1)
-   outranks Button's .md (0,1,0). */
+   atlas.html ≤768px — tighter card padding and a smaller heading. */
 @media (max-width: 768px) {
   .pitch {
     padding: 40px 24px;
@@ -40,10 +38,5 @@
 
   .title {
     font-size: 30px;
-  }
-
-  .pitch button {
-    padding: 14px 22px;
-    font-size: 14px;
   }
 }
