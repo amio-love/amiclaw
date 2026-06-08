@@ -1,0 +1,45 @@
+# Demo-only wrangler config for the Platform AI Interface.
+#
+# This is a LOCAL-DEV config, not a deploy config. It runs the same Worker as
+# the production `wrangler.toml` (../src/worker.ts) but with three demo-friendly
+# changes so the full STT -> LLM -> TTS pipeline runs with NO real credentials:
+#
+#   1. DEV_AUTH_BYPASS = "true" — the WS handshake auth seam returns a fixed dev
+#      identity instead of doing a real AUTH KV lookup, so you can connect
+#      without a signed-in session cookie.
+#   2. The demo uses the `demo-mock` gameId (see ../src/provider-config.ts),
+#      whose three layers all select the deterministic `mock` provider — no
+#      DeepSeek / Volcengine keys are read or required.
+#   3. `[assets]` serves this `demo/` directory as static files, and
+#      `run_worker_first` lets the Worker claim `/ai-ws/*` while every other
+#      path (the demo page itself) is served as a static asset.
+#
+# Run from the package root:
+#   pnpm exec wrangler dev --config demo/wrangler.dev.toml
+# then open the printed http://localhost:8787/ URL.
+
+name = "platform-ai-demo"
+main = "../src/worker.ts"
+compatibility_date = "2026-06-08"
+
+# Serve the demo page + client as static assets; the Worker is invoked first so
+# it can handle the `/ai-ws/*` WebSocket upgrade before asset routing.
+[assets]
+directory = "."
+run_worker_first = ["/ai-ws/*"]
+
+# Per-session voice pipeline DO (same class as production).
+[[durable_objects.bindings]]
+name = "VOICE_SESSION"
+class_name = "VoiceSessionDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceSessionDO"]
+
+[vars]
+# Dev auth bypass ON for local demo only — never set in production.
+DEV_AUTH_BYPASS = "true"
+
+# NOTE: no [[kv_namespaces]] AUTH binding and no provider secrets here. The mock
+# provider path needs neither, and DEV_AUTH_BYPASS short-circuits the AUTH read.

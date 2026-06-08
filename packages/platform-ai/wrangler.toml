@@ -1,0 +1,78 @@
+# Platform AI Interface — standalone Cloudflare Worker.
+#
+# This is the repo's first independent Worker deploy unit. It hosts the
+# Durable Object that carries the per-session WebSocket voice pipeline
+# (STT -> LLM -> TTS). The DO/WebSocket server implementation and the real
+# provider adapters land in later rounds (R2/R3); this file pins the
+# deploy-time bindings so those rounds have a stable contract.
+#
+# TOML syntax verified against the current Cloudflare docs (June 2026):
+#   - Durable Objects bindings + migrations:
+#     https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
+#   - KV namespaces, routes, vars:
+#     https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "platform-ai"
+main = "src/worker.ts"
+compatibility_date = "2026-06-08"
+
+# Worker runs only the server-side AI orchestration. The Node.js compat flag
+# is intentionally NOT set here — adapters target the standard Workers fetch /
+# WebSocket / streams APIs, decided in a later round if a provider SDK needs it.
+
+# --- Durable Object: per-session voice pipeline state holder ---
+# The DO owns one voice session's conversation history, current phase, and the
+# WebSocket long-connection. Single-point serialization keeps turns ordered.
+# Implementation deferred to R3; the binding + class name are pinned now.
+[[durable_objects.bindings]]
+name = "VOICE_SESSION"
+class_name = "VoiceSessionDO"
+
+# SQLite-backed DO storage (the recommended backend for new classes). The
+# migration tag is the ordered changelog of DO class lifecycle events.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceSessionDO"]
+
+# --- AUTH KV: shared session keyspace owned by auth-session ---
+# The Worker self-binds the auth-session AUTH namespace and reuses the shared
+# session-reader during the WS upgrade handshake (read-only: cookie -> session
+# id -> session:<id>). The Worker never writes here. `id` is the production
+# namespace id, filled at deploy wiring time (placeholder until then).
+[[kv_namespaces]]
+binding = "AUTH"
+id = "PLACEHOLDER_AUTH_KV_NAMESPACE_ID"
+
+# --- Same-origin WS route on the canonical zone ---
+# Mounting under claw.amio.fans (same zone as the Platform SPA / /api/*) is the
+# structural prerequisite for the session cookie to ride along on the WS
+# upgrade — a path-prefix route on the existing zone, not a whole-domain custom
+# domain. The /ai-ws/* prefix is pinned at L2 and must not drift.
+[[routes]]
+pattern = "claw.amio.fans/ai-ws/*"
+zone_name = "amio.fans"
+
+# --- Plain-text vars ---
+[vars]
+# Dev-only auth bypass. When set (dev/preview), the WS handshake's
+# session-reader step is replaced by a fixed dev identity; the prod build
+# compiles this branch out. Mounting point / "validate-at-handshake, reject if
+# invalid" shape stays fixed — only the session lookup is stubbed.
+DEV_AUTH_BYPASS = "false"
+
+# --- Secrets (set via `wrangler secret put`, NEVER committed as plaintext) ---
+# Provider API keys and any system-prompt material live only server-side as
+# Cloudflare secrets. Set each with `wrangler secret put <NAME>`:
+#   DEEPSEEK_API_KEY   — DeepSeek (OpenAI-compatible) LLM key.
+#   VOLC_ACCESS_KEY    — Volcengine (火山) access key, sent as X-Api-Access-Key.
+#   VOLC_APP_ID        — Volcengine (火山) speech app id, sent as X-Api-App-Key.
+# These are referenced by the provider adapters; declared here only as
+# documentation so the deploy operator knows what to provision.
+#
+# No VOLC_SECRET_KEY: the v3 big-model endpoints this adapter targets —
+# streaming ASR (/api/v3/sauc/bigmodel) and Doubao TTS 2.0 bidirectional
+# (/api/v3/tts/bidirection) — authenticate purely via the X-Api-App-Key /
+# X-Api-Access-Key / X-Api-Resource-Id token headers. They do NOT use the legacy
+# `Authorization: HMAC256` signature scheme, so no secret key is needed. (The
+# secret-key signature path is the older console-auth method for the v1/v2
+# endpoints, which this adapter does not use.)
