@@ -1,0 +1,78 @@
+/* Stacks the digit row over the unit row, centered relative to each other.
+   The block is inline-flex so the consumer positions it via text-align on the
+   wrapping element (center on the homepage card, left on mobile). */
+.countdown {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.digits {
+  display: flex;
+  font-family: var(--amio-font-mono);
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.sep {
+  color: var(--text-muted);
+}
+
+.units {
+  display: flex;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--text-4);
+}
+
+/* lg — homepage daily card (~56px). */
+.lg .digits {
+  gap: 8px;
+  font-size: 56px;
+  letter-spacing: -0.02em;
+}
+
+.lg .units {
+  gap: 33px;
+  margin-top: 6px;
+}
+
+@media (max-width: 1080px) {
+  .lg .digits {
+    font-size: 44px;
+  }
+
+  .lg .units {
+    gap: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .lg .digits {
+    font-size: 40px;
+  }
+
+  .lg .units {
+    gap: 22px;
+  }
+}
+
+/* sm — BombSquad lobby card (~26px, growing to ~32px on desktop). */
+.sm .digits {
+  gap: 2px;
+  font-size: 26px;
+}
+
+.sm .units {
+  gap: 16px;
+  margin-top: 4px;
+}
+
+@media (min-width: 900px) {
+  .sm .digits {
+    font-size: 32px;
+  }
+}

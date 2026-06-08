@@ -1,4 +1,4 @@
-import { EyebrowTag, useDailyCountdown } from '@amiclaw/ui'
+import { DailyCountdown, EyebrowTag } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './DailyChallenge.module.css'
@@ -20,8 +20,6 @@ interface DailyChallengeProps {
    successful defusals, so the count is labelled 今日上榜 (matches AnonHero),
    not 参与. */
 export default function DailyChallenge({ board }: DailyChallengeProps) {
-  const [hours, minutes, seconds] = useDailyCountdown()
-
   return (
     <section className={styles.section}>
       <div className={styles.card}>
@@ -46,18 +44,7 @@ export default function DailyChallenge({ board }: DailyChallengeProps) {
         </div>
 
         <div className={styles.right}>
-          <div className={styles.countdown}>
-            <span>{hours}</span>
-            <span className={styles.sep}>:</span>
-            <span>{minutes}</span>
-            <span className={styles.sep}>:</span>
-            <span>{seconds}</span>
-          </div>
-          <div className={styles.units}>
-            <span>时</span>
-            <span>分</span>
-            <span>秒</span>
-          </div>
+          <DailyCountdown size="lg" />
         </div>
       </div>
     </section>

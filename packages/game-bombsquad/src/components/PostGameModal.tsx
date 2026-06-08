@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
+import { AI_TOOLS } from '@amiclaw/ui'
 import type { SurveyAnswers } from '@shared/event-types'
 import { NICKNAME_MAX_LENGTH, isValidNickname, setStoredNickname } from '@/utils/nickname'
 import {
@@ -15,11 +16,10 @@ import styles from './PostGameModal.module.css'
 /** Hard caps mirroring the `survey_submit` wire contract (data payload ≤ 1KB). */
 const AI_ISSUE_MAX_LENGTH = 200
 
-/** Q1 — single-select AI tool. `other` reveals a free-text input. */
+/** Q1 — single-select AI tool. The first options derive from the shared
+ *  `AI_TOOLS` source (lowercased ids); `other` reveals a free-text input. */
 const AI_TOOL_OPTIONS = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'chatgpt', label: 'ChatGPT' },
-  { value: 'gemini', label: 'Gemini' },
+  ...AI_TOOLS.map((name) => ({ value: name.toLowerCase(), label: name })),
   { value: 'other', label: '其他' },
 ] as const
 

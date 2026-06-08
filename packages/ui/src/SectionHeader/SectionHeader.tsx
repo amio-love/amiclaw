@@ -14,7 +14,10 @@ interface SectionHeaderAction {
 }
 
 interface SectionHeaderProps {
-  eyebrow: string
+  /* Plain string for the usual uppercase eyebrow, or a ReactNode when a
+     fragment must opt out of the eyebrow's `text-transform: uppercase` —
+     e.g. a `<Wordmark />` keeping the brand name in prose case (`AmiClaw`). */
+  eyebrow: ReactNode
   title: ReactNode
   action?: SectionHeaderAction
 }

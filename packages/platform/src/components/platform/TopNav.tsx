@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Button, ConicAvatar } from '@amiclaw/ui'
+import { Button, ConicAvatar, Wordmark } from '@amiclaw/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_TABS } from './nav-tabs'
 import styles from './TopNav.module.css'
@@ -13,9 +13,7 @@ export default function TopNav() {
     <div className={styles.wrap}>
       <div className={styles.nav}>
         <Link to="/" className={styles.brand}>
-          <span className={styles.brandMark}>
-            AMIO<span className={styles.dot}>·</span>claw
-          </span>
+          <Wordmark variant="lockup" className={styles.brandMark} />
         </Link>
 
         <nav className={styles.links} aria-label="主导航">

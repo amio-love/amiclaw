@@ -25,10 +25,11 @@ import { fetchLeaderboard } from '@shared/leaderboard-api'
 import GamesPage from './GamesPage'
 
 // The daily countdown ticks on a setInterval; these tests never assert on it.
-// Mock it to a static tuple so the suite carries no live timer. The hook now
-// lives in @amiclaw/ui, so the rest of the barrel must be preserved.
-vi.mock('@amiclaw/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@amiclaw/ui')>()),
+// DailyChallenge renders @amiclaw/ui's DailyCountdown, which consumes the
+// useDailyCountdown hook directly — so mock the hook module (the same one
+// DailyCountdown imports) to a static tuple, the same pattern
+// BombSquadLandingPage.test.tsx uses, so the suite carries no live timer.
+vi.mock('../../../ui/src/useDailyCountdown', () => ({
   useDailyCountdown: () => ['12', '00', '00'],
 }))
 

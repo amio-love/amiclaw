@@ -1,8 +1,9 @@
 /* Featured BombSquad section — handoff §6.4; pixel values mirror
    prototype/atlas/atlas.html (.featured*). The left art panel is the
-   only cyan zone; the right leaderboard panel is platform chrome. The
-   responsive @media tiers (≤1080px / ≤768px) carry atlas.html's exact
-   @media values. */
+   warm-cosmic BombSquad zone (yellow + violet, no cyan — DesignSystem.md
+   §Brand / Hard Prohibition #1); the right leaderboard panel is platform
+   chrome. The responsive @media tiers (≤1080px / ≤768px) carry atlas.html's
+   exact @media values. */
 
 .section {
   margin: 0 0 72px;
@@ -12,14 +13,14 @@
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   overflow: hidden;
-  border: 1px solid rgba(0, 255, 255, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-3xl);
   background: rgba(13, 13, 26, 0.6);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
 }
 
-/* ----------  left art panel — BombSquad zone  ---------- */
+/* ----------  left art panel — warm-cosmic BombSquad zone  ---------- */
 .art {
   position: relative;
   display: flex;
@@ -28,8 +29,11 @@
   min-height: 460px;
   padding: 40px;
   overflow: hidden;
+  /* Warm-cosmic atmosphere behind the white+yellow wordmark — yellow core
+     glow + violet accent over the dark cosmic base, matching the hero orb.
+     No cyan (DesignSystem.md §Brand / Hard Prohibition #1). */
   background:
-    radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.25), transparent 55%),
+    radial-gradient(circle at 30% 30%, rgba(255, 229, 62, 0.25), transparent 55%),
     radial-gradient(circle at 70% 80%, rgba(180, 120, 255, 0.15), transparent 55%), #050511;
 }
 
@@ -48,24 +52,10 @@
   pointer-events: none;
 }
 
-.mark {
-  z-index: 1;
-  font: 700 11px var(--amio-font-mono);
-  letter-spacing: 0.3em;
-  color: rgba(0, 255, 255, 0.7);
-  text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
-}
-
+/* Panel placement only — the BombSquadWordmark hero variant owns the type. */
 .bigTitle {
   z-index: 1;
   align-self: flex-start;
-  font: 700 84px/0.9 var(--amio-font-mono);
-  letter-spacing: 0.04em;
-  color: var(--bs-cyan);
-  text-shadow:
-    0 0 14px var(--bs-cyan),
-    0 0 40px var(--bs-cyan),
-    0 0 80px rgba(0, 255, 255, 0.35);
 }
 
 .meta {
@@ -76,12 +66,6 @@
   margin-bottom: 14px;
   font: 400 16px var(--font-body);
   color: rgba(224, 224, 255, 0.75);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 /* ----------  right leaderboard panel — platform chrome  ---------- */
@@ -176,10 +160,6 @@
     min-height: 380px;
     padding: 30px;
   }
-
-  .bigTitle {
-    font-size: 62px;
-  }
 }
 
 /* ----------  responsive: mobile  ---------- */
@@ -195,10 +175,6 @@
   .art {
     min-height: 260px;
     padding: 28px;
-  }
-
-  .bigTitle {
-    font-size: 50px;
   }
 
   .side {
