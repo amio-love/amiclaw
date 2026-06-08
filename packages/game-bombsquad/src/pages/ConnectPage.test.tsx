@@ -4,10 +4,10 @@
  * Covers the connect-AI flow at /bombsquad/connect — the Atlas redesign's
  * 2-step handoff (design_handoff_bombsquad README §6.2):
  *   1. step 1 renders the URL preview with the manual URL.
- *   2. the most prominent element (the bottom primary CTA「复制手册」) IS the
- *      copy action: tapping it copies the manual link, shows the copied
- *      feedback, and auto-advances to step 2 after ~0.7s; the clipboard
- *      payload is the manual URL.
+ *   2. both the manual URL card and the bottom primary CTA「复制手册」copy the
+ *      manual link, show the copied feedback, and auto-advance to step 2 after
+ *      ~0.7s; if clipboard access fails, the player can manually send the
+ *      visible URL and continue. The clipboard payload is the manual URL.
  *   3. step 1 has no disabled / dead control — the affordance-inversion guard.
  *   4. the 2-step state machine reaches the voice-mode step and hands off.
  *   5. daily mode hands off to the run carrying the manual URL as ?url=.
@@ -89,9 +89,10 @@ async function copyAndReachStep2() {
 
 describe('ConnectPage', () => {
   beforeEach(() => {
-    vi.mocked(copyToClipboard).mockClear()
+    vi.mocked(copyToClipboard).mockReset()
     vi.mocked(copyToClipboard).mockResolvedValue(true)
-    vi.mocked(getAudioContext).mockClear()
+    vi.mocked(getAudioContext).mockReset()
+    vi.mocked(getAudioContext).mockReturnValue(null)
   })
 
   it('renders step 1 with the URL preview and manual URL', () => {
@@ -104,12 +105,15 @@ describe('ConnectPage', () => {
     expect(screen.getByText(DAILY_URL)).toBeInTheDocument()
   })
 
-  it('makes the most prominent CTA the copy action with no dead control on step 1', () => {
+  it('makes the manual URL card and primary CTA active copy controls on step 1', () => {
     renderConnect('daily')
 
-    // The affordance-inversion guard: the bottom primary CTA is the real copy
-    // action ("复制手册"), and step 1 has no disabled / dead control — the old
-    // "biggest button does nothing until you find the smaller card" trap.
+    const copyCard = screen.getByRole('button', { name: '复制手册链接' })
+    expect(copyCard).toBeInTheDocument()
+    expect(copyCard).not.toBeDisabled()
+
+    // The affordance-inversion guard: the bottom primary CTA is also the real
+    // copy action ("复制手册"), and step 1 has no disabled / dead control.
     const copyCta = screen.getByRole('button', { name: '复制手册' })
     expect(copyCta).toBeInTheDocument()
     expect(copyCta).not.toBeDisabled()
@@ -120,8 +124,7 @@ describe('ConnectPage', () => {
       expect(btn).not.toBeDisabled()
     }
 
-    // The URL preview is no longer a button — the only copy control is the CTA.
-    expect(screen.queryByRole('button', { name: /手册链接/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button')).toHaveLength(3)
   })
 
   it('surfaces the /bombsquad/compatibility discovery link on step 1', () => {
@@ -154,6 +157,41 @@ describe('ConnectPage', () => {
     await waitFor(() => {
       expect(screen.getByText('切到语音模式')).toBeInTheDocument()
     })
+  })
+
+  it('copies the manual link from the URL card too', async () => {
+    renderConnect('practice')
+
+    fireEvent.click(screen.getByRole('button', { name: '复制手册链接' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('已复制到剪贴板')).toBeInTheDocument()
+    })
+    expect(copyToClipboard).toHaveBeenCalledTimes(1)
+    expect(copyToClipboard).toHaveBeenCalledWith(PRACTICE_URL)
+
+    await waitFor(() => {
+      expect(screen.getByText('切到语音模式')).toBeInTheDocument()
+    })
+  })
+
+  it('lets the player continue manually if clipboard copy fails', async () => {
+    vi.mocked(copyToClipboard).mockResolvedValueOnce(false)
+    renderConnect('practice')
+
+    fireEvent.click(screen.getByRole('button', { name: '复制手册' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('复制失败，可手动发送')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/你可以重试复制/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试复制' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试复制手册链接' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /我已发给 AI/ }))
+
+    expect(screen.getByText('第 2/2 步')).toBeInTheDocument()
+    expect(screen.getByText(SYNC_PROMPT)).toBeInTheDocument()
   })
 
   it('walks the 2-step state machine to the voice-mode step', async () => {

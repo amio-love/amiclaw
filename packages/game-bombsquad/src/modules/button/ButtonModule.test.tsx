@@ -70,6 +70,23 @@ describe('ButtonModule', () => {
     expect(screen.getByText('DETONATE')).toBeInTheDocument()
     expect(screen.getByTestId('button-display')).toHaveTextContent('7')
   })
+
+  it('exposes concise button color, label, display, and light state to assistive tech', () => {
+    const config = { color: 'white', label: 'ABORT', indicatorColor: 'blue', displayNumber: 4 }
+    const answer = { type: 'button' as const, action: 'hold' as const, releaseOnColor: 'red' }
+    render(
+      <ButtonModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
+    )
+    const btn = screen.getByRole('button', { name: 'white ABORT button, display 4' })
+    expect(btn).toBeInTheDocument()
+    expect(btn).toHaveAccessibleDescription('Preview light is blue.')
+  })
 })
 
 describe('ButtonModule cycle-legibility cue is target-agnostic', () => {

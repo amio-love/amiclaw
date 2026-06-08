@@ -89,4 +89,24 @@ describe('KeypadModule', () => {
     fireEvent.click(screen.getByTestId('keypad-cell-0'))
     expect(screen.getByText('1')).toBeInTheDocument()
   })
+
+  it('uses concise accessible names instead of full symbol descriptions', () => {
+    render(
+      <KeypadModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Keypad top-left symbol: omega' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Keypad top-right symbol: delta' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /马蹄铁形/ })).not.toBeInTheDocument()
+  })
 })

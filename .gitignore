@@ -49,3 +49,7 @@ packages/*/src/**/*.jsx
 
 # Claude Code session state
 .claude/
+
+# Codex local session state
+.codex/
+tmp/

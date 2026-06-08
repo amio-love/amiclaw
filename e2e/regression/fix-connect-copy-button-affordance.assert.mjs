@@ -4,8 +4,9 @@
  *
  * Cheap static source-read backstop over
  *   packages/game-bombsquad/src/pages/ConnectPage.tsx
- * guarding against re-introducing the affordance inversion: a dead
- * (disabled) bottom CTA on step 1 while the real copy hides in a smaller card.
+ * guarding against re-introducing either copy affordance failure:
+ * a dead (disabled) bottom CTA on step 1, or a visible manual URL card that no
+ * longer shares the copy/fallback action.
  *
  * The AUTHORITATIVE executable guard is the React Testing Library unit test in
  * the same package (ConnectPage.test.tsx) — this script is only a no-browser
@@ -74,20 +75,25 @@ function scenarioCta() {
   }
 }
 
-// ---------- Scenario 2: URL preview is passive, not a second button ----------
+// ---------- Scenario 2: URL card shares the copy action ----------
 function scenarioPreview() {
-  const name = 'the URL preview is a passive preview, not a second copy button'
-  // The preview must use the urlPreview class on a <div>, not a <button>.
-  const previewMatch = src.match(/<(\w+)[^>]*className=\{`\$\{styles\.urlPreview\}/)
-  if (!previewMatch) {
-    record(name, 'styles.urlPreview element not found in ConnectPage.tsx')
+  const name = 'the URL card is also a copy target sharing the same handler'
+  const cardMatch = src.match(
+    /<button[\s\S]*?className=\{`\$\{styles\.urlPreview\}[\s\S]*?<\/button>/
+  )
+  if (!cardMatch) {
+    record(name, 'styles.urlPreview is not rendered on a <button> in ConnectPage.tsx')
     return
   }
-  if (previewMatch[1] !== 'div') {
-    record(
-      name,
-      `the URL preview is a <${previewMatch[1]}> — it must be a non-interactive <div> (no second copy control)`
-    )
+  const card = cardMatch[0]
+  if (!/onClick=\{handleCopy\}/.test(card)) {
+    record(name, 'the manual URL card is not wired to handleCopy')
+  }
+  if (!/复制手册链接/.test(card)) {
+    record(name, 'the manual URL card copy aria-label is missing')
+  }
+  if (/\bdisabled(\s*=|[\s/>])/.test(card.replace(/\/\*[\s\S]*?\*\//g, ''))) {
+    record(name, 'the manual URL card is disabled on step 1')
   }
   // The legacy clickable copyCard class must be gone.
   if (/styles\.copyCard\b/.test(src)) {

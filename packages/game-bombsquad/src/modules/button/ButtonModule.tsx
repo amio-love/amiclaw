@@ -120,6 +120,10 @@ export default function ButtonModule({
   const isPressed = buttonState === 'pressed' || buttonState === 'holding'
   const isHolding = buttonState === 'holding'
   const litColor = isHolding ? indicatorColor : (CSS_COLORS[config.indicatorColor] ?? '#888')
+  const buttonAccessibleName = `${config.color} ${config.label} button, display ${config.displayNumber}`
+  const lightAccessibleState = isHolding
+    ? `Hold light is ${INDICATOR_COLORS[indicatorColorIdx]}.`
+    : `Preview light is ${config.indicatorColor}.`
 
   return (
     <div
@@ -147,6 +151,9 @@ export default function ButtonModule({
           />
         </div>
         <div className={styles.buttonOrbit}>
+          <span id="button-module-state" className={styles.srOnly} aria-live="polite">
+            {lightAccessibleState}
+          </span>
           <button
             type="button"
             className={`${styles.bigButton} ${isPressed ? styles.pressed : ''}`}
@@ -157,7 +164,8 @@ export default function ButtonModule({
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
             data-testid="big-button"
-            aria-label={`${config.label} button`}
+            aria-label={buttonAccessibleName}
+            aria-describedby="button-module-state"
           >
             {config.label}
           </button>

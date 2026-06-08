@@ -176,11 +176,8 @@
   flex-direction: column;
 }
 
-/* ----------  manual-URL preview (passive)  ----------
-   A non-interactive preview of the manual link. The copy action lives on the
-   bottom primary CTA, so this card has no pointer, no hover, and no focus
-   ring — it only shows the URL (trust requirement) and turns green once the
-   CTA has copied it. */
+/* ----------  manual-URL copy card  ----------
+   The whole card copies the manual link, matching the bottom CTA. */
 .urlPreview {
   display: flex;
   align-items: center;
@@ -195,13 +192,33 @@
   font-family: var(--font-body);
   color: #fff;
   text-align: left;
+  appearance: none;
+  cursor: pointer;
   transition: all 0.2s;
+}
+
+.urlPreview:hover,
+.urlPreview:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 229, 62, 0.35);
+  outline: none;
+}
+
+.urlPreview:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 3px;
 }
 
 /* done — the card turns green the moment the link is copied. */
 .urlPreviewDone {
   background: rgba(20, 30, 22, 0.6);
   border-color: rgba(75, 210, 102, 0.4);
+}
+
+.urlPreviewDone:hover,
+.urlPreviewDone:focus-visible {
+  background: rgba(20, 30, 22, 0.72);
+  border-color: rgba(75, 210, 102, 0.55);
 }
 
 .copyCardText {
@@ -328,6 +345,9 @@
 .cta {
   margin-top: auto;
   padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* `breathe` is BombSquad-specific (not in atlas-animations.css);
