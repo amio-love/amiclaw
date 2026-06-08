@@ -2,9 +2,9 @@
  * AiToolList unit tests.
  *
  * Guards the canonical AI-tools rendering (DesignSystem.md §Brand → AI-Tools
- * List): both variants render the single `AI_TOOLS` source in official
- * title-case — `inline` joins the names with ` · ` and emphasizes each in its
- * own span; `chips` renders one discrete brand pill per name.
+ * List): both variants render the single `AI_TOOLS` source — `inline` joins
+ * the names with ` · ` and emphasizes each in its own span; `chips` renders
+ * one discrete brand pill per name.
  *
  * Note on casing: the all-caps guard (`text-transform: none` on the tool
  * spans, so an uppercasing parent eyebrow can't render `CLAUDE`) is a CSS rule.
@@ -17,11 +17,11 @@ import { render, screen } from '@testing-library/react'
 import AiToolList, { AI_TOOLS } from './AiToolList'
 
 describe('AiToolList', () => {
-  it('renders AI_TOOLS inline as "Claude · ChatGPT · Gemini", each name in its own emphasis span', () => {
+  it('renders AI_TOOLS inline, each name in its own emphasis span', () => {
     const { container } = render(<AiToolList variant="inline" />)
 
-    // The whole inline string is the title-case AI_TOOLS joined by ` · `.
-    expect(container.textContent).toBe('Claude · ChatGPT · Gemini')
+    // The whole inline string is AI_TOOLS joined by ` · `.
+    expect(container.textContent).toBe(AI_TOOLS.join(' · '))
 
     // Each tool name renders in its own <span> (the weight-500 emphasis span).
     for (const tool of AI_TOOLS) {
@@ -32,12 +32,12 @@ describe('AiToolList', () => {
   it('renders one title-case brand chip per AI_TOOLS entry in the chips variant', () => {
     const { container } = render(<AiToolList variant="chips" />)
 
-    // One pill per tool, in title-case.
+    // One pill per tool.
     for (const tool of AI_TOOLS) {
       expect(screen.getByText(tool).tagName).toBe('SPAN')
     }
 
     // Chips are discrete pills — no ` · ` text separators between the names.
-    expect(container.textContent).toBe('ClaudeChatGPTGemini')
+    expect(container.textContent).toBe(AI_TOOLS.join(''))
   })
 })

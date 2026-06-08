@@ -5,6 +5,19 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
+hero description now explains AmiClaw instead of describing only the defusal game, and
+the hero keeps a single start button. The former daily challenge and weekly feature
+sections are merged into one BombSquad overview with a daily countdown and no repeated
+leaderboard data. The card also uses tighter copy, drops the four-module and daily-same
+labels, expands the AI tool list to Claude, ChatGPT, Gemini, Openclaw, Hermes, Doubao,
+Qianwen, and DeepSeek, and updates the footer pitch to the bring-your-AI message without
+the old free/no-archive subtitle.
+
+**The hero planet stat now counts live games instead of AI tools** - The floating stat
+pill now shows two live games, covering BombSquad and the Yijing Oracle preview, instead
+of showing the old supported-AI-model count.
+
 **四个品牌元素现在全站只有一种长相** — 同一个名字、同一个标志，过去在首页、BombSquad
 大厅和平台导航里各画各的，凑在一起显得没收尾。现在它们都收敛到一套共享组件：产品名在正文里
 统一写作 AmiClaw;BombSquad 标志一律是白色 BOMB 配亮黄 SQUAD 的横排,首页那版刺眼的

@@ -11,7 +11,7 @@
 
 .card {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: minmax(0, 1fr) 360px;
   overflow: hidden;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-3xl);
@@ -26,7 +26,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 460px;
+  min-height: 360px;
   padding: 40px;
   overflow: hidden;
   /* Warm-cosmic atmosphere behind the white+yellow wordmark — yellow core
@@ -52,112 +52,72 @@
   pointer-events: none;
 }
 
+.artTop,
+.meta {
+  position: relative;
+  z-index: 1;
+}
+
+.kicker {
+  display: block;
+  margin-bottom: 24px;
+  font: 700 12px var(--font-body);
+  letter-spacing: 0.18em;
+  color: var(--text-4);
+}
+
 /* Panel placement only — the BombSquadWordmark hero variant owns the type. */
 .bigTitle {
-  z-index: 1;
   align-self: flex-start;
 }
 
-.meta {
-  z-index: 1;
-}
-
 .metaBlurb {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   font: 400 16px var(--font-body);
   color: rgba(224, 224, 255, 0.75);
+}
+
+.tools {
+  max-width: 420px;
 }
 
 /* ----------  right leaderboard panel — platform chrome  ---------- */
 .side {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 28px;
+  background: rgba(7, 8, 24, 0.55);
+}
+
+.dailyPanel {
+  display: flex;
+  min-height: 100%;
   flex-direction: column;
-  gap: 28px;
-  padding: 36px 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-align: center;
 }
 
 .sideTitle {
   margin: 0;
-  font: 400 26px var(--font-display);
+  font: 400 30px/1 var(--font-display);
   color: var(--text-1);
 }
 
-.sideBlurb {
-  margin: 8px 0 0;
-  font: 400 14px/1.7 var(--font-body);
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.lbMini {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lbHead {
-  display: grid;
-  grid-template-columns: 36px 1fr 70px;
-  gap: 8px;
-  padding: 0 4px 8px;
-  border-bottom: 1px solid var(--border-hairline);
-  font: 500 12px var(--font-body);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.lbScoreHead {
-  text-align: right;
-}
-
-.lbRow {
-  display: grid;
-  grid-template-columns: 36px 1fr 70px;
-  gap: 8px;
-  align-items: center;
-  padding: 11px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  font: 500 13px var(--font-body);
-}
-
-.lbRow:last-child {
-  border-bottom: none;
-}
-
-.rk {
-  font-family: var(--amio-font-mono);
-  color: var(--text-4);
-}
-
-.lbRowTop .rk {
-  color: var(--amio-yellow);
-}
-
-.nm {
-  color: var(--text-1);
-}
-
-.sc {
-  font-family: var(--amio-font-mono);
-  text-align: right;
-  color: var(--text-1);
-}
-
-.lbEmpty {
-  margin: 0;
-  padding: 24px 4px;
-  font: 400 13px/1.6 var(--font-body);
-  color: rgba(255, 255, 255, 0.45);
+.countdown {
+  align-self: center;
 }
 
 /* ----------  responsive: medium  ---------- */
 @media (max-width: 1080px) {
   .card {
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 
   .art {
-    min-height: 380px;
+    min-height: 340px;
     padding: 30px;
   }
 }

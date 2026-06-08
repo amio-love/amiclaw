@@ -86,17 +86,16 @@ When(/^the `\/` route renders$/, async ({ page }) => {
   await expect(page.getByRole('navigation', { name: NAV })).toBeVisible()
 })
 
-Then('I see the anonymous hero with the「开始玩 →」and「看看 BombSquad」CTAs', async ({ page }) => {
+Then('I see the anonymous hero with a single「开始玩 →」CTA', async ({ page }) => {
   await expect(page.getByRole('button', { name: '开始玩 →' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '看看 BombSquad' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '看看 BombSquad' })).toHaveCount(0)
 })
 
-Then('I see the daily-challenge section', async ({ page }) => {
-  await expect(page.getByText('每日挑战 · DAILY DROP')).toBeVisible()
-})
-
-Then('I see the featured BombSquad section', async ({ page }) => {
-  await expect(page.locator('#featured')).toBeVisible()
+Then('I see the featured BombSquad overview', async ({ page }) => {
+  const featured = page.locator('#featured')
+  await expect(featured).toBeVisible()
+  await expect(featured.getByText('今日挑战')).toBeVisible()
+  await expect(featured.getByText('每日挑战 · DAILY DROP')).toHaveCount(0)
 })
 
 Then('I see the "什么是 Amiclaw" section', async ({ page }) => {
@@ -108,7 +107,8 @@ Then('I see the upcoming-games section', async ({ page }) => {
 })
 
 Then('I see the footer pitch', async ({ page }) => {
-  await expect(page.getByText('永久免费，不存档也不出售你的对话。')).toBeVisible()
+  await expect(page.getByText(/带上你的 AI.*一起玩/)).toBeVisible()
+  await expect(page.getByText('永久免费，不存档也不出售你的对话。')).toHaveCount(0)
 })
 
 Then('the page is dark-only with no light-mode variant', async ({ page }) => {
@@ -176,11 +176,12 @@ Then('the homepage renders again', async ({ page }) => {
   await expect(page.getByRole('button', { name: '开始玩 →' })).toBeVisible()
 })
 
-Then(/^the daily-challenge section shows a countdown in 时 \/ 分 \/ 秒$/, async ({ page }) => {
+Then(/^the BombSquad overview shows a countdown in 时 \/ 分 \/ 秒$/, async ({ page }) => {
+  const featured = page.locator('#featured')
   for (const unit of ['时', '分', '秒']) {
-    await expect(page.getByText(unit, { exact: true }).first()).toBeVisible()
+    await expect(featured.getByText(unit, { exact: true }).first()).toBeVisible()
   }
-  await expect(page.locator('[class*="countdown"]').first()).toBeVisible()
+  await expect(featured.locator('[class*="countdown"]').first()).toBeVisible()
 })
 
 Then('the countdown counts down toward the next UTC 00:00 reset', async ({ world, page }) => {
@@ -225,13 +226,11 @@ Then('the "什么是 Amiclaw" section and the footer pitch are not shown', async
   await expect(page.getByText('永久免费，不存档也不出售你的对话。')).toHaveCount(0)
 })
 
-Then(
-  'I can still reach the daily challenge and the featured BombSquad section',
-  async ({ page }) => {
-    await expect(page.getByText('每日挑战 · DAILY DROP')).toBeVisible()
-    await expect(page.locator('#featured')).toBeVisible()
-  }
-)
+Then('I can still reach the featured BombSquad overview', async ({ page }) => {
+  const featured = page.locator('#featured')
+  await expect(featured).toBeVisible()
+  await expect(featured.getByText('今日挑战')).toBeVisible()
+})
 
 Then('no element on the homepage uses the BombSquad cyan accent', async ({ page }) => {
   // Whole-page guard: subsumes the prior "platform chrome carries no cyan"

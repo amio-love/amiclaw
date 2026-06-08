@@ -7,8 +7,6 @@ interface AnonHeroProps {
   /* Routes to the BombSquad landing page (window.location.assign('/bombsquad/'))
      — the primary「开始玩」CTA. */
   onStart: () => void
-  /* Scrolls to the FeaturedBombSquad section — the ghost「看看 BombSquad」CTA. */
-  onSeeBombSquad: () => void
   /* Today's real daily board, fetched once in GamesPage. The floating stat
      pills derive from it — no fabricated numbers. */
   board: DailyBoardState
@@ -21,9 +19,10 @@ interface AnonHeroProps {
    actually
    track: 今日上榜 (real daily participation) and 最快拆弹 (today's #1 time)
    come from the daily board — the leader pill hides until the board has a
-   score — and 支持 AI 模型 is an honest static fact. There is NO weekly /
+   score. The static game-count pill reflects the currently playable platform
+   surfaces: BombSquad plus the Yijing Oracle preview. There is NO weekly /
    online metric anywhere in the product, so no pill claims one. */
-export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroProps) {
+export default function AnonHero({ onStart, board }: AnonHeroProps) {
   return (
     <section className={styles.hero}>
       <div>
@@ -35,15 +34,14 @@ export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroPro
           <span className={styles.line2}>a place to play with AI · together</span>
         </h1>
         <p className={styles.sub}>
-          你描述、AI 协助，一起拆弹。
-          <Wordmark /> 是 AMIO 的人机协作游戏平台。
+          <span className={styles.subLine}>
+            <Wordmark /> 是 AMIO 的人机协作游戏平台。
+          </span>
+          <span className={styles.subLine}>带上你的 AI，一起进入不同小游戏。</span>
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>
             开始玩 →
-          </Button>
-          <Button variant="ghost" onClick={onSeeBombSquad}>
-            看看 BombSquad
           </Button>
         </div>
       </div>
@@ -56,7 +54,7 @@ export default function AnonHero({ onStart, onSeeBombSquad, board }: AnonHeroPro
         {board.leaderTimeMs !== null && (
           <StatPill className={styles.s2} value={formatMs(board.leaderTimeMs)} label="最快拆弹" />
         )}
-        <StatPill className={styles.s3} value="3" label="支持 AI 模型" />
+        <StatPill className={styles.s3} value="2" label="已上线游戏" />
       </div>
     </section>
   )

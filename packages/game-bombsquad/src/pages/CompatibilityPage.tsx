@@ -11,11 +11,17 @@ interface AiTool {
   tip: string
 }
 
+const DEFAULT_TOOL_DETAIL: Omit<AiTool, 'name'> = {
+  verification: 'untested',
+  statusLabel: '未测试 · 邀请反馈',
+  tip: '如果它支持实时语音对话，理论上可以协作。玩通后请把成绩发给作者帮忙打勾。',
+}
+
 /* Per-tool verification status + presentation copy, keyed by the canonical
    AI-tool name. The set and its render order come from the shared `AI_TOOLS`
    source (imported as `AI_TOOL_NAMES`); this map supplies only the data
    specific to each tool. */
-const TOOL_DETAILS: Record<string, Omit<AiTool, 'name'>> = {
+const TOOL_DETAILS: Partial<Record<(typeof AI_TOOL_NAMES)[number], Omit<AiTool, 'name'>>> = {
   Claude: {
     verification: 'verified',
     statusLabel: '已验证 ✓',
@@ -33,7 +39,10 @@ const TOOL_DETAILS: Record<string, Omit<AiTool, 'name'>> = {
   },
 }
 
-const AI_TOOLS: AiTool[] = AI_TOOL_NAMES.map((name) => ({ name, ...TOOL_DETAILS[name] }))
+const AI_TOOLS: AiTool[] = AI_TOOL_NAMES.map((name) => ({
+  name,
+  ...(TOOL_DETAILS[name] ?? DEFAULT_TOOL_DETAIL),
+}))
 
 export default function CompatibilityPage() {
   return (
