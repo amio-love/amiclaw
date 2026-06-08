@@ -8,25 +8,30 @@
  * email yield one `user_id` and one session shape.
  *
  * Order of checks (security-load-bearing):
+ *   (a0) double-submit the `oauth_state` cookie against the `state` query param
+ *        — the cookie binds the flow to THIS browser (invariant ⑥). Missing /
+ *        mismatched cookie is a login-CSRF signal: reject before any KV work.
  *   (a) verify `state` against `oauth_state:<state>` and single-use-consume it
- *       — reject on missing / unknown / expired (invariant ⑥ CSRF). The state
- *       is deleted BEFORE the token exchange so a replayed callback finds none.
+ *       — reject on missing / unknown / expired. The KV record proves OUR server
+ *       issued the state (defense in depth alongside the cookie). The state is
+ *       deleted BEFORE the token exchange so a replayed callback finds none.
  *   (b) exchange the authorization `code` for tokens (injected exchanger).
  *   (c) read email + email_verified from the id_token; REJECT if not verified.
  *   (d) derive identity, (e) create session + set cookie, (f) write audit,
- *   (g) 302-redirect to the post-login landing.
+ *   (g) 302-redirect to the post-login landing, clearing the state cookie.
  *
- * Every rejection redirects to /login?error=... and sets NO cookie.
+ * Every rejection redirects to /login?error=... and sets NO session cookie.
  */
 
 import type { AuthEnv } from '../auth/config'
 import type { AuthIdentity } from '../../../../shared/auth-types'
 import { resolveBaseUrl } from '../auth/config'
 import { oauthStateKey } from '../auth/kv-keys'
-import { createSession, buildSessionCookie } from '../auth/session'
+import { createSession, buildSessionCookie, readCookie } from '../auth/session'
 import { writeAudit } from '../auth/audit'
 import { deriveUserId } from '../auth/identity'
 import type { GoogleTokenExchanger } from '../auth/google-oauth'
+import { OAUTH_STATE_COOKIE_NAME, buildClearedOAuthStateCookie } from '../auth/google-oauth'
 
 export async function handleGoogleCallback(
   request: Request,
@@ -46,13 +51,22 @@ export async function handleGoogleCallback(
   const state = url.searchParams.get('state')
   const code = url.searchParams.get('code')
 
-  // (a) State first — invariant ⑥. Missing / unknown / expired state is a CSRF
-  // signal: reject before touching the code. Consume single-use so a replayed
-  // callback (same state) cannot be reused.
+  // (a0) Browser binding — invariant ⑥. The `state` query param MUST match the
+  // `oauth_state` cookie this browser carried back from the start endpoint. This
+  // blocks login-CSRF / session fixation: a server-issued state alone is not
+  // enough, the attacker cannot also plant their state in the victim's cookie.
   if (!state) {
     await writeAudit(env.AUTH, 'oauth_failed', { reason: 'missing state' })
     return redirect(loginUrl(baseUrl, 'invalid_state'))
   }
+  const stateCookie = readCookie(request, OAUTH_STATE_COOKIE_NAME)
+  if (!stateCookie || stateCookie !== state) {
+    await writeAudit(env.AUTH, 'oauth_failed', { reason: 'state cookie mismatch' })
+    return redirect(loginUrl(baseUrl, 'invalid_state'))
+  }
+
+  // (a) Server binding — the KV record proves OUR server issued this state.
+  // Consume single-use so a replayed callback (same state) cannot be reused.
   const stateKey = oauthStateKey(state)
   const stateRecord = await env.AUTH.get(stateKey, 'json')
   if (!stateRecord) {
@@ -101,15 +115,25 @@ export async function handleGoogleCallback(
   })
   await writeAudit(env.AUTH, 'login', { email: identity.email, user_id: identity.user_id })
 
-  // (g) Land the player, carrying the freshly-set Lax cookie.
-  return redirect(landingUrl(baseUrl), buildSessionCookie(sessionId))
+  // (g) Land the player, carrying the freshly-set session cookie and clearing
+  // the now-consumed state cookie.
+  return redirect(landingUrl(baseUrl), [
+    buildSessionCookie(sessionId),
+    buildClearedOAuthStateCookie(),
+  ])
 }
 
-function redirect(location: string, setCookie?: string): Response {
-  const headers: Record<string, string> = { Location: location }
-  if (setCookie) headers['Set-Cookie'] = setCookie
+function redirect(location: string, setCookie?: string | string[]): Response {
   // 302: the callback GET is a one-shot navigation; the browser follows to the
   // landing carrying the freshly-set Lax cookie (top-level GET navigation).
+  // Headers.append emits one Set-Cookie line per cookie (a plain object would
+  // collapse them into a single, invalid header).
+  const headers = new Headers({ Location: location })
+  if (setCookie) {
+    for (const cookie of Array.isArray(setCookie) ? setCookie : [setCookie]) {
+      headers.append('Set-Cookie', cookie)
+    }
+  }
   return new Response(null, { status: 302, headers })
 }
 

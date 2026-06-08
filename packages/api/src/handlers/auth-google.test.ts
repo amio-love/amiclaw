@@ -7,7 +7,11 @@ import { handleGoogleCallback } from './auth-google-callback'
 import { handleMagicLinkRequest } from './auth-magic-link-request'
 import { handleMagicLinkVerify } from './auth-magic-link-verify'
 import type { GoogleTokenExchanger, GoogleIdentity } from '../auth/google-oauth'
-import { decodeGoogleIdToken, createGoogleTokenExchanger } from '../auth/google-oauth'
+import {
+  decodeGoogleIdToken,
+  createGoogleTokenExchanger,
+  OAUTH_STATE_COOKIE_NAME,
+} from '../auth/google-oauth'
 import type { EmailSender, MagicLinkEmail } from '../auth/email'
 import { SESSION_COOKIE_NAME } from '../../../../shared/auth-types'
 import { deriveUserId } from '../auth/identity'
@@ -27,10 +31,19 @@ function mockExchanger(identity: GoogleIdentity): GoogleTokenExchanger {
   return vi.fn(async () => ({ ok: true, identity }))
 }
 
-function callbackRequest(params: Record<string, string>): Request {
+/**
+ * Build a callback request. By default the `oauth_state` cookie is set to match
+ * the `state` query param (the normal browser case — start planted that cookie).
+ * `cookie` overrides this: `null` omits the cookie entirely (browser-binding
+ * failure), a string forces a specific cookie value (mismatch case).
+ */
+function callbackRequest(params: Record<string, string>, cookie?: string | null): Request {
   const url = new URL('https://claw.amio.fans/api/auth/google/callback')
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  return new Request(url.toString(), { method: 'GET' })
+  const headers: Record<string, string> = {}
+  const cookieValue = cookie === undefined ? params.state : cookie
+  if (cookieValue) headers.Cookie = `${OAUTH_STATE_COOKIE_NAME}=${cookieValue}`
+  return new Request(url.toString(), { method: 'GET', headers })
 }
 
 /** Run start, then pull the `state` back out of the KV record it wrote. */
@@ -72,6 +85,20 @@ describe('GET /api/auth/google/start', () => {
     expect(kv.ttlOf(key)!).toBeLessThanOrEqual(10 * 60)
   })
 
+  it('sets the oauth_state binding cookie (HttpOnly+Secure+SameSite=Lax) matching the URL state (invariant ⑥)', async () => {
+    const kv = new FakeKV()
+    const res = await handleGoogleStart(env(kv))
+    const cookie = res.headers.get('Set-Cookie') ?? ''
+    expect(cookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=`)
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain('SameSite=Lax')
+    expect(cookie).toContain('Path=/api/auth/google')
+    // The cookie value equals the state in the redirect URL — the double-submit pair.
+    const stateInUrl = new URL(res.headers.get('Location') ?? '').searchParams.get('state')
+    expect(cookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=${stateInUrl}`)
+  })
+
   it('redirects to /login when the Google client is unconfigured (no dead Google URL)', async () => {
     const kv = new FakeKV()
     const res = await handleGoogleStart(env(kv, { AUTH_BASE_URL: 'https://claw.amio.fans' }))
@@ -83,6 +110,47 @@ describe('GET /api/auth/google/start', () => {
 
 describe('GET /api/auth/google/callback — CSRF state checks (invariant ⑥)', () => {
   const identity: GoogleIdentity = { email: 'p@example.com', emailVerified: true }
+
+  it('rejects when the oauth_state cookie is ABSENT — login-CSRF binding (no session, no exchange)', async () => {
+    const kv = new FakeKV()
+    const exchange = mockExchanger(identity)
+    const state = await startAndGetState(kv)
+
+    // Valid server-issued state, but the browser carries no oauth_state cookie —
+    // exactly the attacker-feeds-victim-a-state scenario this binding blocks.
+    const res = await handleGoogleCallback(
+      callbackRequest({ code: 'auth-code', state }, null),
+      env(kv),
+      exchange
+    )
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toContain('/login?error=invalid_state')
+    expect(res.headers.get('Set-Cookie')).toBeNull()
+    expect(exchange).not.toHaveBeenCalled()
+    expect(kv.keysWithPrefix('session:')).toHaveLength(0)
+    // The state is NOT consumed — the cookie check rejects before the KV lookup.
+    expect(kv.keysWithPrefix('oauth_state:')).toHaveLength(1)
+  })
+
+  it('rejects when the oauth_state cookie does NOT match the state query param', async () => {
+    const kv = new FakeKV()
+    const exchange = mockExchanger(identity)
+    const state = await startAndGetState(kv)
+
+    const res = await handleGoogleCallback(
+      callbackRequest({ code: 'auth-code', state }, 'a-different-browsers-state'),
+      env(kv),
+      exchange
+    )
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toContain('/login?error=invalid_state')
+    expect(res.headers.get('Set-Cookie')).toBeNull()
+    expect(exchange).not.toHaveBeenCalled()
+    expect(kv.keysWithPrefix('session:')).toHaveLength(0)
+    expect(kv.keysWithPrefix('oauth_state:')).toHaveLength(1)
+  })
 
   it('rejects a MISSING state with no session and no token exchange', async () => {
     const kv = new FakeKV()

@@ -70,19 +70,28 @@ export async function readSessionFromRequest(
   return readSession(kv, sessionId)
 }
 
-/** Extract the session id from the `Cookie` header, or `null`. */
-export function readSessionCookie(request: Request): string | null {
+/**
+ * Read a single cookie value by name from a request's `Cookie` header, or
+ * `null`. Shared by the session reader and the OAuth state-cookie check so the
+ * (slightly fiddly) parse loop lives in one place.
+ */
+export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie')
   if (!header) return null
   for (const part of header.split(';')) {
     const eq = part.indexOf('=')
     if (eq === -1) continue
-    const name = part.slice(0, eq).trim()
-    if (name === SESSION_COOKIE_NAME) {
+    const cookieName = part.slice(0, eq).trim()
+    if (cookieName === name) {
       return decodeURIComponent(part.slice(eq + 1).trim())
     }
   }
   return null
+}
+
+/** Extract the session id from the `Cookie` header, or `null`. */
+export function readSessionCookie(request: Request): string | null {
+  return readCookie(request, SESSION_COOKIE_NAME)
 }
 
 /**

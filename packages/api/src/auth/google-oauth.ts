@@ -32,11 +32,48 @@
  */
 
 import type { AuthEnv } from './config'
-import { resolveGoogleRedirectUri } from './config'
+import { resolveGoogleRedirectUri, OAUTH_STATE_TTL_SECONDS } from './config'
 
 /** Google OAuth 2.0 endpoints. Stable, long-lived; isolated here for auditing. */
 export const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
+
+/**
+ * Name of the short-lived cookie that binds the OAuth `state` to the initiating
+ * browser. The callback double-submits this against the `state` query param: the
+ * KV record proves OUR server issued the state, the cookie proves THIS browser
+ * initiated the flow. Without the cookie binding, an attacker could feed a
+ * victim a server-issued state + attacker code and log the victim into the
+ * attacker's account (login-CSRF / session fixation) — invariant ⑥.
+ */
+export const OAUTH_STATE_COOKIE_NAME = 'oauth_state'
+
+/**
+ * Cookie scoped to the Google auth routes only, HttpOnly + Secure + SameSite=Lax
+ * (Lax so the cookie rides the top-level GET navigation back from Google).
+ */
+export function buildOAuthStateCookie(state: string): string {
+  return [
+    `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(state)}`,
+    'Path=/api/auth/google',
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
+    `Max-Age=${OAUTH_STATE_TTL_SECONDS}`,
+  ].join('; ')
+}
+
+/** Clear the OAuth state cookie (same attributes, Max-Age=0) once consumed. */
+export function buildClearedOAuthStateCookie(): string {
+  return [
+    `${OAUTH_STATE_COOKIE_NAME}=`,
+    'Path=/api/auth/google',
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
+    'Max-Age=0',
+  ].join('; ')
+}
 
 /** Minimal scope — we only need the verified email to derive the identity. */
 export const GOOGLE_SCOPE = 'openid email'
