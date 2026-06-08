@@ -54,7 +54,6 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for all contribution conventions.
 - "Play Again" is the most prominent CTA on the results page.
 - The leaderboard shows time, attempt number, and the AI tool used when
   provided.
-- The post-game summary must stay copyable plain text with no HTML formatting.
 
 ## Development Rules
 

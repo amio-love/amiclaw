@@ -36,7 +36,7 @@ export default function BombSquadLandingPage() {
               connected. Brand-yellow (not green) keeps it a label, not a
               "ready/online" signal. */}
           <div className={styles.top}>
-            <Eyebrow dot color="var(--y)">
+            <Eyebrow dot color="var(--y)" className={styles.aiEyebrow}>
               <AiToolList prefix="自带语音 AI · 支持" />
             </Eyebrow>
             <button

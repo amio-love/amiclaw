@@ -29,6 +29,7 @@ export default function ConnectPage() {
 
   const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
 
   /* Once the manual link is copied, the card turns green and the flow
      auto-advances to step 2 after ~0.7s. The timer is owned by an effect
@@ -45,7 +46,16 @@ export default function ConnectPage() {
   const handleCopy = async () => {
     if (copied) return
     const ok = await copyToClipboard(manualUrl)
-    if (ok) setCopied(true)
+    if (ok) {
+      setCopyFailed(false)
+      setCopied(true)
+    } else {
+      setCopyFailed(true)
+    }
+  }
+
+  const continueAfterManualHandoff = () => {
+    setStep(2)
   }
 
   /* Final step → the existing run. Daily carries the manual URL as ?url= so
@@ -155,17 +165,23 @@ export default function ConnectPage() {
             </div>
           </div>
 
-          {/* Step 1 — copy the manual link. The copy action lives on the
-              bottom primary CTA (the most prominent element); this card is a
-              passive read-only preview of the URL so the link stays visible
-              and trustworthy. It is deliberately NOT a button — the only copy
-              control on this step is the CTA below. */}
+          {/* Step 1 — copy the manual link. The full URL card and the bottom
+              primary CTA share the same copy action: the card keeps the link
+              visible and trustworthy, while the CTA remains the strongest
+              explicit command for players scanning fast. */}
           {step === 1 && (
             <div className={styles.action}>
-              <div className={`${styles.urlPreview} ${copied ? styles.urlPreviewDone : ''}`}>
+              <button
+                type="button"
+                className={`${styles.urlPreview} ${copied ? styles.urlPreviewDone : ''}`}
+                onClick={handleCopy}
+                aria-label={
+                  copied ? '已复制手册链接' : copyFailed ? '重试复制手册链接' : '复制手册链接'
+                }
+              >
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>
-                    {copied ? '已复制到剪贴板' : '手册链接'}
+                    {copied ? '已复制到剪贴板' : copyFailed ? '复制失败，可手动发送' : '手册链接'}
                   </div>
                   <div className={styles.copyCardUrl}>{manualUrl}</div>
                 </div>
@@ -197,9 +213,13 @@ export default function ConnectPage() {
                     </svg>
                   )}
                 </div>
-              </div>
+              </button>
 
-              <p className={styles.hint}>粘贴到你常用的 AI，让它读完手册后说「好了」。</p>
+              <p className={styles.hint}>
+                {copyFailed
+                  ? '浏览器没有允许自动复制。你可以重试复制，或手动选择上面的链接发给 AI，等它读完手册后继续。'
+                  : '粘贴到你常用的 AI，让它读完手册后说「好了」。'}
+              </p>
               {/* /compatibility discovery link — re-homed here from the
                  retired PromptModal, which placed it directly under the
                  same send-to-AI content. Step 1 is that moment now. */}
@@ -250,18 +270,25 @@ export default function ConnectPage() {
 
           <div className={styles.cta}>
             {step === 1 ? (
-              /* The most prominent element IS the copy action: tap copies the
+              /* The CTA mirrors the URL card's copy action: tap copies the
                  manual URL, flips to the green confirmed state, and the 0.7s
                  effect above auto-advances to step 2. No disabled / dead
                  control on this step. */
-              <Button
-                variant="primary"
-                full
-                accent={copied ? 'green' : 'yellow'}
-                onClick={handleCopy}
-              >
-                {copied ? '已复制 ✓' : '复制手册'}
-              </Button>
+              <>
+                <Button
+                  variant="primary"
+                  full
+                  accent={copied ? 'green' : copyFailed ? 'rose' : 'yellow'}
+                  onClick={handleCopy}
+                >
+                  {copied ? '已复制 ✓' : copyFailed ? '重试复制' : '复制手册'}
+                </Button>
+                {copyFailed && !copied && (
+                  <Button variant="ghost" full onClick={continueAfterManualHandoff}>
+                    我已发给 AI，继续 →
+                  </Button>
+                )}
+              </>
             ) : (
               <Button variant="primary" full onClick={confirmStart}>
                 进入游戏 →

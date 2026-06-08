@@ -207,11 +207,11 @@ export class World {
 
   /**
    * Connect step 1 — click the primary copy CTA and wait for its copied state.
-   * The copy action now lives on the most prominent element (the bottom
-   * 复制手册 CTA); the URL above is a passive preview, not a button.
+   * The most prominent element (the bottom 复制手册 CTA) and the URL card above
+   * both share the same copy/fallback action.
    */
   async copyManualLink(): Promise<void> {
-    await this.page.getByRole('button', { name: '复制手册' }).click()
+    await this.page.getByRole('button', { name: '复制手册', exact: true }).click()
     await this.page.getByText('已复制到剪贴板').first().waitFor()
   }
 

@@ -1,7 +1,8 @@
 # Result-page endgame survey — the once-per-device PostGameModal survey shown
-# after any game outcome. On a practice run it is a dismissable survey-only
-# modal; on a first daily win it merges with the nickname gate into a single
-# dialog (never two stacked). Submitting posts a `survey_submit` event to
+# after any game outcome. The survey waits until after the result feedback has
+# had time to land. On a first daily win, the leaderboard nickname / AI metadata
+# gate can still open immediately before score submission; the survey follows
+# later as a separate dialog. Submitting posts a `survey_submit` event to
 # /api/events; submitting or skipping both retire the survey for the device.
 #
 # Gated by localStorage['bombsquad-survey-answered'] (packages/game-bombsquad/src/utils/
@@ -19,6 +20,7 @@ Feature: Result-page endgame survey
   @playwright @survey-fresh
   Scenario Outline: The endgame survey shows once per device and records a submission
     Given I have finished a "<mode>" run on a survey-fresh device and the result page is open
+    And any required leaderboard gate is completed before the survey
     Then the post-game modal opens as a single dialog showing the survey questions
     When I <interaction>
     Then the post-game modal closes
@@ -30,4 +32,4 @@ Feature: Result-page endgame survey
       | mode     | interaction                       | events                                            |
       | practice | answer and submit the survey      | a "survey_submit" event records my survey answers  |
       | practice | skip the survey                   | no "survey_submit" event is recorded               |
-      | daily    | submit a nickname with the survey | a "survey_submit" event records my survey answers  |
+      | daily    | answer and submit the survey      | a "survey_submit" event records my survey answers  |

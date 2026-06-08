@@ -42,8 +42,11 @@ const MODULE_GLYPH: Record<string, GlyphKey> = {
   keypad: 'yue',
 }
 
+const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
+
 /** The result screen has two visual variants (handoff README §6.6 / §6.7). */
 type ResultVariant = 'success' | 'failure'
+type PostGameModalPurpose = 'leaderboard' | 'survey'
 
 /**
  * Map a frozen game outcome to a result variant. `defused` and
@@ -123,20 +126,27 @@ export default function ResultPage() {
     () => getStoredLeaderboardPlayerMetadata()
   )
 
-  // The unified post-game modal composes two optional sections. The nickname
-  // and AI metadata sections are the daily-leaderboard gates; the survey
-  // section is shown once per device after any outcome. The modal opens when
-  // any section is needed — never as two stacked dialogs. Both `need*` flags
-  // are captured once on mount; the modal closes on confirm/skip rather than
-  // re-deriving.
+  // The post-game modal has two separate purposes. The leaderboard gate can
+  // open immediately when a first daily defuse needs a nickname / AI metadata
+  // before score submission. The once-per-device survey waits until after the
+  // result feedback has had time to land, so a first win is not covered by a
+  // questionnaire before the player can read it.
   const [needNickname] = useState(() => hasFinishedDailyRun && nickname === null)
   const [needLeaderboardMetadata] = useState(
     () => hasFinishedDailyRun && leaderboardMetadata === null
   )
   const [needSurvey] = useState(() => !hasAnsweredSurvey())
-  const [modalOpen, setModalOpen] = useState(
-    () => needNickname || needLeaderboardMetadata || needSurvey
-  )
+  const needsLeaderboardGate = needNickname || needLeaderboardMetadata
+  const [leaderboardGateOpen, setLeaderboardGateOpen] = useState(needsLeaderboardGate)
+  const [surveyReady, setSurveyReady] = useState(false)
+  const [surveyRetired, setSurveyRetired] = useState(false)
+  const surveyOpen = needSurvey && !surveyRetired && surveyReady && !leaderboardGateOpen
+  const modalPurpose: PostGameModalPurpose | null = leaderboardGateOpen
+    ? 'leaderboard'
+    : surveyOpen
+      ? 'survey'
+      : null
+  const modalOpen = modalPurpose !== null
   // Initialize submitting=true only when the effect below will actually fire a
   // request, so we avoid a synchronous setState in the effect body
   // (react-hooks/set-state-in-effect). First-visit daily runs wait for the
@@ -147,7 +157,13 @@ export default function ResultPage() {
 
   // The daily score is still gated while the modal is open with a leaderboard
   // submission section present.
-  const leaderboardGatePending = (needNickname || needLeaderboardMetadata) && modalOpen
+  const leaderboardGatePending = modalPurpose === 'leaderboard'
+
+  useEffect(() => {
+    if (!needSurvey || noRunData) return
+    const id = setTimeout(() => setSurveyReady(true), RESULT_FEEDBACK_SURVEY_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [needSurvey, noRunData])
 
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
@@ -258,24 +274,40 @@ export default function ResultPage() {
         setSubmitting(true)
         performSubmission(confirmedNickname, confirmedMetadata)
       }
-      if (result.survey !== undefined) {
+      const completingSurvey = modalPurpose === 'survey'
+      if (completingSurvey && result.survey !== undefined) {
         logEvent('survey_submit', { ...result.survey })
       }
-      if (needSurvey) {
+      if (completingSurvey && needSurvey) {
         markSurveyAnswered()
+        setSurveyRetired(true)
       }
-      setModalOpen(false)
+      if (modalPurpose === 'leaderboard') {
+        setLeaderboardGateOpen(false)
+      }
     },
-    [performSubmission, needSurvey, nickname, leaderboardMetadata, hasFinishedDailyRun]
+    [
+      performSubmission,
+      needSurvey,
+      nickname,
+      leaderboardMetadata,
+      hasFinishedDailyRun,
+      modalPurpose,
+    ]
   )
 
   // Survey-only dismissal. The device is marked answered so the survey does
   // not reappear, but no `survey_submit` event fires — a skip is not a
   // response.
   const handleModalSkip = useCallback(() => {
-    markSurveyAnswered()
-    setModalOpen(false)
-  }, [])
+    if (modalPurpose === 'survey') {
+      markSurveyAnswered()
+      setSurveyRetired(true)
+    }
+    if (modalPurpose === 'leaderboard') {
+      setLeaderboardGateOpen(false)
+    }
+  }, [modalPurpose])
 
   const handleRetrySubmit = useCallback(() => {
     if (nickname === null) return
@@ -521,9 +553,9 @@ export default function ResultPage() {
 
       <PostGameModal
         open={modalOpen}
-        showNickname={needNickname}
-        showLeaderboardMetadata={needLeaderboardMetadata}
-        showSurvey={needSurvey}
+        showNickname={modalPurpose === 'leaderboard' && needNickname}
+        showLeaderboardMetadata={modalPurpose === 'leaderboard' && needLeaderboardMetadata}
+        showSurvey={modalPurpose === 'survey' && needSurvey}
         onConfirm={handleModalConfirm}
         onSkip={handleModalSkip}
       />

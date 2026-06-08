@@ -2,18 +2,20 @@
  * ResultPage endgame-survey wiring tests.
  *
  * Covers the post-game survey integration on ResultPage:
- *   1. Any outcome on a fresh device opens the survey modal.
+ *   1. Any outcome on a fresh device opens the survey modal after the result
+ *      feedback has had time to land.
  *   2. A device that has already answered/skipped sees no modal.
  *   3. Submitting the survey emits `survey_submit` and marks the device.
  *   4. Skipping marks the device WITHOUT emitting `survey_submit`.
- *   5. First daily win merges the nickname gate and the survey into one modal.
+ *   5. First daily win opens the leaderboard gate first; the survey remains
+ *      deferred until after that gate closes.
  *
  * Setup mirrors the sibling ResultPage tests: pre-seed sessionStorage with a
  * finished-game state so `GameProvider`'s lazy initializer hydrates straight
  * into a renderable ResultPage.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('@/utils/device-fingerprint', () => ({
@@ -71,6 +73,7 @@ import { GameProvider, type GameState, type GameOutcome } from '@/store/game-con
 import { submitScore } from '@shared/leaderboard-api'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
+const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
 
 interface FixtureOptions {
   mode: GameState['mode']
@@ -130,8 +133,15 @@ function answerRequiredSurvey({
   fireEvent.click(screen.getByRole('button', { name: difficulty }))
 }
 
+function advancePastResultFeedback() {
+  act(() => {
+    vi.advanceTimersByTime(RESULT_FEEDBACK_SURVEY_DELAY_MS)
+  })
+}
+
 describe('ResultPage endgame survey', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     sessionStorage.clear()
     logEvent.mockReset()
     surveyMock.hasAnsweredSurvey.mockReset()
@@ -141,12 +151,18 @@ describe('ResultPage endgame survey', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     sessionStorage.clear()
   })
 
-  it('opens the survey modal after any outcome on a fresh device', () => {
+  it('opens the survey modal after the result feedback on a fresh device', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
+
+    expect(screen.getByText('拆弹成功')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    advancePastResultFeedback()
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
@@ -158,6 +174,11 @@ describe('ResultPage endgame survey', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'exploded' }))
 
+    expect(screen.getByText('差一点')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    advancePastResultFeedback()
+
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('难度感受')).toBeInTheDocument()
   })
@@ -166,6 +187,8 @@ describe('ResultPage endgame survey', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(true)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
+    advancePastResultFeedback()
+
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -173,6 +196,7 @@ describe('ResultPage endgame survey', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
+    advancePastResultFeedback()
     answerRequiredSurvey()
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
 
@@ -191,6 +215,7 @@ describe('ResultPage endgame survey', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
+    advancePastResultFeedback()
     fireEvent.click(screen.getByRole('button', { name: '跳过' }))
 
     expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
@@ -199,27 +224,40 @@ describe('ResultPage endgame survey', () => {
     expect(screen.getByRole('button', { name: '再来一局' })).toBeInTheDocument()
   })
 
-  it('first daily win merges the nickname gate and the survey into one modal', async () => {
+  it('first daily win opens the leaderboard gate before the deferred survey', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
 
-    // Exactly one dialog — never two stacked.
+    // Exactly one dialog — the leaderboard gate opens first, without the
+    // survey-only fun / difficulty questions.
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
     expect(screen.getByLabelText(/昵称/)).toBeInTheDocument()
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
+    expect(screen.queryByText('整体好玩程度')).not.toBeInTheDocument()
     // Score is gated behind the nickname and AI metadata while the modal is open.
     expect(submitScore).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
-    answerRequiredSurvey()
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
-    // Nickname path fires the score submission; survey path emits telemetry.
-    await waitFor(() => expect(submitScore).toHaveBeenCalledTimes(1))
+    // Nickname / AI metadata path fires the score submission; survey has not
+    // opened yet, so no survey telemetry or answered marker fires here.
+    expect(submitScore).toHaveBeenCalledTimes(1)
     expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
       nickname: '小测',
       ai_tool: 'claude',
     })
+    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
+    expect(surveyMock.markSurveyAnswered).not.toHaveBeenCalled()
+
+    advancePastResultFeedback()
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('整体好玩程度')).toBeInTheDocument()
+    answerRequiredSurvey()
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+
     expect(logEvent).toHaveBeenCalledWith('survey_submit', {
       ai_tool: 'claude',
       fun: 4,
@@ -229,7 +267,7 @@ describe('ResultPage endgame survey', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('merged modal is confirmable with nickname and AI tool — survey skipped, no survey_submit', async () => {
+  it('daily leaderboard gate is confirmable without answering the deferred survey', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
 
@@ -242,13 +280,19 @@ describe('ResultPage endgame survey', () => {
 
     // Score still submits, the device is marked answered, but a skipped
     // survey fires no `survey_submit`.
-    await waitFor(() => expect(submitScore).toHaveBeenCalledTimes(1))
+    expect(submitScore).toHaveBeenCalledTimes(1)
     expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
       nickname: '小测',
       ai_tool: 'claude',
     })
     expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
-    expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
+    expect(surveyMock.markSurveyAnswered).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    advancePastResultFeedback()
+
+    fireEvent.click(screen.getByRole('button', { name: '跳过' }))
+    expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
+    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
   })
 })

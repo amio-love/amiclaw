@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The BombSquad first-run path no longer depends on clipboard permission** —
+If the browser refuses to copy the manual link, the connect screen now says so,
+keeps the manual URL visible, and lets the player continue after manually
+sending it to their AI. The visible manual URL card is now also a click target
+for the same copy action as the primary button. The post-game survey waits
+until the success feedback has had time to land, instead of covering the first
+clear immediately. The mobile BombSquad lobby also keeps its top chrome inside
+the viewport, and the button and keypad modules expose shorter, more useful
+accessible labels for the state a player needs to describe.
+
 **The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
 hero description now explains AmiClaw instead of describing only the defusal game, and
 the hero keeps a single start button. The former daily challenge and weekly feature

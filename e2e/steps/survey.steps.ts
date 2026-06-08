@@ -2,8 +2,10 @@
 import { expect } from '@playwright/test'
 import { Given, When, Then } from './fixtures'
 
-/** Stable test nickname for the merged daily-win modal — mirrors result.steps. */
+/** Stable test player metadata for the daily leaderboard gate — mirrors result.steps. */
 const E2E_NICKNAME = 'E2ERunner'
+const E2E_AI_ASSISTANT_LABEL = 'Claude'
+const SURVEY_DELAY_MS = 2000
 
 /** Answer Q1/Q2/Q3 — the three required survey questions inside an open modal. */
 async function answerRequiredSurvey(dialog: import('@playwright/test').Locator): Promise<void> {
@@ -26,12 +28,30 @@ Given(
   }
 )
 
+Given('any required leaderboard gate is completed before the survey', async ({ page, world }) => {
+  if (world.runMode !== 'daily') return
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toHaveCount(1)
+  await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
+  await dialog.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true }).click()
+  await dialog.getByRole('button', { name: '确认', exact: true }).click()
+  await expect.poll(() => world.leaderboard.submissions.length).toBeGreaterThan(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
 Then(
   'the post-game modal opens as a single dialog showing the survey questions',
-  async ({ page }) => {
-    // Exactly one dialog — a merged daily-win modal never stacks two.
-    await expect(page.getByRole('dialog')).toHaveCount(1)
+  async ({ page, world }) => {
+    // The result needs breathing room before the survey opens.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     const dialog = page.getByRole('dialog')
+    if ((await dialog.count()) === 0) {
+      await world.advance(SURVEY_DELAY_MS)
+    }
+
+    // Exactly one dialog — daily leaderboard and survey gates never stack.
+    await expect(dialog).toHaveCount(1)
     await expect(dialog.getByText('你这局用的是哪个 AI 工具？')).toBeVisible()
     await expect(dialog.getByText('难度感受')).toBeVisible()
   }
@@ -95,7 +115,8 @@ When('I revisit the result page', async ({ world }) => {
 
 Then('no post-game survey modal appears', async ({ page }) => {
   // The result heading proves ResultPage re-mounted from the persisted state;
-  // the survey modal opens synchronously with it, so its absence is conclusive.
+  // advance past the deferred survey delay before asserting absence.
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await page.clock.runFor(SURVEY_DELAY_MS)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })

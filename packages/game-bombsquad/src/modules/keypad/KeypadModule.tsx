@@ -20,6 +20,8 @@ const STAR_MAP: { x: number; y: number }[] = [
   { x: 33, y: 78 },
 ]
 
+const CELL_LABELS = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+
 export default function KeypadModule({
   config,
   answer,
@@ -98,7 +100,7 @@ export default function KeypadModule({
               className={`${styles.star} ${tapped ? styles.tapped : ''}`}
               style={{ left: `${star.x}%`, top: `${star.y}%` }}
               onClick={() => handleCellClick(position)}
-              aria-label={sym.description}
+              aria-label={`Keypad ${CELL_LABELS[position]} symbol: ${symbolId}`}
               data-testid={`keypad-cell-${position}`}
             >
               <svg viewBox="0 0 100 100" className={styles.symbol}>
