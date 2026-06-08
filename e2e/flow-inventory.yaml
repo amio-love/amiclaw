@@ -178,9 +178,9 @@ flows:
   - id: bombsquad-zone-styling
     name: BombSquad zone styling
     description: >-
-      The BombSquad cyan accent stays confined to the featured BombSquad art
-      panel and never leaks into the platform chrome.
-    steps: [landing, featured-bombsquad-zone, chrome-no-cyan]
+      The homepage carries no BombSquad cyan anywhere — cyan is wire-only — and
+      the featured BombSquad zone uses the brand yellow as its accent.
+    steps: [landing, homepage-no-cyan, featured-bombsquad-yellow]
     status: active
 
   - id: footer-to-privacy-policy

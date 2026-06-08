@@ -76,7 +76,7 @@ Feature: Amiclaw platform homepage
 
   # Source: bombsquad-zone-styling
   @playwright
-  Scenario: BombSquad cyan stays inside the BombSquad zone
+  Scenario: The homepage BombSquad branding uses brand yellow, never cyan
     Given I am on the homepage
-    Then the BombSquad cyan accent appears only in the featured BombSquad art panel
-    And the platform chrome — top navigation, footer, daily-challenge card — uses no cyan
+    Then no element on the homepage uses the BombSquad cyan accent
+    And the featured BombSquad wordmark uses the brand yellow

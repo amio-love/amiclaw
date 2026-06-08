@@ -4,10 +4,12 @@ import { Given, When, Then } from './fixtures'
 
 const NAV = '主导航'
 
-/** Scan computed colors document-wide; report cyan elements outside #featured. */
+/** Scan computed colors document-wide; report EVERY element painted cyan,
+    including inside #featured. The homepage is fully de-cyaned — cyan is
+    wire-only (DesignSystem.md §Brand / Hard Prohibition #1) — so any cyan
+    anywhere on the page is an offender. */
 async function cyanAudit(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
-    const featured = document.querySelector('#featured')
     const isCyan = (value: string | null): boolean => {
       if (!value) return false
       const m = value.match(/-?\d+(\.\d+)?/g)
@@ -27,16 +29,40 @@ async function cyanAudit(page: import('@playwright/test').Page) {
       'fill',
       'stroke',
     ] as const
-    let insideZone = false
     const offenders: string[] = []
     for (const el of Array.from(document.querySelectorAll('*'))) {
       const style = getComputedStyle(el)
       const cyan = props.some((p) => isCyan(style[p as keyof CSSStyleDeclaration] as string))
-      if (!cyan) continue
-      if (featured && featured.contains(el)) insideZone = true
-      else offenders.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)}`)
+      if (cyan) offenders.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)}`)
     }
-    return { insideZone, offenders }
+    return { offenders }
+  })
+}
+
+/** Does the featured BombSquad zone paint anything brand yellow (--amio-yellow
+    is #ffe53e = rgb(255, 229, 62))? The de-cyaned zone leans on the brand
+    yellow wordmark accent, so this positively guards that the zone keeps a
+    visible brand-yellow accent rather than going colourless. */
+async function featuredUsesBrandYellow(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const featured = document.querySelector('#featured')
+    if (!featured) return false
+    const isBrandYellow = (value: string | null): boolean => {
+      if (!value) return false
+      const m = value.match(/-?\d+(\.\d+)?/g)
+      if (!m || m.length < 3) return false
+      const [r, g, b] = m.map(Number)
+      // --amio-yellow is #ffe53e = rgb(255, 229, 62).
+      return r >= 235 && g >= 205 && g <= 250 && b <= 120
+    }
+    const props = ['color', 'backgroundColor', 'fill', 'stroke'] as const
+    for (const el of Array.from(featured.querySelectorAll('*'))) {
+      const style = getComputedStyle(el)
+      if (props.some((p) => isBrandYellow(style[p as keyof CSSStyleDeclaration] as string))) {
+        return true
+      }
+    }
+    return false
   })
 }
 
@@ -74,7 +100,7 @@ Then('I see the featured BombSquad section', async ({ page }) => {
 })
 
 Then('I see the "什么是 Amiclaw" section', async ({ page }) => {
-  await expect(page.getByText('关于 · WHAT IS AMICLAW')).toBeVisible()
+  await expect(page.getByText('关于 · What is AmiClaw')).toBeVisible()
 })
 
 Then('I see the upcoming-games section', async ({ page }) => {
@@ -159,12 +185,19 @@ Then(/^the daily-challenge section shows a countdown in 时 \/ 分 \/ 秒$/, asy
 
 Then('the countdown counts down toward the next UTC 00:00 reset', async ({ world, page }) => {
   const readSeconds = async (): Promise<number> => {
+    // The DailyCountdown primitive renders the `HH:MM:SS` digits and a
+    // `时 / 分 / 秒` unit row inside the same container. Each digit/label sits in
+    // its own flex-item span, so innerText puts them on separate lines and the
+    // unit labels trail the digits (e.g. "11\n:\n59\n:\n59\n时\n分\n秒"). Strip
+    // all whitespace first, then pull just the HH:MM:SS digit groups, ignoring
+    // the trailing unit labels.
     const text = (await page.locator('[class*="countdown"]').first().innerText()).replace(/\s/g, '')
-    const parts = text.split(':').map((n) => Number(n))
-    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+    const m = text.match(/(\d{1,2}):(\d{2}):(\d{2})/)
+    if (!m) {
       throw new Error(`unparseable countdown: "${text}"`)
     }
-    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    const [, h, min, s] = m.map(Number)
+    return h * 3600 + min * 60 + s
   }
   const before = await readSeconds()
   await world.advance(3000)
@@ -188,7 +221,7 @@ Then('the anonymous hero is not shown', async ({ page }) => {
 })
 
 Then('the "什么是 Amiclaw" section and the footer pitch are not shown', async ({ page }) => {
-  await expect(page.getByText('关于 · WHAT IS AMICLAW')).toHaveCount(0)
+  await expect(page.getByText('关于 · What is AmiClaw')).toHaveCount(0)
   await expect(page.getByText('永久免费，不存档也不出售你的对话。')).toHaveCount(0)
 })
 
@@ -200,19 +233,17 @@ Then(
   }
 )
 
-Then(
-  'the BombSquad cyan accent appears only in the featured BombSquad art panel',
-  async ({ page }) => {
-    const { insideZone, offenders } = await cyanAudit(page)
-    expect(insideZone, 'the featured BombSquad zone uses the cyan accent').toBe(true)
-    expect(offenders, 'no cyan outside the featured zone').toEqual([])
-  }
-)
+Then('no element on the homepage uses the BombSquad cyan accent', async ({ page }) => {
+  // Whole-page guard: subsumes the prior "platform chrome carries no cyan"
+  // check and additionally forbids cyan inside the featured BombSquad zone,
+  // which was de-cyaned to the brand yellow / warm-cosmic treatment.
+  const { offenders } = await cyanAudit(page)
+  expect(offenders, 'the homepage is fully de-cyaned — cyan is wire-only').toEqual([])
+})
 
-Then(
-  'the platform chrome — top navigation, footer, daily-challenge card — uses no cyan',
-  async ({ page }) => {
-    const { offenders } = await cyanAudit(page)
-    expect(offenders, 'platform chrome carries no cyan').toEqual([])
-  }
-)
+Then('the featured BombSquad wordmark uses the brand yellow', async ({ page }) => {
+  expect(
+    await featuredUsesBrandYellow(page),
+    'the featured BombSquad zone keeps a visible brand-yellow accent'
+  ).toBe(true)
+})
