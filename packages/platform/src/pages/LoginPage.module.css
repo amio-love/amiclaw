@@ -79,6 +79,53 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* "或" divider between the email form and the Google button. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-hairline);
+}
+
+/* Google sign-in link, styled to mirror the @amiclaw/ui ghost button: dark
+   glass outline, pill, CSS-only hover. It is an <a> (a real navigation), not a
+   <button>, so it carries no submit semantics. */
+.googleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: 500 15px var(--font-body);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.googleButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.googleMark {
+  width: 18px;
+  height: 18px;
+}
+
 @media (max-width: 768px) {
   .title {
     font-size: 32px;

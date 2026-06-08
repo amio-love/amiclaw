@@ -8,6 +8,7 @@
  *
  *   magiclink:<sha256>          one-time token hash      (TTL ≤ 15 min)
  *   session:<id>                opaque session record    (TTL = session life)
+ *   oauth_state:<state>         one-time OAuth CSRF state (TTL = state window)
  *   audit:<event>:<ts>:<rand>   append-only audit log    (TTL = audit retention)
  *   ratelimit:email:<email>     per-email send counter   (TTL = send window)
  *   ratelimit:verify:global     global verify counter    (TTL = verify window)
@@ -19,6 +20,11 @@ export function magicLinkKey(tokenHash: string): string {
 
 export function sessionKey(sessionId: string): string {
   return `session:${sessionId}`
+}
+
+/** One-time OAuth `state` for CSRF protection (invariant ⑥). */
+export function oauthStateKey(state: string): string {
+  return `oauth_state:${state}`
 }
 
 /**

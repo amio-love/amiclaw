@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 19 active flows <-> 19 journey
-# scenarios, the regression size budget is 38 (2026-06-09, after the
-# mode② magic-link auth flows were added).
+# 2 x the journey-scenario count. With 20 active flows <-> 20 journey
+# scenarios, the regression size budget is 40 (2026-06-09, after the
+# mode② Google-OAuth login flow was added alongside the magic-link flows).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -201,18 +201,30 @@ flows:
     steps: [landing, footer-terms-link, terms-page]
     status: active
 
-  # === mode② magic-link auth flows ===========================================
-  # The platform's real, revocable session (mode②/point-of-need login). Email
-  # magic-link only this round; Google OAuth is Round 3.
+  # === mode② auth flows =======================================================
+  # The platform's real, revocable session (mode②/point-of-need login). Two
+  # sign-in paths: email magic link and Google OAuth.
 
   - id: magic-link-login-request
     name: Magic-link login request
     description: >-
-      A signed-out visitor opens /login, enters an email, submits, and sees the
-      unified anti-enumeration confirmation — the same message regardless of
-      whether the email is known, so the page never reveals which addresses can
-      sign in. Email flow only; no Google button this round.
+      A signed-out visitor opens /login (which now also offers a Google sign-in
+      button), enters an email, submits, and sees the unified anti-enumeration
+      confirmation — the same message regardless of whether the email is known,
+      so the page never reveals which addresses can sign in.
     steps: [login-page, email-input, submit, unified-confirmation]
+    status: active
+
+  - id: google-login-start
+    name: Google OAuth login start
+    description: >-
+      A signed-out visitor on /login sees the Google sign-in button, which is a
+      real navigational link to /api/auth/google/start (the browser follows the
+      302 to Google's consent screen). The server-side OAuth round-trip — state
+      CSRF check, token exchange, callback session creation — is covered by the
+      backend integration tests, not e2e, since the harness serves a static
+      build with no Workers runtime and Google's consent screen is cross-origin.
+    steps: [login-page, google-button, google-start-link]
     status: active
 
   - id: account-signed-out-guide

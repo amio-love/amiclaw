@@ -8,11 +8,24 @@ const TEST_EMAIL = 'nova@amio.fans'
 
 // --- /login form -------------------------------------------------------------
 
-Then('I see the login email form with no Google button', async ({ page }) => {
+Then('I see the login email form and the Google sign-in button', async ({ page }) => {
   await expect(page.getByLabel('邮箱')).toBeVisible()
   await expect(page.getByRole('button', { name: '发送登录邮件' })).toBeVisible()
-  // Email flow only this round — a Google button would be a dead placeholder.
-  await expect(page.getByRole('button', { name: /Google|谷歌/ })).toHaveCount(0)
+  // The Google option is a real navigational link, live now that the start
+  // endpoint exists.
+  await expect(page.getByRole('link', { name: /Google/ })).toBeVisible()
+})
+
+// RegExp-registered: the literal step text contains `/api/auth/google/start`,
+// and a bare `/` is a Cucumber-expression alternation separator (same dodge as
+// the `I am signed in on /me` step above).
+Then(/^the Google sign-in button links to \/api\/auth\/google\/start$/, async ({ page }) => {
+  // Assert the wiring only: the server-side OAuth round-trip (state-check,
+  // token exchange, callback session) has no Workers runtime in the harness and
+  // the Google consent screen is cross-origin, so it is covered by the backend
+  // integration tests (auth-google.test.ts), not faked here.
+  const href = await page.getByRole('link', { name: /Google/ }).getAttribute('href')
+  expect(href).toContain('/api/auth/google/start')
 })
 
 When('I enter my email and submit the login form', async ({ page }) => {

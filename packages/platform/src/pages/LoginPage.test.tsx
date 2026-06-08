@@ -1,12 +1,14 @@
 /**
  * LoginPage (/login) integration tests.
  *
- * The magic-link login is email-only this round:
- *   1. the form renders an email input and a submit button; NO Google button
- *      (Round 3 adds it when /api/auth/google/start exists).
- *   2. submitting POSTs to /api/auth/magic-link/request and shows the unified
- *      anti-enumeration confirmation — the same message regardless of whether
- *      the email is known (the page never reveals which addresses can sign in).
+ * Two real sign-in paths:
+ *   1. the form renders an email input and a submit button, AND a Google
+ *      sign-in link to /api/auth/google/start (live now that the endpoint
+ *      exists — a navigational <a>, not a fetch).
+ *   2. submitting the email form POSTs to /api/auth/magic-link/request and shows
+ *      the unified anti-enumeration confirmation — the same message regardless
+ *      of whether the email is known (the page never reveals which addresses can
+ *      sign in).
  *   3. a network failure surfaces a retry message, not the confirmation.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -27,13 +29,17 @@ describe('LoginPage /login', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders an email-only form with no Google button', () => {
+  it('renders the email form and a live Google sign-in link', () => {
     renderLogin()
 
     expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '发送登录邮件' })).toBeInTheDocument()
-    // Email flow ONLY this round — a Google button would be a dead placeholder.
-    expect(screen.queryByRole('button', { name: /Google|谷歌/ })).not.toBeInTheDocument()
+
+    // The Google option is a real navigational link to the start endpoint
+    // (the browser follows the 302 to Google), not a fetch button.
+    const google = screen.getByRole('link', { name: /Google/ })
+    expect(google).toBeInTheDocument()
+    expect(google).toHaveAttribute('href', expect.stringContaining('/api/auth/google/start'))
   })
 
   it('shows the unified confirmation after submitting an email', async () => {

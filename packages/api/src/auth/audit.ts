@@ -13,6 +13,8 @@ import { AUDIT_TTL_SECONDS } from './config'
 export type AuditEvent =
   | 'magic_link_request'
   | 'magic_link_verify'
+  | 'google_oauth_callback'
+  | 'oauth_failed'
   | 'login'
   | 'logout'
   | 'verify_failed'

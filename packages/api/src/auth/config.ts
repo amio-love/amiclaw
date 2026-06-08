@@ -23,6 +23,13 @@ export interface AuthEnv {
    * target. Defaults to the production canonical; override per-environment.
    */
   AUTH_BASE_URL?: string
+  /**
+   * Google OAuth 2.0 client id (public). When unset, `/api/auth/google/start`
+   * has nothing to redirect to and reports the provider as unconfigured.
+   */
+  GOOGLE_OAUTH_CLIENT_ID?: string
+  /** Google OAuth 2.0 client secret. Used only server-side in the token exchange. */
+  GOOGLE_OAUTH_CLIENT_SECRET?: string
 }
 
 // --- Tunables (invariant-bearing) -----------------------------------------
@@ -44,6 +51,9 @@ export const EMAIL_SEND_WINDOW_SECONDS = 60 * 60 // 1 hour
 export const VERIFY_GLOBAL_LIMIT = 1000
 export const VERIFY_GLOBAL_WINDOW_SECONDS = 60 // per minute
 
+/** OAuth `state` lifetime — short, single-use; covers the consent round-trip (invariant ⑥). */
+export const OAUTH_STATE_TTL_SECONDS = 10 * 60 // 10 minutes
+
 // --- Dev fallbacks ----------------------------------------------------------
 
 const DEFAULT_BASE_URL = 'https://claw.amio.fans'
@@ -57,4 +67,16 @@ export function resolveEmailFrom(env: AuthEnv): string {
   return env.AUTH_EMAIL_FROM && env.AUTH_EMAIL_FROM.length > 0
     ? env.AUTH_EMAIL_FROM
     : DEFAULT_EMAIL_FROM
+}
+
+/**
+ * The Google OAuth `redirect_uri` — the callback endpoint on this origin. It is
+ * derived from the base URL (NOT separately configured) so it can never drift
+ * from the deployment; the exact string here MUST be registered verbatim as an
+ * authorized redirect URI in the Google Cloud OAuth client (see PROVISIONING.md).
+ */
+export const GOOGLE_CALLBACK_PATH = '/api/auth/google/callback'
+
+export function resolveGoogleRedirectUri(env: AuthEnv): string {
+  return new URL(GOOGLE_CALLBACK_PATH, resolveBaseUrl(env)).toString()
 }
