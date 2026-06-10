@@ -49,6 +49,7 @@ import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
 import {
   assertSessionOwnership,
   assertSocketOwnsBoundSession,
+  socketOwnsBoundSession,
   SocketIdentityRegistry,
 } from './auth-seam'
 
@@ -213,9 +214,23 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     bridge.push(new Uint8Array(data))
   }
 
-  /** Socket closed: drop its identity binding and tear the audio stream down. */
+  /**
+   * Socket closed. Always release THIS socket's identity binding (so the
+   * registry never leaks). Tear down the shared audio bridge / in-flight turn
+   * ONLY when the closing socket owns the bound session — the same per-socket
+   * ownership gate the control and binary paths enforce.
+   *
+   * Without this gate the close path is the one un-gated mutation of shared
+   * session state: a second authenticated client on the same `/ai-ws/{name}` DO
+   * (which only needs to know the session name) connecting and then disconnecting
+   * would close the owner's bridge and truncate the owner's in-flight turn. A
+   * non-owner close must touch nothing but its own binding. Ownership is checked
+   * with the non-throwing predicate because a close handler must be total.
+   */
   private onSocketClose(ws: WebSocket): void {
+    const ownsSession = socketOwnsBoundSession(this.socketIdentities, ws, this.boundIdentity())
     this.socketIdentities.release(ws)
+    if (!ownsSession) return
     this.audio?.close()
     this.audio = undefined
   }

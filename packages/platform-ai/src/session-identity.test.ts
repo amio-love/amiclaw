@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assertSessionOwnership,
   assertSocketOwnsBoundSession,
+  socketOwnsBoundSession,
   SocketIdentityRegistry,
 } from './auth-seam'
 
@@ -181,6 +182,110 @@ describe('binary audio path — non-owner frames cannot pollute the owner bridge
     const ownerBound = { boundSessionId: SESSION_ID, boundUserId: 'user-A' }
 
     expect(assertSocketOwnsBoundSession(reg, socketA, ownerBound)).toBe('user-A')
+  })
+})
+
+describe('socket close — only the owner’s close tears down the shared bridge (F-E)', () => {
+  // Model VoiceSessionDO.onSocketClose: it ALWAYS releases the closing socket's
+  // identity binding, but tears down the shared audio bridge / in-flight turn
+  // ONLY when the closing socket owns the bound session. The bug was an
+  // UNCONDITIONAL teardown: a non-owner client connecting to the same
+  // `/ai-ws/{name}` DO and then disconnecting closed the owner's bridge and
+  // truncated the owner's in-flight turn. The control/binary paths were already
+  // owner-gated; the close path bypassed the gate.
+  const SESSION_ID = 'do-session-1'
+
+  function makeDo() {
+    const reg = new SocketIdentityRegistry<FakeSocket>()
+    // socket A created the session → bound owner is user-A.
+    reg.bind(socketA, 'user-A')
+    reg.bind(socketB, 'user-B')
+    const ownerBound = { boundSessionId: SESSION_ID, boundUserId: 'user-A' }
+    // `bridge` stands in for the DO's `this.audio`: a live object = an in-flight
+    // turn, `undefined` = torn down.
+    let bridge: { closed: boolean } | undefined = { closed: false }
+
+    // Mirrors VoiceSessionDO.onSocketClose: gate teardown on ownership, always
+    // release the closing socket's own binding.
+    function closeSocket(socket: FakeSocket): void {
+      const ownsSession = socketOwnsBoundSession(reg, socket, ownerBound)
+      reg.release(socket)
+      if (!ownsSession) return
+      if (bridge) bridge.closed = true
+      bridge = undefined
+    }
+
+    return {
+      reg,
+      closeSocket,
+      bridgeIsLive: () => bridge !== undefined,
+      bridgeClosed: () => bridge?.closed ?? true,
+    }
+  }
+
+  it('a non-owner close leaves the owner bridge / turn untouched', () => {
+    const { closeSocket, reg, bridgeIsLive } = makeDo()
+
+    // Non-owner socket B (user-B) connected and now disconnects.
+    closeSocket(socketB)
+
+    // The owner's in-flight turn survives: the bridge is still live.
+    expect(bridgeIsLive()).toBe(true)
+    // Only socket B's own identity binding was released.
+    expect(reg.resolve(socketB)).toBeUndefined()
+    expect(reg.resolve(socketA)).toBe('user-A')
+  })
+
+  it('the owner’s own close tears the bridge down normally', () => {
+    const { closeSocket, reg, bridgeIsLive, bridgeClosed } = makeDo()
+
+    closeSocket(socketA)
+
+    // Owner teardown: bridge closed and cleared, owner binding released.
+    expect(bridgeClosed()).toBe(true)
+    expect(bridgeIsLive()).toBe(false)
+    expect(reg.resolve(socketA)).toBeUndefined()
+  })
+
+  it('a non-owner close then the owner close still tears down exactly once', () => {
+    const { closeSocket, bridgeIsLive } = makeDo()
+
+    // Attacker connects + disconnects first: bridge must survive.
+    closeSocket(socketB)
+    expect(bridgeIsLive()).toBe(true)
+
+    // Owner finally disconnects: now teardown happens.
+    closeSocket(socketA)
+    expect(bridgeIsLive()).toBe(false)
+  })
+
+  it('a close from an unbound socket tears down nothing', () => {
+    const { closeSocket, bridgeIsLive } = makeDo()
+    const unbound: FakeSocket = { id: 'never-bound' }
+
+    closeSocket(unbound)
+
+    // No bound identity → not the owner → bridge untouched.
+    expect(bridgeIsLive()).toBe(true)
+  })
+
+  it('socketOwnsBoundSession is false before any session is created', () => {
+    const reg = new SocketIdentityRegistry<FakeSocket>()
+    reg.bind(socketA, 'user-A')
+    const preCreate = { boundSessionId: undefined, boundUserId: undefined }
+
+    // Pre-create close must not tear down a (nonexistent) bridge.
+    expect(socketOwnsBoundSession(reg, socketA, preCreate)).toBe(false)
+  })
+
+  it('socketOwnsBoundSession is true only for the owning socket', () => {
+    const reg = new SocketIdentityRegistry<FakeSocket>()
+    reg.bind(socketA, 'user-A')
+    reg.bind(socketB, 'user-B')
+    const ownerBound = { boundSessionId: SESSION_ID, boundUserId: 'user-A' }
+
+    expect(socketOwnsBoundSession(reg, socketA, ownerBound)).toBe(true)
+    expect(socketOwnsBoundSession(reg, socketB, ownerBound)).toBe(false)
   })
 })
 

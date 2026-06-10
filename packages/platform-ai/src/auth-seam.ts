@@ -48,8 +48,28 @@ export const DEV_AUTH_USER_ID = 'dev-user'
 const SESSION_COOKIE_NAME = 'session'
 
 /**
+ * Best-effort percent-decode of a cookie value. The `Cookie` header is
+ * attacker-controlled, and `decodeURIComponent` throws a `URIError` on a
+ * malformed escape (a lone `%`, a half-finished `%E`, an illegal byte). At the
+ * WS handshake an uncaught throw here would surface as a Worker error (500)
+ * instead of the intended "no valid session" outcome — turning a bad cookie into
+ * a crash rather than a clean 401. We catch the decode failure and keep the raw
+ * value: a malformed cookie then simply fails to resolve to a real session id,
+ * which the reader rejects (fail-closed). Pure and total — never throws.
+ */
+function decodeCookieValue(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/**
  * Parse a `Cookie` request header into a name->value map. Pure and total:
- * a `null`/empty header yields an empty map; malformed pairs are skipped.
+ * a `null`/empty header yields an empty map; malformed pairs are skipped; a
+ * value with a malformed percent-escape is kept raw rather than throwing (the
+ * header is attacker-controlled — see `decodeCookieValue`).
  */
 export function parseCookies(cookieHeader: string | null): Record<string, string> {
   const out: Record<string, string> = {}
@@ -60,7 +80,7 @@ export function parseCookies(cookieHeader: string | null): Record<string, string
     const name = part.slice(0, eq).trim()
     if (name === '') continue
     const value = part.slice(eq + 1).trim()
-    out[name] = decodeURIComponent(value)
+    out[name] = decodeCookieValue(value)
   }
   return out
 }
@@ -202,6 +222,31 @@ export function assertSocketOwnsBoundSession<Socket>(
   // while the user axis enforces "this socket's user owns the bound session".
   assertSessionOwnership(bound, bound.boundSessionId as string, socketUserId)
   return socketUserId
+}
+
+/**
+ * Non-throwing sibling of `assertSocketOwnsBoundSession` for total (no-throw)
+ * call sites such as the socket-close handler. Returns `true` only when THIS
+ * socket carries a bound identity AND that identity owns the DO's bound session
+ * (same predicate the throwing version enforces); `false` for every reject path
+ * — no bound identity, no session yet, or a non-owner socket.
+ *
+ * The close path must be total: a close event fires for owner and non-owner
+ * sockets alike, and a non-owner's close must NOT tear down the owner's shared
+ * audio bridge / in-flight turn (otherwise a second authenticated client on the
+ * same `/ai-ws/{sessionName}` could disconnect and truncate the owner's turn).
+ * Gating bridge teardown on this predicate closes that path while leaving the
+ * non-owner free to release only its own identity binding.
+ */
+export function socketOwnsBoundSession<Socket>(
+  registry: SocketIdentityRegistry<Socket>,
+  socket: Socket,
+  bound: { boundSessionId: string | undefined; boundUserId: string | undefined }
+): boolean {
+  const socketUserId = registry.resolve(socket)
+  if (socketUserId === undefined) return false
+  if (bound.boundUserId === undefined || bound.boundSessionId === undefined) return false
+  return socketUserId === bound.boundUserId
 }
 
 /**
