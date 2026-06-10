@@ -273,6 +273,30 @@ function int32BE(value: number): Uint8Array {
  * sequence; audio frames are raw audio-only requests. The final audio frame
  * carries a negative sequence with the `NegativeWithSequence` flag so the
  * server knows the stream is complete.
+ *
+ * Request-frame flag basis (verified against production clients, 2026-06):
+ * the `/api/v3/sauc/bigmodel` streaming ASR server accepts two equivalent
+ * client dialects — one that omits sequence numbers (audio frames flagged
+ * `NoSequence` 0b0000) and one that carries them (config + audio flagged
+ * `PositiveSequence` 0b0001, the final audio frame flagged
+ * `NegativeWithSequence` 0b0011 with a negative sequence). This adapter
+ * implements the SEQUENCE-CARRYING dialect consistently across the config,
+ * audio, and final frames. `0b0001`/`0b0011` are legitimate client-request
+ * flags (positive / negative sequence), NOT server-response-only markers — the
+ * server's frame parser keys "sequence present" off `flags & 0x01` and "last
+ * package" off `flags & 0x02` symmetrically for requests and responses. The
+ * config frame is sent as `FullClientRequest` + `PositiveSequence` + sequence=1,
+ * which matches Volcengine's own first-party client exactly.
+ * Ground truth:
+ *  - volcengine/ai-app-lab arkitect/core/component/asr/asr_client.py
+ *    (first-party, Apache-licensed): config frame =
+ *    `generate_header(message_type_specific_flags=POS_SEQUENCE)` +
+ *    `generate_before_payload(sequence=1)`.
+ *  - thundersoft-td/mcp-server-speech src/.../asr_ws.py (sequence-carrying
+ *    dialect): config = POS_SEQUENCE + seq; audio non-last = POS_SEQUENCE + seq;
+ *    audio last = NEG_WITH_SEQUENCE + negative seq; with the constant comments
+ *    `POS_SEQUENCE = 0b0001  # Positive sequence number` and
+ *    `NEG_WITH_SEQUENCE = 0b0011  # Negative sequence number (end data frame)`.
  */
 export function buildSttRequestFrame(args: {
   messageType: number

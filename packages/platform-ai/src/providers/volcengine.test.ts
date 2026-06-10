@@ -228,6 +228,37 @@ describe('STT frame codec', () => {
     expect(parsed.flags).toBe(MessageFlag.PositiveSequence)
     expect(parsed.sequence).toBe(3)
   })
+
+  it('ASR request frames use the sequence-carrying client dialect (request-side flag pin)', () => {
+    // Ground-truth pin: the /api/v3/sauc/bigmodel streaming ASR server accepts a
+    // sequence-carrying client dialect where the config + non-last audio frames
+    // are flagged PositiveSequence (0b0001) and the final audio frame is flagged
+    // NegativeWithSequence (0b0011), each carrying a 4-byte sequence field.
+    // `0b0001`/`0b0011` are legitimate CLIENT-request flags (positive / negative
+    // sequence), NOT server-response-only markers. This is exactly what
+    // Volcengine's own first-party client (volcengine/ai-app-lab asr_client.py:
+    // config = POS_SEQUENCE + sequence=1) and the sequence-carrying demo
+    // (thundersoft-td/mcp-server-speech asr_ws.py: config/audio POS_SEQUENCE,
+    // last NEG_WITH_SEQUENCE) send. This test locks the request-side flags so a
+    // future "fix" toward a (mistaken) response-only reading of 0b0001/0b0011 is
+    // caught here instead of failing the whole stream at deploy time.
+    const config = parseFrame(
+      buildSttConfigFrame({ uid: 'u', format: 'pcm', sampleRate: 16000, model: 'bigmodel' })
+    )
+    expect(config.messageType).toBe(MessageType.FullClientRequest)
+    expect(config.flags).toBe(MessageFlag.PositiveSequence) // 0b0001, NOT 0b0000
+    expect(config.sequence).toBe(1) // sequence field IS present (== 1)
+
+    const mid = parseFrame(buildSttAudioFrame(encoder.encode('aud'), 4, false))
+    expect(mid.messageType).toBe(MessageType.AudioOnlyClient)
+    expect(mid.flags).toBe(MessageFlag.PositiveSequence) // 0b0001
+    expect(mid.sequence).toBe(4) // positive sequence present
+
+    const last = parseFrame(buildSttAudioFrame(encoder.encode('aud'), 4, true))
+    expect(last.messageType).toBe(MessageType.AudioOnlyClient)
+    expect(last.flags).toBe(MessageFlag.NegativeWithSequence) // 0b0011, the end-data marker
+    expect(last.sequence).toBe(-4) // negative sequence present
+  })
 })
 
 // --- ASR server-response mapping --------------------------------------------
