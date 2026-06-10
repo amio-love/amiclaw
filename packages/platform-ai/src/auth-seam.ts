@@ -167,6 +167,44 @@ export function assertSessionOwnership(
 }
 
 /**
+ * Resolve the operating user from THIS socket's bound identity and assert it owns
+ * the DO's bound session — the single ownership predicate shared by every inbound
+ * path (control messages AND binary audio frames). Returns the verified operating
+ * user id on success; throws (fail-loud) on any reject path.
+ *
+ * Reject paths:
+ *  - the socket carries no bound identity (never authenticated / never bound) →
+ *    `socket has no authenticated identity`;
+ *  - the DO has no session yet (`boundUserId`/`boundSessionId` undefined) →
+ *    `operation before createSession` (from `assertSessionOwnership`);
+ *  - the socket's user is not the session owner → `userId does not own this
+ *    session` (from `assertSessionOwnership`).
+ *
+ * The binary audio path MUST funnel through this before touching the shared audio
+ * bridge: without it, a second authenticated socket on the same DO (which only
+ * needs to know the session name) could push frames the owner's next `turn`
+ * transcribes — injecting/forging the owner's utterance and bypassing the
+ * per-socket ownership invariant the control path already enforces. Pure and
+ * generic over the socket type, so it is unit-testable in Node without the
+ * Workers `WebSocket` runtime.
+ */
+export function assertSocketOwnsBoundSession<Socket>(
+  registry: SocketIdentityRegistry<Socket>,
+  socket: Socket,
+  bound: { boundSessionId: string | undefined; boundUserId: string | undefined }
+): string {
+  const socketUserId = registry.resolve(socket)
+  if (socketUserId === undefined) {
+    throw new Error('auth-seam: socket has no authenticated identity')
+  }
+  // `boundSessionId` is the operating session id: a socket connected to this DO
+  // operates on this DO's session, so the session axis is satisfied by identity
+  // while the user axis enforces "this socket's user owns the bound session".
+  assertSessionOwnership(bound, bound.boundSessionId as string, socketUserId)
+  return socketUserId
+}
+
+/**
  * Per-socket authenticated identity (L2 §Mechanism Variant 3, step 3).
  *
  * The forwarded `X-Session-User-Id` is the identity of ONE accepted socket, not

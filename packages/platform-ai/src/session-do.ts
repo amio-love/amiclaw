@@ -30,9 +30,14 @@
  * (via `SocketIdentityRegistry`), not in a shared instance field: two
  * already-authenticated clients can connect to the same-named DO (one instance),
  * and a shared field would let the later upgrade overwrite the earlier client's
- * identity — letting socket B drive `create`/`reset` under socket A's user. Each
- * control message resolves the id of the exact socket it arrived on, so the
- * per-operation ownership invariant (L2 §Mechanism Variant 3) holds per socket.
+ * identity — letting socket B drive `create`/`reset` under socket A's user. Both
+ * inbound paths resolve the id of the exact socket a frame arrived on and verify
+ * it owns the bound session: control messages (create/turn/end) and binary audio
+ * frames alike. The binary path must gate too — otherwise a second authenticated
+ * socket on the same DO could push audio onto the owner's shared bridge, which
+ * the owner's next `turn` would transcribe (forging the owner's utterance). So
+ * the per-operation ownership invariant (L2 §Mechanism Variant 3) holds per
+ * socket across every inbound frame, not just control messages.
  */
 
 import { DurableObject } from 'cloudflare:workers'
@@ -41,7 +46,11 @@ import type { GameState } from './manual-injection'
 import { resolveConfig } from './provider-config'
 import { createProviders, type ProviderEnv } from './providers/factory'
 import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
-import { assertSessionOwnership, SocketIdentityRegistry } from './auth-seam'
+import {
+  assertSessionOwnership,
+  assertSocketOwnsBoundSession,
+  SocketIdentityRegistry,
+} from './auth-seam'
 
 /** Env bindings visible to the DO (provider creds + the AUTH KV, unused here). */
 export type SessionDoEnv = ProviderEnv & Record<string, unknown>
@@ -192,7 +201,14 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
       await this.handleControl(ws, JSON.parse(data) as ControlMessage)
       return
     }
-    // Binary frame: player audio for the in-flight (or next) turn.
+    // Binary frame: player audio. Gate it through the SAME per-socket ownership
+    // predicate the control path uses — a binary frame must come from the socket
+    // whose user owns the bound session. Without this, a second authenticated
+    // socket on the same DO could push frames the owner's next `turn` transcribes,
+    // forging the owner's utterance. The throw on a non-owner frame propagates to
+    // the message listener's `.catch`, which closes THAT socket with 1008 (fail
+    // loud, control-path-consistent) — the owner's bridge is never touched.
+    this.assertSocketOwner(ws)
     const bridge = this.ensureAudioBridge()
     bridge.push(new Uint8Array(data))
   }
@@ -290,14 +306,26 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
    * `onPlayerAudio` / `onAiResponse` / `endSession` verify ownership).
    */
   private assertOwner(sessionId: string, userId: string): void {
-    assertSessionOwnership(
-      {
-        boundSessionId: this.userId === undefined ? undefined : this.ctx.id.toString(),
-        boundUserId: this.userId,
-      },
-      sessionId,
-      userId
-    )
+    assertSessionOwnership(this.boundIdentity(), sessionId, userId)
+  }
+
+  /**
+   * Assert THIS socket's authenticated user owns the bound session, using the
+   * shared ownership predicate. Drives the binary audio path so it carries the
+   * same per-socket ownership guarantee as the control path. Throws (fail loud)
+   * on a non-owner / unauthenticated / pre-create frame; the caller's listener
+   * turns the throw into a 1008 close of this socket.
+   */
+  private assertSocketOwner(ws: WebSocket): void {
+    assertSocketOwnsBoundSession(this.socketIdentities, ws, this.boundIdentity())
+  }
+
+  /** The DO's bound identity in the `{ boundSessionId, boundUserId }` shape. */
+  private boundIdentity(): { boundSessionId: string | undefined; boundUserId: string | undefined } {
+    return {
+      boundSessionId: this.userId === undefined ? undefined : this.ctx.id.toString(),
+      boundUserId: this.userId,
+    }
   }
 
   /** WS control-message dispatch driving the four-method semantics. */
