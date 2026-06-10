@@ -826,6 +826,13 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       )
       const socket = await connect(STT_URL, headers)
       const queue = new AsyncQueue<SttTranscriptChunk>()
+      // Tracks whether a final/definite transcript arrived — the ASR normal
+      // completion signal. A socket close is only a clean end-of-stream once this
+      // is set; a close BEFORE it (handshake-period failure, mid-stream network
+      // drop) is a premature close that must fail the queue, so a turn does not
+      // proceed with an empty/incomplete transcript. Mirrors the TTS layer's
+      // SessionFinished gate.
+      let finalReached = false
 
       socket.addEventListener('message', (event) => {
         try {
@@ -841,6 +848,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           // the final transcript is never dropped. Also close the ASR socket as
           // the normal end-of-stream path (idempotent; mirrors the TTS layer).
           if (chunk.isFinal) {
+            finalReached = true
             queue.close()
             socket.close()
           }
@@ -848,7 +856,19 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           queue.fail(err)
         }
       })
-      socket.addEventListener('close', () => queue.close())
+      // Distinguish a normal-completion close from a premature one. After a
+      // final/definite transcript the close is the expected end-of-stream ->
+      // close the queue normally. Before it (handshake race / mid-stream drop)
+      // the close is premature: fail the queue so the consumer
+      // (`collectFinalTranscript`) throws and the turn fails loud, rather than
+      // continuing with an empty/incomplete transcript.
+      socket.addEventListener('close', () => {
+        if (finalReached) {
+          queue.close()
+        } else {
+          queue.fail(new Error('Volcengine ASR socket closed before a final transcript'))
+        }
+      })
       socket.addEventListener('error', (err) => queue.fail(err))
 
       // Pump audio in the background so we can yield transcripts as they arrive.
@@ -894,6 +914,12 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       const socket = await connect(TTS_URL, headers)
       const queue = new AsyncQueue<TtsAudioChunk>()
       const handshake = new TtsHandshake()
+      // Tracks whether the session reached its normal completion (SessionFinished,
+      // event 152). A socket close is only a clean end-of-stream once this is set;
+      // a close BEFORE it (handshake-period failure, mid-stream network drop) is a
+      // premature close that must fail the queue, so a turn with text but missing
+      // TTS audio fails loudly instead of settling silently without audio.
+      let sessionFinished = false
 
       socket.addEventListener('message', (event) => {
         try {
@@ -913,6 +939,10 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           if (frame.event === TtsEvent.TtsResponse && frame.payload.length > 0) {
             queue.push({ audio: copyBytes(frame.payload), done: false })
           } else if (frame.event === TtsEvent.SessionFinished) {
+            // Normal completion: push the final done frame, mark the session
+            // finished so a subsequent socket close is the clean end-of-stream,
+            // and end iteration.
+            sessionFinished = true
             queue.push({ audio: new Uint8Array(0), done: true })
             queue.close()
           } else if (frame.event === TtsEvent.SessionFailed) {
@@ -927,9 +957,21 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       })
       // A socket close before the handshake completes must reject the pending
       // gates so the pump fails loudly rather than awaiting a frame forever.
+      // `abort` is harmless once the gates have all settled (no-op on a settled
+      // gate), so it runs unconditionally on every close.
       socket.addEventListener('close', () => {
         handshake.abort(new Error('Volcengine TTS socket closed before session completed'))
-        queue.close()
+        // Distinguish a normal-completion close from a premature one. After
+        // SessionFinished (152) the close is the expected end-of-stream -> close
+        // the queue normally. Before it (handshake race / mid-stream drop) the
+        // close is premature: fail the queue so the consumer (`runTurn`'s TTS
+        // extraction) throws and the provider call fails loud, rather than the
+        // turn silently settling with text but no/partial audio.
+        if (sessionFinished) {
+          queue.close()
+        } else {
+          queue.fail(new Error('Volcengine TTS socket closed before session finished'))
+        }
       })
       socket.addEventListener('error', (err) => {
         handshake.abort(err)

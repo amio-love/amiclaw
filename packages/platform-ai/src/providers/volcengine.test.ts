@@ -563,6 +563,59 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
 
     await expect(consumed).rejects.toThrow(/Volcengine ASR error/)
   })
+
+  it('fails loudly if the socket closes before a final transcript (premature close)', async () => {
+    // The ASR dual of the TTS premature-close fix. A socket close that arrives
+    // before any final/definite transcript — handshake-period failure or a
+    // mid-stream network drop — must REJECT the consumer, not settle it as a clean
+    // empty/incomplete end-of-stream. Otherwise `collectFinalTranscript` would
+    // proceed with an empty (or partial, non-definite) transcript and the turn
+    // would continue silently on bad input. Here the server emits only a
+    // non-definite chunk, then the socket drops.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
+
+    await new Promise((r) => setTimeout(r, 0))
+    // A partial (non-definite) transcript arrives, then the socket closes BEFORE
+    // any definite/final result — a premature close.
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
+    )
+    socket.emitClose()
+
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('transcribe did not settle after an early close')), 50)
+    )
+    await expect(Promise.race([consumed, guard])).rejects.toThrow(
+      /closed before a final transcript/
+    )
+  })
+
+  it('treats a socket close AFTER a final transcript as a clean end-of-stream', async () => {
+    // The dual of the premature-close test: once a final/definite transcript has
+    // arrived (the normal completion), a subsequent socket close is the expected
+    // end-of-stream and must NOT fail the already-completed stream. Guards against
+    // the fail-loud fix over-firing on the normal path.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
+
+    await new Promise((r) => setTimeout(r, 0))
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你好', utterances: [{ definite: true }] } })
+    )
+    // A close arriving after the definite transcript is the normal teardown
+    // (the adapter itself also closes the socket on a final transcript).
+    socket.emitClose()
+
+    const chunks = await collected
+    expect(chunks).toEqual([{ text: '你好', isFinal: true }])
+  })
 })
 
 // --- Streaming logic: synthesize (mock WS) ----------------------------------
@@ -948,9 +1001,12 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     await expect(consumed).rejects.toThrow(/Volcengine TTS session failed/)
   })
 
-  it('rejects the pending gate if the socket closes before the handshake completes', async () => {
-    // A socket close before ConnectionStarted must reject the awaited gate so the
-    // pump fails loudly instead of awaiting a connection frame forever.
+  it('fails loudly if the socket closes before the session finishes (premature close)', async () => {
+    // A socket close before SessionFinished (152) — handshake-period failure or a
+    // mid-stream network drop — must REJECT the consumer, not settle it as a clean
+    // empty end-of-stream. Otherwise `runTurn`'s TTS extraction would silently
+    // settle a turn with text but no audio. The close also rejects the pump's
+    // awaited handshake gate so the pump never hangs awaiting a connection frame.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
@@ -959,13 +1015,44 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     await tick()
     socket.emitClose()
 
-    // Close ends the queue (no audio); the pump's awaited gate rejected, but the
-    // queue closing means the consumer simply sees an empty stream — assert it
-    // terminates rather than hanging.
+    // Race against a timer so a hang fails the test rather than stalling: the
+    // close must surface as a thrown error promptly, not a silent termination.
     const guard = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('synthesize did not terminate after an early close')), 50)
+      setTimeout(() => reject(new Error('synthesize did not settle after an early close')), 50)
     )
-    await Promise.race([consumed, guard])
+    await expect(Promise.race([consumed, guard])).rejects.toThrow(/closed before session finished/)
+  })
+
+  it('treats a socket close AFTER SessionFinished as a clean end-of-stream', async () => {
+    // The dual of the premature-close test: once SessionFinished (152) has been
+    // delivered (the normal completion), a subsequent socket close is the expected
+    // end-of-stream and must NOT fail the already-completed stream. Guards against
+    // the fail-loud fix over-firing on the normal path.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(await asyncFrom(['句一'])))
+
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('AUDIO'), sessionId))
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+    // A close arriving after SessionFinished is the normal teardown.
+    socket.emitClose()
+
+    const chunks = await collected
+    // The audio + final done chunk are intact; the post-completion close is a
+    // no-op, not a failure.
+    const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
+    expect(audio).toEqual(['AUDIO'])
+    expect(chunks[chunks.length - 1].done).toBe(true)
   })
 
   it('skips empty text pieces (no TaskRequest emitted for them)', async () => {
