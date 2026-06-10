@@ -498,15 +498,28 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           // closes the audio bridge (the NEXT turn's bridge, which buffered any
           // frames that arrived during this turn — the in-flight turn already
           // detached + closed its own bridge at `onAiResponse` start, so its STT
-          // has already terminated), and returns the summary. The in-flight turn
-          // is then cleanly canceled: `cancelActiveTurn` `return()`s its iterator
-          // so `runTurn`'s `finally` runs — closing the sentence queue and
-          // returning the live LLM/TTS iterators, leaving no provider stream
-          // dangling. A turn canceled mid-flight never reached `runTurn`'s settle
-          // step, so it did not increment `turnCount` — the summary counts only
-          // fully-completed turns.
+          // has already terminated), and returns the summary.
           const summary = this.endSession(this.ctx.id.toString(), socketUserId)
-          await this.cancelActiveTurn()
+          // Cancel the in-flight turn FIRE-AND-FORGET, then summarize + close
+          // immediately — do NOT await the cancel. `AsyncIterator.return()` cannot
+          // interrupt a provider `await` already pending inside the generator (an
+          // STT/LLM/TTS promise that is slow or stuck): the generator only reaches
+          // its `finally` once that promise settles. Awaiting the cancel here would
+          // make `end` hang for as long as the provider is stuck — leaving the
+          // owner unable to end the session and the socket open. So we initiate the
+          // best-effort cancel (`return()` + bridge close already done by
+          // `endSession`) and proceed without blocking on it. The background cancel
+          // still completes when the provider promise eventually settles: at that
+          // point `runTurn`'s `finally` closes the sentence queue + returns the live
+          // LLM/TTS iterators (no stream leaks), and the turn loop's own `finally`
+          // clears `turnInFlight`/`activeTurn` — so the in-flight guard is released
+          // by the same path as before, just not synchronously with `end`. A turn
+          // canceled mid-flight never reaches `runTurn`'s settle step, so it never
+          // increments `turnCount` — the summary counts only fully-completed turns.
+          // Truly abortable cancellation (an AbortSignal threaded through `runTurn`
+          // into each adapter to interrupt a stuck fetch/WS) is a separate followup,
+          // not this fix.
+          void this.cancelActiveTurn()
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, 'session ended')

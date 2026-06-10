@@ -77,6 +77,15 @@ export interface VolcengineSpeechOptions {
   ttsResourceId?: string
   /** ASR model name in the config request (`request.model_name`). */
   sttModel?: string
+  /**
+   * TTS model id, threaded into the Doubao TTS 2.0 `StartSession` `req_params`
+   * as `model` when set. The bidirectional TTS 2.0 protocol primarily binds the
+   * model via the endpoint resource id (`X-Api-Resource-Id`); this carries the
+   * resolved config model so a model switch in `provider-config` reaches the wire
+   * rather than being a silent no-op. Omitted when unset (the field is simply not
+   * sent), preserving the documented default request shape.
+   */
+  ttsModel?: string
   /** TTS speaker / voice type (`req_params.speaker`). */
   ttsSpeaker?: string
   /** Audio sample rate in Hz used on both the ASR input and TTS output. */
@@ -369,23 +378,36 @@ export function buildTtsFinishConnectionFrame(): Uint8Array {
   })
 }
 
-/** Build the TTS StartSession frame carrying the synthesis parameters. */
+/**
+ * Build the TTS StartSession frame carrying the synthesis parameters. `model` is
+ * threaded into `req_params` only when provided (the resolved config model), so
+ * the default request shape is unchanged when no model is configured.
+ */
 export function buildTtsStartSessionFrame(args: {
   sessionId: string
   speaker: string
   sampleRate: number
+  model?: string
 }): Uint8Array {
+  const reqParams: {
+    speaker: string
+    audio_params: { format: string; sample_rate: number }
+    model?: string
+  } = {
+    speaker: args.speaker,
+    audio_params: {
+      format: 'pcm',
+      sample_rate: args.sampleRate,
+    },
+  }
+  if (args.model !== undefined && args.model !== '') {
+    reqParams.model = args.model
+  }
   const payload = textEncoder.encode(
     JSON.stringify({
       event: TtsEvent.StartSession,
       namespace: 'BidirectionalTTS',
-      req_params: {
-        speaker: args.speaker,
-        audio_params: {
-          format: 'pcm',
-          sample_rate: args.sampleRate,
-        },
-      },
+      req_params: reqParams,
     })
   )
   return buildTtsEventFrame({
@@ -747,6 +769,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
   const sttResourceId = opts.sttResourceId ?? DEFAULT_STT_RESOURCE_ID
   const ttsResourceId = opts.ttsResourceId ?? DEFAULT_TTS_RESOURCE_ID
   const sttModel = opts.sttModel ?? DEFAULT_STT_MODEL
+  const ttsModel = opts.ttsModel
   const ttsSpeaker = opts.ttsSpeaker ?? DEFAULT_TTS_SPEAKER
   const sampleRate = opts.sampleRate ?? DEFAULT_SAMPLE_RATE
 
@@ -883,7 +906,14 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         socket.send(asArrayBuffer(buildTtsStartConnectionFrame()))
         await handshake.connectionStarted
         socket.send(
-          asArrayBuffer(buildTtsStartSessionFrame({ sessionId, speaker: ttsSpeaker, sampleRate }))
+          asArrayBuffer(
+            buildTtsStartSessionFrame({
+              sessionId,
+              speaker: ttsSpeaker,
+              sampleRate,
+              model: ttsModel,
+            })
+          )
         )
         await handshake.sessionStarted
         for await (const piece of text) {

@@ -97,6 +97,13 @@ async function asyncFrom<T>(items: T[]): Promise<AsyncIterable<T>> {
   })()
 }
 
+/** Synchronous variant of {@link asyncFrom} for call sites that need the iterable inline. */
+function asyncFromSync<T>(items: T[]): AsyncIterable<T> {
+  return (async function* () {
+    for (const item of items) yield item
+  })()
+}
+
 async function collect<T>(stream: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = []
   for await (const item of stream) out.push(item)
@@ -391,6 +398,62 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     expect(last.sequence).toBeLessThan(0)
   })
 
+  it('sends the configured sttModel as request.model_name, not the default (F-K)', async () => {
+    // F-K: the factory must thread `resolved.stt.model` into the adapter so the
+    // config-selected ASR model reaches `request.model_name`. Here we set a
+    // non-default `sttModel` and assert the FIRST outbound frame (the JSON config
+    // request) carries it — proving the option is not dropped in favour of the
+    // built-in `DEFAULT_STT_MODEL`.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      sttModel: 'bigmodel-asr-pro',
+      connect,
+    })
+
+    const consumed = (async () => {
+      for await (const _chunk of stt.transcribe(await asyncFrom([encoder.encode('f1')]))) {
+        break
+      }
+    })()
+    await tick()
+
+    const configFrame = parseFrame(socket.sent[0])
+    const body = JSON.parse(decoder.decode(configFrame.payload)) as {
+      request: { model_name: string }
+    }
+    expect(body.request.model_name).toBe('bigmodel-asr-pro')
+    expect(body.request.model_name).not.toBe('bigmodel') // not the default
+
+    // Unblock the consumer so nothing is left pending.
+    socket.emitMessage(sttServerFrame({ result: { text: 'x', utterances: [{ definite: true }] } }))
+    await consumed
+  })
+
+  it('falls back to the default sttModel when none is configured', async () => {
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = (async () => {
+      for await (const _chunk of stt.transcribe(await asyncFrom([encoder.encode('f1')]))) {
+        break
+      }
+    })()
+    await tick()
+
+    const configFrame = parseFrame(socket.sent[0])
+    const body = JSON.parse(decoder.decode(configFrame.payload)) as {
+      request: { model_name: string }
+    }
+    expect(body.request.model_name).toBe('bigmodel')
+
+    socket.emitMessage(sttServerFrame({ result: { text: 'x', utterances: [{ definite: true }] } }))
+    await consumed
+  })
+
   it('ends the iteration on a definite transcript without waiting for a WS close', async () => {
     // Regression: `collectFinalTranscript` drains `transcribe` to iterator end
     // (it does not break early like the test above). If the adapter only closed
@@ -598,6 +661,54 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
       TtsEvent.FinishSession,
       TtsEvent.FinishConnection,
     ])
+  })
+
+  it('puts the configured ttsModel in the StartSession req_params, omitting it when unset (F-K)', async () => {
+    // F-K: the factory threads `resolved.tts.model` into the adapter so a TTS
+    // model switch in `provider-config` reaches the wire (the StartSession
+    // `req_params.model`) instead of being silently dropped. With a model set it
+    // must appear; with none set the field must be absent (default request shape).
+    const withModelSocket = new MockSocket()
+    const withModel = mockConnector(withModelSocket)
+    const provider = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      ttsModel: 'doubao-tts-2.0-pro',
+      connect: withModel.connect,
+    })
+    void collect(provider.tts.synthesize(asyncFromSync(['句一'])))
+    await tick()
+    withModelSocket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+
+    const startSession = withModelSocket.sent
+      .map((b) => parseFrame(b))
+      .find((f) => f.event === TtsEvent.StartSession)
+    const body = JSON.parse(decoder.decode(startSession?.payload ?? new Uint8Array(0))) as {
+      req_params: { model?: string }
+    }
+    expect(body.req_params.model).toBe('doubao-tts-2.0-pro')
+
+    // With no ttsModel configured, the StartSession req_params omits `model`.
+    const noModelSocket = new MockSocket()
+    const noModel = mockConnector(noModelSocket)
+    const plain = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      connect: noModel.connect,
+    })
+    void collect(plain.tts.synthesize(asyncFromSync(['句一'])))
+    await tick()
+    noModelSocket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+
+    const plainStartSession = noModelSocket.sent
+      .map((b) => parseFrame(b))
+      .find((f) => f.event === TtsEvent.StartSession)
+    const plainBody = JSON.parse(
+      decoder.decode(plainStartSession?.payload ?? new Uint8Array(0))
+    ) as { req_params: { model?: string } }
+    expect(plainBody.req_params.model).toBeUndefined()
   })
 
   it('does NOT send StartSession until the server accepts the connection', async () => {

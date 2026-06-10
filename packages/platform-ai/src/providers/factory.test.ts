@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createProviders, type ProviderEnv } from './factory'
 import type { ResolvedConfig } from '../provider-config'
+import * as volcengine from './volcengine'
 
 function config(over: Partial<ResolvedConfig> = {}): ResolvedConfig {
   return {
@@ -82,5 +83,31 @@ describe('createProviders', () => {
     // The shared-instance build means stt and tts come from the same pair; we
     // assert both are present and distinct method surfaces (stt vs tts).
     expect(providers.stt).not.toBe(providers.tts)
+  })
+
+  it('threads the resolved stt/tts models into the volcengine provider (F-K)', () => {
+    // F-K: a model switch in `provider-config` must reach the speech adapter.
+    // Spy on the volcengine factory and assert `createProviders` forwards
+    // `resolved.stt.model` / `resolved.tts.model` (not just env/resource ids) so
+    // the per-layer model is no longer a no-op for the voice layer.
+    const spy = vi.spyOn(volcengine, 'createVolcengineSpeechProvider')
+    try {
+      createProviders(
+        config({
+          stt: { provider: 'volcengine', model: 'bigmodel-asr-pro' },
+          tts: { provider: 'volcengine', model: 'doubao-tts-2.0-pro' },
+        }),
+        fullEnv
+      )
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sttModel: 'bigmodel-asr-pro',
+          ttsModel: 'doubao-tts-2.0-pro',
+        })
+      )
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

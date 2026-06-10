@@ -89,13 +89,27 @@ function createLlmProvider(resolved: ResolvedConfig, env: ProviderEnv): LlmProvi
  * Build the shared Volcengine speech pair once. Both the STT and TTS layers map
  * to this single instance when they select `volcengine`; building it once keeps
  * the voice layer shared (one socket pair per modality, one adapter).
+ *
+ * The resolved STT and TTS model ids from `provider-config` are threaded in so
+ * the config's "each layer's model is swappable" contract actually reaches the
+ * wire: `sttModel` becomes the ASR `request.model_name`, `ttsModel` the Doubao
+ * TTS `req_params.model`. Without this passthrough the adapter would fall back to
+ * its built-in defaults and the config model would be a silent no-op (the F-K
+ * bug). The shared pair is built from BOTH layers' models, which is correct: when
+ * both voice slots select `volcengine` the spec already binds them to one shared
+ * voice instance, and a single Volcengine config registers STT + TTS together.
  */
-function createVolcengineSpeech(env: ProviderEnv): { stt: SttProvider; tts: TtsProvider } {
+function createVolcengineSpeech(
+  resolved: ResolvedConfig,
+  env: ProviderEnv
+): { stt: SttProvider; tts: TtsProvider } {
   return createVolcengineSpeechProvider({
     appId: requireCredential(env.VOLC_APP_ID, 'VOLC_APP_ID', PROVIDER_VOLCENGINE),
     accessToken: requireCredential(env.VOLC_ACCESS_KEY, 'VOLC_ACCESS_KEY', PROVIDER_VOLCENGINE),
     sttResourceId: env.VOLC_STT_RESOURCE_ID,
     ttsResourceId: env.VOLC_TTS_RESOURCE_ID,
+    sttModel: resolved.stt.model,
+    ttsModel: resolved.tts.model,
   })
 }
 
@@ -114,7 +128,7 @@ export function createProviders(resolved: ResolvedConfig, env: ProviderEnv): Ses
   // STT+TTS instances — one build backs both slots.
   let volcengine: { stt: SttProvider; tts: TtsProvider } | undefined
   const getVolcengine = (): { stt: SttProvider; tts: TtsProvider } => {
-    if (volcengine === undefined) volcengine = createVolcengineSpeech(env)
+    if (volcengine === undefined) volcengine = createVolcengineSpeech(resolved, env)
     return volcengine
   }
   let mock: { stt: SttProvider; tts: TtsProvider } | undefined

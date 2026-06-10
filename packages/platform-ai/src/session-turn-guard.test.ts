@@ -196,11 +196,18 @@ class FakeSessionDo {
     }
   }
 
-  /** Mirrors the `end` branch: close the bridge, cancel the in-flight turn, summarize. */
-  async end(): Promise<void> {
+  /**
+   * Mirrors the `end` branch: close the bridge, then cancel the in-flight turn
+   * FIRE-AND-FORGET (no await) and summarize + return immediately. Awaiting the
+   * cancel would make `end` hang whenever the turn is parked at a provider await
+   * that never settles (`return()` cannot interrupt a pending await). The
+   * background cancel still completes when that await eventually settles, running
+   * the turn's `finally` and clearing the guard via the turn loop's own `finally`.
+   */
+  end(): void {
     if (!this.state) return
     this.closeBridge()
-    await this.cancelActiveTurn()
+    void this.cancelActiveTurn()
     this.send({ type: 'summary', turnCount: this.state.turnCount })
   }
 
@@ -374,8 +381,15 @@ describe('end during a turn — clean cancellation (matrix: end)', () => {
     expect(do_.turnInFlight).toBe(true)
     expect(ctrl.settled()).toBe(false)
 
-    // `end` arrives mid-turn: clean cancel.
-    await do_.end()
+    // `end` arrives mid-turn: fire-and-forget cancel, immediate summary. The
+    // summary lands synchronously, BEFORE the turn's `finally` (the cancel runs
+    // in the background) — proving `end` does not block on the cancel.
+    do_.end()
+    expect(do_.sent).toContainEqual({ type: 'summary', turnCount: 0 })
+    expect(bridge.closed).toBe(true)
+
+    // The background cancel then settles (the controllable turn unblocks on the
+    // bridge-close analogue), and the turn drains to completion.
     await turning
 
     // The turn's `finally` ran (LLM/TTS streams returned, queue closed) and the
@@ -385,7 +399,7 @@ describe('end during a turn — clean cancellation (matrix: end)', () => {
     // The canceled turn never reached settle, so it did not count.
     expect(ctrl.settled()).toBe(false)
     expect(sharedState.turnCount).toBe(0)
-    // Guard cleared after cancellation.
+    // Guard cleared after the background cancellation completes.
     expect(do_.turnInFlight).toBe(false)
     expect(do_.activeTurn).toBeUndefined()
     // A summary was still emitted, reflecting only completed turns.
@@ -400,8 +414,73 @@ describe('end during a turn — clean cancellation (matrix: end)', () => {
     do_.create(sharedState)
     do_.bridge = { closed: false }
 
-    await expect(do_.end()).resolves.toBeUndefined()
+    do_.end()
     expect(do_.sent).toContainEqual({ type: 'summary', turnCount: 0 })
+  })
+
+  it('does not hang when the in-flight turn is parked at a never-settling provider await (F-J)', async () => {
+    // F-J: `AsyncIterator.return()` cannot interrupt a provider `await` already
+    // pending inside the generator — the generator reaches its `finally` only when
+    // that promise settles. A stuck STT/LLM/TTS provider (a fetch/WS that never
+    // resolves) is modelled here by a turn parked at a promise NOTHING resolves —
+    // closing the bridge does NOT unblock it (unlike the controllable turn above).
+    // If `end` awaited the cancel it would hang forever; the fix makes `end`
+    // fire-and-forget, so it must summarize + close promptly regardless.
+    const sharedState = { history: [] as string[], turnCount: 0 }
+    let finallyRan = false
+    let stuckReturnAwaited = false
+
+    // A turn generator that parks at a never-settling await on its first `next()`.
+    // `return()` on it queues a completion but cannot run the `finally` until the
+    // pending await settles — which never happens here.
+    async function* stuckTurn(): AsyncGenerator<AiResponseChunk> {
+      try {
+        await new Promise<void>(() => {
+          // Intentionally never resolves: models a stuck provider promise.
+        })
+        yield textChunk('unreachable')
+      } finally {
+        finallyRan = true
+      }
+    }
+
+    const do_ = new FakeSessionDo(() => stuckTurn())
+    do_.create(sharedState)
+    do_.bridge = { closed: false }
+    // Wrap the active turn's `return()` so we can confirm the cancel was initiated
+    // (fire-and-forget) yet never settles — exactly the hang `end` must not await.
+    const turning = do_.turn()
+    await tick()
+    expect(do_.turnInFlight).toBe(true)
+    const realReturn = do_.activeTurn?.return?.bind(do_.activeTurn)
+    if (do_.activeTurn && realReturn) {
+      do_.activeTurn.return = (value?: unknown) => {
+        stuckReturnAwaited = true
+        return realReturn(value)
+      }
+    }
+
+    // `end` must resolve PROMPTLY even though the turn's cancel can never settle.
+    // Race it against a timer; `end()` returning + the summary landing must win.
+    const ended = (async () => {
+      do_.end()
+      return 'ended' as const
+    })()
+    const timed = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 200))
+    const outcome = await Promise.race([ended, timed])
+
+    expect(outcome).toBe('ended')
+    // Summary emitted + cancel initiated, but the stuck turn's `finally` did NOT
+    // run (the provider await is still pending) — proving `end` never blocked on it.
+    expect(do_.sent).toContainEqual({ type: 'summary', turnCount: 0 })
+    expect(stuckReturnAwaited).toBe(true)
+    expect(finallyRan).toBe(false)
+    // The bridge was still closed synchronously by `end` (best-effort teardown).
+    expect(do_.bridge?.closed).toBe(true)
+
+    // `turning` stays pending forever (the stuck provider never settles); do not
+    // await it. The test asserts only that `end` itself did not hang.
+    void turning
   })
 })
 
