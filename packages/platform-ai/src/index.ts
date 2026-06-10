@@ -73,6 +73,7 @@ export {
   createDevAuthBypassReader,
   createKvSessionReader,
   assertSessionOwnership,
+  SocketIdentityRegistry,
   DEV_AUTH_USER_ID,
 } from './auth-seam'
 

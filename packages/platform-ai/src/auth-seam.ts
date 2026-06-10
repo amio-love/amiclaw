@@ -166,6 +166,53 @@ export function assertSessionOwnership(
   }
 }
 
+/**
+ * Per-socket authenticated identity (L2 §Mechanism Variant 3, step 3).
+ *
+ * The forwarded `X-Session-User-Id` is the identity of ONE accepted socket, not
+ * a property of the DO instance. Two already-authenticated clients connecting to
+ * the same-named DO share one instance, so storing the forwarded id in a single
+ * instance field lets the later upgrade overwrite the earlier one — after which
+ * a `create`/`turn`/`end` from socket A would run under socket B's user. Binding
+ * the id to the specific accepted socket and resolving it per message removes
+ * that cross-socket contamination.
+ *
+ * `WebSocket` identity (reference equality) is the map key, so this works
+ * regardless of how the socket is accepted (hibernation or plain `accept()`):
+ * each accepted socket maps to its own forwarded user id, and a control message
+ * resolves the id of the exact socket it arrived on.
+ *
+ * Kept generic over the socket type (`Socket`) so it is unit-testable in Node
+ * without the Workers `WebSocket` runtime — the DO instantiates it with the real
+ * `WebSocket` type.
+ */
+export class SocketIdentityRegistry<Socket> {
+  private readonly bySocket = new Map<Socket, string>()
+
+  /** Bind the authenticated user id to a freshly accepted socket. */
+  bind(socket: Socket, userId: string): void {
+    this.bySocket.set(socket, userId)
+  }
+
+  /**
+   * The user id bound to THIS socket, or `undefined` if the socket was never
+   * bound (e.g. a control message before the upgrade bound an identity).
+   */
+  resolve(socket: Socket): string | undefined {
+    return this.bySocket.get(socket)
+  }
+
+  /** Drop a socket's binding when it closes, so the map does not leak entries. */
+  release(socket: Socket): void {
+    this.bySocket.delete(socket)
+  }
+
+  /** Number of currently bound sockets — test/inspection aid. */
+  get size(): number {
+    return this.bySocket.size
+  }
+}
+
 /** Env shape the seam reads to decide which reader to construct. */
 export interface AuthSeamEnv {
   DEV_AUTH_BYPASS?: string

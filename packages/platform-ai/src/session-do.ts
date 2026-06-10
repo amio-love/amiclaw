@@ -11,12 +11,28 @@
  *     audio; outbound `AiResponseChunk`s are serialized back to the player.
  *
  * The orchestration logic itself lives in `runTurn` (pure, provider-mocked
- * unit tests); this class is the DO/WS adapter around it. WebSocket Hibernation
- * is used so an idle session does not pin a live isolate: `ctx.acceptWebSocket`
- * registers the socket and `webSocketMessage` / `webSocketClose` are the
- * rehydration callbacks. API verified against `@cloudflare/workers-types`
- * 4.20260608.1 (`DurableObject` base from `cloudflare:workers`;
- * `DurableObjectState.acceptWebSocket` / `getWebSockets`).
+ * unit tests); this class is the DO/WS adapter around it.
+ *
+ * Hibernation is deliberately NOT used. The DO accepts the socket with a plain
+ * `server.accept()` and listens via `addEventListener('message'|'close')`, so it
+ * stays resident for the session's lifetime and the in-memory session state
+ * (`state` / `providers`) is always valid between `create` and a later `turn`.
+ * The WebSocket Hibernation API (`ctx.acceptWebSocket` + the `webSocketMessage`
+ * rehydration callback) would drop that in-memory state on an idle-eviction
+ * between turns — rejecting the next message as "turn before create" and losing
+ * history. Turn-based voice sessions have short idle windows, so the hibernation
+ * cost saving does not justify persisting + rehydrating session state per
+ * message (L2 §Open Questions — "WebSocket Hibernation 是否启用"). API verified
+ * against `@cloudflare/workers-types` 4.20260608.1 (`DurableObject` base from
+ * `cloudflare:workers`; `WebSocket.accept` / `addEventListener`).
+ *
+ * The authenticated user id forwarded by the Worker is bound PER ACCEPTED SOCKET
+ * (via `SocketIdentityRegistry`), not in a shared instance field: two
+ * already-authenticated clients can connect to the same-named DO (one instance),
+ * and a shared field would let the later upgrade overwrite the earlier client's
+ * identity — letting socket B drive `create`/`reset` under socket A's user. Each
+ * control message resolves the id of the exact socket it arrived on, so the
+ * per-operation ownership invariant (L2 §Mechanism Variant 3) holds per socket.
  */
 
 import { DurableObject } from 'cloudflare:workers'
@@ -25,7 +41,7 @@ import type { GameState } from './manual-injection'
 import { resolveConfig } from './provider-config'
 import { createProviders, type ProviderEnv } from './providers/factory'
 import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
-import { assertSessionOwnership } from './auth-seam'
+import { assertSessionOwnership, SocketIdentityRegistry } from './auth-seam'
 
 /** Env bindings visible to the DO (provider creds + the AUTH KV, unused here). */
 export type SessionDoEnv = ProviderEnv & Record<string, unknown>
@@ -120,17 +136,21 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   /** Audio bridge for the in-flight turn, if any. */
   private audio: AudioBridge | undefined
   /**
-   * Authenticated user id forwarded by the Worker from the validated handshake
-   * (`X-Session-User-Id`). This is the authoritative identity bound at
-   * `createSession` — the client-supplied control message is NOT trusted for it.
+   * Authenticated user id per accepted socket, forwarded by the Worker from the
+   * validated handshake (`X-Session-User-Id`). This is the authoritative
+   * identity bound at upgrade — the client-supplied control message is NOT
+   * trusted for it. Keyed by socket so two clients on the same DO instance keep
+   * separate identities and cannot overwrite each other.
    */
-  private authUserId: string | undefined
+  private readonly socketIdentities = new SocketIdentityRegistry<WebSocket>()
 
   /**
    * WS upgrade entry. The Worker forwards the (already auth-validated) upgrade
-   * request here, carrying the resolved user id in `X-Session-User-Id`. We
-   * capture that id as the authoritative session identity, accept the client
-   * side via Hibernation, and hand the server side back in the 101 response.
+   * request here, carrying the resolved user id in `X-Session-User-Id`. We bind
+   * that id to THIS accepted socket (so a second client on the same DO cannot
+   * overwrite it), accept the server side with a plain `accept()` (no
+   * hibernation — see the file header), wire its message/close listeners, and
+   * hand the client side back in the 101 response.
    */
   override async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -140,27 +160,46 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     if (!forwardedUserId) {
       return new Response('missing authenticated identity', { status: 401 })
     }
-    this.authUserId = forwardedUserId
     const pair = new WebSocketPair()
     const client = pair[0]
     const server = pair[1]
-    this.ctx.acceptWebSocket(server)
+
+    // Plain accept keeps the DO resident for the session (no hibernation), so
+    // the in-memory session state survives between turns.
+    server.accept()
+    // Bind the authenticated identity to this specific socket.
+    this.socketIdentities.bind(server, forwardedUserId)
+
+    server.addEventListener('message', (event) => {
+      this.onSocketMessage(server, event.data as string | ArrayBuffer).catch((err: unknown) => {
+        // Fail loud: an ownership violation or a malformed control message ends
+        // this socket with a policy-violation close rather than leaking an
+        // unhandled rejection. Other sockets on the DO are unaffected.
+        const reason = err instanceof Error ? err.message : 'message handling failed'
+        server.close(1008, reason.slice(0, 123))
+      })
+    })
+    server.addEventListener('close', () => {
+      this.onSocketClose(server)
+    })
+
     return new Response(null, { status: 101, webSocket: client })
   }
 
   /** Inbound WS frame: a JSON control message (string) or an audio frame (binary). */
-  override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (typeof message === 'string') {
-      await this.handleControl(ws, JSON.parse(message) as ControlMessage)
+  private async onSocketMessage(ws: WebSocket, data: string | ArrayBuffer): Promise<void> {
+    if (typeof data === 'string') {
+      await this.handleControl(ws, JSON.parse(data) as ControlMessage)
       return
     }
     // Binary frame: player audio for the in-flight (or next) turn.
     const bridge = this.ensureAudioBridge()
-    bridge.push(new Uint8Array(message))
+    bridge.push(new Uint8Array(data))
   }
 
-  /** Socket closed: tear the in-flight turn's audio stream down. */
-  override async webSocketClose(): Promise<void> {
+  /** Socket closed: drop its identity binding and tear the audio stream down. */
+  private onSocketClose(ws: WebSocket): void {
+    this.socketIdentities.release(ws)
     this.audio?.close()
     this.audio = undefined
   }
@@ -263,16 +302,19 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
 
   /** WS control-message dispatch driving the four-method semantics. */
   private async handleControl(ws: WebSocket, msg: ControlMessage): Promise<void> {
+    // The operating user is THIS socket's authenticated identity, resolved per
+    // message — never a shared field a later upgrade could have overwritten.
+    const socketUserId = this.socketIdentities.resolve(ws)
     switch (msg.type) {
       case 'create': {
-        if (!this.authUserId) {
+        if (!socketUserId) {
           ws.close(1008, 'no authenticated identity')
           return
         }
         // Bind the AUTH-validated user id, NOT any id the client claims.
         const sessionId = this.createSession(
           msg.gameId,
-          this.authUserId,
+          socketUserId,
           msg.manualData,
           msg.gameState
         )
@@ -280,15 +322,17 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         return
       }
       case 'turn': {
-        if (!this.state || !this.userId) {
+        if (!this.state || !socketUserId) {
           ws.close(1008, 'turn before create')
           return
         }
         // Stream the AI response chunks back. Text rides as JSON; audio is
         // base64-encoded so the whole turn stays on the JSON text channel and
-        // the binary frame direction remains player-audio-only.
+        // the binary frame direction remains player-audio-only. Ownership is
+        // checked against THIS socket's user, so a second client on the same DO
+        // cannot drive the first user's session.
         const sessionId = this.ctx.id.toString()
-        for await (const chunk of this.onAiResponse(sessionId, this.userId)) {
+        for await (const chunk of this.onAiResponse(sessionId, socketUserId)) {
           if (chunk.kind === 'audio' && chunk.audio) {
             ws.send(
               JSON.stringify({
@@ -312,8 +356,11 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         return
       }
       case 'end': {
-        if (this.state && this.userId) {
-          const summary = this.endSession(this.ctx.id.toString(), this.userId)
+        // `endSession` validates ownership against THIS socket's user, so an
+        // `end` from a different user on the same DO is rejected (throws) rather
+        // than tearing down the owner's session.
+        if (this.state && socketUserId) {
+          const summary = this.endSession(this.ctx.id.toString(), socketUserId)
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, 'session ended')

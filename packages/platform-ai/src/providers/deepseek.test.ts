@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDeepSeekLlmProvider, parseSseLine, sseStreamToChunks } from './deepseek'
+import {
+  createDeepSeekLlmProvider,
+  parseSseLine,
+  sseStreamToChunks,
+  trimTrailingSlashes,
+} from './deepseek'
 import type { LlmCompletionChunk, LlmCompletionRequest } from './types'
 
 // --- helpers -------------------------------------------------------------
@@ -92,6 +97,41 @@ describe('parseSseLine', () => {
       type: 'usage',
       usage: { inputTokens: 12, outputTokens: 34 },
     })
+  })
+})
+
+// --- trimTrailingSlashes (linear, no ReDoS) ------------------------------
+
+describe('trimTrailingSlashes', () => {
+  it('strips one or more trailing slashes', () => {
+    expect(trimTrailingSlashes('https://api.deepseek.com/v1/')).toBe('https://api.deepseek.com/v1')
+    expect(trimTrailingSlashes('https://proxy.example.com/v1///')).toBe(
+      'https://proxy.example.com/v1'
+    )
+  })
+
+  it('leaves a slash-free base url unchanged', () => {
+    expect(trimTrailingSlashes('https://api.deepseek.com/v1')).toBe('https://api.deepseek.com/v1')
+  })
+
+  it('handles an all-slash and empty string without underflow', () => {
+    expect(trimTrailingSlashes('////')).toBe('')
+    expect(trimTrailingSlashes('')).toBe('')
+  })
+
+  it('returns fast on a long run of slashes that fails the end-anchor (no ReDoS)', () => {
+    // The replaced `/\/+$/` regex backtracks polynomially on this exact shape
+    // (a long run of `/` immediately followed by a non-`/`, so the `$` anchor
+    // fails and the engine re-tries every start position). The linear scan must
+    // stay well under any reasonable bound regardless of length.
+    const adversarial = `${'/'.repeat(200_000)}x`
+    const start = performance.now()
+    const result = trimTrailingSlashes(adversarial)
+    const elapsedMs = performance.now() - start
+    // No trailing slash to strip (input ends in 'x'), so the value is unchanged.
+    expect(result).toBe(adversarial)
+    // The vulnerable regex took ~19s for this input; linear is sub-millisecond.
+    expect(elapsedMs).toBeLessThan(50)
   })
 })
 

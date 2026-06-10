@@ -30,6 +30,23 @@ import type {
 /** Default DeepSeek OpenAI-compatible base URL (includes the `/v1` prefix). */
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
 
+/** ASCII code point for `/`, used by the linear trailing-slash trim. */
+const SLASH_CODE = 0x2f
+
+/**
+ * Strip any run of trailing `/` from a base URL. A single linear backward scan,
+ * deliberately NOT a regex: the equivalent `/\/+$/` pattern backtracks
+ * polynomially on a long run of slashes that fails the end-anchor (a
+ * `js/polynomial-redos` shape), so on an adversarial input it can stall the
+ * isolate. The character walk is O(n) with no backtracking and yields the
+ * identical result. Pure and total.
+ */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === SLASH_CODE) end -= 1
+  return value.slice(0, end)
+}
+
 /** Options for constructing a DeepSeek LLM provider. */
 export interface DeepSeekProviderOptions {
   /** Server-side API key, placed in the `Authorization: Bearer` header. */
@@ -235,7 +252,7 @@ function processSse(
  * streaming `LlmProvider` contract.
  */
 export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSeekLlmProvider {
-  const baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '')
+  const baseUrl = trimTrailingSlashes(opts.baseUrl ?? DEFAULT_BASE_URL)
   const endpoint = `${baseUrl}/chat/completions`
 
   const provider: DeepSeekLlmProvider = {
