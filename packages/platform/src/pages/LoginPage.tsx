@@ -22,16 +22,14 @@ function startWithOwnAI() {
   window.location.assign('/bombsquad/')
 }
 
-/* The login page is an honest fork, not a wall.
-   - Framing: it states WHY an account exists (the platform-AI path, mode②,
-     where the platform calls and pays for AI inference and so needs an identity
-     to meter usage / set limits — decided but not yet live, so login is framed
-     as that path's identity prerequisite, not a live feature), and that playing
-     with your own AI needs no account.
-   - Direct-play escape: a secondary action straight into free anonymous play.
-   - Two real sign-in paths converge on one server session: the email magic-link
-     (POST /api/auth/magic-link/request → confirmation) and Google OAuth (a link
-     to GET /api/auth/google/start, which 302s to Google's consent screen).
+/* The login page is one clean card, not a wall of text.
+   - The card is the single focal point: the email magic-link form and the
+     Google option converge on one server session.
+   - One quiet line under the card carries the honest why: login only builds an
+     account for the platform-AI path (mode②), which is decided but not yet live
+     — so it does not overpromise.
+   - The escape — playing needs no account — sits as a subtle footer link into
+     free anonymous play.
    Platform chrome — brand yellow, dark-only, CSS-only transitions. */
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -60,28 +58,12 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <EyebrowTag variant="section">登录 · SIGN IN</EyebrowTag>
-      <h2 className={styles.title}>
-        登录用来<span className={styles.accent}>认你这个人</span>。
-      </h2>
-
-      {/* Honest framing: why an account exists, and that playing needs none. */}
-      <div className={styles.why}>
-        <p className={styles.lead}>
-          玩游戏不需要登录。带上你自己的 AI，随时可以直接开始，全程免费，也不用建账号。
-        </p>
-        <p className={styles.lead}>
-          登录是为「平台 AI」这条路准备的：那种模式下由平台替你调用并承担 AI 的算力开销，
-          所以需要一个账号来记你的用量、设置额度、避免被滥用。这条路已经定了方向，但还没上线，
-          现在登录只是先把你的账号和会话建起来。以后也会用它把成绩在多台设备间存下来。
-        </p>
+      <div className={styles.head}>
+        <EyebrowTag variant="section">登录 · SIGN IN</EyebrowTag>
+        <h2 className={styles.title}>
+          欢迎<span className={styles.accent}>回来</span>。
+        </h2>
       </div>
-
-      {/* Direct-play escape — anyone who lands here can bail into free anonymous
-          play. A real navigation into the BombSquad SPA, not a router push. */}
-      <Button variant="ghost" onClick={startWithOwnAI} className={styles.directPlay}>
-        带自己的 AI 直接开始玩
-      </Button>
 
       <GlassCard radius="2xl" className={styles.card}>
         {phase === 'sent' ? (
@@ -90,9 +72,6 @@ export default function LoginPage() {
           </p>
         ) : (
           <>
-            <p className={styles.cardLead}>
-              输入邮箱，我们会发一封登录邮件，点开链接即可登录。无需密码。
-            </p>
             <form className={styles.form} onSubmit={onSubmit}>
               <label className={styles.label} htmlFor="login-email">
                 邮箱
@@ -115,7 +94,7 @@ export default function LoginPage() {
                 </p>
               )}
               <Button type="submit" variant="primary" disabled={phase === 'submitting'}>
-                {phase === 'submitting' ? '发送中…' : '发送登录邮件'}
+                {phase === 'submitting' ? '发送中…' : '发送登录链接'}
               </Button>
             </form>
 
@@ -131,6 +110,22 @@ export default function LoginPage() {
           </>
         )}
       </GlassCard>
+
+      {/* The honest why, compressed to one quiet line — login only builds your
+          account for the platform-AI path, which isn't live yet. */}
+      <p className={styles.why}>
+        登录是为「平台 AI」这条路准备的：将来由平台替你调用
+        AI、记你的用量，所以需要账号。这条路还没上线，现在登录只是先建好你的账号。
+      </p>
+
+      {/* The escape — playing needs no account. A subtle footer link into free
+          anonymous play, not a heavy block. */}
+      <p className={styles.escape}>
+        玩游戏不需要登录。
+        <button type="button" className={styles.escapeLink} onClick={startWithOwnAI}>
+          带自己的 AI 直接开始玩
+        </button>
+      </p>
     </div>
   )
 }

@@ -10,7 +10,7 @@ const TEST_EMAIL = 'nova@amio.fans'
 
 Then('I see the login email form and the Google sign-in button', async ({ page }) => {
   await expect(page.getByLabel('邮箱')).toBeVisible()
-  await expect(page.getByRole('button', { name: '发送登录邮件' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '发送登录链接' })).toBeVisible()
   // The Google option is a real navigational link, live now that the start
   // endpoint exists.
   await expect(page.getByRole('link', { name: /Google/ })).toBeVisible()
@@ -42,7 +42,7 @@ Then(/^the Google sign-in button links to \/api\/auth\/google\/start$/, async ({
 
 When('I enter my email and submit the login form', async ({ page }) => {
   await page.getByLabel('邮箱').fill(TEST_EMAIL)
-  await page.getByRole('button', { name: '发送登录邮件' }).click()
+  await page.getByRole('button', { name: '发送登录链接' }).click()
 })
 
 Then('I see the unified login confirmation', async ({ page }) => {

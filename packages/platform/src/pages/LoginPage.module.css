@@ -1,15 +1,25 @@
-/* Magic-link login page — a single email-input card. Header mirrors the other
-   platform pages (.page / .title / .accent / .lead). Dark-only, brand-yellow
-   accents, no BombSquad cyan. CSS-only transitions. */
+/* Magic-link login page — one clean glass card, centered. The card is the
+   single focal point; the why-login reason and the no-login escape sit as quiet
+   helper lines, not body paragraphs. Header mirrors the platform .accent
+   pattern. Dark-only, brand-yellow accents, no BombSquad cyan. CSS-only
+   transitions and a staggered page-load reveal. */
 
 .page {
-  padding: 60px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 0 72px;
+}
+
+.head {
+  text-align: center;
 }
 
 .title {
-  margin: 0;
-  font: 400 44px var(--font-display);
+  margin: 14px 0 0;
+  font: 400 40px var(--font-display);
   color: var(--text-1);
+  letter-spacing: 0.01em;
 }
 
 .accent {
@@ -17,42 +27,12 @@
   font-style: italic;
 }
 
-/* Honest framing block — why an account exists + that playing needs none.
-   Two stacked lead paragraphs above the direct-play escape and the login card. */
-.why {
-  margin: 14px 0 24px;
-  max-width: 560px;
-}
-
-.lead {
-  margin: 0;
-  font: 400 16px/1.7 var(--font-body);
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.lead + .lead {
-  margin-top: 14px;
-}
-
-/* Direct-play escape — a full-width ghost action, prominent but secondary to
-   the login card below. Mirrors the @amiclaw/ui ghost button recipe. */
-.directPlay {
-  width: 100%;
-  max-width: 440px;
-  margin-bottom: 28px;
-}
-
+/* The login card — the page's single focal point. */
 .card {
-  max-width: 440px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 36px;
   padding: 36px 32px;
-}
-
-/* In-card instruction for the email flow (the page lead now carries the
-   why-login framing instead). */
-.cardLead {
-  margin: 0 0 18px;
-  font: 400 14px/1.6 var(--font-body);
-  color: rgba(255, 255, 255, 0.55);
 }
 
 .form {
@@ -103,6 +83,7 @@
   margin: 0;
   font: 400 16px/1.6 var(--font-body);
   color: rgba(255, 255, 255, 0.85);
+  text-align: center;
 }
 
 /* "或" divider between the email form and the Google button. */
@@ -152,7 +133,85 @@
   height: 18px;
 }
 
+/* The honest why, compressed to one quiet line below the card. Small, muted,
+   centered — present but never competing with the form. */
+.why {
+  margin: 24px 0 0;
+  max-width: 380px;
+  font: 400 13px/1.7 var(--font-body);
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+/* The no-login escape — a single line, the action as a subtle inline text
+   link, not a heavy ghost block. */
+.escape {
+  margin: 18px 0 0;
+  font: 400 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.escapeLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--amio-yellow);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-yellow-soft);
+  transition: border-color 0.2s;
+}
+
+.escapeLink:hover {
+  border-bottom-color: var(--amio-yellow);
+}
+
+/* Staggered page-load reveal — CSS-only. Each block fades up in sequence. */
+.head,
+.card,
+.why,
+.escape {
+  animation: loginRise 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.card {
+  animation-delay: 0.06s;
+}
+
+.why {
+  animation-delay: 0.12s;
+}
+
+.escape {
+  animation-delay: 0.16s;
+}
+
+@keyframes loginRise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head,
+  .card,
+  .why,
+  .escape {
+    animation: none;
+  }
+}
+
 @media (max-width: 768px) {
+  .page {
+    padding: 56px 0 48px;
+  }
+
   .title {
     font-size: 32px;
   }

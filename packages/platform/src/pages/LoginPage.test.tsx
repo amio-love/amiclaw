@@ -35,15 +35,13 @@ describe('LoginPage /login', () => {
   it('frames why login exists and that playing needs no account', () => {
     renderLogin()
 
-    // Playing does NOT require login — the free anonymous mode① line.
-    expect(
-      screen.getByText(
-        '玩游戏不需要登录。带上你自己的 AI，随时可以直接开始，全程免费，也不用建账号。'
-      )
-    ).toBeInTheDocument()
-    // The honest reason: login is the platform-AI (mode②) identity prerequisite
-    // — platform pays for the inference, so it needs an account to meter usage /
-    // set limits; framed as decided-but-not-live, not a live feature.
+    // Playing does NOT require login — the free anonymous mode① line, now a
+    // tight one-liner paired with the inline direct-play escape.
+    expect(screen.getByText(/玩游戏不需要登录/)).toBeInTheDocument()
+    // The honest reason, compressed to one quiet line: login is the platform-AI
+    // (mode②) identity prerequisite — platform pays for the inference, so it
+    // needs an account to meter usage; framed as decided-but-not-live, not a
+    // live feature.
     const reason = screen.getByText(/登录是为「平台 AI」这条路准备的/)
     expect(reason).toBeInTheDocument()
     expect(reason.textContent).toContain('还没上线')
@@ -67,7 +65,7 @@ describe('LoginPage /login', () => {
     renderLogin()
 
     expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '发送登录邮件' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '发送登录链接' })).toBeInTheDocument()
 
     // The Google option is a real navigational link to the start endpoint
     // (the browser follows the 302 to Google), not a fetch button.
@@ -84,7 +82,7 @@ describe('LoginPage /login', () => {
     renderLogin()
 
     fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'nova@amio.fans' } })
-    fireEvent.click(screen.getByRole('button', { name: '发送登录邮件' }))
+    fireEvent.click(screen.getByRole('button', { name: '发送登录链接' }))
 
     expect(await screen.findByText('如果该邮箱可用，你会收到一封登录邮件。')).toBeInTheDocument()
     // The POST hit the magic-link request endpoint with the typed email.
@@ -102,7 +100,7 @@ describe('LoginPage /login', () => {
     renderLogin()
 
     fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'nova@amio.fans' } })
-    fireEvent.click(screen.getByRole('button', { name: '发送登录邮件' }))
+    fireEvent.click(screen.getByRole('button', { name: '发送登录链接' }))
 
     expect(await screen.findByText('发送失败，请检查网络后重试。')).toBeInTheDocument()
     // The unified confirmation must NOT appear on a true network failure.
