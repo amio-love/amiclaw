@@ -9,9 +9,10 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
 
 /* The `/` route — the Amiclaw platform homepage. Renders the anonymous
    hero or the signed-in welcome strip per useAuth(), then the homepage
-   sections. The homepage has exactly two play entries into the BombSquad
-   landing page (/bombsquad): the TopNav「开始玩」and the AnonHero primary
-   「开始玩」CTA. FeaturedBombSquad is the single BombSquad overview block: it
+   sections. The homepage carries the anonymous play entry into the BombSquad
+   landing page (/bombsquad): the AnonHero primary「开始玩」CTA (the TopNav now
+   holds the 登录 / 注册 auth entry, not a play CTA). FeaturedBombSquad is the
+   single BombSquad overview block: it
    combines the game pitch and daily countdown without repeating leaderboard
    data. FooterPitch is a pure pitch block. The landing owns the daily/practice
    choice and the connect-AI flow, so the homepage no longer gates the run
@@ -22,7 +23,7 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
    derived stats + real rows. No homepage surface fabricates participation
    counts, leader times, or player rows. */
 export default function GamesPage() {
-  const { signedIn, user } = useAuth()
+  const { status, user } = useAuth()
   const board = useDailyBoard()
 
   /* The AnonHero primary CTA's target — the BombSquad landing page. Mode is
@@ -34,9 +35,16 @@ export default function GamesPage() {
     window.location.assign('/bombsquad/')
   }
 
+  /* The session read is async. While `loading`, show the anonymous hero's
+     shell-neutral default rather than flashing the signed-in welcome strip:
+     the hero is the safe default since most visitors are anonymous, and a
+     loading→authed transition swaps it in without a jarring signed-in flash.
+     `authed` requires a resolved `user`. */
+  const signedIn = status === 'authed' && user !== null
+
   return (
     <>
-      {signedIn && user ? (
+      {signedIn ? (
         <WelcomeStrip user={user} />
       ) : (
         <AnonHero onStart={enterBombSquad} board={board} />

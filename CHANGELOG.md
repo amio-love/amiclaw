@@ -5,6 +5,19 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Google sign-in** - You can now sign in with Google as well as by email magic
+link. The `/login` page shows a "用 Google 登录" button that takes you to Google's
+consent screen and back; signing in with Google lands you in the same account as
+the email magic link for the same address (one identity, one session). The flow
+verifies an anti-CSRF `state` token on the way back (single-use, short-lived),
+exchanges the authorization code for the Google identity server-side, and
+rejects an unverified Google email. Sign-in events are written to the audit log,
+same as the email path. The session cookie and revocation behave exactly as for
+the magic link — Google only changes how your email is proven, not how the
+session works. See `functions/api/auth/PROVISIONING.md` for the one-time Google
+Cloud OAuth app setup (`GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`
+and the authorized redirect URI).
+
 **The BombSquad first-run path no longer depends on clipboard permission** —
 If the browser refuses to copy the manual link, the connect screen now says so,
 keeps the manual URL visible, and lets the player continue after manually
@@ -14,6 +27,36 @@ until the success feedback has had time to land, instead of covering the first
 clear immediately. The mobile BombSquad lobby also keeps its top chrome inside
 the viewport, and the button and keypad modules expose shorter, more useful
 accessible labels for the state a player needs to describe.
+
+**Magic-link sign-in backend (server side)** - AmiClaw now has a real,
+revocable sign-in backend for the paid (platform-AI) path. A player enters
+their email at `/api/auth/magic-link/request`, receives a one-time link by
+email (sent via Resend), and lands on `/api/auth/magic-link/verify`, which
+creates an opaque server-side session and sets a secure session cookie.
+`/api/auth/session` reports who is signed in and `/api/auth/logout` revokes the
+session. The one-time token is single-use and expires within 15 minutes, the
+server stores only its SHA-256 hash (never the plaintext), the request endpoint
+returns the same response whether or not the email is known (no account
+enumeration), send and verify are rate-limited, the cookie is
+HttpOnly + Secure + SameSite=Lax, and sign-in / sign-out / verify events are
+written to an audit log in a dedicated `AUTH` KV namespace. Leaderboard score
+submissions now reject any request that claims a `user_id` without a valid
+session; anonymous device-UUID submissions are unaffected. See
+`functions/api/auth/PROVISIONING.md` for the one-time setup (Resend key + `AUTH`
+namespace).
+
+**Magic-link sign-in UI, wired to the real session** - The site now reads the
+real sign-in state from the server instead of a development mock. A new
+`/login` page takes an email and sends the magic link; after you submit it
+always shows the same "如果该邮箱可用，你会收到一封登录邮件" message, so the page
+never reveals which addresses have an account. The 登录 entry points (top
+navigation and the account page) route here. The account page
+and home page now show your real identity once you are signed in: your name is
+derived from your email, and because per-user stats are not built yet, signed-in
+pages show an honest "还没有成绩，去玩一局" empty state rather than placeholder
+numbers. The old `?auth=in` URL mock is gone from the shipped site; a
+development-only sign-in shortcut remains for local work and is compiled out of
+the production build.
 
 **The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
 hero description now explains AmiClaw instead of describing only the defusal game, and

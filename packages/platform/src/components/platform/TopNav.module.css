@@ -84,6 +84,29 @@
   border-radius: 50%;
 }
 
+/* Primary 登录 / 注册 pill — a react-router Link styled as the Button primary
+   (sm) recipe: brand-yellow fill, dark text, glow-lift on hover. CSS-only
+   transition. Mirrors @amiclaw/ui Button .primary.sm so the auth slot keeps the
+   established primary affordance now that the 开始玩 Button is gone. */
+.loginBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 22px;
+  border-radius: 999px;
+  background: var(--amio-yellow);
+  color: #000;
+  font: 600 14px var(--font-body);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.25s;
+}
+
+.loginBtn:hover {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
+}
+
 /* ---------- mobile: simplify nav; BottomNav takes over the center tabs ---------- */
 @media (max-width: 768px) {
   .nav {
@@ -99,9 +122,9 @@
     font-size: 19px;
   }
 
-  /* the 开始玩 entry button — atlas .signin-btn mobile size. .right button
-     (0,1,1) outranks Button's .sm / .primary (0,1,0). */
-  .right button {
+  /* Compact the 登录 / 注册 pill on mobile (mirrors the old play-CTA mobile
+     sizing — atlas .signin-btn). */
+  .loginBtn {
     padding: 8px 14px;
     font-size: 12px;
   }

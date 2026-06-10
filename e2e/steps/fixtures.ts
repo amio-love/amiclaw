@@ -125,6 +125,11 @@ export class World {
   /** Captured `/api/events` POST bodies — `survey_submit` and friends. */
   readonly events: Record<string, unknown>[] = []
   runMode: 'daily' | 'practice' = 'daily'
+  /** Session identity returned by the mocked GET /api/auth/session, or null for
+   *  the anonymous state. Set by `signIn` before the first navigation. */
+  authIdentity: { user_id: string; email: string } | null = null
+  /** Captured POST /api/auth/magic-link/request bodies for assertions. */
+  readonly magicLinkRequests: Record<string, unknown>[] = []
   private clockInstalled = false
 
   constructor(page: Page) {
@@ -135,6 +140,15 @@ export class World {
       abortPost: false,
       submissions: [],
     }
+  }
+
+  /** Mark this test as signed in BEFORE the first navigation. The real useAuth
+   *  reads GET /api/auth/session (route-mocked in the fixture wiring); setting
+   *  this makes that mock return an authenticated identity. Replaces the retired
+   *  `?auth=in` dev mock, which is compiled out of the production build the e2e
+   *  harness serves. */
+  signIn(identity: { user_id: string; email: string }): void {
+    this.authIdentity = identity
   }
 
   /** Canonical seed-pinning recipe: install before goto, pauseAt after. */
@@ -179,9 +193,9 @@ export class World {
    *  BombSquad is now a separate SPA served at `/bombsquad/`, so crossing the app
    *  boundary is a full-page navigation that lands on the directory root
    *  (`/bombsquad/`, with a trailing slash). Accept both forms.
-   *  Uses the AnonHero primary CTA「开始玩 →」. The arrow is load-bearing: the
-   *  TopNav has a bare「开始玩」button, so a name match without the arrow hits two
-   *  buttons and trips Playwright strict mode. */
+   *  Uses the AnonHero primary CTA「开始玩 →」(its exact label). The TopNav no
+   *  longer carries a play button — its signed-out slot is now the 登录 / 注册
+   *  auth entry — so the hero CTA is the only「开始玩」on the page. */
   async enterBombSquadLanding(): Promise<void> {
     await this.page.getByRole('button', { name: '开始玩 →' }).click()
     await this.page.waitForURL((url) => new URL(url).pathname.replace(/\/$/, '') === '/bombsquad', {
@@ -353,6 +367,44 @@ export const test = base.extend<{ world: World }>({
           }
         })
       }
+
+      // Auth session read (useAuth). Returns the authenticated identity once a
+      // scenario calls world.signIn(...), else the anonymous 200. The real
+      // backend always answers 200 (asking "am I logged in?" is legal), so the
+      // mock mirrors that — never a 401.
+      await page.route('**/api/auth/session', async (route) => {
+        const body = world.authIdentity
+          ? { authenticated: true, identity: world.authIdentity }
+          : { authenticated: false, identity: null }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(body),
+        })
+      })
+
+      // Magic-link request — capture the POST body and return the unified
+      // anti-enumeration response (the same body the real endpoint sends in
+      // every branch). No email is actually sent in e2e.
+      await page.route('**/api/auth/magic-link/request', async (route) => {
+        const request = route.request()
+        if (request.method() === 'POST') {
+          try {
+            world.magicLinkRequests.push(request.postDataJSON())
+          } catch {
+            /* body not JSON — ignore */
+          }
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            message: 'If that email can sign in, a link is on its way.',
+          }),
+        })
+      })
 
       // Daily/practice manual fetch -> fixture YAML.
       await page.route('**/manual/**', async (route) => {

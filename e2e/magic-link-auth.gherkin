@@ -1,0 +1,49 @@
+# mode② auth — the platform's real, revocable session UI.
+#
+# Two sign-in paths: the email magic link and Google OAuth. These scenarios
+# cover the UI-observable states; the token round-trips themselves (magic-link
+# verify, Google state-check / token-exchange / callback) are covered by the
+# backend integration tests — the harness serves a static build with no Workers
+# runtime, so a server-side OAuth callback cannot be exercised end-to-end here,
+# and the Google consent screen is a cross-origin page outside the harness. The
+# Google button's wiring (it points at /api/auth/google/start) IS asserted. The
+# signed-in state is stubbed by mocking GET /api/auth/session (world.signIn) —
+# the retired `?auth=in` dev mock is compiled out of the production build the
+# harness serves.
+
+Feature: mode② auth
+  As a visitor who wants the platform to remember me
+  I want to sign in with an email magic link or with Google
+  So that my account page shows my identity instead of a stranger's profile
+
+  # Source: magic-link-login-request
+  @playwright
+  Scenario: The login form sends a magic link and shows the unified confirmation
+    Given I open /login
+    Then I see the login email form and the Google sign-in button
+    And I see the honest framing and the direct-play escape
+    When I enter my email and submit the login form
+    Then I see the unified login confirmation
+    And a magic-link request was sent for my email
+
+  # Source: google-login-start
+  @playwright
+  Scenario: The Google sign-in button points at the OAuth start endpoint
+    Given I open /login
+    Then the Google sign-in button links to /api/auth/google/start
+
+  # Source: account-signed-out-guide
+  @playwright
+  Scenario: A signed-out visitor on /me sees the login guide
+    Given I open /me
+    Then I see the account login guide and no fake profile
+    When I click the login guide CTA
+    Then the URL path is /login
+
+  # Source: account-signed-in-profile
+  @playwright
+  Scenario: A signed-in visitor on /me sees the real-identity profile
+    Given I am signed in on /me
+    Then I see my real identity from the session
+    And I see the honest empty stats state with a play CTA
+    And the account login guide is not shown

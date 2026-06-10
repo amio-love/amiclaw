@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 16 active flows <-> 16 journey
-# scenarios, the regression size budget is 32 (2026-06-07, after the
-# footer privacy / terms page flows were added).
+# 2 x the journey-scenario count. With 20 active flows <-> 20 journey
+# scenarios, the regression size budget is 40 (2026-06-09, after the
+# mode② Google-OAuth login flow was added alongside the magic-link flows).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -199,4 +199,48 @@ flows:
       /terms route, where the full user agreement renders inside the platform
       shell.
     steps: [landing, footer-terms-link, terms-page]
+    status: active
+
+  # === mode② auth flows =======================================================
+  # The platform's real, revocable session (mode②/point-of-need login). Two
+  # sign-in paths: email magic link and Google OAuth.
+
+  - id: magic-link-login-request
+    name: Magic-link login request
+    description: >-
+      A signed-out visitor opens /login (which now also offers a Google sign-in
+      button), enters an email, submits, and sees the unified anti-enumeration
+      confirmation — the same message regardless of whether the email is known,
+      so the page never reveals which addresses can sign in.
+    steps: [login-page, email-input, submit, unified-confirmation]
+    status: active
+
+  - id: google-login-start
+    name: Google OAuth login start
+    description: >-
+      A signed-out visitor on /login sees the Google sign-in button, which is a
+      real navigational link to /api/auth/google/start (the browser follows the
+      302 to Google's consent screen). The server-side OAuth round-trip — state
+      CSRF check, token exchange, callback session creation — is covered by the
+      backend integration tests, not e2e, since the harness serves a static
+      build with no Workers runtime and Google's consent screen is cross-origin.
+    steps: [login-page, google-button, google-start-link]
+    status: active
+
+  - id: account-signed-out-guide
+    name: Account page signed-out guide
+    description: >-
+      A signed-out visitor opens /me and sees the login-guide empty state — a
+      heading, the plain-text unlock preview, and a 登录 CTA routing to /login —
+      and none of a fake profile.
+    steps: [account-page-anonymous, login-guide, login-cta-to-login]
+    status: active
+
+  - id: account-signed-in-profile
+    name: Account page signed-in profile
+    description: >-
+      A signed-in visitor opens /me and sees the real-identity profile — the
+      display name derived from the session email plus the email — and the
+      honest empty stats state (没有成绩 + a play CTA), not fabricated numbers.
+    steps: [account-page-signed-in, real-identity, honest-empty-stats]
     status: active

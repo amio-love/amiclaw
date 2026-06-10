@@ -1,0 +1,219 @@
+/* Magic-link login page — one clean glass card, centered. The card is the
+   single focal point; the why-login reason and the no-login escape sit as quiet
+   helper lines, not body paragraphs. Header mirrors the platform .accent
+   pattern. Dark-only, brand-yellow accents, no BombSquad cyan. CSS-only
+   transitions and a staggered page-load reveal. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 0 72px;
+}
+
+.head {
+  text-align: center;
+}
+
+.title {
+  margin: 14px 0 0;
+  font: 400 40px var(--font-display);
+  color: var(--text-1);
+  letter-spacing: 0.01em;
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+/* The login card — the page's single focal point. */
+.card {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 36px;
+  padding: 36px 32px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.label {
+  font: 500 12px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-hairline);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-1);
+  font: 400 16px var(--font-body);
+  transition: border-color 0.2s;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--amio-yellow);
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.errorText {
+  margin: 0;
+  font: 400 13px var(--font-body);
+  color: #ff8a8a;
+}
+
+/* The unified anti-enumeration confirmation replacing the form on send. */
+.confirmation {
+  margin: 0;
+  font: 400 16px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+
+/* "或" divider between the email form and the Google button. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-hairline);
+}
+
+/* Google sign-in link, styled to mirror the @amiclaw/ui ghost button: dark
+   glass outline, pill, CSS-only hover. It is an <a> (a real navigation), not a
+   <button>, so it carries no submit semantics. */
+.googleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: 500 15px var(--font-body);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.googleButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.googleMark {
+  width: 18px;
+  height: 18px;
+}
+
+/* The value of an account — the end-state product value, below the card. A
+   value-prop, so a touch more present than a grey caption (slightly larger and
+   brighter), but still tight and centered, never competing with the form. */
+.why {
+  margin: 24px 0 0;
+  max-width: 400px;
+  font: 400 14px/1.75 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+/* The no-login escape — a single line, the action as a subtle inline text
+   link, not a heavy ghost block. */
+.escape {
+  margin: 18px 0 0;
+  font: 400 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.escapeLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--amio-yellow);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-yellow-soft);
+  transition: border-color 0.2s;
+}
+
+.escapeLink:hover {
+  border-bottom-color: var(--amio-yellow);
+}
+
+/* Staggered page-load reveal — CSS-only. Each block fades up in sequence. */
+.head,
+.card,
+.why,
+.escape {
+  animation: loginRise 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.card {
+  animation-delay: 0.06s;
+}
+
+.why {
+  animation-delay: 0.12s;
+}
+
+.escape {
+  animation-delay: 0.16s;
+}
+
+@keyframes loginRise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head,
+  .card,
+  .why,
+  .escape {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 56px 0 48px;
+  }
+
+  .title {
+    font-size: 32px;
+  }
+}

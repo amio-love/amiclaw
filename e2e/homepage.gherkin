@@ -68,7 +68,7 @@ Feature: Amiclaw platform homepage
     Given I am signed in
     When the `/` route renders
     Then I see the welcome strip greeting me by name
-    And the welcome strip shows my streak, completed count, and weekly rank
+    And the welcome strip shows an honest no-scores prompt and a play CTA
     And the anonymous hero is not shown
     And the "什么是 Amiclaw" section and the footer pitch are not shown
     And I can still reach the featured BombSquad overview
