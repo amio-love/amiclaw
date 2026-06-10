@@ -493,6 +493,21 @@ describe('TtsHandshake', () => {
     expect(hs.handleEvent(undefined, () => '')).toBe(false)
   })
 
+  it('resolves sessionFinished on a SessionFinished event (but reports it not consumed)', async () => {
+    // SessionFinished (152) resolves the finish gate so the pump may send
+    // FinishConnection, yet handleEvent returns false because the provider's
+    // listener still owns pushing the final done chunk + closing the queue on it.
+    const hs = new TtsHandshake()
+    expect(hs.handleEvent(TtsEvent.SessionFinished, () => '')).toBe(false)
+    await expect(hs.sessionFinished).resolves.toBeUndefined()
+  })
+
+  it('abort rejects the sessionFinished gate when the session never finishes', async () => {
+    const hs = new TtsHandshake()
+    hs.abort(new Error('socket closed before finish'))
+    await expect(hs.sessionFinished).rejects.toThrow(/socket closed before finish/)
+  })
+
   it('abort rejects every not-yet-settled gate', async () => {
     const hs = new TtsHandshake()
     hs.abort(new Error('socket closed early'))
@@ -639,6 +654,68 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
 
     socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
     await collected
+  })
+
+  it('does NOT send FinishConnection until the server finishes the session (no tail-audio truncation)', async () => {
+    // Regression for the close-side timing P2: the previous pump sent
+    // FinishConnection immediately after FinishSession, before the server had
+    // returned its remaining TTSResponse audio frames + SessionFinished (152).
+    // Closing the connection at that point truncates the last synthesized audio.
+    // The fix gates FinishConnection on SessionFinished, symmetric to the
+    // start-side handshake — so the server's tail audio is fully drained first.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(await asyncFrom(['念完整一段话'])))
+
+    // Walk the start-side handshake to where FinishSession has just been sent.
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+
+    // After FinishSession, the pump must NOT have sent FinishConnection yet — it
+    // is gated on SessionFinished, which has not arrived.
+    expect(sentEvents(socket)).toContain(TtsEvent.FinishSession)
+    expect(sentEvents(socket)).not.toContain(TtsEvent.FinishConnection)
+
+    // Server streams the remaining tail audio AFTER FinishSession. Each frame
+    // arrives while the connection is still open and FinishConnection unsent.
+    for (const tail of ['TAIL1', 'TAIL2', 'TAIL3']) {
+      socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode(tail), sessionId))
+      // Still no FinishConnection and the socket is still open mid-stream — the
+      // close is strictly gated behind SessionFinished, so no frame is dropped.
+      expect(sentEvents(socket)).not.toContain(TtsEvent.FinishConnection)
+      expect(socket.closed).toBe(false)
+    }
+
+    // Only now does the server acknowledge the session is complete.
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+    const chunks = await collected
+    await tick()
+
+    // Every tail audio frame was produced (none truncated), in order, followed by
+    // the final done chunk — the iteration ended normally on SessionFinished.
+    const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
+    expect(audio).toEqual(['TAIL1', 'TAIL2', 'TAIL3'])
+    expect(chunks[chunks.length - 1].done).toBe(true)
+
+    // FinishConnection is sent exactly once, and only after FinishSession — i.e.
+    // it is the last outbound frame, never racing ahead of the tail audio.
+    const events = sentEvents(socket)
+    expect(events).toEqual([
+      TtsEvent.StartConnection,
+      TtsEvent.StartSession,
+      TtsEvent.TaskRequest,
+      TtsEvent.FinishSession,
+      TtsEvent.FinishConnection,
+    ])
+    expect(events.indexOf(TtsEvent.FinishConnection)).toBe(events.length - 1)
   })
 
   it('fails loudly on ConnectionFailed instead of hanging the handshake', async () => {

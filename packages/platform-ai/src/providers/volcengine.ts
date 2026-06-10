@@ -439,26 +439,43 @@ export function buildTtsFinishSessionFrame(sessionId: string): Uint8Array {
  *
  * This pure gate makes that timing explicit and unit-testable without a live
  * socket: the message listener feeds inbound server events via `handleEvent`,
- * and the pump `await`s `connectionStarted` / `sessionStarted` before advancing.
- * A `ConnectionFailed` / `SessionFailed` event rejects the matching gate so the
- * pump fails loudly instead of hanging.
+ * and the pump `await`s `connectionStarted` / `sessionStarted` before advancing,
+ * then `sessionFinished` before closing the connection. A `ConnectionFailed` /
+ * `SessionFailed` event rejects the matching gate so the pump fails loudly
+ * instead of hanging.
  *
- * It only sequences the handshake (connection + session acceptance). Audio
- * (`TtsResponse`) and session completion (`SessionFinished`) stay in the
- * provider's message listener, which owns the audio queue.
+ * It sequences both ends of the handshake symmetrically: the connection +
+ * session acceptance gates open the turn, and the `sessionFinished` gate closes
+ * it. `SessionStarted` (150) resolves the start gate; `SessionFinished` (152)
+ * resolves the finish gate — gating the client's `FinishConnection` until the
+ * server has streamed every remaining `TTSResponse` frame and acknowledged the
+ * session is complete, so closing the socket never truncates the tail audio.
+ * The audio queue itself (pushing `TTSResponse` frames + the final `done` chunk
+ * on `SessionFinished`) stays in the provider's message listener.
  */
 export class TtsHandshake {
   /** Resolves when the server has accepted the connection (event 50). */
   readonly connectionStarted: Promise<void>
   /** Resolves when the server has accepted the session (event 150). */
   readonly sessionStarted: Promise<void>
+  /**
+   * Resolves when the server has finished the session (event 152) — i.e. every
+   * remaining `TTSResponse` audio frame has been delivered. The pump awaits this
+   * before sending `FinishConnection`, so closing the connection never truncates
+   * the tail audio. Symmetric to the start-side `connectionStarted` /
+   * `sessionStarted` gates.
+   */
+  readonly sessionFinished: Promise<void>
 
   private resolveConnection!: () => void
   private rejectConnection!: (err: unknown) => void
   private resolveSession!: () => void
   private rejectSession!: (err: unknown) => void
+  private resolveSessionFinished!: () => void
+  private rejectSessionFinished!: (err: unknown) => void
   private connectionSettled = false
   private sessionSettled = false
+  private sessionFinishedSettled = false
 
   constructor() {
     this.connectionStarted = new Promise<void>((resolve, reject) => {
@@ -469,17 +486,26 @@ export class TtsHandshake {
       this.resolveSession = resolve
       this.rejectSession = reject
     })
+    this.sessionFinished = new Promise<void>((resolve, reject) => {
+      this.resolveSessionFinished = resolve
+      this.rejectSessionFinished = reject
+    })
     // A rejected gate the pump has not awaited yet would surface as an unhandled
     // rejection; attach an inert catch so the rejection is delivered only to the
     // awaiting pump, never to the process.
     this.connectionStarted.catch(() => {})
     this.sessionStarted.catch(() => {})
+    this.sessionFinished.catch(() => {})
   }
 
   /**
    * Advance the handshake from one inbound server event. Returns `true` if the
    * event was a handshake-control event this gate consumed (so the caller can
-   * skip further handling), `false` for any other event (audio, completion).
+   * skip further handling), `false` for any other event (audio).
+   *
+   * `SessionFinished` (152) is special: it resolves the finish gate but returns
+   * `false`, because the provider's listener still owns pushing the final `done`
+   * chunk + closing the audio queue on that same event.
    */
   handleEvent(event: number | undefined, describe: () => string): boolean {
     switch (event) {
@@ -492,6 +518,9 @@ export class TtsHandshake {
       case TtsEvent.SessionStarted:
         this.settleSession()
         return true
+      case TtsEvent.SessionFinished:
+        this.settleSessionFinished()
+        return false
       default:
         return false
     }
@@ -501,6 +530,7 @@ export class TtsHandshake {
   abort(err: unknown): void {
     this.failConnection(err)
     this.failSession(err)
+    this.failSessionFinished(err)
   }
 
   private settleConnection(): void {
@@ -525,6 +555,18 @@ export class TtsHandshake {
     if (this.sessionSettled) return
     this.sessionSettled = true
     this.rejectSession(err)
+  }
+
+  private settleSessionFinished(): void {
+    if (this.sessionFinishedSettled) return
+    this.sessionFinishedSettled = true
+    this.resolveSessionFinished()
+  }
+
+  private failSessionFinished(err: unknown): void {
+    if (this.sessionFinishedSettled) return
+    this.sessionFinishedSettled = true
+    this.rejectSessionFinished(err)
   }
 }
 
@@ -827,11 +869,16 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         queue.fail(err)
       })
 
-      // Event-driven handshake: each client frame waits for the server to accept
-      // the previous step before being sent. StartConnection -> (await
-      // ConnectionStarted) -> StartSession -> (await SessionStarted) ->
-      // TaskRequest(s) -> FinishSession -> FinishConnection. The server then
-      // streams TTSResponse audio + SessionFinished, handled by the listener.
+      // Event-driven handshake, server-gated on both ends. Each client frame
+      // waits for the server to accept the previous step before being sent:
+      // StartConnection -> (await ConnectionStarted) -> StartSession -> (await
+      // SessionStarted) -> TaskRequest(s) -> FinishSession -> (await
+      // SessionFinished) -> FinishConnection. After FinishSession the server
+      // streams the remaining TTSResponse audio frames and then SessionFinished;
+      // gating FinishConnection on SessionFinished (rather than firing it
+      // immediately after FinishSession) lets the listener drain that tail audio
+      // before the connection closes, so the last synthesized frames are never
+      // truncated. This mirrors the start-side gating symmetrically.
       const pump = (async () => {
         socket.send(asArrayBuffer(buildTtsStartConnectionFrame()))
         await handshake.connectionStarted
@@ -846,6 +893,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           )
         }
         socket.send(asArrayBuffer(buildTtsFinishSessionFrame(sessionId)))
+        await handshake.sessionFinished
         socket.send(asArrayBuffer(buildTtsFinishConnectionFrame()))
       })()
       pump.catch((err) => queue.fail(err))
