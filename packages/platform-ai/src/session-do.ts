@@ -168,6 +168,36 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
    */
   private activeTurn: AsyncIterator<AiResponseChunk> | undefined
   /**
+   * Monotonic session-generation counter — the epoch guard that keeps a stale
+   * turn-loop `finally` from clobbering a NEWER session's shared `turnInFlight`/
+   * `activeTurn`.
+   *
+   * The race it closes: `end`/owner-close fire-and-forget a mid-turn cancel
+   * (`cancelActiveTurn` is NOT awaited — a provider promise may still be
+   * pending) and then `clearSession()` makes the same-named DO immediately
+   * reusable. The canceled turn's loop `finally` still runs LATER, when its
+   * iterator finally settles. If a client reconnects in that window — `create`s
+   * a fresh session and starts a NEW turn (setting fresh `turnInFlight`/
+   * `activeTurn`) — an UNCONDITIONAL clear in the stale `finally` would
+   * (1) reopen the overlap guard (the new session becomes attackable by an
+   * overlapping `turn`) and (2) null out the new `activeTurn` so the new turn
+   * can no longer be canceled by `end`. Root cause: cleanup wrote shared fields
+   * across the "old turn generation" / "new session generation" boundary.
+   *
+   * Mechanism: every turn captures its own generation (`myEpoch`) the instant it
+   * becomes active. Both the turn loop `finally` and `clearSession`'s reset only
+   * touch the shared fields while the current epoch still matches the captured
+   * one. `clearSession` (end / owner-close) bumps the epoch, advancing the
+   * generation, so a stale `finally` comparing an old `myEpoch` is a no-op and
+   * never reaches the new session's state. A new `create` does not need to bump:
+   * `clearSession` already advanced the epoch at the prior session's end, and
+   * `create` does not start a turn (no `myEpoch` is captured until the first
+   * `turn`). Normal single-session flow is unchanged — the epoch only advances on
+   * teardown, so a turn that completes within its own live session always finds
+   * its epoch current and clears as before.
+   */
+  private turnEpoch = 0
+  /**
    * Authenticated user id per accepted socket, forwarded by the Worker from the
    * validated handshake (`X-Session-User-Id`). This is the authoritative
    * identity bound at upgrade — the client-supplied control message is NOT
@@ -389,15 +419,24 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
    * live `activeTurn` synchronously; once captured, clearing the field here is
    * safe (the captured iterator drives the background `return()` independently).
    * The background cancel only runs `runTurn`'s `finally` (closes the sentence
-   * queue, returns the live LLM/TTS iterators) and the turn loop's own `finally`
-   * (which re-clears `turnInFlight`/`activeTurn` to their initial values — an
-   * idempotent no-op after this reset, never a revival): a canceled turn never
-   * reaches `runTurn`'s settle step, so it never writes back to the (now
-   * undefined) `state`. There is no read-after-clear that could NPE: the only
-   * post-clear toucher is the turn loop `finally`, which only assigns the same
-   * initial values these fields already hold.
+   * queue, returns the live LLM/TTS iterators) and the turn loop's own `finally`.
+   * A canceled turn never reaches `runTurn`'s settle step, so it never writes
+   * back to the (now undefined) `state`.
+   *
+   * Epoch advance — the cross-generation guard: bumping `turnEpoch` here
+   * advances the session generation, so the just-canceled (or any still-draining)
+   * turn's loop `finally`, which captured the OLD epoch, no longer matches and
+   * becomes a no-op. Without this, that stale `finally` settling AFTER a client
+   * reconnected + started a NEW turn would null out the NEW session's
+   * `turnInFlight`/`activeTurn` — reopening the overlap guard and stranding the
+   * new turn (uncancelable by `end`). The current-generation `turnInFlight`/
+   * `activeTurn` reset below still clears the ended session's own state; the
+   * epoch bump only fences off the stale generation's late callback. Bump BEFORE
+   * the field reset so any `finally` that interleaves already sees the advanced
+   * epoch.
    */
   private clearSession(): void {
+    this.turnEpoch += 1
     this.state = undefined
     this.userId = undefined
     this.providers = undefined
@@ -517,9 +556,16 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         // Hold the iterator explicitly so a mid-turn `end` / owner close can
         // cancel it via `return()`. Mark in-flight BEFORE the first `await`
         // (synchronous up to here) so an interleaved second `turn` sees the
-        // guard set. The `finally` clears the guard + iterator on every exit
-        // (normal end, provider error, or cancellation) so the next turn can run.
+        // guard set. Capture THIS turn's generation (`myEpoch`) at the same
+        // synchronous point the shared fields are set, so the `finally` can tell
+        // "still my session" from "a newer session reused this DO after my
+        // session was torn down". The `finally` clears the guard + iterator on
+        // every exit (normal end, provider error, or cancellation) so the next
+        // turn can run — but ONLY while this turn is still the live generation
+        // (see `turnEpoch`): a stale `finally` whose session was already ended/
+        // dropped must not null out a newer session's `turnInFlight`/`activeTurn`.
         const turn = this.onAiResponse(sessionId, socketUserId)[Symbol.asyncIterator]()
+        const myEpoch = this.turnEpoch
         this.activeTurn = turn
         this.turnInFlight = true
         try {
@@ -548,8 +594,17 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
             }
           }
         } finally {
-          this.turnInFlight = false
-          this.activeTurn = undefined
+          // Epoch guard: only release the guard + iterator if THIS turn is still
+          // the live generation. If `clearSession` (end / owner-close) already
+          // bumped the epoch and a newer session is running on this resident DO,
+          // `this.turnEpoch !== myEpoch` and we leave the new session's
+          // `turnInFlight`/`activeTurn` untouched — the stale `finally` is a
+          // no-op. In the normal single-session path the epoch is unchanged, so
+          // this clears exactly as before.
+          if (this.turnEpoch === myEpoch) {
+            this.turnInFlight = false
+            this.activeTurn = undefined
+          }
         }
         return
       }
@@ -574,11 +629,16 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           // `endSession`) and proceed without blocking on it. The background cancel
           // still completes when the provider promise eventually settles: at that
           // point `runTurn`'s `finally` closes the sentence queue + returns the live
-          // LLM/TTS iterators (no stream leaks), and the turn loop's own `finally`
-          // clears `turnInFlight`/`activeTurn` — so the in-flight guard is released
-          // by the same path as before, just not synchronously with `end`. A turn
-          // canceled mid-flight never reaches `runTurn`'s settle step, so it never
-          // increments `turnCount` — the summary counts only fully-completed turns.
+          // LLM/TTS iterators (no stream leaks). The in-flight guard itself is
+          // released synchronously by the `clearSession` below (which resets
+          // `turnInFlight`/`activeTurn` for this ended generation); the late turn
+          // loop `finally` is then EPOCH-FENCED — `clearSession` bumped the epoch,
+          // so the stale `finally` finds `turnEpoch !== myEpoch` and is a no-op,
+          // never touching a session that may have already been re-`create`d on
+          // this resident DO (the cross-generation race this fix closes; see
+          // `turnEpoch` + `clearSession`). A turn canceled mid-flight never reaches
+          // `runTurn`'s settle step, so it never increments `turnCount` — the
+          // summary counts only fully-completed turns.
           // Truly abortable cancellation (an AbortSignal threaded through `runTurn`
           // into each adapter to interrupt a stuck fetch/WS) is a separate followup,
           // not this fix.
