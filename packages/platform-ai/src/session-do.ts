@@ -265,15 +265,27 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     this.socketIdentities.release(ws)
     if (!ownsSession) return
     // Owner gone: cancel any in-flight turn so its LLM/TTS streams are returned
-    // (`runTurn`'s `finally`) rather than left dangling, then close + clear the
-    // next-turn bridge. The turn loop's `finally` (which clears `turnInFlight`
-    // and `activeTurn`) runs when the `return()` settles. `cancelActiveTurn` is
-    // total and idempotent — a no-op when no turn is running. Fire-and-forget
-    // here because `onSocketClose` is a sync (total) close handler; the cancel's
-    // cleanup is best-effort on a socket that is already gone.
+    // (`runTurn`'s `finally`) rather than left dangling, then close the next-turn
+    // bridge and clear the bound session. The turn loop's `finally` (which clears
+    // `turnInFlight` and `activeTurn`) runs when the `return()` settles.
+    // `cancelActiveTurn` is total and idempotent — a no-op when no turn is
+    // running. Fire-and-forget here because `onSocketClose` is a sync (total)
+    // close handler; the cancel's cleanup is best-effort on a socket that is
+    // already gone.
+    //
+    // `cancelActiveTurn` MUST run BEFORE `clearSession` (it captures the live
+    // `activeTurn` synchronously — see `clearSession`). The owner's socket
+    // closing — whether via `end` (which already cleared the session, so this
+    // owner branch is not reached: `boundIdentity` is empty and `ownsSession` is
+    // false) or via an abrupt drop with no `end` — terminates the session, so
+    // we clear ALL session-level state, not just the bridge. Otherwise the
+    // abrupt-drop path leaves `state`/`userId`/`providers` bound on this resident
+    // DO: a later same-name reconnect authenticated as the same user could then
+    // `turn` with no fresh `create` and run a provider turn on the dropped
+    // session. Clearing makes that reconnect open a clean new session via
+    // `create` and reject a create-less `turn` ("turn before create").
     void this.cancelActiveTurn()
-    this.audio?.close()
-    this.audio = undefined
+    this.clearSession()
   }
 
   // --- Four-method contract semantics ---
@@ -354,6 +366,44 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   private ensureAudioBridge(): AudioBridge {
     if (this.audio === undefined) this.audio = new AudioBridge()
     return this.audio
+  }
+
+  /**
+   * Reset every session-level mutable field back to the "no active session"
+   * initial state. Called by the `end` path after the summary is produced (and
+   * after a mid-turn cancel has been INITIATED) so the ended session leaves no
+   * residue on this resident DO instance.
+   *
+   * Without this, the DO keeps `state`/`userId`/`providers` bound after `end`
+   * (no hibernation — the instance is resident for the worker's lifetime). The
+   * next client reconnecting to the same-named DO would then (a) be wrongly
+   * rejected with `already_created` on `create` (the session is over, a fresh
+   * one should open) and (b) — worse — a `turn` with no new `create` would pass
+   * `assertOwner` against the stale binding and run a provider turn on an
+   * already-ended session. Clearing the binding makes a post-`end` `turn` fail
+   * "turn before create" and a post-`end` `create` open a clean new session.
+   *
+   * Coordination with the fire-and-forget cancel (`end` does NOT await the
+   * cancel — see the `end` branch): the caller MUST initiate
+   * `cancelActiveTurn()` BEFORE calling this, because that helper captures the
+   * live `activeTurn` synchronously; once captured, clearing the field here is
+   * safe (the captured iterator drives the background `return()` independently).
+   * The background cancel only runs `runTurn`'s `finally` (closes the sentence
+   * queue, returns the live LLM/TTS iterators) and the turn loop's own `finally`
+   * (which re-clears `turnInFlight`/`activeTurn` to their initial values — an
+   * idempotent no-op after this reset, never a revival): a canceled turn never
+   * reaches `runTurn`'s settle step, so it never writes back to the (now
+   * undefined) `state`. There is no read-after-clear that could NPE: the only
+   * post-clear toucher is the turn loop `finally`, which only assigns the same
+   * initial values these fields already hold.
+   */
+  private clearSession(): void {
+    this.state = undefined
+    this.userId = undefined
+    this.providers = undefined
+    this.audio = undefined
+    this.turnInFlight = false
+    this.activeTurn = undefined
   }
 
   /**
@@ -533,6 +583,15 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           // into each adapter to interrupt a stuck fetch/WS) is a separate followup,
           // not this fix.
           void this.cancelActiveTurn()
+          // Clear the bound session state so the ended session leaves no residue
+          // on this resident DO. MUST follow the cancel: `cancelActiveTurn`
+          // captures the live `activeTurn` synchronously above, so clearing the
+          // field now does not strand the in-flight turn's cleanup. After this,
+          // a later same-name reconnect's `create` opens a clean new session
+          // (no false `already_created`) and a `turn` without a fresh `create`
+          // is rejected ("turn before create") instead of running a provider
+          // turn on the just-ended session. See `clearSession`.
+          this.clearSession()
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, 'session ended')
