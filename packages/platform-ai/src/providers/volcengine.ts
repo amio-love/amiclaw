@@ -81,12 +81,16 @@ export interface VolcengineSpeechOptions {
   /** ASR model name in the config request (`request.model_name`). */
   sttModel?: string
   /**
-   * TTS model id, threaded into the Doubao TTS 2.0 `StartSession` `req_params`
-   * as `model` when set. The bidirectional TTS 2.0 protocol primarily binds the
-   * model via the endpoint resource id (`X-Api-Resource-Id`); this carries the
-   * resolved config model so a model switch in `provider-config` reaches the wire
-   * rather than being a silent no-op. Omitted when unset (the field is simply not
-   * sent), preserving the documented default request shape.
+   * TTS model id, set as the Doubao TTS 2.0 `StartSession` `req_params.model`
+   * when provided. `req_params.model` is a real (optional) request field on the
+   * bidirectional protocol; its legal wire value is the model-family token
+   * `seed-tts-2.0` (NOT the product alias `doubao-tts-2.0`), and it must agree
+   * with the paired endpoint resource id (`X-Api-Resource-Id`, default
+   * `volc.service_type.10029`). Carrying the resolved config model here makes a
+   * `provider-config` model switch reach the wire instead of being a silent
+   * no-op. Omitted when unset (the field is simply not sent) — a Doubao TTS 2.0
+   * session can be driven by the resource id alone, with `req_params.model` left
+   * out — so unset preserves the default request shape.
    */
   ttsModel?: string
   /** TTS speaker / voice type (`req_params.speaker`). */

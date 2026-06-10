@@ -27,6 +27,17 @@ describe('resolveConfig — hit', () => {
     expect(stt.model).not.toBe('bigmodel-asr')
   })
 
+  it('registers a legal Volcengine TTS wire model for the demo TTS layer (P2)', () => {
+    // P2 regression: the demo TTS model is passed verbatim into the Doubao TTS 2.0
+    // `StartSession` req_params.model (factory F-K passthrough). The legal wire
+    // value is the model-family token `seed-tts-2.0`; the product alias
+    // `doubao-tts-2.0` is NOT a request value and could be rejected / mis-routed.
+    // Guard the alias from creeping back at the config layer.
+    const { tts } = resolveConfig('demo')
+    expect(tts.model).toBe('seed-tts-2.0')
+    expect(tts.model).not.toBe('doubao-tts-2.0')
+  })
+
   it('a layer selection carries provider + model only (no unwired fallback field)', () => {
     // F-H regression: `fallback` was defined but never executed (createProviders
     // builds one provider per layer, runTurn calls each once and fails loud on

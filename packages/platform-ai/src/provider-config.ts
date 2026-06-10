@@ -114,16 +114,20 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
       model: 'bigmodel',
     },
     tts: {
-      // Doubao TTS 2.0 binds the model via the endpoint resource id
-      // (`X-Api-Resource-Id: volc.service_type.10029`), NOT a `req_params` field:
-      // the documented bidirectional `StartSession` `req_params` carries only
-      // `speaker` + `audio_params`. This value is threaded into `req_params.model`
-      // as a non-breaking additive (the server ignores unknown fields), so a model
-      // switch here is wire-visible without altering the documented request shape;
-      // whether the server consumes it is a deploy-time open question.
+      // `seed-tts-2.0` is the legal wire value for the Doubao TTS 2.0
+      // bidirectional `StartSession` `req_params.model` field; the factory threads
+      // it through (F-K) so a model switch here reaches the wire. The product
+      // alias `doubao-tts-2.0` is NOT a request value — sending it would risk the
+      // turn being rejected or routed to the wrong model. The model is also pinned
+      // by the paired resource id (`X-Api-Resource-Id: volc.service_type.10029`,
+      // the adapter's `DEFAULT_TTS_RESOURCE_ID`): `req_params.model` is the
+      // optional in-payload selector that must agree with that resource id. The
+      // exact model token and its resource-id pairing need a deploy-time check
+      // against the real endpoint (the official docs render via JS; this value is
+      // corroborated by production Doubao seed-tts-2.0 clients).
       // Doc: https://www.volcengine.com/docs/6561/1329505
       provider: 'volcengine',
-      model: 'doubao-tts-2.0',
+      model: 'seed-tts-2.0',
     },
   },
   'demo-mock': {

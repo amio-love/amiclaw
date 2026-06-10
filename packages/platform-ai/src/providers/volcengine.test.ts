@@ -755,6 +755,42 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     expect(plainBody.req_params.model).toBeUndefined()
   })
 
+  it("resolveConfig('demo').tts.model is a legal Doubao TTS 2.0 wire req_params.model", async () => {
+    // P2 regression: the `demo` config's TTS model is threaded verbatim into the
+    // Doubao TTS 2.0 `StartSession` req_params.model (factory F-K passthrough).
+    // The legal wire value is the model-family token `seed-tts-2.0`; the product
+    // alias `doubao-tts-2.0` is NOT a request value and could be rejected / routed
+    // to the wrong model. This stitches the resolved config model straight into the
+    // real adapter and asserts the StartSession wire frame, so the bad alias cannot
+    // come back. Doc: https://www.volcengine.com/docs/6561/1329505
+    const resolved = resolveConfig('demo')
+    expect(resolved.tts.model).toBe('seed-tts-2.0')
+    expect(resolved.tts.model).not.toBe('doubao-tts-2.0')
+
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      // Exactly what the factory threads through: `resolved.tts.model`.
+      ttsModel: resolved.tts.model,
+      connect,
+    })
+    void collect(tts.synthesize(asyncFromSync(['句一'])))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+
+    const startSession = socket.sent
+      .map((b) => parseFrame(b))
+      .find((f) => f.event === TtsEvent.StartSession)
+    const body = JSON.parse(decoder.decode(startSession?.payload ?? new Uint8Array(0))) as {
+      req_params: { model?: string }
+    }
+    expect(body.req_params.model).toBe('seed-tts-2.0')
+    expect(body.req_params.model).not.toBe('doubao-tts-2.0')
+  })
+
   it('does NOT send StartSession until the server accepts the connection', async () => {
     // Regression for F-G: the previous pump fired StartSession immediately after
     // StartConnection without waiting for ConnectionStarted, racing the server.
