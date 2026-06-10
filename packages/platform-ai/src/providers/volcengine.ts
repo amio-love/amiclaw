@@ -612,7 +612,19 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         try {
           const frame = parseFrame(event.data)
           const chunk = parseSttResponse(frame)
-          if (chunk) queue.push(chunk)
+          if (!chunk) return
+          queue.push(chunk)
+          // A final/definite transcript is the normal completion signal: end the
+          // iteration here instead of waiting for a separate WS `close`. Without
+          // this, `collectFinalTranscript` (which drains `transcribe` to iterator
+          // end) would hang the whole turn whenever the server keeps the socket
+          // open after the definite result. Push the chunk first, then close, so
+          // the final transcript is never dropped. Also close the ASR socket as
+          // the normal end-of-stream path (idempotent; mirrors the TTS layer).
+          if (chunk.isFinal) {
+            queue.close()
+            socket.close()
+          }
         } catch (err) {
           queue.fail(err)
         }

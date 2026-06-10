@@ -390,6 +390,51 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     expect(last.sequence).toBeLessThan(0)
   })
 
+  it('ends the iteration on a definite transcript without waiting for a WS close', async () => {
+    // Regression: `collectFinalTranscript` drains `transcribe` to iterator end
+    // (it does not break early like the test above). If the adapter only closed
+    // on a separate WS `close` event, a server that keeps the socket open after
+    // the definite result would hang the whole turn. Here the server emits a
+    // definite frame and never closes the socket; the iterator must still end
+    // and surface the final chunk.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const audio = await asyncFrom([encoder.encode('f1')])
+    // Drain to iterator end (no early break) — the exact shape the turn pipeline
+    // uses. Race against a timer so a hang fails the test instead of stalling.
+    const drained = (async () => {
+      const out = []
+      for await (const chunk of stt.transcribe(audio)) out.push(chunk)
+      return out
+    })()
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('transcribe did not terminate on a definite transcript')),
+        50
+      )
+    )
+
+    await new Promise((r) => setTimeout(r, 0))
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '在', utterances: [{ definite: false }] } })
+    )
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '在的', utterances: [{ definite: true }] } })
+    )
+    // Intentionally do NOT emit a WS `close` — termination must come from the
+    // definite transcript alone.
+
+    const chunks = await Promise.race([drained, guard])
+    expect(chunks).toEqual([
+      { text: '在', isFinal: false },
+      { text: '在的', isFinal: true },
+    ])
+    // The adapter also closes the ASR socket as the normal end-of-stream path.
+    expect(socket.closed).toBe(true)
+  })
+
   it('propagates a server error frame as a thrown error', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
