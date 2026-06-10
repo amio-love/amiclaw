@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveConfig } from '../provider-config'
 import {
   buildAuthHeaders,
@@ -13,6 +13,7 @@ import {
   buildTtsTaskRequestFrame,
   Compression,
   createVolcengineSpeechProvider,
+  defaultConnect,
   MessageFlag,
   MessageType,
   parseFrame,
@@ -960,5 +961,61 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const provider = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't' })
     expect(typeof provider.stt.transcribe).toBe('function')
     expect(typeof provider.tts.synthesize).toBe('function')
+  })
+})
+
+// --- Default Workers connector: binary frame delivery type (F-N) -------------
+
+describe('defaultConnect — outbound socket binary delivery type (F-N)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * A stand-in for the Cloudflare `response.webSocket`. Records the order of the
+   * `binaryType` write relative to `accept()` so the test can prove the opt-in is
+   * applied BEFORE the socket is accepted (the runtime only honors it pre-accept).
+   */
+  class FakeRuntimeSocket {
+    binaryType: 'blob' | 'arraybuffer' = 'blob'
+    accepted = false
+    /** `binaryType` value captured at the moment `accept()` ran. */
+    binaryTypeAtAccept: 'blob' | 'arraybuffer' | undefined
+    accept(): void {
+      this.accepted = true
+      this.binaryTypeAtAccept = this.binaryType
+    }
+  }
+
+  function stubFetchWith(socket: FakeRuntimeSocket | undefined): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ webSocket: socket }) as unknown as Response)
+    )
+  }
+
+  it('opts the outbound socket into arraybuffer delivery BEFORE accepting it', async () => {
+    // F-N root fix: with compatibility_date 2026-06-08 the runtime delivers
+    // inbound binary WS frames as Blob unless binaryType='arraybuffer' is set
+    // before accept(). The synchronous `toBytes` codec only accepts ArrayBuffer /
+    // views / strings, so a Blob would fail every ASR/TTS turn. Assert the real
+    // connector both sets the type and sets it pre-accept (ordering is load-bearing).
+    const socket = new FakeRuntimeSocket()
+    stubFetchWith(socket)
+
+    const returned = await defaultConnect('wss://example.test/v3', { Upgrade: 'websocket' })
+
+    expect(socket.binaryType).toBe('arraybuffer')
+    expect(socket.accepted).toBe(true)
+    // The crux: arraybuffer was already in effect at the instant accept() ran.
+    expect(socket.binaryTypeAtAccept).toBe('arraybuffer')
+    expect(returned).toBe(socket as unknown as AdapterSocket)
+  })
+
+  it('throws when the upgrade response carries no webSocket', async () => {
+    stubFetchWith(undefined)
+    await expect(defaultConnect('wss://example.test/v3', { Upgrade: 'websocket' })).rejects.toThrow(
+      /no webSocket on response/
+    )
   })
 })

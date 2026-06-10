@@ -315,3 +315,57 @@ describe('non-hibernation invariant — session state stays valid between turns 
     expect(resident.state?.gameId).toBe('bombsquad')
   })
 })
+
+describe('binary frame delivery type — arraybuffer is required for audio fidelity (F-M)', () => {
+  /**
+   * Models `VoiceSessionDO.onSocketMessage`'s string-vs-binary dispatch. The DO
+   * accepts its `WebSocketPair` server with `binaryType = 'arraybuffer'` set
+   * BEFORE `accept()`, so player audio frames arrive as `ArrayBuffer` and the
+   * synchronous handler's `new Uint8Array(data)` reconstructs the exact bytes.
+   *
+   * Under this Worker's `compatibility_date` (2026-06-08) the runtime default
+   * (`websocket_standard_binary_type`) instead delivers binary frames as `Blob`.
+   * A `Blob` is neither a string nor an `ArrayBuffer`: it would fall through to
+   * the binary branch and be cast to `ArrayBuffer`, and `new Uint8Array(blob)`
+   * yields an empty/garbage view — corrupting every audio frame. These tests pin
+   * the contract the binaryType opt-in guarantees.
+   */
+  const AUDIO_BYTES = new Uint8Array([0x10, 0x20, 0x30, 0x40])
+
+  /** Mirrors onSocketMessage's dispatch: string → control, else binary audio. */
+  function dispatch(data: string | ArrayBuffer): { kind: 'control' | 'audio'; frame?: Uint8Array } {
+    if (typeof data === 'string') {
+      return { kind: 'control' }
+    }
+    // Binary branch: the handler treats `data` as an ArrayBuffer (the fix's
+    // guarantee) and wraps it synchronously — exactly `new Uint8Array(data)`.
+    return { kind: 'audio', frame: new Uint8Array(data) }
+  }
+
+  it('reconstructs the exact audio bytes from an ArrayBuffer binary frame', () => {
+    // What binaryType='arraybuffer' delivers: event.data is an ArrayBuffer.
+    const arrayBuffer = AUDIO_BYTES.slice().buffer
+    const result = dispatch(arrayBuffer)
+
+    expect(result.kind).toBe('audio')
+    expect(result.frame).toEqual(AUDIO_BYTES)
+  })
+
+  it('routes string frames to the control path, never the binary branch', () => {
+    expect(dispatch(JSON.stringify({ type: 'turn' })).kind).toBe('control')
+  })
+
+  it('a Blob default (no binaryType opt-in) would corrupt the frame — why the fix is needed', () => {
+    // Reproduce the un-fixed 2026 default: a Blob payload. It is not a string, so
+    // it reaches the binary branch; `new Uint8Array(blob)` does NOT read the
+    // blob's bytes — it produces a zero-length view (or throws), losing the audio.
+    const blob = new Blob([AUDIO_BYTES])
+    // The blob slips past the text guard (it is not a string).
+    expect(typeof (blob as unknown) === 'string').toBe(false)
+    // Synchronously wrapping it the way the handler does yields NOT the 4 audio
+    // bytes — proving the synchronous ArrayBuffer-typed path breaks on a Blob and
+    // the binaryType='arraybuffer' opt-in (set before accept) is load-bearing.
+    const wrapped = new Uint8Array(blob as unknown as ArrayBuffer)
+    expect(Array.from(wrapped)).not.toEqual(Array.from(AUDIO_BYTES))
+  })
+})

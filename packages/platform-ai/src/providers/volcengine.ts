@@ -41,8 +41,11 @@
  * use). The bare `new WebSocket(url)` constructor cannot set request headers in
  * Workers, so the connection is opened with
  * `fetch(url, { headers: { Upgrade: 'websocket', ... } })` and the socket is
- * taken from `response.webSocket` + `.accept()`. Credentials come only from
- * server-side env and are never sent to the client.
+ * taken from `response.webSocket`, set to `binaryType = 'arraybuffer'`, and then
+ * `.accept()`ed — so inbound ASR/TTS binary frames arrive as `ArrayBuffer` (what
+ * the synchronous `toBytes` codec needs) rather than the post-2026 `Blob`
+ * default. Credentials come only from server-side env and are never sent to the
+ * client.
  *
  * The wire codec (frame build / frame parse / auth header assembly) is factored
  * into the pure functions below so it is unit-testable without a live network;
@@ -682,14 +685,29 @@ export function parseSttResponse(frame: ParsedFrame): SttTranscriptChunk | undef
  * `fetch` + `Upgrade: websocket` pattern because the bare `WebSocket`
  * constructor cannot attach the `X-Api-*` auth headers in the Workers runtime.
  */
-const defaultConnect: WebSocketConnector = async (url, headers) => {
+export const defaultConnect: WebSocketConnector = async (url, headers) => {
   const response = await fetch(url, { headers })
   // Cloudflare's fetch exposes the negotiated socket on the response.
-  const socket = (response as unknown as { webSocket?: AdapterSocket & { accept(): void } })
-    .webSocket
+  const socket = (
+    response as unknown as {
+      webSocket?: AdapterSocket & { accept(): void; binaryType: 'blob' | 'arraybuffer' }
+    }
+  ).webSocket
   if (!socket) {
     throw new Error('Volcengine WebSocket upgrade failed: no webSocket on response')
   }
+  // Opt back into ArrayBuffer delivery BEFORE accepting. With this Worker's
+  // `compatibility_date` (2026-06-08) the `websocket_standard_binary_type`
+  // default delivers inbound binary WS frames as `Blob`. The ASR/TTS message
+  // listeners parse every frame synchronously via `parseFrame` -> `toBytes`,
+  // which accepts ArrayBuffer / typed-array views / strings but NOT a `Blob`
+  // (a Blob can only be read async via `blob.arrayBuffer()`). A Blob would hit
+  // `toBytes`'s `unsupported WebSocket message payload` throw and fail the turn.
+  // Setting `binaryType` keeps the synchronous codec path correct. MUST precede
+  // `accept()` — the runtime only honors it before the socket is accepted.
+  // (Cloudflare docs: runtime-apis/websockets#binary-messages.) Applies to BOTH
+  // outbound connections (ASR + TTS) since both open through this one connector.
+  socket.binaryType = 'arraybuffer'
   socket.accept()
   return socket
 }

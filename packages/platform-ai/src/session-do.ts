@@ -13,9 +13,11 @@
  * The orchestration logic itself lives in `runTurn` (pure, provider-mocked
  * unit tests); this class is the DO/WS adapter around it.
  *
- * Hibernation is deliberately NOT used. The DO accepts the socket with a plain
- * `server.accept()` and listens via `addEventListener('message'|'close')`, so it
- * stays resident for the session's lifetime and the in-memory session state
+ * Hibernation is deliberately NOT used. The DO sets `binaryType = 'arraybuffer'`
+ * then accepts the socket with a plain `server.accept()` and listens via
+ * `addEventListener('message'|'close')`, so it stays resident for the session's
+ * lifetime, binary audio frames arrive as `ArrayBuffer` (not the post-2026
+ * `Blob` default), and the in-memory session state
  * (`state` / `providers`) is always valid between `create` and a later `turn`.
  * The WebSocket Hibernation API (`ctx.acceptWebSocket` + the `webSocketMessage`
  * rehydration callback) would drop that in-memory state on an idle-eviction
@@ -194,6 +196,17 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     const client = pair[0]
     const server = pair[1]
 
+    // Opt this socket back into ArrayBuffer delivery for binary frames BEFORE
+    // accepting it. With this Worker's `compatibility_date` (2026-06-08) the
+    // `websocket_standard_binary_type` default delivers binary WS messages as
+    // `Blob`, but `onSocketMessage` consumes player audio frames synchronously
+    // as `ArrayBuffer` (`new Uint8Array(data)`). A `Blob` would slip past the
+    // `typeof data === 'string'` branch and be wrapped into an empty/garbage
+    // `Uint8Array`, corrupting every audio frame. Setting `binaryType` keeps the
+    // existing synchronous, ArrayBuffer-typed handler correct. MUST precede
+    // `accept()` — the runtime only honors it before the socket is accepted.
+    // (Cloudflare docs: runtime-apis/websockets#binary-messages.)
+    server.binaryType = 'arraybuffer'
     // Plain accept keeps the DO resident for the session (no hibernation), so
     // the in-memory session state survives between turns.
     server.accept()
