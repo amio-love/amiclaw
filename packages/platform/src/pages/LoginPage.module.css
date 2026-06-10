@@ -133,13 +133,14 @@
   height: 18px;
 }
 
-/* The honest why, compressed to one quiet line below the card. Small, muted,
-   centered — present but never competing with the form. */
+/* The value of an account — the end-state product value, below the card. A
+   value-prop, so a touch more present than a grey caption (slightly larger and
+   brighter), but still tight and centered, never competing with the form. */
 .why {
   margin: 24px 0 0;
-  max-width: 380px;
-  font: 400 13px/1.7 var(--font-body);
-  color: rgba(255, 255, 255, 0.4);
+  max-width: 400px;
+  font: 400 14px/1.75 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
 

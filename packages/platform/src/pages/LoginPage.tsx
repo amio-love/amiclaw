@@ -111,11 +111,11 @@ export default function LoginPage() {
         )}
       </GlassCard>
 
-      {/* The honest why, compressed to one quiet line — login only builds your
-          account for the platform-AI path, which isn't live yet. */}
+      {/* The value of an account, stated as the end-state product value — a
+          dedicated AI companion, social features, and cross-device progress.
+          Aspirational ("你将拥有…"), not a literal instant-delivery claim. */}
       <p className={styles.why}>
-        登录是为「平台 AI」这条路准备的：将来由平台替你调用
-        AI、记你的用量，所以需要账号。这条路还没上线，现在登录只是先建好你的账号。
+        登录后，你将拥有专属于你的 AI 伙伴、与同好相连的社交主场，以及跨设备同步的战绩与排名。
       </p>
 
       {/* The escape — playing needs no account. A subtle footer link into free

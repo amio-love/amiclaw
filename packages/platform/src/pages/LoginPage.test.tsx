@@ -32,20 +32,19 @@ describe('LoginPage /login', () => {
     vi.unstubAllGlobals()
   })
 
-  it('frames why login exists and that playing needs no account', () => {
+  it('states the value of an account and that playing needs no account', () => {
     renderLogin()
 
     // Playing does NOT require login — the free anonymous mode① line, now a
     // tight one-liner paired with the inline direct-play escape.
     expect(screen.getByText(/玩游戏不需要登录/)).toBeInTheDocument()
-    // The honest reason, compressed to one quiet line: login is the platform-AI
-    // (mode②) identity prerequisite — platform pays for the inference, so it
-    // needs an account to meter usage; framed as decided-but-not-live, not a
-    // live feature.
-    const reason = screen.getByText(/登录是为「平台 AI」这条路准备的/)
-    expect(reason).toBeInTheDocument()
-    expect(reason.textContent).toContain('还没上线')
-    expect(reason.textContent).toContain('记你的用量')
+    // The value-prop: an account unlocks the end-state product value — a
+    // dedicated AI companion, social features, and cross-device progress. An
+    // aspirational framing, not the old current-status caveat.
+    const value = screen.getByText(/登录后，你将拥有专属于你的 AI 伙伴/)
+    expect(value).toBeInTheDocument()
+    expect(value.textContent).toContain('社交')
+    expect(value.textContent).toContain('跨设备同步')
   })
 
   it('offers a direct-play escape into free anonymous play', () => {
