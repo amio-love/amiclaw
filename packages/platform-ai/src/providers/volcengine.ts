@@ -681,12 +681,34 @@ export function parseSttResponse(frame: ParsedFrame): SttTranscriptChunk | undef
 // --- Default Workers connector ---
 
 /**
+ * Rewrite a WebSocket URL scheme to its HTTP equivalent for the `fetch`-upgrade
+ * path: `wss:` -> `https:`, `ws:` -> `http:`. The endpoint constants stay
+ * `wss://` (the adapter's outward contract is WebSocket), but the Cloudflare
+ * Workers custom-header upgrade pattern requires an `http(s)://` URL handed to
+ * `fetch`: `ws:`/`wss:` are reserved for the `new WebSocket()` constructor,
+ * which cannot carry the `X-Api-*` auth headers. With the
+ * `fetch_refuses_unknown_protocols` runtime behavior a `wss://` URL is no longer
+ * silently coerced to HTTP, so passing it straight to `fetch` fails the upgrade
+ * before any turn starts. Only the leading scheme is touched — host, path, and
+ * query are untouched. (Cloudflare docs: workers/examples/websockets +
+ * configuration/compatibility-flags#fetch-refuses-unknown-protocols.)
+ */
+function toFetchUpgradeUrl(url: string): string {
+  if (url.startsWith('wss:')) return `https:${url.slice('wss:'.length)}`
+  if (url.startsWith('ws:')) return `http:${url.slice('ws:'.length)}`
+  return url
+}
+
+/**
  * Open an authenticated outbound WebSocket from a Cloudflare Worker. Uses the
  * `fetch` + `Upgrade: websocket` pattern because the bare `WebSocket`
  * constructor cannot attach the `X-Api-*` auth headers in the Workers runtime.
+ * The `wss://` endpoint constant is rewritten to `https://` via
+ * `toFetchUpgradeUrl` before `fetch`, as the Workers upgrade path requires an
+ * `http(s)://` URL (see that helper).
  */
 export const defaultConnect: WebSocketConnector = async (url, headers) => {
-  const response = await fetch(url, { headers })
+  const response = await fetch(toFetchUpgradeUrl(url), { headers })
   // Cloudflare's fetch exposes the negotiated socket on the response.
   const socket = (
     response as unknown as {

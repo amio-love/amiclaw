@@ -1019,3 +1019,73 @@ describe('defaultConnect — outbound socket binary delivery type (F-N)', () => 
     )
   })
 })
+
+describe('defaultConnect — fetch-upgrade URL scheme rewrite', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** Minimal accept-only socket so `defaultConnect` resolves past the upgrade. */
+  class AcceptableSocket {
+    binaryType: 'blob' | 'arraybuffer' = 'blob'
+    accept(): void {}
+  }
+
+  /**
+   * Stub `fetch` so the test can read back the exact URL it received. The
+   * Cloudflare custom-header WebSocket upgrade requires an `http(s)://` URL —
+   * `ws:`/`wss:` are reserved for `new WebSocket()` and fail the `fetch` upgrade
+   * before any turn starts. These tests pin the `wss:`->`https:` / `ws:`->`http:`
+   * rewrite (and that host/path/query + the Upgrade + auth headers survive
+   * untouched) so a scheme regression is caught here, not at deploy time.
+   */
+  function captureFetchUrl(): { calls: Array<{ url: string; init?: RequestInit }> } {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init })
+        return { webSocket: new AcceptableSocket() } as unknown as Response
+      })
+    )
+    return { calls }
+  }
+
+  it('rewrites wss:// to https:// while preserving host/path/query', async () => {
+    const captured = captureFetchUrl()
+
+    await defaultConnect('wss://openspeech.bytedance.com/api/v3/tts/bidirection?x=1', {
+      Upgrade: 'websocket',
+    })
+
+    expect(captured.calls).toHaveLength(1)
+    expect(captured.calls[0].url).toBe(
+      'https://openspeech.bytedance.com/api/v3/tts/bidirection?x=1'
+    )
+  })
+
+  it('rewrites ws:// to http:// while preserving host/path/query', async () => {
+    const captured = captureFetchUrl()
+
+    await defaultConnect('ws://example.test:8080/v3/sauc/bigmodel?a=b', { Upgrade: 'websocket' })
+
+    expect(captured.calls).toHaveLength(1)
+    expect(captured.calls[0].url).toBe('http://example.test:8080/v3/sauc/bigmodel?a=b')
+  })
+
+  it('passes the Upgrade + auth headers through unchanged after the rewrite', async () => {
+    const captured = captureFetchUrl()
+    const headers = {
+      Upgrade: 'websocket',
+      'X-Api-App-Key': 'app-123',
+      'X-Api-Access-Key': 'token-456',
+      'X-Api-Resource-Id': 'volc.bigasr.sauc.duration',
+      'X-Api-Connect-Id': 'connect-789',
+    }
+
+    await defaultConnect('wss://openspeech.bytedance.com/api/v3/sauc/bigmodel', headers)
+
+    expect(captured.calls[0].url.startsWith('https://')).toBe(true)
+    expect(captured.calls[0].init?.headers).toEqual(headers)
+  })
+})
