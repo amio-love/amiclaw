@@ -105,10 +105,23 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
       model: 'deepseek-v4-flash',
     },
     stt: {
+      // `bigmodel` is the only `model_name` the Volcengine v3 streaming ASR
+      // endpoint (`/api/v3/sauc/bigmodel`) accepts — it is passed verbatim as the
+      // wire `request.model_name` (the factory threads it through; see F-K). A
+      // non-wire alias like `bigmodel-asr` would now produce an illegal model id
+      // and fail the turn. Doc: https://www.volcengine.com/docs/6561/1354869
       provider: 'volcengine',
-      model: 'bigmodel-asr',
+      model: 'bigmodel',
     },
     tts: {
+      // Doubao TTS 2.0 binds the model via the endpoint resource id
+      // (`X-Api-Resource-Id: volc.service_type.10029`), NOT a `req_params` field:
+      // the documented bidirectional `StartSession` `req_params` carries only
+      // `speaker` + `audio_params`. This value is threaded into `req_params.model`
+      // as a non-breaking additive (the server ignores unknown fields), so a model
+      // switch here is wire-visible without altering the documented request shape;
+      // whether the server consumes it is a deploy-time open question.
+      // Doc: https://www.volcengine.com/docs/6561/1329505
       provider: 'volcengine',
       model: 'doubao-tts-2.0',
     },

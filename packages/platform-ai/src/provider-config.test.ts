@@ -17,6 +17,16 @@ describe('resolveConfig — hit', () => {
     expect(tts.provider).toBe('volcengine')
   })
 
+  it('registers a legal Volcengine ASR wire model for the demo STT layer (P2)', () => {
+    // P2 regression: the demo STT model is passed verbatim into the ASR
+    // `request.model_name` (factory F-K passthrough), and the Volcengine v3
+    // streaming ASR endpoint accepts ONLY `bigmodel`. Guard the alias `bigmodel-asr`
+    // (illegal model id → failed turn) from creeping back at the config layer.
+    const { stt } = resolveConfig('demo')
+    expect(stt.model).toBe('bigmodel')
+    expect(stt.model).not.toBe('bigmodel-asr')
+  })
+
   it('a layer selection carries provider + model only (no unwired fallback field)', () => {
     // F-H regression: `fallback` was defined but never executed (createProviders
     // builds one provider per layer, runTurn calls each once and fails loud on

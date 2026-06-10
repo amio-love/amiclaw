@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveConfig } from '../provider-config'
 import {
   buildAuthHeaders,
   buildSttAudioFrame,
@@ -449,6 +450,48 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
       request: { model_name: string }
     }
     expect(body.request.model_name).toBe('bigmodel')
+
+    socket.emitMessage(sttServerFrame({ result: { text: 'x', utterances: [{ definite: true }] } }))
+    await consumed
+  })
+
+  it("resolveConfig('demo').stt.model is a legal Volcengine ASR wire model_name", async () => {
+    // P2 regression: the `demo` config's STT model is threaded verbatim into the
+    // ASR `request.model_name` (factory F-K passthrough). The Volcengine v3
+    // streaming ASR endpoint (`/api/v3/sauc/bigmodel`) accepts ONLY `bigmodel` as
+    // `model_name` — a config alias like `bigmodel-asr` was harmless before F-K
+    // only because the adapter fell back to its own DEFAULT_STT_MODEL; now that
+    // the resolved model is really transmitted, the alias would send an illegal
+    // model id and fail the turn. This stitches the resolved config model directly
+    // into the real adapter and asserts the wire frame, so the bad alias cannot
+    // come back. Doc: https://www.volcengine.com/docs/6561/1354869
+    const resolved = resolveConfig('demo')
+    expect(resolved.stt.model).toBe('bigmodel')
+    expect(resolved.stt.model).not.toBe('bigmodel-asr')
+
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      // Exactly what the factory threads through: `resolved.stt.model`.
+      sttModel: resolved.stt.model,
+      connect,
+    })
+
+    const consumed = (async () => {
+      for await (const _chunk of stt.transcribe(await asyncFrom([encoder.encode('f1')]))) {
+        break
+      }
+    })()
+    await tick()
+
+    const configFrame = parseFrame(socket.sent[0])
+    const body = JSON.parse(decoder.decode(configFrame.payload)) as {
+      request: { model_name: string }
+    }
+    expect(body.request.model_name).toBe('bigmodel')
+    expect(body.request.model_name).not.toBe('bigmodel-asr')
 
     socket.emitMessage(sttServerFrame({ result: { text: 'x', utterances: [{ definite: true }] } }))
     await consumed
