@@ -193,9 +193,9 @@ export class World {
    *  BombSquad is now a separate SPA served at `/bombsquad/`, so crossing the app
    *  boundary is a full-page navigation that lands on the directory root
    *  (`/bombsquad/`, with a trailing slash). Accept both forms.
-   *  Uses the AnonHero primary CTA「开始玩 →」. The arrow is load-bearing: the
-   *  TopNav has a bare「开始玩」button, so a name match without the arrow hits two
-   *  buttons and trips Playwright strict mode. */
+   *  Uses the AnonHero primary CTA「开始玩 →」(its exact label). The TopNav no
+   *  longer carries a play button — its signed-out slot is now the 登录 / 注册
+   *  auth entry — so the hero CTA is the only「开始玩」on the page. */
   async enterBombSquadLanding(): Promise<void> {
     await this.page.getByRole('button', { name: '开始玩 →' }).click()
     await this.page.waitForURL((url) => new URL(url).pathname.replace(/\/$/, '') === '/bombsquad', {

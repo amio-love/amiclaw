@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Button, ConicAvatar, Wordmark } from '@amiclaw/ui'
+import { ConicAvatar, Wordmark } from '@amiclaw/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_TABS } from './nav-tabs'
 import styles from './TopNav.module.css'
@@ -40,23 +40,15 @@ export default function TopNav() {
               <ConicAvatar size={36} spin letter={user.avatarLetter} ariaHidden />
             </Link>
           ) : (
-            /* Signed-out, mode②/point-of-need entry: a primary 开始玩 CTA into
-               the BombSquad SPA (window.location.assign('/bombsquad/'), the
-               same cross-app entry every play CTA uses) plus a 登录 link to
-               the magic-link /login page. mode① anonymous direct-play is
-               untouched — login is never forced. */
-            <>
-              <Link to="/login" className={styles.loginLink}>
-                登录
-              </Link>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => window.location.assign('/bombsquad/')}
-              >
-                开始玩
-              </Button>
-            </>
+            /* Signed-out: a single primary 登录 / 注册 entry to the magic-link
+               /login page. Magic-link is passwordless — first-time verify
+               auto-creates the account — so one control honestly covers both
+               sign-in and sign-up; there is no separate register flow. The
+               nav carries NO play CTA: anonymous mode① play is reached from
+               the homepage hero / BombSquad card, so login is never forced. */
+            <Link to="/login" className={styles.loginBtn}>
+              登录 / 注册
+            </Link>
           )}
         </div>
       </div>

@@ -9,9 +9,10 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
 
 /* The `/` route — the Amiclaw platform homepage. Renders the anonymous
    hero or the signed-in welcome strip per useAuth(), then the homepage
-   sections. The homepage has exactly two play entries into the BombSquad
-   landing page (/bombsquad): the TopNav「开始玩」and the AnonHero primary
-   「开始玩」CTA. FeaturedBombSquad is the single BombSquad overview block: it
+   sections. The homepage carries the anonymous play entry into the BombSquad
+   landing page (/bombsquad): the AnonHero primary「开始玩」CTA (the TopNav now
+   holds the 登录 / 注册 auth entry, not a play CTA). FeaturedBombSquad is the
+   single BombSquad overview block: it
    combines the game pitch and daily countdown without repeating leaderboard
    data. FooterPitch is a pure pitch block. The landing owns the daily/practice
    choice and the connect-AI flow, so the homepage no longer gates the run

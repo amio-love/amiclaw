@@ -46,7 +46,8 @@ Then('a magic-link request was sent for my email', async ({ world }) => {
 
 Then('I see the account login guide and no fake profile', async ({ page }) => {
   // Scope to the routed page content (<main>): the TopNav shell also renders a
-  // 登录 link, so page-wide role/text queries would be ambiguous.
+  // 登录 / 注册 auth entry (substring-matched by name '登录'), so page-wide
+  // role/text queries would be ambiguous.
   const main = page.getByRole('main')
   // Exact match targets the guide-card title (the page header carries the same
   // text plus a trailing 。, so a substring match would hit both).
