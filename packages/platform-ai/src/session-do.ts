@@ -146,6 +146,26 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   /** Audio bridge for the in-flight turn, if any. */
   private audio: AudioBridge | undefined
   /**
+   * Turn in-flight guard. A voice turn is a single serial round; a DO event can
+   * interleave across the many `await`s inside one turn (STT/LLM/TTS all await),
+   * so a second `turn` message arriving mid-flight would start a second
+   * `onAiResponse`/`runTurn` over the SAME `state`/`providers`/socket — racing
+   * the shared `history`/`usage` and interleaving two response streams on one
+   * socket. This flag is `true` for exactly the window one turn is running; a
+   * second `turn` while set is rejected (fail-loud), and it is cleared in the
+   * turn loop's `finally` so success / failure / cancel all release it (an
+   * exception can never wedge the guard shut).
+   */
+  private turnInFlight = false
+  /**
+   * The in-flight turn's async iterator, held so a mid-turn `end` (or the
+   * owner's socket close) can cancel it cleanly: closing the audio bridge
+   * terminates STT, and `return()` on this iterator runs `runTurn`'s `finally`
+   * (closes the sentence queue, returns the live LLM/TTS iterators) so no
+   * provider stream is left dangling. `undefined` when no turn is running.
+   */
+  private activeTurn: AsyncIterator<AiResponseChunk> | undefined
+  /**
    * Authenticated user id per accepted socket, forwarded by the Worker from the
    * validated handshake (`X-Session-User-Id`). This is the authoritative
    * identity bound at upgrade — the client-supplied control message is NOT
@@ -231,6 +251,14 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     const ownsSession = socketOwnsBoundSession(this.socketIdentities, ws, this.boundIdentity())
     this.socketIdentities.release(ws)
     if (!ownsSession) return
+    // Owner gone: cancel any in-flight turn so its LLM/TTS streams are returned
+    // (`runTurn`'s `finally`) rather than left dangling, then close + clear the
+    // next-turn bridge. The turn loop's `finally` (which clears `turnInFlight`
+    // and `activeTurn`) runs when the `return()` settles. `cancelActiveTurn` is
+    // total and idempotent — a no-op when no turn is running. Fire-and-forget
+    // here because `onSocketClose` is a sync (total) close handler; the cancel's
+    // cleanup is best-effort on a socket that is already gone.
+    void this.cancelActiveTurn()
     this.audio?.close()
     this.audio = undefined
   }
@@ -316,6 +344,32 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   }
 
   /**
+   * Send a structured, non-fatal error signal on a socket WITHOUT closing it.
+   * Used for reject-the-message-not-the-connection cases (an overlapping `turn`,
+   * a re-`create`) where a 1008 close would also truncate a turn streaming on
+   * the same socket. Distinct from the listener's 1008 close, which is reserved
+   * for ownership / protocol violations that must terminate the socket.
+   */
+  private sendError(ws: WebSocket, code: string, message: string): void {
+    ws.send(JSON.stringify({ type: 'error', code, message }))
+  }
+
+  /**
+   * Cleanly cancel the in-flight turn, if any. Closing the audio bridge (done by
+   * the caller) terminates the STT step; here we `return()` the held turn
+   * iterator, which resumes `runTurn` at its suspension point and runs its
+   * `finally` (closes the sentence queue, returns the live LLM/TTS iterators) so
+   * no provider stream is left dangling. The turn loop's own `finally` then
+   * clears `turnInFlight`/`activeTurn`. Total and idempotent: a no-op when no
+   * turn is running, and `return()` on an already-finished iterator is harmless.
+   */
+  private async cancelActiveTurn(): Promise<void> {
+    const turn = this.activeTurn
+    if (turn === undefined) return
+    await turn.return?.(undefined)
+  }
+
+  /**
    * Reject cross-session / cross-user access. Delegates to the pure
    * `assertSessionOwnership` predicate (the L2 ownership invariant —
    * `onPlayerAudio` / `onAiResponse` / `endSession` verify ownership).
@@ -354,6 +408,16 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           ws.close(1008, 'no authenticated identity')
           return
         }
+        // A session is already live on this DO. Re-`create` would silently
+        // re-initialize `state`/`providers`/`userId` — blowing away an in-flight
+        // turn's state and the bound owner. Reject (the session is active)
+        // rather than reset. Fail-loud via an explicit signal on THIS socket so
+        // a concurrently streaming turn on the same socket is not truncated (a
+        // 1008 close would kill it); the owner's session is left intact.
+        if (this.state) {
+          this.sendError(ws, 'already_created', 'session already created')
+          return
+        }
         // Bind the AUTH-validated user id, NOT any id the client claims.
         const sessionId = this.createSession(
           msg.gameId,
@@ -369,41 +433,80 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           ws.close(1008, 'turn before create')
           return
         }
+        // Turn in-flight guard: voice turns are serial. A second `turn` while
+        // one is running (owner double-click / retry) would start a second
+        // `runTurn` over the shared `state`/`providers` and interleave two
+        // response streams on this one socket — DO events interleave across the
+        // turn's STT/LLM/TTS `await`s. Reject the overlap with an explicit
+        // signal on THIS socket (NOT a 1008 close — the first turn is streaming
+        // on the same socket and a close would truncate it). No second
+        // `onAiResponse`/`runTurn` is started; the live turn is untouched.
+        if (this.turnInFlight) {
+          this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
+          return
+        }
         // Stream the AI response chunks back. Text rides as JSON; audio is
         // base64-encoded so the whole turn stays on the JSON text channel and
         // the binary frame direction remains player-audio-only. Ownership is
         // checked against THIS socket's user, so a second client on the same DO
         // cannot drive the first user's session.
         const sessionId = this.ctx.id.toString()
-        for await (const chunk of this.onAiResponse(sessionId, socketUserId)) {
-          if (chunk.kind === 'audio' && chunk.audio) {
-            ws.send(
-              JSON.stringify({
-                type: 'chunk',
-                kind: 'audio',
-                audio: base64FromBytes(chunk.audio),
-                done: chunk.done,
-              })
-            )
-          } else {
-            ws.send(
-              JSON.stringify({
-                type: 'chunk',
-                kind: 'text',
-                text: chunk.text ?? '',
-                done: chunk.done,
-              })
-            )
+        // Hold the iterator explicitly so a mid-turn `end` / owner close can
+        // cancel it via `return()`. Mark in-flight BEFORE the first `await`
+        // (synchronous up to here) so an interleaved second `turn` sees the
+        // guard set. The `finally` clears the guard + iterator on every exit
+        // (normal end, provider error, or cancellation) so the next turn can run.
+        const turn = this.onAiResponse(sessionId, socketUserId)[Symbol.asyncIterator]()
+        this.activeTurn = turn
+        this.turnInFlight = true
+        try {
+          for (;;) {
+            const next = await turn.next()
+            if (next.done) break
+            const chunk = next.value
+            if (chunk.kind === 'audio' && chunk.audio) {
+              ws.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  kind: 'audio',
+                  audio: base64FromBytes(chunk.audio),
+                  done: chunk.done,
+                })
+              )
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  kind: 'text',
+                  text: chunk.text ?? '',
+                  done: chunk.done,
+                })
+              )
+            }
           }
+        } finally {
+          this.turnInFlight = false
+          this.activeTurn = undefined
         }
         return
       }
       case 'end': {
-        // `endSession` validates ownership against THIS socket's user, so an
-        // `end` from a different user on the same DO is rejected (throws) rather
-        // than tearing down the owner's session.
         if (this.state && socketUserId) {
+          // `endSession` re-validates ownership (a non-owner `end` throws before
+          // any teardown — the throw closes THAT socket with 1008 via the
+          // listener, so a non-owner cannot end / cancel the owner's turn),
+          // closes the audio bridge (the NEXT turn's bridge, which buffered any
+          // frames that arrived during this turn — the in-flight turn already
+          // detached + closed its own bridge at `onAiResponse` start, so its STT
+          // has already terminated), and returns the summary. The in-flight turn
+          // is then cleanly canceled: `cancelActiveTurn` `return()`s its iterator
+          // so `runTurn`'s `finally` runs — closing the sentence queue and
+          // returning the live LLM/TTS iterators, leaving no provider stream
+          // dangling. A turn canceled mid-flight never reached `runTurn`'s settle
+          // step, so it did not increment `turnCount` — the summary counts only
+          // fully-completed turns.
           const summary = this.endSession(this.ctx.id.toString(), socketUserId)
+          await this.cancelActiveTurn()
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, 'session ended')
