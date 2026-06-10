@@ -2,8 +2,8 @@
  * Provider selection layer.
  *
  * Registers, per `gameId`: that game's system-prompt config plus the chosen
- * provider/model/fallback for each of the three layers (STT / LLM / TTS).
- * Switching vendors is a config change here — game logic does not change.
+ * provider + model for each of the three layers (STT / LLM / TTS). Switching
+ * vendors is a config change here — game logic does not change.
  *
  * This is also the single authoritative path for the system prompt: it is
  * resolved from `gameId` here (NOT passed into `createSession`), which keeps
@@ -11,6 +11,17 @@
  *
  * `resolveConfig` is a pure function: a miss is an explicit error, never a
  * silent fallback to some default game.
+ *
+ * FOLLOWUP — provider timeout + fallback chain (NOT implemented in v1): the L2
+ * spec (`docs/architecture/arch-component-platform-ai-interface.md` §L3 验收目标)
+ * lists per-layer provider timeouts and a `provider-config`-defined fallback
+ * order as explicit L3 acceptance targets, to be landed against real CF-edge +
+ * real-provider measurements. v1 deliberately ships provider + model switching
+ * only (the wired "vendor is swappable" core) and does NOT carry an unwired
+ * `fallback` config field: `createProviders` builds one provider per layer and
+ * `runTurn` calls each once and fails loud on first error, so a `fallback` array
+ * would have been a promised-but-unimplemented capability. It is re-added when
+ * the timeout + fallback followup is actually implemented and wired.
  */
 
 import type { GameId } from './contract'
@@ -19,17 +30,17 @@ import type { GameId } from './contract'
 export type ProviderLayer = 'stt' | 'llm' | 'tts'
 
 /**
- * Selection for one pipeline layer: which provider, which model, and the
- * ordered fallback chain to try on failure/timeout. `fallback` entries are
- * provider ids to switch to, in order; an empty array means no fallback.
+ * Selection for one pipeline layer: which provider and which model. Switching a
+ * vendor is an edit to these two fields (the wired "vendor is swappable" core).
+ *
+ * No `fallback` field: a provider timeout + fallback chain is a deferred L3
+ * followup (see the file docblock) and v1 does not carry unwired config for it.
  */
 export interface LayerSelection {
   /** Provider id (adapter selector), e.g. 'deepseek' or 'volcengine'. */
   provider: string
   /** Concrete model id for that provider, e.g. 'deepseek-v4-flash'. */
   model: string
-  /** Ordered fallback provider ids, tried left-to-right on failure. */
-  fallback: string[]
 }
 
 /**
@@ -92,17 +103,14 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     llm: {
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
-      fallback: ['deepseek-v4-pro'],
     },
     stt: {
       provider: 'volcengine',
       model: 'bigmodel-asr',
-      fallback: [],
     },
     tts: {
       provider: 'volcengine',
       model: 'doubao-tts-2.0',
-      fallback: [],
     },
   },
   'demo-mock': {
@@ -118,24 +126,21 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     llm: {
       provider: 'mock',
       model: 'mock-llm',
-      fallback: [],
     },
     stt: {
       provider: 'mock',
       model: 'mock-stt',
-      fallback: [],
     },
     tts: {
       provider: 'mock',
       model: 'mock-tts',
-      fallback: [],
     },
   },
 }
 
 /** Deep-clone a layer selection so callers cannot mutate the registry. */
 function cloneLayer(layer: LayerSelection): LayerSelection {
-  return { provider: layer.provider, model: layer.model, fallback: [...layer.fallback] }
+  return { provider: layer.provider, model: layer.model }
 }
 
 /**

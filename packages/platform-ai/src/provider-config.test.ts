@@ -17,9 +17,16 @@ describe('resolveConfig — hit', () => {
     expect(tts.provider).toBe('volcengine')
   })
 
-  it('carries a fallback chain on the LLM layer', () => {
-    const { llm } = resolveConfig('demo')
-    expect(llm.fallback).toEqual(['deepseek-v4-pro'])
+  it('a layer selection carries provider + model only (no unwired fallback field)', () => {
+    // F-H regression: `fallback` was defined but never executed (createProviders
+    // builds one provider per layer, runTurn calls each once and fails loud on
+    // first error). The dead config field is removed; a resolved layer must be
+    // exactly { provider, model } so it cannot reappear unwired. Timeout +
+    // fallback is a deferred L3 followup (see provider-config.ts docblock).
+    const { llm, stt, tts } = resolveConfig('demo')
+    for (const layer of [llm, stt, tts]) {
+      expect(Object.keys(layer).sort()).toEqual(['model', 'provider'])
+    }
   })
 })
 
@@ -57,13 +64,11 @@ describe('resolveConfig — switchability and isolation', () => {
     const first = resolveConfig('demo')
     first.llm.provider = 'rogue-mutation'
     first.llm.model = 'rogue-model'
-    first.llm.fallback.push('rogue-fallback')
     first.systemPromptConfig.role = 'rogue-role'
 
     const second = resolveConfig('demo')
     expect(second.llm.provider).toBe('deepseek')
     expect(second.llm.model).toBe('deepseek-v4-flash')
-    expect(second.llm.fallback).toEqual(['deepseek-v4-pro'])
     expect(second.systemPromptConfig.role).toContain('manual-explainer')
   })
 })

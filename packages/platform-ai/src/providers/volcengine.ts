@@ -10,13 +10,22 @@
  *    resource `volc.bigasr.sauc.duration`). The first frame is a JSON
  *    full-client config request; subsequent frames are raw audio. Server
  *    responses carry a JSON transcript whose `utterances[].definite` marks a
- *    stabilized segment.
+ *    stabilized segment. This ASR protocol is *client-push-first by design*:
+ *    the documented flow is "send full-client request, then stream audio packets
+ *    (~100-200ms each)"; there is NO connection/session-accepted handshake event
+ *    the client must wait for before sending audio (unlike the TTS layer below).
+ *    So sending config-then-audio without a server "ready" gate is correct here,
+ *    not optimistic — the server returns transcripts asynchronously as audio
+ *    flows.
  *  - TTS: Doubao TTS 2.0 bidirectional streaming over the event-based binary
  *    protocol (`wss://openspeech.bytedance.com/api/v3/tts/bidirection`,
- *    resource `volc.service_type.10029`). The client drives an event sequence
- *    (StartConnection -> StartSession -> TaskRequest* -> FinishSession ->
- *    FinishConnection); the server streams `TTSResponse` (event 352) audio
- *    frames.
+ *    resource `volc.service_type.10029`). This protocol is *stateful and
+ *    server-gated*: the client must wait for the server to accept each step
+ *    before advancing — StartConnection -> (await ConnectionStarted, event 50)
+ *    -> StartSession -> (await SessionStarted, event 150) -> TaskRequest* ->
+ *    FinishSession -> FinishConnection; the server then streams `TTSResponse`
+ *    (event 352) audio frames + `SessionFinished` (event 152). The handshake
+ *    gates live in `TtsHandshake` so the timing is unit-testable with a mock WS.
  *
  * Protocol references (consulted 2026-06):
  *  - ASR binary protocol + sequence flags + auth headers:
@@ -418,6 +427,107 @@ export function buildTtsFinishSessionFrame(sessionId: string): Uint8Array {
   })
 }
 
+// --- TTS handshake state machine (event-driven, server-gated) ---
+
+/**
+ * The Doubao TTS 2.0 bidirectional protocol is **stateful**: the server accepts
+ * the connection and the session in two distinct steps, and each must be
+ * acknowledged before the next client frame is legal. Sending `StartSession`
+ * before the server's `ConnectionStarted`, or `TaskRequest` before its
+ * `SessionStarted`, races the server — early frames are rejected/ignored and the
+ * turn yields no audio.
+ *
+ * This pure gate makes that timing explicit and unit-testable without a live
+ * socket: the message listener feeds inbound server events via `handleEvent`,
+ * and the pump `await`s `connectionStarted` / `sessionStarted` before advancing.
+ * A `ConnectionFailed` / `SessionFailed` event rejects the matching gate so the
+ * pump fails loudly instead of hanging.
+ *
+ * It only sequences the handshake (connection + session acceptance). Audio
+ * (`TtsResponse`) and session completion (`SessionFinished`) stay in the
+ * provider's message listener, which owns the audio queue.
+ */
+export class TtsHandshake {
+  /** Resolves when the server has accepted the connection (event 50). */
+  readonly connectionStarted: Promise<void>
+  /** Resolves when the server has accepted the session (event 150). */
+  readonly sessionStarted: Promise<void>
+
+  private resolveConnection!: () => void
+  private rejectConnection!: (err: unknown) => void
+  private resolveSession!: () => void
+  private rejectSession!: (err: unknown) => void
+  private connectionSettled = false
+  private sessionSettled = false
+
+  constructor() {
+    this.connectionStarted = new Promise<void>((resolve, reject) => {
+      this.resolveConnection = resolve
+      this.rejectConnection = reject
+    })
+    this.sessionStarted = new Promise<void>((resolve, reject) => {
+      this.resolveSession = resolve
+      this.rejectSession = reject
+    })
+    // A rejected gate the pump has not awaited yet would surface as an unhandled
+    // rejection; attach an inert catch so the rejection is delivered only to the
+    // awaiting pump, never to the process.
+    this.connectionStarted.catch(() => {})
+    this.sessionStarted.catch(() => {})
+  }
+
+  /**
+   * Advance the handshake from one inbound server event. Returns `true` if the
+   * event was a handshake-control event this gate consumed (so the caller can
+   * skip further handling), `false` for any other event (audio, completion).
+   */
+  handleEvent(event: number | undefined, describe: () => string): boolean {
+    switch (event) {
+      case TtsEvent.ConnectionStarted:
+        this.settleConnection()
+        return true
+      case TtsEvent.ConnectionFailed:
+        this.failConnection(new Error(`Volcengine TTS connection failed: ${describe()}`))
+        return true
+      case TtsEvent.SessionStarted:
+        this.settleSession()
+        return true
+      default:
+        return false
+    }
+  }
+
+  /** Reject any not-yet-settled gate (e.g. on a socket close before handshake). */
+  abort(err: unknown): void {
+    this.failConnection(err)
+    this.failSession(err)
+  }
+
+  private settleConnection(): void {
+    if (this.connectionSettled) return
+    this.connectionSettled = true
+    this.resolveConnection()
+  }
+
+  private failConnection(err: unknown): void {
+    if (this.connectionSettled) return
+    this.connectionSettled = true
+    this.rejectConnection(err)
+  }
+
+  private settleSession(): void {
+    if (this.sessionSettled) return
+    this.sessionSettled = true
+    this.resolveSession()
+  }
+
+  private failSession(err: unknown): void {
+    if (this.sessionSettled) return
+    this.sessionSettled = true
+    this.rejectSession(err)
+  }
+}
+
 /** Coerce any inbound WS message payload to a `Uint8Array` view. */
 function toBytes(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) return data
@@ -674,12 +784,21 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       )
       const socket = await connect(TTS_URL, headers)
       const queue = new AsyncQueue<TtsAudioChunk>()
+      const handshake = new TtsHandshake()
 
       socket.addEventListener('message', (event) => {
         try {
           const frame = parseFrame(event.data)
           if (frame.messageType === MessageType.ErrorResponse) {
-            queue.fail(new Error(`Volcengine TTS error: ${decodeUtf8(frame.payload)}`))
+            const err = new Error(`Volcengine TTS error: ${decodeUtf8(frame.payload)}`)
+            handshake.abort(err)
+            queue.fail(err)
+            return
+          }
+          // Drive the connection/session-acceptance gates from server events; a
+          // handshake-control event advances the gate and needs no further
+          // handling here.
+          if (handshake.handleEvent(frame.event, () => decodeUtf8(frame.payload))) {
             return
           }
           if (frame.event === TtsEvent.TtsResponse && frame.payload.length > 0) {
@@ -688,20 +807,38 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             queue.push({ audio: new Uint8Array(0), done: true })
             queue.close()
           } else if (frame.event === TtsEvent.SessionFailed) {
-            queue.fail(new Error(`Volcengine TTS session failed: ${decodeUtf8(frame.payload)}`))
+            const err = new Error(`Volcengine TTS session failed: ${decodeUtf8(frame.payload)}`)
+            handshake.abort(err)
+            queue.fail(err)
           }
         } catch (err) {
+          handshake.abort(err)
           queue.fail(err)
         }
       })
-      socket.addEventListener('close', () => queue.close())
-      socket.addEventListener('error', (err) => queue.fail(err))
+      // A socket close before the handshake completes must reject the pending
+      // gates so the pump fails loudly rather than awaiting a frame forever.
+      socket.addEventListener('close', () => {
+        handshake.abort(new Error('Volcengine TTS socket closed before session completed'))
+        queue.close()
+      })
+      socket.addEventListener('error', (err) => {
+        handshake.abort(err)
+        queue.fail(err)
+      })
 
+      // Event-driven handshake: each client frame waits for the server to accept
+      // the previous step before being sent. StartConnection -> (await
+      // ConnectionStarted) -> StartSession -> (await SessionStarted) ->
+      // TaskRequest(s) -> FinishSession -> FinishConnection. The server then
+      // streams TTSResponse audio + SessionFinished, handled by the listener.
       const pump = (async () => {
         socket.send(asArrayBuffer(buildTtsStartConnectionFrame()))
+        await handshake.connectionStarted
         socket.send(
           asArrayBuffer(buildTtsStartSessionFrame({ sessionId, speaker: ttsSpeaker, sampleRate }))
         )
+        await handshake.sessionStarted
         for await (const piece of text) {
           if (piece.length === 0) continue
           socket.send(

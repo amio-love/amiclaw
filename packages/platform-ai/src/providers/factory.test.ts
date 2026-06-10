@@ -6,9 +6,9 @@ function config(over: Partial<ResolvedConfig> = {}): ResolvedConfig {
   return {
     gameId: 'demo',
     systemPromptConfig: { role: 'guide', ruleTemplate: [] },
-    llm: { provider: 'deepseek', model: 'deepseek-v4-flash', fallback: [] },
-    stt: { provider: 'volcengine', model: 'bigmodel', fallback: [] },
-    tts: { provider: 'volcengine', model: 'doubao', fallback: [] },
+    llm: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    stt: { provider: 'volcengine', model: 'bigmodel' },
+    tts: { provider: 'volcengine', model: 'doubao' },
     ...over,
   }
 }
@@ -29,19 +29,19 @@ describe('createProviders', () => {
 
   it('throws a precise error for an unknown llm provider id', () => {
     expect(() =>
-      createProviders(config({ llm: { provider: 'mystery', model: 'x', fallback: [] } }), fullEnv)
+      createProviders(config({ llm: { provider: 'mystery', model: 'x' } }), fullEnv)
     ).toThrow(/unknown llm provider id "mystery"/)
   })
 
   it('throws a precise error for an unknown stt provider id', () => {
     expect(() =>
-      createProviders(config({ stt: { provider: 'mystery', model: 'x', fallback: [] } }), fullEnv)
+      createProviders(config({ stt: { provider: 'mystery', model: 'x' } }), fullEnv)
     ).toThrow(/unknown stt provider id "mystery"/)
   })
 
   it('throws a precise error for an unknown tts provider id', () => {
     expect(() =>
-      createProviders(config({ tts: { provider: 'mystery', model: 'x', fallback: [] } }), fullEnv)
+      createProviders(config({ tts: { provider: 'mystery', model: 'x' } }), fullEnv)
     ).toThrow(/unknown tts provider id "mystery"/)
   })
 
@@ -61,9 +61,9 @@ describe('createProviders', () => {
 
   it('wires all-mock providers with no credentials in env', () => {
     const mockConfig = config({
-      llm: { provider: 'mock', model: 'mock-llm', fallback: [] },
-      stt: { provider: 'mock', model: 'mock-stt', fallback: [] },
-      tts: { provider: 'mock', model: 'mock-tts', fallback: [] },
+      llm: { provider: 'mock', model: 'mock-llm' },
+      stt: { provider: 'mock', model: 'mock-stt' },
+      tts: { provider: 'mock', model: 'mock-tts' },
     })
     // Empty env: the mock path must require no provider credentials.
     const providers = createProviders(mockConfig, {})
@@ -74,9 +74,9 @@ describe('createProviders', () => {
 
   it('shares one mock speech instance across the stt and tts slots', () => {
     const mockConfig = config({
-      stt: { provider: 'mock', model: 'mock-stt', fallback: [] },
-      tts: { provider: 'mock', model: 'mock-tts', fallback: [] },
-      llm: { provider: 'mock', model: 'mock-llm', fallback: [] },
+      stt: { provider: 'mock', model: 'mock-stt' },
+      tts: { provider: 'mock', model: 'mock-tts' },
+      llm: { provider: 'mock', model: 'mock-llm' },
     })
     const providers = createProviders(mockConfig, {})
     // The shared-instance build means stt and tts come from the same pair; we

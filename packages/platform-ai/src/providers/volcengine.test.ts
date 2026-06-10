@@ -18,6 +18,7 @@ import {
   parseSttResponse,
   Serialization,
   TtsEvent,
+  TtsHandshake,
   type AdapterSocket,
   type WebSocketConnector,
 } from './volcengine'
@@ -459,23 +460,103 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
 
 // --- Streaming logic: synthesize (mock WS) ----------------------------------
 
+// --- TTS handshake state machine (pure, server-gated) -----------------------
+
+describe('TtsHandshake', () => {
+  it('resolves connectionStarted on a ConnectionStarted event', async () => {
+    const hs = new TtsHandshake()
+    let resolved = false
+    void hs.connectionStarted.then(() => {
+      resolved = true
+    })
+    expect(hs.handleEvent(TtsEvent.ConnectionStarted, () => '')).toBe(true)
+    await hs.connectionStarted
+    expect(resolved).toBe(true)
+  })
+
+  it('resolves sessionStarted on a SessionStarted event', async () => {
+    const hs = new TtsHandshake()
+    expect(hs.handleEvent(TtsEvent.SessionStarted, () => '')).toBe(true)
+    await expect(hs.sessionStarted).resolves.toBeUndefined()
+  })
+
+  it('rejects connectionStarted on a ConnectionFailed event', async () => {
+    const hs = new TtsHandshake()
+    expect(hs.handleEvent(TtsEvent.ConnectionFailed, () => 'bad key')).toBe(true)
+    await expect(hs.connectionStarted).rejects.toThrow(/connection failed: bad key/)
+  })
+
+  it('treats non-handshake events (audio / completion) as not consumed', () => {
+    const hs = new TtsHandshake()
+    expect(hs.handleEvent(TtsEvent.TtsResponse, () => '')).toBe(false)
+    expect(hs.handleEvent(TtsEvent.SessionFinished, () => '')).toBe(false)
+    expect(hs.handleEvent(undefined, () => '')).toBe(false)
+  })
+
+  it('abort rejects every not-yet-settled gate', async () => {
+    const hs = new TtsHandshake()
+    hs.abort(new Error('socket closed early'))
+    await expect(hs.connectionStarted).rejects.toThrow(/socket closed early/)
+    await expect(hs.sessionStarted).rejects.toThrow(/socket closed early/)
+  })
+
+  it('abort after a gate already resolved does not override it', async () => {
+    const hs = new TtsHandshake()
+    hs.handleEvent(TtsEvent.ConnectionStarted, () => '')
+    hs.abort(new Error('late close'))
+    // The already-resolved connection gate stays resolved; only the still-pending
+    // session gate is rejected.
+    await expect(hs.connectionStarted).resolves.toBeUndefined()
+    await expect(hs.sessionStarted).rejects.toThrow(/late close/)
+  })
+})
+
+/**
+ * Yield to the microtask/timer loop so the event-driven pump can react to the
+ * server event we just emitted before we inspect outbound frames or emit the
+ * next one. The handshake is now server-gated, so the pump only sends the next
+ * client frame *after* the gating event arrives — the test must interleave.
+ */
+function tick(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 0))
+}
+
+/** Outbound event codes captured on the mock socket so far. */
+function sentEvents(socket: MockSocket): Array<number | undefined> {
+  return socket.sent.map((b) => parseFrame(b).event)
+}
+
 describe('createVolcengineSpeechProvider.tts.synthesize', () => {
-  it('drives the event sequence and maps TTSResponse frames to audio chunks', async () => {
+  it('drives the server-gated event sequence and maps TTSResponse frames to audio', async () => {
     const socket = new MockSocket()
     const { connect, calls } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
 
     const text = await asyncFrom(['句一', '句二'])
-    const stream = tts.synthesize(text)
-    const collected = collect(stream)
+    const collected = collect(tts.synthesize(text))
 
-    await new Promise((r) => setTimeout(r, 0))
-    // Read the session id the adapter assigned (from a session-scoped frame).
+    // 1. The pump sends StartConnection FIRST and then waits — it must NOT have
+    //    sent StartSession before the server accepts the connection.
+    await tick()
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+
+    // 2. Server accepts the connection -> the pump may now send StartSession.
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection, TtsEvent.StartSession])
+
+    // Read the session id the adapter assigned (from the StartSession frame).
     const startSession = socket.sent
       .map((b) => parseFrame(b))
       .find((f) => f.event === TtsEvent.StartSession)
     const sessionId = startSession?.sessionId ?? 's'
 
+    // 3. Server accepts the session -> the pump sends the TaskRequests, then
+    //    FinishSession + FinishConnection.
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+
+    // 4. Server streams audio + SessionFinished.
     socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('AUDIO1'), sessionId))
     socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('AUDIO2'), sessionId))
     socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
@@ -492,10 +573,9 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     expect(calls[0].url).toContain('/tts/bidirection')
     expect(calls[0].headers['X-Api-Resource-Id']).toBe('volc.service_type.10029')
 
-    // The outbound event sequence is StartConnection -> StartSession ->
+    // Full outbound event sequence: StartConnection -> StartSession ->
     // TaskRequest(x2) -> FinishSession -> FinishConnection.
-    const events = socket.sent.map((b) => parseFrame(b).event)
-    expect(events).toEqual([
+    expect(sentEvents(socket)).toEqual([
       TtsEvent.StartConnection,
       TtsEvent.StartSession,
       TtsEvent.TaskRequest,
@@ -505,18 +585,119 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     ])
   })
 
+  it('does NOT send StartSession until the server accepts the connection', async () => {
+    // Regression for F-G: the previous pump fired StartSession immediately after
+    // StartConnection without waiting for ConnectionStarted, racing the server.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(await asyncFrom(['hi'])))
+
+    // Several microtasks pass; with no ConnectionStarted the pump must stay at
+    // StartConnection only — StartSession is gated.
+    await tick()
+    await tick()
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+
+    // Unblock the rest of the handshake so the stream can terminate cleanly.
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+    await collected
+  })
+
+  it('does NOT send TaskRequest until the server accepts the session', async () => {
+    // Regression for F-G: TaskRequest frames are session-scoped and must wait for
+    // SessionStarted; sending them before the session is accepted gets them
+    // rejected/ignored, yielding no audio.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(await asyncFrom(['念这句'])))
+
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    // Connection accepted, session NOT yet accepted: only StartConnection +
+    // StartSession sent, no TaskRequest.
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection, TtsEvent.StartSession])
+
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    // Now the TaskRequest is allowed.
+    expect(sentEvents(socket)).toContain(TtsEvent.TaskRequest)
+
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+    await collected
+  })
+
+  it('fails loudly on ConnectionFailed instead of hanging the handshake', async () => {
+    // If the server rejects the connection, the gate the pump awaits must reject
+    // so the turn fails fast rather than awaiting a frame that never comes.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
+    await tick()
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionFailed, encoder.encode('bad app key')))
+
+    await expect(consumed).rejects.toThrow(/Volcengine TTS connection failed/)
+    // The pump must NOT have advanced past StartConnection.
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+  })
+
   it('surfaces a SessionFailed event as a thrown error', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
 
-    const stream = tts.synthesize(await asyncFrom(['x']))
-    const consumed = collect(stream)
+    const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
 
-    await new Promise((r) => setTimeout(r, 0))
-    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFailed, encoder.encode('quota exceeded')))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(
+      ttsServerFrame(TtsEvent.SessionFailed, encoder.encode('quota exceeded'), sessionId)
+    )
 
     await expect(consumed).rejects.toThrow(/Volcengine TTS session failed/)
+  })
+
+  it('rejects the pending gate if the socket closes before the handshake completes', async () => {
+    // A socket close before ConnectionStarted must reject the awaited gate so the
+    // pump fails loudly instead of awaiting a connection frame forever.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
+    await tick()
+    socket.emitClose()
+
+    // Close ends the queue (no audio); the pump's awaited gate rejected, but the
+    // queue closing means the consumer simply sees an empty stream — assert it
+    // terminates rather than hanging.
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('synthesize did not terminate after an early close')), 50)
+    )
+    await Promise.race([consumed, guard])
   })
 
   it('skips empty text pieces (no TaskRequest emitted for them)', async () => {
@@ -524,16 +705,17 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
 
-    const stream = tts.synthesize(await asyncFrom(['', 'real', '']))
-    const collected = collect(stream)
+    const collected = collect(tts.synthesize(await asyncFrom(['', 'real', ''])))
 
-    await new Promise((r) => setTimeout(r, 0))
-    const startSession = socket.sent
-      .map((b) => parseFrame(b))
-      .find((f) => f.event === TtsEvent.StartSession)
-    socket.emitMessage(
-      ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), startSession?.sessionId ?? 's')
-    )
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
 
     await collected
     const taskRequests = socket.sent

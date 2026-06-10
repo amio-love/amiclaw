@@ -89,9 +89,9 @@ function mockTts(received: string[]): TtsProvider {
 const resolvedConfig: ResolvedConfig = {
   gameId: 'demo',
   systemPromptConfig: { role: 'guide', ruleTemplate: ['rule one'] },
-  llm: { provider: 'deepseek', model: 'deepseek-v4-flash', fallback: [] },
-  stt: { provider: 'volcengine', model: 'bigmodel', fallback: [] },
-  tts: { provider: 'volcengine', model: 'doubao', fallback: [] },
+  llm: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+  stt: { provider: 'volcengine', model: 'bigmodel' },
+  tts: { provider: 'volcengine', model: 'doubao' },
 }
 
 const manualData: ManualData = { version: 'v1', sections: { intro: { text: 'hi' } } }
