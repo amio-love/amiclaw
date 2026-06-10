@@ -1,10 +1,13 @@
 /**
  * LoginPage (/login) integration tests.
  *
- * Two real sign-in paths:
- *   1. the form renders an email input and a submit button, AND a Google
- *      sign-in link to /api/auth/google/start (live now that the endpoint
- *      exists — a navigational <a>, not a fetch).
+ * The page is an honest fork, not a wall:
+ *   0. it frames WHY an account exists (the platform-AI path / mode②) and states
+ *      that playing with your own AI needs no login, and offers a direct-play
+ *      escape into free anonymous play (window.location.assign('/bombsquad/')).
+ *   1. it keeps two real sign-in paths: the email form (input + submit button)
+ *      AND a Google sign-in link to /api/auth/google/start (live now that the
+ *      endpoint exists — a navigational <a>, not a fetch).
  *   2. submitting the email form POSTs to /api/auth/magic-link/request and shows
  *      the unified anti-enumeration confirmation — the same message regardless
  *      of whether the email is known (the page never reveals which addresses can
@@ -27,6 +30,37 @@ function renderLogin() {
 describe('LoginPage /login', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('frames why login exists and that playing needs no account', () => {
+    renderLogin()
+
+    // Playing does NOT require login — the free anonymous mode① line.
+    expect(
+      screen.getByText(
+        '玩游戏不需要登录。带上你自己的 AI，随时可以直接开始，全程免费，也不用建账号。'
+      )
+    ).toBeInTheDocument()
+    // The honest reason: login is the platform-AI (mode②) identity prerequisite
+    // — platform pays for the inference, so it needs an account to meter usage /
+    // set limits; framed as decided-but-not-live, not a live feature.
+    const reason = screen.getByText(/登录是为「平台 AI」这条路准备的/)
+    expect(reason).toBeInTheDocument()
+    expect(reason.textContent).toContain('还没上线')
+    expect(reason.textContent).toContain('记你的用量')
+  })
+
+  it('offers a direct-play escape into free anonymous play', () => {
+    const assignSpy = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign: assignSpy })
+    renderLogin()
+
+    const directPlay = screen.getByRole('button', { name: '带自己的 AI 直接开始玩' })
+    expect(directPlay).toBeInTheDocument()
+
+    fireEvent.click(directPlay)
+    // Full-page navigation into the BombSquad SPA (mode① BYO-AI play entry).
+    expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
 
   it('renders the email form and a live Google sign-in link', () => {

@@ -21,6 +21,7 @@ Feature: mode② auth
   Scenario: The login form sends a magic link and shows the unified confirmation
     Given I open /login
     Then I see the login email form and the Google sign-in button
+    And I see the honest framing and the direct-play escape
     When I enter my email and submit the login form
     Then I see the unified login confirmation
     And a magic-link request was sent for my email

@@ -17,16 +17,42 @@
   font-style: italic;
 }
 
+/* Honest framing block — why an account exists + that playing needs none.
+   Two stacked lead paragraphs above the direct-play escape and the login card. */
+.why {
+  margin: 14px 0 24px;
+  max-width: 560px;
+}
+
 .lead {
-  margin: 10px 0 36px;
-  max-width: 540px;
-  font: 400 16px/1.6 var(--font-body);
+  margin: 0;
+  font: 400 16px/1.7 var(--font-body);
   color: rgba(255, 255, 255, 0.6);
+}
+
+.lead + .lead {
+  margin-top: 14px;
+}
+
+/* Direct-play escape — a full-width ghost action, prominent but secondary to
+   the login card below. Mirrors the @amiclaw/ui ghost button recipe. */
+.directPlay {
+  width: 100%;
+  max-width: 440px;
+  margin-bottom: 28px;
 }
 
 .card {
   max-width: 440px;
   padding: 36px 32px;
+}
+
+/* In-card instruction for the email flow (the page lead now carries the
+   why-login framing instead). */
+.cardLead {
+  margin: 0 0 18px;
+  font: 400 14px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .form {

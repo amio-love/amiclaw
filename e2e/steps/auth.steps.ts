@@ -16,6 +16,18 @@ Then('I see the login email form and the Google sign-in button', async ({ page }
   await expect(page.getByRole('link', { name: /Google/ })).toBeVisible()
 })
 
+Then('I see the honest framing and the direct-play escape', async ({ page }) => {
+  // The page explains WHY login exists (the platform-AI / mode② path) and that
+  // playing with your own AI needs no account.
+  await expect(page.getByText(/玩游戏不需要登录/)).toBeVisible()
+  await expect(page.getByText(/登录是为「平台 AI」这条路准备的/)).toBeVisible()
+  // The direct-play escape into free anonymous play. It navigates via
+  // window.location.assign('/bombsquad/'); presence + label is asserted here,
+  // the navigation target is covered by the LoginPage unit test (no click, so
+  // the scenario can go on to submit the email form without leaving the page).
+  await expect(page.getByRole('button', { name: '带自己的 AI 直接开始玩' })).toBeVisible()
+})
+
 // RegExp-registered: the literal step text contains `/api/auth/google/start`,
 // and a bare `/` is a Cucumber-expression alternation separator (same dodge as
 // the `I am signed in on /me` step above).
