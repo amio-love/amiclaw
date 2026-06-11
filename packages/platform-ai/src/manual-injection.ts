@@ -9,11 +9,17 @@
  *     context, deterministically — the platform decides which manual sections
  *     are relevant, rather than relying on the model's function-calling to go
  *     fetch them.
+ *   - The companion context resolved at session assembly (optional fourth
+ *     input) is injected the same way — deterministic, server-side, appended
+ *     after the manual block; absent, the prompt is byte-identical to the
+ *     pre-companion shape.
  *
- * Determinism is the point: given the same config, manual, and game state, the
- * assembled messages are byte-identical. No model in the loop here.
+ * Determinism is the point: given the same config, manual, game state, and
+ * (optional) companion context, the assembled messages are byte-identical. No
+ * model in the loop here.
  */
 
+import type { CompanionContext } from '../../companion-memory/src/types'
 import type { ManualData } from './contract'
 import type { ChatMessage } from './providers/types'
 import type { SystemPromptConfig } from './provider-config'
@@ -34,6 +40,14 @@ export interface AssembleLlmContextInput {
   systemPromptConfig: SystemPromptConfig
   manualData: ManualData
   gameState: GameState
+  /**
+   * Companion context resolved at session assembly (companion-memory
+   * resolver). Optional: absent for memory-less sessions (no companion set
+   * up, resolver degraded, mode① — nothing is injected and the prompt is
+   * byte-identical to the pre-companion shape). Injected ISOMORPHIC to the
+   * manual: deterministically, server-side, never via model function-calling.
+   */
+  companionContext?: CompanionContext
 }
 
 /**
@@ -72,10 +86,41 @@ function buildManualInjection(manualData: ManualData, gameState: GameState): str
 }
 
 /**
+ * Serialize the companion context into a single injected block (the memory
+ * counterpart of `buildManualInjection` — same deterministic, server-side
+ * shape). The identity lines always inject when a companion exists; the
+ * claims / episodes sections are included only when non-empty, so a fresh
+ * companion with no memories still knows its own name.
+ */
+function buildCompanionInjection(context: CompanionContext): string {
+  const lines: string[] = ['Companion memory (platform-injected):']
+  lines.push(`Your name is ${context.companion.name}.`)
+  if (context.companion.address_style.length > 0) {
+    lines.push(`Address the player as "${context.companion.address_style}".`)
+  }
+  if (context.claims.length > 0) {
+    lines.push('What you understand about the player:')
+    for (const claim of context.claims) {
+      lines.push(`- [${claim.dimension}] ${claim.claim}`)
+    }
+  }
+  if (context.episodes.length > 0) {
+    lines.push('Shared memories you may naturally reference:')
+    for (const episode of context.episodes) {
+      lines.push(
+        `- (${episode.occurred_at} · ${episode.game_id}) ${episode.title}: ${episode.narrative}`
+      )
+    }
+  }
+  return lines.join('\n')
+}
+
+/**
  * Assemble the OpenAI-compatible message array for one turn.
  *
  * Returns exactly two messages:
- *   1. a `system` message carrying role + rules + the injected manual subset
+ *   1. a `system` message carrying role + rules + the injected manual subset +
+ *      (when a companion context is present) the companion memory block
  *      (all server-side material — it never leaves the server boundary), and
  *   2. nothing else here: conversation history / the player's transcribed turn
  *      are appended by the turn pipeline downstream. Keeping this function to
@@ -85,13 +130,17 @@ function buildManualInjection(manualData: ManualData, gameState: GameState): str
  * Pure: no I/O, no clock, no randomness.
  */
 export function assembleLlmContext(input: AssembleLlmContextInput): ChatMessage[] {
-  const { systemPromptConfig, manualData, gameState } = input
+  const { systemPromptConfig, manualData, gameState, companionContext } = input
   const systemPrompt = buildSystemPrompt(systemPromptConfig)
   const manualInjection = buildManualInjection(manualData, gameState)
+  const blocks = [systemPrompt, manualInjection]
+  if (companionContext !== undefined) {
+    blocks.push(buildCompanionInjection(companionContext))
+  }
   return [
     {
       role: 'system',
-      content: `${systemPrompt}\n\n${manualInjection}`,
+      content: blocks.join('\n\n'),
     },
   ]
 }

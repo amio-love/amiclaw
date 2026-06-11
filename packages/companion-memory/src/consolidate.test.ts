@@ -1,0 +1,299 @@
+/**
+ * Write-path tests: capture idempotency, consolidation outcomes per the
+ * degradation matrix, replay safety (zero duplicate episodes / ledger
+ * credits), join-key merge, evidence invariant, profile switch gating, and
+ * the bounded retry budget.
+ */
+
+import { describe, expect, it } from 'vitest'
+import { captureSessionSummary, captureSettlementEvent } from './capture'
+import { MAX_CONSOLIDATION_ATTEMPTS, runConsolidation } from './consolidate'
+import type { CompanionDb } from './db'
+import type { DomainDeps } from './deps'
+import type { DistillLlm } from './distill'
+import { createTestDb } from './test-support/sqlite-db'
+import type {
+  AssetEntryRecord,
+  CaptureEventRecord,
+  EpisodeRecord,
+  ProfileClaimRecord,
+  SessionSummaryCaptureInput,
+  SettlementCaptureInput,
+} from './types'
+
+const NOW = '2026-06-11T10:00:00.000Z'
+
+function testDeps(): DomainDeps {
+  let n = 0
+  return {
+    now: () => NOW,
+    newId: () => `id-${(n += 1)}`,
+  }
+}
+
+async function seedCompanion(
+  db: CompanionDb,
+  userId: string,
+  profileEnabled = true
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO companion (user_id, name, address_style, voice_id, profile_enabled, created_at)
+       VALUES (?, 'Ami', '', 'companion-warm', ?, ?)`
+    )
+    .bind(userId, profileEnabled ? 1 : 0, NOW)
+    .run()
+}
+
+const SUMMARY: SessionSummaryCaptureInput = {
+  sessionId: 'sess-1',
+  gameId: 'bombsquad',
+  userId: 'user-a',
+  turnCount: 9,
+  highlights: ['Player froze on the keypad module', 'We laughed about the wires'],
+  gameRunId: 'run-1',
+  occurredAt: NOW,
+}
+
+const SETTLEMENT: SettlementCaptureInput = {
+  settlementId: 'run-1',
+  userId: 'user-a',
+  gameId: 'bombsquad',
+  gameRunId: 'run-1',
+  outcome: 'win',
+  durationSeconds: 423,
+  occurredAt: NOW,
+  assets: [{ assetType: 'spark', amount: 10 }],
+}
+
+const CANNED_DISTILLATION = JSON.stringify({
+  episodes: [
+    { title: 'The keypad freeze', narrative: 'We froze, then we figured it out.', salience: 80 },
+  ],
+  claims: [
+    { dimension: 'sticking-point', claim: 'Keypad symbols slow the player down', evidence: [0] },
+  ],
+})
+
+function cannedLlm(
+  responses: string[] = [CANNED_DISTILLATION]
+): DistillLlm & { prompts: string[] } {
+  const prompts: string[] = []
+  let i = 0
+  return {
+    prompts,
+    async complete(prompt: string): Promise<string> {
+      prompts.push(prompt)
+      const response = responses[Math.min(i, responses.length - 1)]
+      i += 1
+      return response
+    },
+  }
+}
+
+async function allRows<T>(db: CompanionDb, table: string): Promise<T[]> {
+  const { results } = await db.prepare(`SELECT * FROM ${table}`).bind().all<T>()
+  return results
+}
+
+describe('capture idempotency', () => {
+  it('captures one row per stable event id and no-ops the replay', async () => {
+    const db = createTestDb()
+    const first = await captureSessionSummary(db, SUMMARY, testDeps())
+    const replay = await captureSessionSummary(db, SUMMARY, testDeps())
+    expect(first).toEqual({ captured: true, eventId: 'session-summary:sess-1' })
+    expect(replay).toEqual({
+      captured: false,
+      reason: 'duplicate',
+      eventId: 'session-summary:sess-1',
+    })
+    expect(await allRows(db, 'capture_event')).toHaveLength(1)
+  })
+
+  it('drops a summary with no user id (anonymous sessions never produce memories)', async () => {
+    const db = createTestDb()
+    const result = await captureSessionSummary(db, { ...SUMMARY, userId: '' }, testDeps())
+    expect(result).toEqual({ captured: false, reason: 'no-user' })
+    expect(await allRows(db, 'capture_event')).toHaveLength(0)
+  })
+})
+
+describe('settlement consolidation (deterministic path)', () => {
+  it('writes one fact episode + the asset credit, and replay adds nothing', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a')
+    await captureSettlementEvent(db, SETTLEMENT, deps)
+    const first = await runConsolidation(db, null, deps)
+    expect(first).toEqual({ processed: 1, discarded: 0, remaining: 0 })
+
+    const episodes = await allRows<EpisodeRecord>(db, 'episode')
+    const assets = await allRows<AssetEntryRecord>(db, 'asset_entry')
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0].source_kind).toBe('settlement')
+    expect(episodes[0].title).toContain('bombsquad')
+    expect(assets).toHaveLength(1)
+    expect(assets[0]).toMatchObject({ asset_type: 'spark', amount: 10, source_product: 'amiclaw' })
+
+    // Full replay: re-capture + re-run. Zero duplicate episodes / credits.
+    await captureSettlementEvent(db, SETTLEMENT, deps)
+    await db
+      .prepare(`UPDATE capture_event SET status = 'pending', processed_at = NULL`)
+      .bind()
+      .run()
+    await runConsolidation(db, null, deps)
+    expect(await allRows<EpisodeRecord>(db, 'episode')).toHaveLength(1)
+    expect(await allRows<AssetEntryRecord>(db, 'asset_entry')).toHaveLength(1)
+  })
+
+  it('discards events for a user with no companion', async () => {
+    const db = createTestDb()
+    await captureSettlementEvent(db, SETTLEMENT, testDeps())
+    const outcome = await runConsolidation(db, null, testDeps())
+    expect(outcome).toEqual({ processed: 0, discarded: 1, remaining: 0 })
+    expect(await allRows(db, 'episode')).toHaveLength(0)
+    const [event] = await allRows<CaptureEventRecord>(db, 'capture_event')
+    expect(event.status).toBe('discarded')
+  })
+})
+
+describe('summary consolidation (LLM path)', () => {
+  it('distills episodes + evidence-bearing claims, merging join-keyed settlement facts', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    const llm = cannedLlm()
+    await seedCompanion(db, 'user-a')
+    await captureSettlementEvent(db, SETTLEMENT, deps)
+    await captureSessionSummary(db, SUMMARY, deps)
+
+    const outcome = await runConsolidation(db, llm, deps)
+    expect(outcome).toEqual({ processed: 2, discarded: 0, remaining: 0 })
+
+    // Join semantics: the settlement facts rode into the distillation prompt.
+    expect(llm.prompts).toHaveLength(1)
+    expect(llm.prompts[0]).toContain('outcome=win')
+    expect(llm.prompts[0]).toContain('Player froze on the keypad module')
+
+    const episodes = await allRows<EpisodeRecord>(db, 'episode')
+    const claims = await allRows<ProfileClaimRecord>(db, 'profile_claim')
+    expect(episodes).toHaveLength(2) // settlement fact + distilled moment
+    expect(claims).toHaveLength(1)
+
+    const { results: evidence } = await db
+      .prepare(
+        `SELECT pce.episode_id FROM profile_claim_evidence pce WHERE pce.profile_claim_id = ?`
+      )
+      .bind(claims[0].id)
+      .all<{ episode_id: string }>()
+    const distilled = episodes.find((e) => e.source_kind === 'session_summary')
+    expect(evidence.map((e) => e.episode_id)).toEqual([distilled?.id])
+  })
+
+  it('replaying the whole pipeline produces zero duplicates', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a')
+    await captureSessionSummary(db, SUMMARY, deps)
+    await runConsolidation(db, cannedLlm(), deps)
+
+    await captureSessionSummary(db, SUMMARY, deps)
+    await db
+      .prepare(`UPDATE capture_event SET status = 'pending', processed_at = NULL`)
+      .bind()
+      .run()
+    await runConsolidation(db, cannedLlm(), deps)
+
+    expect(await allRows<EpisodeRecord>(db, 'episode')).toHaveLength(1)
+    expect(await allRows<ProfileClaimRecord>(db, 'profile_claim')).toHaveLength(1)
+    const evidence = await allRows(db, 'profile_claim_evidence')
+    expect(evidence).toHaveLength(1)
+  })
+
+  it('profile_enabled=false consolidates episodes but never claims', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a', false)
+    await captureSessionSummary(db, SUMMARY, deps)
+    await runConsolidation(db, cannedLlm(), deps)
+    expect(await allRows<EpisodeRecord>(db, 'episode')).toHaveLength(1)
+    expect(await allRows<ProfileClaimRecord>(db, 'profile_claim')).toHaveLength(0)
+  })
+
+  it('drops claims whose evidence cites no produced episode', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a')
+    await captureSessionSummary(db, SUMMARY, deps)
+    const orphanClaim = JSON.stringify({
+      episodes: [{ title: 'A moment', narrative: 'It happened.', salience: 50 }],
+      claims: [
+        { dimension: 'play-style', claim: 'Grounded claim', evidence: [0] },
+        { dimension: 'play-style', claim: 'Ungrounded claim', evidence: [7] },
+        { dimension: 'play-style', claim: 'Evidence-free claim', evidence: [] },
+      ],
+    })
+    await runConsolidation(db, cannedLlm([orphanClaim]), deps)
+    const claims = await allRows<ProfileClaimRecord>(db, 'profile_claim')
+    expect(claims).toHaveLength(1)
+    expect(claims[0].claim).toBe('Grounded claim')
+  })
+
+  it('degrades to settlement-facts-only when no LLM is available', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a')
+    await captureSettlementEvent(db, SETTLEMENT, deps)
+    await captureSessionSummary(db, SUMMARY, deps)
+    const outcome = await runConsolidation(db, null, deps)
+    expect(outcome).toEqual({ processed: 2, discarded: 0, remaining: 0 })
+    const episodes = await allRows<EpisodeRecord>(db, 'episode')
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0].source_kind).toBe('settlement')
+    expect(await allRows(db, 'profile_claim')).toHaveLength(0)
+  })
+
+  it('a summary without highlights consolidates to nothing (no LLM call)', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    const llm = cannedLlm()
+    await seedCompanion(db, 'user-a')
+    await captureSessionSummary(db, { ...SUMMARY, highlights: [] }, deps)
+    const outcome = await runConsolidation(db, llm, deps)
+    expect(outcome).toEqual({ processed: 1, discarded: 0, remaining: 0 })
+    expect(llm.prompts).toHaveLength(0)
+    expect(await allRows(db, 'episode')).toHaveLength(0)
+  })
+
+  it('a failing LLM leaves the event pending with attempts bumped, then degrades at budget', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    let llmCalls = 0
+    const failingLlm: DistillLlm = {
+      complete: async () => {
+        llmCalls += 1
+        throw new Error('provider down')
+      },
+    }
+    await seedCompanion(db, 'user-a')
+    await captureSessionSummary(db, SUMMARY, deps)
+
+    for (let attempt = 1; attempt < MAX_CONSOLIDATION_ATTEMPTS; attempt += 1) {
+      const outcome = await runConsolidation(db, failingLlm, deps)
+      expect(outcome.remaining).toBe(1)
+      const [event] = await allRows<CaptureEventRecord>(db, 'capture_event')
+      expect(event.status).toBe('pending')
+      expect(event.attempts).toBe(attempt)
+    }
+
+    // Final attempt: budget exhausted -> processed degraded, no output. The
+    // budget means REAL tries: exactly MAX LLM calls ran, and the row's
+    // `attempts` ledger records all of them (including the final failure).
+    const final = await runConsolidation(db, failingLlm, deps)
+    expect(final).toEqual({ processed: 1, discarded: 0, remaining: 0 })
+    const [event] = await allRows<CaptureEventRecord>(db, 'capture_event')
+    expect(event.status).toBe('processed')
+    expect(event.attempts).toBe(MAX_CONSOLIDATION_ATTEMPTS)
+    expect(llmCalls).toBe(MAX_CONSOLIDATION_ATTEMPTS)
+    expect(await allRows(db, 'episode')).toHaveLength(0)
+  })
+})

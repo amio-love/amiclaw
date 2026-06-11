@@ -20,6 +20,7 @@
  * take the final cumulative text, not a concatenation of fragments.
  */
 
+import type { CompanionContext } from '../../companion-memory/src/types'
 import type { AiResponseChunk, AudioChunk } from './contract'
 import type { ChatMessage, LlmProvider, SttProvider, TtsProvider } from './providers/types'
 import { assembleLlmContext, type GameState } from './manual-injection'
@@ -70,6 +71,16 @@ export interface SessionState {
   turnCount: number
   /** Accumulated usage counters. */
   usage: UsageCounters
+  /**
+   * Companion context resolved at session assembly (companion-memory).
+   * Optional: absent = memory-less session, injection is a no-op.
+   */
+  companionContext?: CompanionContext
+  /**
+   * Join key correlating this session's summary with the run's settlement
+   * event, supplied by the consumer at `create`. Optional (additive).
+   */
+  gameRunId?: string
 }
 
 /** The three wired providers a turn drives. */
@@ -216,6 +227,7 @@ export async function* runTurn(
     systemPromptConfig: state.config.systemPromptConfig,
     manualData: state.manualData,
     gameState: state.gameState,
+    ...(state.companionContext !== undefined ? { companionContext: state.companionContext } : {}),
   })
   const userMessage: ChatMessage = { role: 'user', content: playerText }
   const messages: ChatMessage[] = [...systemMessages, ...state.history, userMessage]

@@ -17,17 +17,34 @@
  * session that is fully constructed or entirely absent, never half-bound.
  */
 
+import type { CompanionContext } from '../../companion-memory/src/types'
 import type { ManualData } from './contract'
 import type { GameState } from './manual-injection'
 import { resolveConfig } from './provider-config'
 import { createProviders, type ProviderEnv } from './providers/factory'
 import type { SessionState, TurnProviders } from './turn-pipeline'
+import { resolveVendorVoice } from './voice-id-mapping'
 
 /** Everything `createSession` publishes, assembled atomically or not at all. */
 export interface AssembledSession {
   userId: string
   providers: TurnProviders
   state: SessionState
+}
+
+/**
+ * Optional assembly-time companion-memory inputs (additive seam). The
+ * RESOLUTION of `companionContext` (the companion-memory resolver call over
+ * D1) happens before this function, on the DO's create path — this function
+ * stays synchronous, and the all-or-nothing publish property is untouched.
+ * The companion's `voice_id`, however, is mapped to vendor voice params
+ * INSIDE this function (synchronous, total — see `voice-id-mapping.ts`) and
+ * threaded into the TTS provider. An absent context assembles the exact
+ * pre-companion session.
+ */
+export interface AssembleSessionExtras {
+  companionContext?: CompanionContext
+  gameRunId?: string
 }
 
 /**
@@ -40,10 +57,26 @@ export function assembleSession(
   userId: string,
   manualData: ManualData,
   gameState: GameState | undefined,
-  env: ProviderEnv
+  env: ProviderEnv,
+  extras: AssembleSessionExtras = {}
 ): AssembledSession {
   const config = resolveConfig(gameId)
-  const providers = createProviders(config, env)
+  // Companion voice wiring (L2 §Mechanism Variant 2): the companion's
+  // platform-neutral `voice_id` resolves to vendor voice params HERE, at
+  // assembly. Resolution is total — an unknown id or an unfilled placeholder
+  // degrades to `undefined` (the provider's default voice, warned inside
+  // `resolveVendorVoice`), so a voice-mapping gap can never fail session
+  // creation and the all-or-nothing publish property is untouched. No
+  // companion context -> no override -> the exact pre-companion wiring.
+  const vendorVoice =
+    extras.companionContext === undefined
+      ? undefined
+      : resolveVendorVoice(extras.companionContext.companion.voice_id)
+  const providers = createProviders(
+    config,
+    env,
+    vendorVoice === undefined ? undefined : { ttsSpeaker: vendorVoice.volcengineVoiceType }
+  )
   const state: SessionState = {
     config,
     manualData,
@@ -51,6 +84,8 @@ export function assembleSession(
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
+    ...(extras.companionContext !== undefined ? { companionContext: extras.companionContext } : {}),
+    ...(extras.gameRunId !== undefined ? { gameRunId: extras.gameRunId } : {}),
   }
   return { userId, providers, state }
 }

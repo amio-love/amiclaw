@@ -5,6 +5,27 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Companion & memory backend (server side)** - The platform now has the data
+layer for a personal AI companion that remembers you across sessions (signed-in
+mode② only; anonymous play is untouched). A new Companion D1 database — the
+repo's first relational database — stores the one-per-account companion profile
+(your chosen name, how it addresses you, a platform-neutral voice), browsable
+episodic memories, an implicit understanding-layer profile in which every
+understanding must cite at least one real memory as evidence, and an
+account-level asset ledger. After a session ends, an asynchronous,
+alarm-driven consolidation job distills the conversation and the game result
+into memories (idempotent: retries can never duplicate a memory or an asset
+credit), and the next session deterministically injects your companion's
+identity plus a small memory subset into the AI's context — the injection
+budget is configuration, ready for tuning. A full `/api/companion/*` control
+plane (behind a login-required guard, owner identity always derived from the
+server-side session) covers initial setup, the memory album
+(paginate / delete, with evidence-loss cascade), and the profile's four
+player-sovereign operations: view with evidence chains, correct, delete, and
+switch off. No UI ships in this change set — endpoints and data only. See
+`functions/api/companion/PROVISIONING.md` for the one-time D1 setup and
+binding back-fill.
+
 **Google sign-in** - You can now sign in with Google as well as by email magic
 link. The `/login` page shows a "用 Google 登录" button that takes you to Google's
 consent screen and back; signing in with Google lands you in the same account as

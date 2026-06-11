@@ -58,6 +58,16 @@ export interface SessionProviders {
   tts: TtsProvider
 }
 
+/**
+ * Per-session voice overrides resolved at assembly (companion voice wiring).
+ * `ttsSpeaker` is the vendor voice token resolved from the companion's
+ * platform-neutral `voice_id` (see `voice-id-mapping.ts`); `undefined` keeps
+ * the adapter's default voice — the exact pre-companion behavior.
+ */
+export interface SessionVoiceOverrides {
+  ttsSpeaker?: string
+}
+
 /** Throw a precise error for a credential the selected vendor requires. */
 function requireCredential(value: string | undefined, name: string, providerId: string): string {
   if (value === undefined || value === '') {
@@ -106,7 +116,8 @@ function createLlmProvider(resolved: ResolvedConfig, env: ProviderEnv): LlmProvi
  */
 function createVolcengineSpeech(
   resolved: ResolvedConfig,
-  env: ProviderEnv
+  env: ProviderEnv,
+  voice?: SessionVoiceOverrides
 ): { stt: SttProvider; tts: TtsProvider } {
   return createVolcengineSpeechProvider({
     appId: requireCredential(env.VOLC_APP_ID, 'VOLC_APP_ID', PROVIDER_VOLCENGINE),
@@ -115,6 +126,10 @@ function createVolcengineSpeech(
     ttsResourceId: env.VOLC_TTS_RESOURCE_ID,
     sttModel: resolved.stt.model,
     ttsModel: resolved.tts.model,
+    // Per-session companion voice: an `undefined` speaker falls through to the
+    // adapter's `DEFAULT_TTS_SPEAKER`, so a session with no companion (or a
+    // degraded voice resolution) is byte-identical to the pre-companion wire.
+    ttsSpeaker: voice?.ttsSpeaker,
   })
 }
 
@@ -123,9 +138,15 @@ function createVolcengineSpeech(
  *
  * Routes each `LayerSelection.provider` id to its R2 adapter factory. When both
  * the STT and TTS layers select `volcengine`, the same shared speech instance
- * backs both. An unknown provider id on any layer throws.
+ * backs both. An unknown provider id on any layer throws. `voice` carries the
+ * per-session overrides resolved at assembly (companion voice); omitted, the
+ * wiring is identical to the pre-companion factory.
  */
-export function createProviders(resolved: ResolvedConfig, env: ProviderEnv): SessionProviders {
+export function createProviders(
+  resolved: ResolvedConfig,
+  env: ProviderEnv,
+  voice?: SessionVoiceOverrides
+): SessionProviders {
   const llm = createLlmProvider(resolved, env)
 
   // Build each shared speech pair at most once, lazily, only if a voice layer
@@ -133,7 +154,7 @@ export function createProviders(resolved: ResolvedConfig, env: ProviderEnv): Ses
   // STT+TTS instances — one build backs both slots.
   let volcengine: { stt: SttProvider; tts: TtsProvider } | undefined
   const getVolcengine = (): { stt: SttProvider; tts: TtsProvider } => {
-    if (volcengine === undefined) volcengine = createVolcengineSpeech(resolved, env)
+    if (volcengine === undefined) volcengine = createVolcengineSpeech(resolved, env, voice)
     return volcengine
   }
   let mock: { stt: SttProvider; tts: TtsProvider } | undefined

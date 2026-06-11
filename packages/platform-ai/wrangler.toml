@@ -34,6 +34,35 @@ class_name = "VoiceSessionDO"
 tag = "v1"
 new_sqlite_classes = ["VoiceSessionDO"]
 
+# --- Companion-memory consolidator: alarm-driven async consolidation ---
+# Singleton DO (one well-known name) that receives the endSession summary
+# hand-off, writes the idempotent capture row to Companion D1, and runs the
+# LLM consolidation job on a durable alarm — off the session lifecycle, so a
+# slow/failed consolidation can never affect a session end. Chosen over
+# `waitUntil` (parent-request wall-clock bound; LLM distillation can overrun)
+# and Queues (new platform dependency).
+[[durable_objects.bindings]]
+name = "COMPANION_CONSOLIDATOR"
+class_name = "CompanionConsolidatorDO"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CompanionConsolidatorDO"]
+
+# --- Companion D1: the repo's first relational database ---
+# Owned by the companion-memory component (companion profile, episodic +
+# profile memory, asset ledger, capture inbox). The SAME database is also
+# bound to the Pages project (variable name `COMPANION_DB`) for the
+# /api/companion/* control plane — two binding points, one database.
+# `database_id` is the production id, filled at deploy wiring time
+# (placeholder until then); schema SSOT + migrations live in
+# packages/companion-memory/migrations (see `migrations_dir`).
+[[d1_databases]]
+binding = "COMPANION_DB"
+database_name = "amiclaw-companion"
+database_id = "PLACEHOLDER_COMPANION_D1_DATABASE_ID"
+migrations_dir = "../companion-memory/migrations"
+
 # --- AUTH KV: shared session keyspace owned by auth-session ---
 # The Worker self-binds the auth-session AUTH namespace and reuses the shared
 # session-reader during the WS upgrade handshake (read-only: cookie -> session

@@ -99,6 +99,30 @@ export interface SessionSummary {
     /** TTS output audio seconds synthesized by the speech provider. */
     ttsOutputSeconds: number
   }
+  // --- Companion-memory capture fields (additive; the four-method contract is
+  // unchanged). These feed the companion-memory capture entry; each is
+  // optional with pinned degradation semantics (companion-memory L2 §capture
+  // input contract):
+  //   no `highlights`  -> only settlement facts are consolidated (no claims);
+  //   no `gameRunId`   -> the summary and the run's settlement event
+  //                       consolidate independently (no merge);
+  //   no `userId`      -> the capture entry drops the summary (anonymous
+  //                       sessions never produce memories — enforced there,
+  //                       since `userId` is non-optional on this contract).
+  /**
+   * Conversation highlights — the memory-consolidation raw material. v1
+   * populates a deterministic excerpt of the session transcript (see
+   * `companion-capture.ts` `summarizeHighlights`); richer summarization is the
+   * consolidation LLM's job downstream.
+   */
+  highlights?: string[]
+  /**
+   * Join key correlating this summary with the same run's game settlement
+   * event (e.g. the game run id the consumer supplied at `create`).
+   */
+  gameRunId?: string
+  /** ISO 8601 session-end timestamp (capture provenance metadata). */
+  occurredAt?: string
 }
 
 /**
