@@ -21,7 +21,14 @@
  */
 
 import type { AiResponseChunk, AudioChunk } from './contract'
-import type { ChatMessage, LlmProvider, SttProvider, TtsProvider } from './providers/types'
+import type {
+  ChatMessage,
+  LlmProvider,
+  SttProvider,
+  SttUsage,
+  SttUsageSource,
+  TtsProvider,
+} from './providers/types'
 import { assembleLlmContext, type GameState } from './manual-injection'
 import type { ResolvedConfig } from './provider-config'
 import type { ManualData } from './contract'
@@ -35,20 +42,21 @@ export interface UsageCounters {
 }
 
 /**
- * Audio-duration estimation constant. Both the Volcengine ASR input and the
- * Doubao TTS output are PCM 16-bit mono at 16 kHz (the adapter's
- * `DEFAULT_SAMPLE_RATE`), i.e. 16000 samples/s * 2 bytes/sample = 32000 bytes/s.
+ * Audio byte-rate constant. Both the Volcengine ASR input and the Doubao TTS
+ * output are PCM 16-bit mono at 16 kHz (the adapter's `DEFAULT_SAMPLE_RATE`),
+ * i.e. 16000 samples/s * 2 bytes/sample = 32000 bytes/s.
  *
- * v1 estimate / metering mount point: the pipeline only sees opaque byte frames,
- * so it derives seconds from byte length under this fixed-format assumption.
- * Precise, per-provider sample-rate-aware accounting (and any non-PCM codec)
- * lives in the downstream `add-usage-metering` task; this fills the counters
- * with a real, non-zero estimate instead of silently reporting 0.
+ * Under that fixed format the byte->seconds conversion is EXACT, not an
+ * estimate: the byte count of the actual audio that flowed divides precisely
+ * into its duration. For TTS this measures the actual synthesized product
+ * (every frame's bytes are tallied as they are yielded); for STT it is the
+ * fallback path when the adapter reports no structured usage of its own —
+ * metered seconds from this path carry the `derived-from-bytes` annotation.
  */
 const PCM16_MONO_16K_BYTES_PER_SECOND = 32000
 
-/** Estimate audio seconds from a raw PCM-frame byte count (see constant above). */
-function estimateAudioSeconds(byteLength: number): number {
+/** Convert a raw PCM-frame byte count to seconds (exact under the format above). */
+function audioSecondsFromBytes(byteLength: number): number {
   return byteLength / PCM16_MONO_16K_BYTES_PER_SECOND
 }
 
@@ -70,6 +78,15 @@ export interface SessionState {
   turnCount: number
   /** Accumulated usage counters. */
   usage: UsageCounters
+  /**
+   * Aggregate STT metering provenance across the session. Starts
+   * `provider-reported` and latches to `derived-from-bytes` as soon as ANY
+   * turn's STT seconds came from a byte-rate conversion rather than the
+   * provider's own report — the annotation describes the precision floor of
+   * the aggregated `sttInputSeconds`, so one fallback turn downgrades the
+   * whole session's annotation. Flushed alongside the counters at session end.
+   */
+  sttSource: SttUsageSource
 }
 
 /** The three wired providers a turn drives. */
@@ -86,6 +103,16 @@ export interface TurnProviders {
  */
 interface MaybeUsageProvider {
   lastUsage?: { inputTokens: number; outputTokens: number }
+}
+
+/**
+ * STT provider instances may expose a structured `lastUsage` after a transcribe
+ * stream is drained (the Volcengine adapter does; the mock does on request).
+ * Read structurally, mirroring the LLM `lastUsage` pattern, so the pipeline
+ * stays adapter-agnostic.
+ */
+interface MaybeSttUsageProvider {
+  lastUsage?: SttUsage
 }
 
 /**
@@ -116,8 +143,9 @@ export function splitSentences(buffer: string): { sentences: string[]; remainder
  *
  * Also reports `audioBytes`: the total byte length of the inbound audio frames
  * the STT provider actually pulled, tapped via a counting passthrough. The
- * caller turns this into the STT input-seconds usage estimate. The passthrough
- * forwards every frame unchanged, so STT behaviour is unaffected.
+ * caller uses this as the fallback STT metering path when the adapter exposes
+ * no structured usage of its own. The passthrough forwards every frame
+ * unchanged, so STT behaviour is unaffected.
  */
 async function collectFinalTranscript(
   stt: SttProvider,
@@ -203,8 +231,8 @@ export async function* runTurn(
   audio: AsyncIterable<AudioChunk>
 ): AsyncIterable<AiResponseChunk> {
   // 1. STT: transcribe the player's audio; take the final cumulative transcript.
-  //    `audioBytes` is the inbound-frame byte total, turned into the STT
-  //    input-seconds usage estimate at turn settle.
+  //    `audioBytes` is the inbound-frame byte total — the fallback STT metering
+  //    source at turn settle when the adapter reports no structured usage.
   const { transcript: playerText, audioBytes: sttAudioBytes } = await collectFinalTranscript(
     providers.stt,
     audio
@@ -243,8 +271,9 @@ export async function* runTurn(
   let nextLlmPromise: Promise<IteratorResult<{ content: string; done: boolean }>> | undefined =
     llmStream.next()
 
-  // TTS output bytes tallied across the turn's synthesized frames, turned into
-  // the TTS output-seconds usage estimate at turn settle.
+  // TTS output bytes tallied across the turn's synthesized frames — converted
+  // exactly into the TTS output-seconds usage at turn settle (the actual
+  // synthesized product, not an estimate).
   let ttsAudioBytes = 0
 
   // Drive both streams until both are exhausted. Whichever resolves first
@@ -343,11 +372,25 @@ export async function* runTurn(
     state.usage.llmInputTokens += usage.inputTokens
     state.usage.llmOutputTokens += usage.outputTokens
   }
-  // Best-effort audio-duration metering (v1 estimate; see
-  // `estimateAudioSeconds`). Filled from the bytes that actually flowed this
-  // turn so `endSession` reports a real estimate, not a silent 0.
-  state.usage.sttInputSeconds += estimateAudioSeconds(sttAudioBytes)
-  state.usage.ttsOutputSeconds += estimateAudioSeconds(ttsAudioBytes)
+  // STT seconds: prefer the adapter's structured usage report (the Volcengine
+  // adapter exposes the server's `audio_info.duration` when reported, or its
+  // own exact bytes->duration conversion when not). When the adapter exposes
+  // nothing at all, fall back to the pipeline's byte tap over the inbound
+  // frames the STT provider actually pulled — and latch the session's STT
+  // metering annotation to `derived-from-bytes` (see `SessionState.sttSource`).
+  const sttUsage = (providers.stt as MaybeSttUsageProvider).lastUsage
+  if (sttUsage) {
+    state.usage.sttInputSeconds += sttUsage.durationMs / 1000
+    if (sttUsage.source === 'derived-from-bytes') state.sttSource = 'derived-from-bytes'
+  } else {
+    state.usage.sttInputSeconds += audioSecondsFromBytes(sttAudioBytes)
+    state.sttSource = 'derived-from-bytes'
+  }
+  // TTS seconds: exact conversion of the actual synthesized product — the byte
+  // tally of every audio frame this turn yielded, under the adapters' fixed
+  // PCM16 mono 16 kHz output contract (the Volcengine TTS session requests
+  // exactly that format; the mock's placeholder bytes meter the same way).
+  state.usage.ttsOutputSeconds += audioSecondsFromBytes(ttsAudioBytes)
 
   yield { kind: 'text', text: '', done: true }
 }

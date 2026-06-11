@@ -32,6 +32,7 @@ import type {
   LlmUsage,
   SttProvider,
   SttTranscriptChunk,
+  SttUsage,
   TtsAudioChunk,
   TtsProvider,
 } from './types'
@@ -114,23 +115,47 @@ export function createMockLlmProvider(options: MockLlmProviderOptions = {}): Moc
   return provider
 }
 
+/** Options for the mock STT provider. */
+export interface MockSttProviderOptions {
+  /**
+   * Fixed STT usage reported after each transcribe stream, so tests can drive
+   * the pipeline's structured STT metering path deterministically. When
+   * omitted, the mock exposes NO usage — the pipeline then exercises its
+   * byte-derived fallback path, matching the pre-metering behavior.
+   */
+  usage?: SttUsage
+}
+
+/**
+ * A mock STT provider. Mirrors the Volcengine adapter's shape (exposes an
+ * optional `lastUsage` the turn pipeline reads structurally) so it is a
+ * drop-in substitute on the STT slot.
+ */
+export interface MockSttProvider extends SttProvider {
+  /** STT usage from the most recently consumed transcribe stream. */
+  lastUsage?: SttUsage
+}
+
 /**
  * Create a deterministic mock STT provider. Drains the inbound audio stream
  * (so the audio bridge is consumed exactly like the real adapter) and yields a
  * single final transcript chunk carrying the fixed example utterance. An empty
  * audio stream still yields the fixed transcript so a turn always has text.
  */
-export function createMockSttProvider(): SttProvider {
-  return {
+export function createMockSttProvider(options: MockSttProviderOptions = {}): MockSttProvider {
+  const provider: MockSttProvider = {
     async *transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk> {
+      provider.lastUsage = undefined
       // Consume the inbound frames so the bridge drains; the content is ignored
       // (deterministic transcript), but draining matches real-adapter behavior.
       for await (const _frame of audio) {
         // intentionally empty — frames are consumed, not inspected
       }
+      provider.lastUsage = options.usage
       yield { text: MOCK_TRANSCRIPT, isFinal: true }
     },
   }
+  return provider
 }
 
 /**

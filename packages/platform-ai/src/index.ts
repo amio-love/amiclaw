@@ -30,6 +30,8 @@ export type {
   LlmUsage,
   LlmProvider,
   SttTranscriptChunk,
+  SttUsage,
+  SttUsageSource,
   SttProvider,
   TtsAudioChunk,
   TtsProvider,
@@ -54,7 +56,12 @@ export type { ProviderEnv, SessionProviders } from './providers/factory'
 export { createProviders } from './providers/factory'
 
 // Deterministic mock providers — no-credential demo / e2e harness backend.
-export type { MockLlmProvider, MockLlmProviderOptions } from './providers/mock'
+export type {
+  MockLlmProvider,
+  MockLlmProviderOptions,
+  MockSttProvider,
+  MockSttProviderOptions,
+} from './providers/mock'
 export {
   createMockLlmProvider,
   createMockSttProvider,
@@ -80,6 +87,9 @@ export {
 // Testable turn-pipeline orchestration (DO is a thin shell over this).
 export type { UsageCounters, SessionState, TurnProviders } from './turn-pipeline'
 export { runTurn, splitSentences } from './turn-pipeline'
+
+// Session-terminal usage metering flush (the DO is a thin shell over this).
+export type { UsageKvWriter, UsageRecord, SessionUsageSnapshot } from './usage-flush'
 
 // Durable Object class (named export required for the wrangler DO binding).
 export { VoiceSessionDO } from './session-do'

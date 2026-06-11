@@ -54,7 +54,7 @@
  */
 
 import type { AudioChunk } from '../contract'
-import type { SttProvider, SttTranscriptChunk, TtsAudioChunk, TtsProvider } from './types'
+import type { SttProvider, SttTranscriptChunk, SttUsage, TtsAudioChunk, TtsProvider } from './types'
 
 // --- Public options ---
 
@@ -715,6 +715,37 @@ export function parseSttResponse(frame: ParsedFrame): SttTranscriptChunk | undef
   return { text: result.text, isFinal }
 }
 
+/**
+ * Extract the cumulative recognized-audio duration (milliseconds) from a full
+ * ASR server response, when present.
+ *
+ * `audio_info.duration` appears in the documented example JSON of the v3
+ * big-model ASR response but NOT in its formal field table (doc 6561/1354869),
+ * so it is treated as best-effort by design: parse it when present
+ * (`provider-reported` metering) and fall back to an exact byte-rate conversion
+ * when absent (`derived-from-bytes`). Semantics are CUMULATIVE per connection —
+ * each response carries the total recognized duration so far, so the LAST
+ * value (never the sum across responses) is the connection's consumption.
+ *
+ * Pure and total: returns `undefined` for non-JSON frames, error frames,
+ * empty payloads, malformed JSON, or a missing/non-numeric field — it never
+ * throws (transcript-side errors are `parseSttResponse`'s job).
+ */
+export function parseSttAudioDurationMs(frame: ParsedFrame): number | undefined {
+  if (frame.messageType !== MessageType.FullServerResponse) return undefined
+  if (frame.serialization !== Serialization.Json || frame.payload.length === 0) return undefined
+  let body: { audio_info?: { duration?: unknown } }
+  try {
+    body = JSON.parse(textDecoder.decode(frame.payload)) as {
+      audio_info?: { duration?: unknown }
+    }
+  } catch {
+    return undefined
+  }
+  const duration = body.audio_info?.duration
+  return typeof duration === 'number' && Number.isFinite(duration) ? duration : undefined
+}
+
 // --- Default Workers connector ---
 
 /**
@@ -834,12 +865,25 @@ class AsyncQueue<T> {
 // --- Provider factory ---
 
 /**
+ * The Volcengine STT slot. Extends `SttProvider` with the optional `lastUsage`
+ * metering field (mirrors `DeepSeekLlmProvider.lastUsage`): after each
+ * transcribe stream is fully consumed, it carries the connection's audio
+ * duration — the server's cumulative `audio_info.duration` report when one
+ * arrived (`provider-reported`), else the exact byte-rate conversion of the
+ * audio actually sent (`derived-from-bytes`).
+ */
+export interface VolcengineSttProvider extends SttProvider {
+  /** STT usage from the most recently consumed transcribe stream. */
+  lastUsage?: SttUsage
+}
+
+/**
  * Build the Volcengine speech provider pair. The returned object satisfies both
  * `SttProvider` and `TtsProvider`; the platform wires the same instance into
  * both layer slots (the voice layer is shared, per the L2 spec).
  */
 export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
-  stt: SttProvider
+  stt: VolcengineSttProvider
   tts: TtsProvider
 } {
   const connect = opts.connect ?? defaultConnect
@@ -849,9 +893,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
   const ttsModel = opts.ttsModel
   const ttsSpeaker = opts.ttsSpeaker ?? DEFAULT_TTS_SPEAKER
   const sampleRate = opts.sampleRate ?? DEFAULT_SAMPLE_RATE
+  // PCM 16-bit mono: 2 bytes per sample. Exact byte rate for the
+  // `derived-from-bytes` fallback conversion below.
+  const bytesPerSecond = sampleRate * 2
 
-  const stt: SttProvider = {
+  const stt: VolcengineSttProvider = {
     async *transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk> {
+      // Reset before consuming so a prior connection's usage cannot leak into
+      // this one (mirrors the DeepSeek `lastUsage` reset).
+      stt.lastUsage = undefined
       const connectId = randomId()
       const headers = buildAuthHeaders(
         { appId: opts.appId, accessToken: opts.accessToken, resourceId: sttResourceId },
@@ -866,10 +916,22 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // proceed with an empty/incomplete transcript. Mirrors the TTS layer's
       // SessionFinished gate.
       let finalReached = false
+      // Per-connection metering state. `reportedDurationMs` follows the server's
+      // cumulative `audio_info.duration` — each response overwrites it, so it
+      // ends as the LAST response's value, the connection's total consumption
+      // (summing per response would double-count the cumulative figure).
+      // `sentAudioBytes` counts the audio payload bytes actually SENT on the
+      // wire (config frame excluded) — the exact-conversion fallback source. A
+      // cancelled pump stops sending and stops counting, so the fallback can
+      // only undercount, never over-meter.
+      let reportedDurationMs: number | undefined
+      let sentAudioBytes = 0
 
       socket.addEventListener('message', (event) => {
         try {
           const frame = parseFrame(event.data)
+          const duration = parseSttAudioDurationMs(frame)
+          if (duration !== undefined) reportedDurationMs = duration
           const chunk = parseSttResponse(frame)
           if (!chunk) return
           queue.push(chunk)
@@ -936,6 +998,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           if (pending !== undefined) {
             seq += 1
             socket.send(asArrayBuffer(buildSttAudioFrame(pending, seq, false)))
+            sentAudioBytes += pending.byteLength
           }
           pending = next.value
         }
@@ -944,6 +1007,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         seq += 1
         const last = pending ?? new Uint8Array(0)
         socket.send(asArrayBuffer(buildSttAudioFrame(last, seq, true)))
+        sentAudioBytes += last.byteLength
       })()
       pump.catch((err) => queue.fail(err))
 
@@ -964,6 +1028,16 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         //  - `queue.close()` is idempotent on an already-closed/failed queue;
         //  - `socket.close()` deterministically releases the outbound connection
         //    (idempotent; the normal path already closes it on a final transcript).
+        //
+        // Usage settle (runs on every exit path, so even a failed/cancelled
+        // connection reports what it consumed): prefer the server's cumulative
+        // duration report when any response carried one (`provider-reported`),
+        // else convert the audio bytes actually sent at the exact PCM16 byte
+        // rate (`derived-from-bytes`).
+        stt.lastUsage =
+          reportedDurationMs !== undefined
+            ? { durationMs: reportedDurationMs, source: 'provider-reported' }
+            : { durationMs: (sentAudioBytes * 1000) / bytesPerSecond, source: 'derived-from-bytes' }
         cancelled = true
         await audioIterator.return?.(undefined)
         queue.close()
