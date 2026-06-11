@@ -95,7 +95,7 @@ describe('createProviders', () => {
       createProviders(
         config({
           stt: { provider: 'volcengine', model: 'bigmodel-asr-pro' },
-          tts: { provider: 'volcengine', model: 'doubao-tts-2.0-pro' },
+          tts: { provider: 'volcengine', model: 'seed-tts-2.0-standard' },
         }),
         fullEnv
       )
@@ -103,7 +103,33 @@ describe('createProviders', () => {
       expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({
           sttModel: 'bigmodel-asr-pro',
-          ttsModel: 'doubao-tts-2.0-pro',
+          ttsModel: 'seed-tts-2.0-standard',
+        })
+      )
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('threads the empty-string TTS model sentinel through unchanged (omit-by-default)', () => {
+    // The `demo` TTS model is `''` ("use the resource-id default model"). The
+    // factory must forward it verbatim — it does NOT substitute a default token —
+    // so the adapter is the single place that decides omission (an empty model
+    // omits `req_params.model`). This proves the passthrough mechanism stays
+    // intact for the omit case as well as for a concrete deploy-time token.
+    const spy = vi.spyOn(volcengine, 'createVolcengineSpeechProvider')
+    try {
+      createProviders(
+        config({
+          stt: { provider: 'volcengine', model: 'bigmodel' },
+          tts: { provider: 'volcengine', model: '' },
+        }),
+        fullEnv
+      )
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sttModel: 'bigmodel',
+          ttsModel: '',
         })
       )
     } finally {

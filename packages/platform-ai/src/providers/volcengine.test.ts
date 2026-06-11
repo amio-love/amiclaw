@@ -801,7 +801,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const provider = createVolcengineSpeechProvider({
       appId: 'a',
       accessToken: 't',
-      ttsModel: 'doubao-tts-2.0-pro',
+      ttsModel: 'seed-tts-2.0-standard',
       connect: withModel.connect,
     })
     void collect(provider.tts.synthesize(asyncFromSync(['句一'])))
@@ -815,7 +815,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const body = JSON.parse(decoder.decode(startSession?.payload ?? new Uint8Array(0))) as {
       req_params: { model?: string }
     }
-    expect(body.req_params.model).toBe('doubao-tts-2.0-pro')
+    expect(body.req_params.model).toBe('seed-tts-2.0-standard')
 
     // With no ttsModel configured, the StartSession req_params omits `model`.
     const noModelSocket = new MockSocket()
@@ -839,25 +839,55 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     expect(plainBody.req_params.model).toBeUndefined()
   })
 
-  it("resolveConfig('demo').tts.model is a legal Doubao TTS 2.0 wire req_params.model", async () => {
-    // P2 regression: the `demo` config's TTS model is threaded verbatim into the
-    // Doubao TTS 2.0 `StartSession` req_params.model (factory F-K passthrough).
-    // The legal wire value is the model-family token `seed-tts-2.0`; the product
-    // alias `doubao-tts-2.0` is NOT a request value and could be rejected / routed
-    // to the wrong model. This stitches the resolved config model straight into the
-    // real adapter and asserts the StartSession wire frame, so the bad alias cannot
-    // come back. Doc: https://www.volcengine.com/docs/6561/1329505
+  it("resolveConfig('demo') TTS omits req_params.model — bound by resource id, not a guessed token", async () => {
+    // The `demo` config's TTS model is the empty-string sentinel ("use the
+    // resource-id default model"). It is threaded into the adapter (factory F-K
+    // passthrough), but the adapter omits `req_params.model` from the StartSession
+    // frame for an empty model — so the Doubao TTS 2.0 session is bound by the
+    // paired resource id (`volc.service_type.10029`) alone, matching Volcengine's
+    // first-party clients. This pins the default-omit so a guessed concrete token
+    // (a reject / mis-route risk) cannot creep back at the config layer; the exact
+    // `req_params.model` wire value is a deploy-time verification item.
+    // Doc: https://www.volcengine.com/docs/6561/1329505
     const resolved = resolveConfig('demo')
-    expect(resolved.tts.model).toBe('seed-tts-2.0')
-    expect(resolved.tts.model).not.toBe('doubao-tts-2.0')
+    expect(resolved.tts.model).toBe('')
 
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({
       appId: 'a',
       accessToken: 't',
-      // Exactly what the factory threads through: `resolved.tts.model`.
+      // Exactly what the factory threads through: `resolved.tts.model` ('').
       ttsModel: resolved.tts.model,
+      connect,
+    })
+    void collect(tts.synthesize(asyncFromSync(['句一'])))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+
+    const startSession = socket.sent
+      .map((b) => parseFrame(b))
+      .find((f) => f.event === TtsEvent.StartSession)
+    const body = JSON.parse(decoder.decode(startSession?.payload ?? new Uint8Array(0))) as {
+      req_params: Record<string, unknown>
+    }
+    expect(body.req_params.model).toBeUndefined()
+    expect('model' in body.req_params).toBe(false)
+  })
+
+  it('threads an explicit concrete ttsModel onto the wire (mechanism preserved for deploy-time token)', async () => {
+    // The omit-by-default for `demo` does NOT remove the passthrough mechanism:
+    // once the concrete `req_params.model` wire value is confirmed at deploy time,
+    // setting a non-empty model in `provider-config` must reach the StartSession
+    // frame. Use a concrete candidate variant (`seed-tts-2.0-standard`) to prove
+    // the threaded non-empty model is attached verbatim.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({
+      appId: 'a',
+      accessToken: 't',
+      ttsModel: 'seed-tts-2.0-standard',
       connect,
     })
     void collect(tts.synthesize(asyncFromSync(['句一'])))
@@ -871,8 +901,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const body = JSON.parse(decoder.decode(startSession?.payload ?? new Uint8Array(0))) as {
       req_params: { model?: string }
     }
-    expect(body.req_params.model).toBe('seed-tts-2.0')
-    expect(body.req_params.model).not.toBe('doubao-tts-2.0')
+    expect(body.req_params.model).toBe('seed-tts-2.0-standard')
   })
 
   it('does NOT send StartSession until the server accepts the connection', async () => {

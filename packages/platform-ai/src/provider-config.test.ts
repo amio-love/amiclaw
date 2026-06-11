@@ -27,14 +27,18 @@ describe('resolveConfig — hit', () => {
     expect(stt.model).not.toBe('bigmodel-asr')
   })
 
-  it('registers a legal Volcengine TTS wire model for the demo TTS layer (P2)', () => {
-    // P2 regression: the demo TTS model is passed verbatim into the Doubao TTS 2.0
-    // `StartSession` req_params.model (factory F-K passthrough). The legal wire
-    // value is the model-family token `seed-tts-2.0`; the product alias
-    // `doubao-tts-2.0` is NOT a request value and could be rejected / mis-routed.
-    // Guard the alias from creeping back at the config layer.
+  it('registers the omit-by-default TTS model sentinel for the demo TTS layer', () => {
+    // The demo TTS model is the empty-string sentinel: "use the resource-id
+    // default model". The factory threads it (F-K passthrough), and the adapter
+    // omits `req_params.model` from the Doubao TTS 2.0 StartSession frame for an
+    // empty model — so the session is bound by the paired resource id
+    // (`volc.service_type.10029`) alone, matching Volcengine's first-party clients.
+    // This guards a guessed concrete model token (a reject / mis-route risk) from
+    // creeping back at the config layer; the exact `req_params.model` wire value
+    // (`seed-tts-2.0-standard` / `-expressive` vs omitted) is a deploy-time
+    // verification item, set here once confirmed.
     const { tts } = resolveConfig('demo')
-    expect(tts.model).toBe('seed-tts-2.0')
+    expect(tts.model).toBe('')
     expect(tts.model).not.toBe('doubao-tts-2.0')
   })
 

@@ -114,20 +114,24 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
       model: 'bigmodel',
     },
     tts: {
-      // `seed-tts-2.0` is the legal wire value for the Doubao TTS 2.0
-      // bidirectional `StartSession` `req_params.model` field; the factory threads
-      // it through (F-K) so a model switch here reaches the wire. The product
-      // alias `doubao-tts-2.0` is NOT a request value — sending it would risk the
-      // turn being rejected or routed to the wrong model. The model is also pinned
-      // by the paired resource id (`X-Api-Resource-Id: volc.service_type.10029`,
-      // the adapter's `DEFAULT_TTS_RESOURCE_ID`): `req_params.model` is the
-      // optional in-payload selector that must agree with that resource id. The
-      // exact model token and its resource-id pairing need a deploy-time check
-      // against the real endpoint (the official docs render via JS; this value is
-      // corroborated by production Doubao seed-tts-2.0 clients).
-      // Doc: https://www.volcengine.com/docs/6561/1329505
+      // Empty string = the "use the resource-id default model" sentinel: the
+      // Doubao TTS 2.0 model is bound by the paired resource id
+      // (`X-Api-Resource-Id: volc.service_type.10029`, the adapter's
+      // `DEFAULT_TTS_RESOURCE_ID`), and `req_params.model` is left OUT of the
+      // `StartSession` frame by default. This aligns with Volcengine's own
+      // first-party speech clients (`volcengine/ai-app-lab` and the bigmodel
+      // ASR/TTS clients), which omit `req_params.model` and let the resource id
+      // pick the model. An empty model here makes the factory's F-K passthrough a
+      // no-op for the wire (the adapter only attaches `req_params.model` when the
+      // threaded model is non-empty), so no model token is guessed onto the wire —
+      // sending a wrong token is rejected by the server, sending none is the safe
+      // default. The concrete `req_params.model` wire value (`seed-tts-2.0-standard`
+      // / `-expressive` vs omitted) is a DEPLOY-TIME verification item: once the
+      // real endpoint confirms the exact token, set it here and the same F-K
+      // passthrough carries it onto the wire — the mechanism stays available, only
+      // the default is "omit". Doc: https://www.volcengine.com/docs/6561/1329505
       provider: 'volcengine',
-      model: 'seed-tts-2.0',
+      model: '',
     },
   },
   'demo-mock': {

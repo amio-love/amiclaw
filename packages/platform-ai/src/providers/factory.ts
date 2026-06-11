@@ -93,9 +93,14 @@ function createLlmProvider(resolved: ResolvedConfig, env: ProviderEnv): LlmProvi
  * The resolved STT and TTS model ids from `provider-config` are threaded in so
  * the config's "each layer's model is swappable" contract actually reaches the
  * wire: `sttModel` becomes the ASR `request.model_name`, `ttsModel` the Doubao
- * TTS `req_params.model`. Without this passthrough the adapter would fall back to
- * its built-in defaults and the config model would be a silent no-op (the F-K
- * bug). The shared pair is built from BOTH layers' models, which is correct: when
+ * TTS `req_params.model` when it is a non-empty concrete value. The `demo` TTS
+ * model is the empty-string sentinel ("use the resource-id default model"), so
+ * this passthrough omits `req_params.model` by default — the mechanism stays
+ * available for a concrete deploy-time-confirmed token without guessing one onto
+ * the wire now. Without this passthrough the adapter would fall back to its
+ * built-in defaults and the config model would be a silent no-op (the F-K bug,
+ * for the STT side and any future concrete TTS token). The shared pair is built
+ * from BOTH layers' models, which is correct: when
  * both voice slots select `volcengine` the spec already binds them to one shared
  * voice instance, and a single Volcengine config registers STT + TTS together.
  */

@@ -81,16 +81,22 @@ export interface VolcengineSpeechOptions {
   /** ASR model name in the config request (`request.model_name`). */
   sttModel?: string
   /**
-   * TTS model id, set as the Doubao TTS 2.0 `StartSession` `req_params.model`
-   * when provided. `req_params.model` is a real (optional) request field on the
-   * bidirectional protocol; its legal wire value is the model-family token
-   * `seed-tts-2.0` (NOT the product alias `doubao-tts-2.0`), and it must agree
-   * with the paired endpoint resource id (`X-Api-Resource-Id`, default
-   * `volc.service_type.10029`). Carrying the resolved config model here makes a
-   * `provider-config` model switch reach the wire instead of being a silent
-   * no-op. Omitted when unset (the field is simply not sent) — a Doubao TTS 2.0
-   * session can be driven by the resource id alone, with `req_params.model` left
-   * out — so unset preserves the default request shape.
+   * TTS model id, attached as the Doubao TTS 2.0 `StartSession`
+   * `req_params.model` ONLY when it is a non-empty concrete value. By default the
+   * field is OMITTED: the TTS model is bound by the paired endpoint resource id
+   * (`X-Api-Resource-Id`, default `volc.service_type.10029`), exactly as
+   * Volcengine's own first-party speech clients drive it (they omit
+   * `req_params.model` and let the resource id select the model). Both `undefined`
+   * and `''` mean "omit" — `''` is the `provider-config` sentinel for "use the
+   * resource-id default model", so the default request shape carries no model
+   * token. The factory threads the resolved config model here (F-K), so once the
+   * concrete wire token is confirmed at deploy time (`seed-tts-2.0-standard` /
+   * `-expressive` are the candidate concrete `req_params.model` values; the
+   * model-FAMILY id `seed-tts-2.0` and the resource id are NOT the in-payload
+   * model value), setting a non-empty `model` in `provider-config` reaches the
+   * wire through this same passthrough. Until then nothing is guessed onto the
+   * wire — sending a wrong token risks server rejection, sending none is the safe
+   * default.
    */
   ttsModel?: string
   /** TTS speaker / voice type (`req_params.speaker`). */
@@ -411,8 +417,11 @@ export function buildTtsFinishConnectionFrame(): Uint8Array {
 
 /**
  * Build the TTS StartSession frame carrying the synthesis parameters. `model` is
- * threaded into `req_params` only when provided (the resolved config model), so
- * the default request shape is unchanged when no model is configured.
+ * threaded into `req_params` only when it is a non-empty concrete value; both an
+ * absent `model` and an empty-string `model` (the `provider-config` "use the
+ * resource-id default model" sentinel) omit `req_params.model` entirely, so the
+ * default request shape carries no model token and the resource id selects the
+ * model — matching Volcengine's first-party clients.
  */
 export function buildTtsStartSessionFrame(args: {
   sessionId: string
