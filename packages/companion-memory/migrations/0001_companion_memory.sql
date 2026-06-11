@@ -32,6 +32,14 @@ CREATE TABLE companion (
   -- Profile (understanding layer) switch. 0 = stop claim consolidation AND
   -- stop claim injection; episodes (visible memories) are unaffected.
   profile_enabled INTEGER NOT NULL DEFAULT 1 CHECK (profile_enabled IN (0, 1)),
+  -- Bulk profile-delete watermark (ISO 8601, NULL = never bulk-deleted).
+  -- Written atomically with the bulk claim delete; consolidation skips CLAIM
+  -- production for capture events created at-or-before this instant, so a
+  -- pending/retrying event can never resurrect a profile the player just
+  -- erased. Episodes and asset entries are NOT gated (the player deleted the
+  -- profile layer, not the memories or the ledger). Single-claim deletes and
+  -- corrections do not touch it.
+  profile_deleted_at TEXT,
   created_at TEXT NOT NULL
 );
 

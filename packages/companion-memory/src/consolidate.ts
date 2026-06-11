@@ -38,6 +38,7 @@ import { assetSourceKey, claimSourceKey, episodeSourceKey } from './idempotency'
 import { getCompanion } from './store'
 import type {
   CaptureEventRecord,
+  CompanionRecord,
   SessionSummaryCaptureInput,
   SettlementCaptureInput,
 } from './types'
@@ -231,11 +232,34 @@ async function writeDistillation(
   await db.batch(statements)
 }
 
+/**
+ * Whether claim production is allowed for this event, decided at PROCESSING
+ * time (not capture time) so control-plane writes that land while the event
+ * sits pending always win:
+ *
+ *  - `profile_enabled` is read fresh per run — disabling the profile fences
+ *    every still-pending event immediately;
+ *  - `profile_deleted_at` (the bulk-delete watermark) fences every event
+ *    CAPTURED at-or-before the deletion instant — a pending or replayed event
+ *    can never resurrect a profile the player erased. Events captured after
+ *    the watermark produce claims normally (the player cleared history, not
+ *    future profiling — that is what `profile_enabled` is for).
+ *
+ * The comparison is on `created_at` (server-assigned capture instant) against
+ * the watermark; both come from the same `deps.now()` ISO-8601 UTC clock, so
+ * lexicographic order is chronological. Ties go to the deletion (`<=` skips).
+ * Episodes and asset entries are never gated here.
+ */
+function claimsAllowed(companion: CompanionRecord, event: CaptureEventRecord): boolean {
+  if (companion.profile_enabled !== 1) return false
+  return companion.profile_deleted_at === null || event.created_at > companion.profile_deleted_at
+}
+
 async function consolidateSummary(
   db: CompanionDb,
   event: CaptureEventRecord,
   llm: DistillLlm | null,
-  profileEnabled: boolean,
+  claimsEnabled: boolean,
   deps: DomainDeps
 ): Promise<'processed' | 'retry'> {
   const payload = JSON.parse(event.payload) as SessionSummaryCaptureInput
@@ -255,7 +279,7 @@ async function consolidateSummary(
       highlights,
       turnCount: payload.turnCount,
       settlement: await findJoinedSettlement(db, event),
-      profileEnabled,
+      profileEnabled: claimsEnabled,
     })
   } catch {
     // Count this REAL failed LLM try against the budget — including the
@@ -307,7 +331,7 @@ export async function runConsolidation(
       outcome.processed += 1
       continue
     }
-    const status = await consolidateSummary(db, event, llm, companion.profile_enabled === 1, deps)
+    const status = await consolidateSummary(db, event, llm, claimsAllowed(companion, event), deps)
     if (status === 'processed') outcome.processed += 1
     else outcome.remaining += 1
   }

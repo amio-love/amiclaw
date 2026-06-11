@@ -316,10 +316,23 @@ export async function deleteClaim(
  * the "or all of it" half of the L2 delete operation). Removes every claim
  * row the user owns — any status, history included — with the same cascade
  * semantics as the single delete (evidence links go via ON DELETE CASCADE).
+ * In the SAME atomic batch, the companion's `profile_deleted_at` watermark is
+ * set to now: capture events created at-or-before that instant can never
+ * produce claims when the async consolidator processes them later, so a
+ * pending event cannot resurrect the profile the player just erased.
  * Returns the number of claims removed; idempotent — re-deleting an empty
- * profile removes zero rows.
+ * profile removes zero rows (and merely advances the watermark).
  */
-export async function deleteAllClaims(db: CompanionDb, userId: string): Promise<number> {
-  const result = await db.prepare('DELETE FROM profile_claim WHERE user_id = ?').bind(userId).run()
-  return result.meta.changes
+export async function deleteAllClaims(
+  db: CompanionDb,
+  userId: string,
+  deps: DomainDeps = defaultDeps
+): Promise<number> {
+  const [deleted] = await db.batch([
+    db.prepare('DELETE FROM profile_claim WHERE user_id = ?').bind(userId),
+    db
+      .prepare('UPDATE companion SET profile_deleted_at = ? WHERE user_id = ?')
+      .bind(deps.now(), userId),
+  ])
+  return deleted.meta.changes
 }

@@ -45,6 +45,11 @@ export interface CompanionRecord {
   voice_id: string
   /** SQLite boolean: 0 | 1. */
   profile_enabled: number
+  /**
+   * Bulk profile-delete watermark (ISO 8601, `null` = never bulk-deleted).
+   * Consolidation skips claim production for events captured at-or-before it.
+   */
+  profile_deleted_at: string | null
   created_at: string
 }
 

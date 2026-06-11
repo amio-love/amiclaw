@@ -25,6 +25,9 @@ export interface CompanionDbStatement {
 
 export interface CompanionDb {
   prepare(sql: string): CompanionDbStatement
-  /** Execute the statements as one atomic batch (D1 semantics: a transaction). */
-  batch(statements: CompanionDbStatement[]): Promise<unknown>
+  /**
+   * Execute the statements as one atomic batch (D1 semantics: a transaction).
+   * Returns one run result per statement, in order (D1 `D1Result[]`).
+   */
+  batch(statements: CompanionDbStatement[]): Promise<CompanionDbRunResult[]>
 }

@@ -9,6 +9,7 @@ import type { DomainDeps } from './deps'
 import {
   correctClaim,
   createCompanion,
+  deleteAllClaims,
   deleteClaim,
   deleteMemory,
   getCompanion,
@@ -189,6 +190,19 @@ describe('claim control plane', () => {
     expect(await correctClaim(db, 'user-a', 'cl-1', 'Again', deps)).toBeNull()
     // A foreign user cannot correct it either.
     expect(await correctClaim(db, 'user-b', corrected?.id ?? '', 'Hijack', deps)).toBeNull()
+  })
+
+  it('deleteAllClaims wipes every claim and stamps the deletion watermark atomically', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await createCompanion(db, { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' }, deps)
+    expect((await getCompanion(db, 'user-a'))?.profile_deleted_at).toBeNull()
+    await seedEpisode(db, 'ep-1', 'user-a', NOW)
+    await seedClaimWithEvidence(db, 'cl-1', 'user-a', 'ep-1')
+
+    expect(await deleteAllClaims(db, 'user-a', deps)).toBe(1)
+    expect(await listActiveClaimsWithEvidence(db, 'user-a')).toEqual([])
+    expect((await getCompanion(db, 'user-a'))?.profile_deleted_at).toBe(NOW)
   })
 
   it('deleteClaim hard-deletes the row and its evidence links', async () => {

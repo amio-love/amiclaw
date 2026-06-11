@@ -61,7 +61,7 @@ class SqliteCompanionDb implements CompanionDb {
     return new SqliteStatement(this.raw, sql)
   }
 
-  async batch(statements: CompanionDbStatement[]): Promise<unknown> {
+  async batch(statements: CompanionDbStatement[]): Promise<CompanionDbRunResult[]> {
     this.raw.exec('BEGIN')
     try {
       const results = (statements as SqliteStatement[]).map((s) => s.runSync())

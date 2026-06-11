@@ -324,6 +324,14 @@ describe('DELETE /api/companion/profile (bulk)', () => {
 
     const claims = await db.prepare('SELECT id FROM profile_claim').bind().all<{ id: string }>()
     expect(claims.results.map((c) => c.id)).toEqual(['cl-b'])
+    // The deletion watermark landed with the wipe (fences pending capture
+    // events against claim resurrection) — and only on the deleting user.
+    const watermarks = await db
+      .prepare('SELECT user_id, profile_deleted_at FROM companion ORDER BY user_id')
+      .bind()
+      .all<{ user_id: string; profile_deleted_at: string | null }>()
+    expect(watermarks.results[0].profile_deleted_at).not.toBeNull()
+    expect(watermarks.results[1]).toEqual({ user_id: 'user-b', profile_deleted_at: null })
     const evidence = await db
       .prepare('SELECT profile_claim_id FROM profile_claim_evidence')
       .bind()
