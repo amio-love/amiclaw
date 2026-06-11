@@ -58,6 +58,19 @@ numbers. The old `?auth=in` URL mock is gone from the shipped site; a
 development-only sign-in shortcut remains for local work and is compiled out of
 the production build.
 
+**Games can now plug in a shared AI voice partner** — AmiClaw gains a reusable
+platform AI layer (`@amiclaw/platform-ai`) so any game can hand the player a
+voice partner instead of building one from scratch. It runs a modular
+speech-to-text → language-model → text-to-speech pipeline behind one
+game-agnostic session contract; the model reads only the manual the platform
+injects for the current step, so it guides without inventing rules. DeepSeek and
+Volcengine (火山) are the default providers, and switching a vendor is a config
+change, not a rewrite. The session lives in a per-player Durable Object over a
+same-origin WebSocket, bound to the signed-in player; provider keys and the
+system prompt stay server-side and never reach the browser. A first-party demo
+harness runs the whole speak-to-reply loop locally with deterministic mock
+providers — no real credentials needed.
+
 **The home page now introduces AmiClaw as a platform, with one BombSquad block** - The
 hero description now explains AmiClaw instead of describing only the defusal game, and
 the hero keeps a single start button. The former daily challenge and weekly feature
