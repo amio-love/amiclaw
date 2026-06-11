@@ -51,12 +51,16 @@ import type {
 export const MAX_CONSOLIDATION_ATTEMPTS = 5
 
 /** Max events pulled per job run (one alarm tick). */
-const BATCH_SIZE = 20
+export const BATCH_SIZE = 20
 
 export interface ConsolidationOutcome {
   processed: number
   discarded: number
-  /** Events left pending (retryable failures) after this run. */
+  /**
+   * Events still pending after this run: in-batch retryable failures PLUS any
+   * backlog beyond this run's batch (BATCH_SIZE). Non-zero tells the alarm
+   * caller to re-arm — a burst larger than one batch must not strand its tail.
+   */
   remaining: number
 }
 
@@ -112,6 +116,19 @@ async function listPending(db: CompanionDb): Promise<CaptureEventRecord[]> {
     .bind(BATCH_SIZE)
     .all<CaptureEventRecord>()
   return results
+}
+
+/**
+ * Events still pending AFTER a run — the re-arm signal. Cheap regardless of
+ * how many processed rows the table accumulates: `idx_capture_status` makes
+ * this an index-range scan over only the pending rows.
+ */
+async function countPending(db: CompanionDb): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM capture_event WHERE status = 'pending'`)
+    .bind()
+    .first<{ n: number }>()
+  return row === null ? 0 : row.n
 }
 
 /** The same user+run's settlement event, as distillation context for a summary. */
@@ -310,6 +327,11 @@ async function consolidateSummary(
  * single event's failure — a bad event is retried (bounded) or degraded, and
  * the rest of the batch still processes. Returns counts so the caller (the
  * consolidator DO alarm) can decide whether to re-arm.
+ *
+ * `remaining` is counted from the table AFTER the pass, not from in-batch
+ * bookkeeping: a backlog larger than BATCH_SIZE whose first batch fully
+ * succeeds still reports remaining > 0, so the caller re-arms and the tail
+ * drains instead of stranding until some future capture re-arms the alarm.
  */
 export async function runConsolidation(
   db: CompanionDb,
@@ -333,8 +355,8 @@ export async function runConsolidation(
     }
     const status = await consolidateSummary(db, event, llm, claimsAllowed(companion, event), deps)
     if (status === 'processed') outcome.processed += 1
-    else outcome.remaining += 1
   }
 
+  outcome.remaining = await countPending(db)
   return outcome
 }
