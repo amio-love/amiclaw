@@ -93,7 +93,11 @@ describe('assembleSession — all-or-nothing session construction', () => {
     // logical sessions, and an eviction resets any counter — colliding the
     // write-once `usage:{date}:{user_id}:{session_id}` metering keys. The mint
     // happens in `assembleSession`, so the DO publishes the minted id and
-    // `createSession` returns it instead of `ctx.id`.
+    // `createSession` returns it instead of `ctx.id`. The companion-memory
+    // capture event id `session-summary:{session_id}` rests on the same
+    // per-run uniqueness (G5): two consecutive assemblies (= two runs on one
+    // reused DO) get distinct ids, so the second run's summary can never
+    // collide with the first's capture event.
     const a = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
     const b = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
 

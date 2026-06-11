@@ -1,0 +1,15 @@
+{
+  "name": "@amiclaw/companion-memory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260608.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

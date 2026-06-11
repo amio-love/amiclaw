@@ -198,9 +198,18 @@ async function openSocket(doInstance: VoiceSessionDO, userId: string): Promise<F
   return createdPairs[createdPairs.length - 1][1]
 }
 
-/** Send the `create` control message over the socket; return the minted session id. */
-function createSessionOverWs(socket: FakeWebSocket): string {
+/** Let the DO's async message handling settle (one macrotask). */
+const tick = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+/**
+ * Send the `create` control message over the socket; return the minted session
+ * id. Async: the WS create branch awaits the (best-effort, here absent)
+ * companion-context resolution before replying, so the `created` reply lands a
+ * task after `receive` returns.
+ */
+async function createSessionOverWs(socket: FakeWebSocket): Promise<string> {
   socket.receive(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: MANUAL }))
+  await tick()
   const created = JSON.parse(socket.sent[socket.sent.length - 1]) as {
     type: string
     sessionId: string
@@ -276,7 +285,7 @@ describe('real VoiceSessionDO — WS terminal paths', () => {
     const kv = new RecordingUsageKv()
     const { doInstance, ctx } = makeDo(kv)
     const socket = await openSocket(doInstance, 'user-A')
-    const sessionId = createSessionOverWs(socket)
+    const sessionId = await createSessionOverWs(socket)
 
     socket.receive(JSON.stringify({ type: 'end' }))
     // The end branch answered with the summary and a clean 1000 close.
@@ -297,7 +306,7 @@ describe('real VoiceSessionDO — WS terminal paths', () => {
     const kv = new RecordingUsageKv()
     const { doInstance, ctx } = makeDo(kv)
     const socket = await openSocket(doInstance, 'user-A')
-    const sessionId = createSessionOverWs(socket)
+    const sessionId = await createSessionOverWs(socket)
 
     // Abrupt drop: the socket closes without any `end` control message.
     socket.disconnect()
@@ -317,7 +326,7 @@ describe('real VoiceSessionDO — WS terminal paths', () => {
     const kv = new RecordingUsageKv()
     const { doInstance, ctx } = makeDo(kv)
     const owner = await openSocket(doInstance, 'user-A')
-    const sessionId = createSessionOverWs(owner)
+    const sessionId = await createSessionOverWs(owner)
     // A second tab / reconnect for the SAME user on the same DO.
     const duplicate = await openSocket(doInstance, 'user-A')
 
@@ -342,7 +351,7 @@ describe('real VoiceSessionDO — fail-open', () => {
     const kv = new FailingUsageKv()
     const { doInstance, ctx } = makeDo(kv)
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(JSON.stringify({ type: 'end' }))
 

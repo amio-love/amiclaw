@@ -111,6 +111,30 @@ describe('createProviders', () => {
     }
   })
 
+  it('threads the per-session voice override into the volcengine speaker slot', () => {
+    // Companion voice wiring: the speaker resolved at session assembly must
+    // reach the adapter as `ttsSpeaker`; absent, the adapter keeps its default.
+    const spy = vi.spyOn(volcengine, 'createVolcengineSpeechProvider')
+    try {
+      createProviders(config(), fullEnv, { ttsSpeaker: 'zh_female_warm_real_token' })
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ ttsSpeaker: 'zh_female_warm_real_token' })
+      )
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('passes no speaker when the voice override is absent (pre-companion wiring)', () => {
+    const spy = vi.spyOn(volcengine, 'createVolcengineSpeechProvider')
+    try {
+      createProviders(config(), fullEnv)
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ ttsSpeaker: undefined }))
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('threads the empty-string TTS model sentinel through unchanged (omit-by-default)', () => {
     // The `demo` TTS model is `''` ("use the resource-id default model"). The
     // factory must forward it verbatim — it does NOT substitute a default token —

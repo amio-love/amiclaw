@@ -11,7 +11,7 @@
       "@shared/*": ["../../shared/*"]
     }
   },
-  "include": ["src", "../../shared"],
+  "include": ["src", "../../shared", "../companion-memory/src/test-support/node-sqlite.d.ts"],
   "exclude": [
     "../../shared/api-base.ts",
     "../../shared/leaderboard-api.ts",

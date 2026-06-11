@@ -57,6 +57,14 @@
  */
 
 import { DurableObject } from 'cloudflare:workers'
+import type { CompanionDb } from '../../companion-memory/src/db'
+import { resolveCompanionContext } from '../../companion-memory/src/resolver'
+import type { CompanionContext } from '../../companion-memory/src/types'
+import {
+  handOffSummaryCapture,
+  summarizeHighlights,
+  type ConsolidatorNamespace,
+} from './companion-capture'
 import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './contract'
 import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
@@ -71,12 +79,19 @@ import {
 } from './auth-seam'
 
 /**
- * Env bindings visible to the DO: provider creds, the AUTH KV (unused here),
- * and the optional USAGE KV the session-terminal metering flush writes to.
- * `USAGE` is optional by design — a dev/demo deploy without the binding skips
- * the flush fail-open (see `usage-flush.ts`).
+ * Env bindings visible to the DO: provider creds, the optional USAGE KV the
+ * session-terminal metering flush writes to, and the OPTIONAL
+ * companion-memory bindings (Companion D1 for the assembly-time resolver
+ * read; the consolidator DO namespace for the end-of-session capture
+ * hand-off). All three are optional by design — a deploy without `USAGE`
+ * skips the flush fail-open (see `usage-flush.ts`); absent companion
+ * bindings degrade to a memory-less session, never an error.
  */
-export type SessionDoEnv = ProviderEnv & { USAGE?: UsageKvWriter } & Record<string, unknown>
+export type SessionDoEnv = ProviderEnv & {
+  USAGE?: UsageKvWriter
+  COMPANION_DB?: CompanionDb
+  COMPANION_CONSOLIDATOR?: ConsolidatorNamespace
+} & Record<string, unknown>
 
 /** The DO accepts a single session-control message kind plus binary audio. */
 interface CreateSessionMessage {
@@ -84,6 +99,12 @@ interface CreateSessionMessage {
   gameId: string
   manualData: ManualData
   gameState?: GameState
+  /**
+   * Optional join key correlating this session's summary with the run's
+   * settlement event (companion-memory capture contract). Pass-through
+   * metadata only — it never affects session behaviour.
+   */
+  gameRunId?: string
 }
 
 /**
@@ -410,9 +431,10 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     gameId: string,
     userId: string,
     manualData: ManualData,
-    gameState?: GameState
+    gameState?: GameState,
+    extras?: { companionContext?: CompanionContext; gameRunId?: string }
   ): string {
-    const assembled = assembleSession(gameId, userId, manualData, gameState, this.env)
+    const assembled = assembleSession(gameId, userId, manualData, gameState, this.env, extras)
     // Atomic publish — nothing below this line can throw or await.
     this.sessionId = assembled.sessionId
     this.userId = assembled.userId
@@ -480,12 +502,43 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
       userId,
       turnCount: this.state.turnCount,
       usage: { ...this.state.usage },
+      // Companion-memory capture fields (additive). Highlights are the
+      // deterministic transcript excerpt — the consolidation LLM summarizes
+      // downstream, outside the session boundary. The capture side keys its
+      // event off `sessionId` above, which is minted fresh per assembly (see
+      // `AssembledSession.sessionId`) — naturally per-run, so two runs on this
+      // same-named DO can never collide on the capture key.
+      highlights: summarizeHighlights(this.state.history),
+      ...(this.state.gameRunId !== undefined ? { gameRunId: this.state.gameRunId } : {}),
+      occurredAt: new Date().toISOString(),
     }
     this.flushUsage()
     return summary
   }
 
   // --- Internals ---
+
+  /**
+   * Resolve the companion context for an authenticated user at session
+   * assembly. Total: returns `undefined` (memory-less session) when the
+   * Companion D1 binding is absent, the user has no companion, or the read
+   * fails for any reason — the resolver read is an enhancement on the create
+   * path, never a dependency of it.
+   */
+  private async resolveCompanionContextBestEffort(
+    userId: string,
+    gameId: string
+  ): Promise<CompanionContext | undefined> {
+    const db = this.env.COMPANION_DB
+    if (db === undefined) return undefined
+    try {
+      const context = await resolveCompanionContext(db, userId, gameId)
+      return context ?? undefined
+    } catch (error) {
+      console.warn('session-do: companion-context resolution failed (memory-less session)', error)
+      return undefined
+    }
+  }
 
   private ensureAudioBridge(): AudioBridge {
     if (this.audio === undefined) this.audio = new AudioBridge()
@@ -663,12 +716,32 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           this.sendError(ws, 'already_created', 'session already created')
           return
         }
+        // Companion-memory resolver call (assembly-time read path, L2
+        // §Mechanism Variant 2). Best-effort and OUTSIDE the hot path: a
+        // missing binding, no companion, or a resolver failure all degrade to
+        // a memory-less session (the companion context is simply absent).
+        const companionContext = await this.resolveCompanionContextBestEffort(
+          socketUserId,
+          msg.gameId
+        )
+        // Re-check the create guard AFTER the await above: a second `create`
+        // could have interleaved across the resolver read. The check + the
+        // synchronous `createSession` below are atomic again (no await
+        // between them), preserving the publish-after-success property.
+        if (this.state) {
+          this.sendError(ws, 'already_created', 'session already created')
+          return
+        }
         // Bind the AUTH-validated user id, NOT any id the client claims.
         const sessionId = this.createSession(
           msg.gameId,
           socketUserId,
           msg.manualData,
-          msg.gameState
+          msg.gameState,
+          {
+            ...(companionContext !== undefined ? { companionContext } : {}),
+            ...(msg.gameRunId !== undefined ? { gameRunId: msg.gameRunId } : {}),
+          }
         )
         // Record THIS socket as the session owner. Only this exact socket's close
         // tears the session down (`onSocketClose`); a same-user duplicate socket's
@@ -820,6 +893,12 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           // is rejected ("turn before create") instead of running a provider
           // turn on the just-ended session. See `clearSession`.
           this.clearSession()
+          // Companion-memory capture hand-off (L2 capture entry): deliver the
+          // finished summary to the consolidator DO, fire-and-forget. Both
+          // the helper (never throws) and the placement (after teardown is
+          // fully settled, before the close) keep the invariant "a capture
+          // failure must never affect the game result or the session end".
+          void handOffSummaryCapture(this.env.COMPANION_CONSOLIDATOR, summary)
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, 'session ended')
