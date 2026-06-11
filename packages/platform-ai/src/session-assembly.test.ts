@@ -75,6 +75,9 @@ describe('assembleSession — all-or-nothing session construction', () => {
       sttInputSeconds: 0,
       ttsOutputSeconds: 0,
     })
+    // STT metering annotation starts at the precision ceiling; the pipeline
+    // latches it to 'derived-from-bytes' on the first byte-derived turn.
+    expect(assembled.state.sttSource).toBe('provider-reported')
   })
 
   it('threads an explicit gameState through to the assembled state', () => {
@@ -82,6 +85,24 @@ describe('assembleSession — all-or-nothing session construction', () => {
     const assembled = assembleSession('demo-mock', 'user-A', MANUAL, gameState, {})
 
     expect(assembled.state.gameState).toEqual(gameState)
+  })
+
+  it('mints a fresh opaque UUID session id per assembly — never a DO-derived id', () => {
+    // The L2 spec forbids the bare DO id (and any "DO id + in-memory counter"
+    // composite) as the session id: the same-named resident DO hosts many
+    // logical sessions, and an eviction resets any counter — colliding the
+    // write-once `usage:{date}:{user_id}:{session_id}` metering keys. The mint
+    // happens in `assembleSession`, so the DO publishes the minted id and
+    // `createSession` returns it instead of `ctx.id`.
+    const a = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+    const b = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+
+    const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    expect(a.sessionId).toMatch(UUID_V4)
+    expect(b.sessionId).toMatch(UUID_V4)
+    // Two sessions on the same inputs (same DO, same user, same game) still get
+    // distinct ids — the property a DO-derived id cannot provide.
+    expect(a.sessionId).not.toBe(b.sessionId)
   })
 })
 

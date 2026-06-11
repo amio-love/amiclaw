@@ -17,6 +17,7 @@ import {
   MessageFlag,
   MessageType,
   parseFrame,
+  parseSttAudioDurationMs,
   parseSttResponse,
   Serialization,
   TtsEvent,
@@ -296,6 +297,45 @@ describe('parseSttResponse', () => {
       payload: encoder.encode(JSON.stringify({ result: {} })),
     })
     expect(parseSttResponse(parseFrame(ack))).toBeUndefined()
+  })
+
+  it('parses audio_info.duration alongside the transcript fields', () => {
+    // The example-JSON-only field (doc 6561/1354869): present -> the cumulative
+    // recognized duration in milliseconds.
+    const frame = parseFrame(
+      sttServerFrame({
+        result: { text: '你好', utterances: [{ definite: true }] },
+        audio_info: { duration: 3696 },
+      })
+    )
+    expect(parseSttAudioDurationMs(frame)).toBe(3696)
+    // The transcript parse is unaffected by the extra field.
+    expect(parseSttResponse(frame)).toEqual({ text: '你好', isFinal: true })
+  })
+
+  it('returns undefined duration when audio_info is absent or malformed (best-effort field)', () => {
+    // Absent entirely — the formal field table does not list audio_info, so an
+    // absent field is the documented-normal case, not an error.
+    expect(
+      parseSttAudioDurationMs(parseFrame(sttServerFrame({ result: { text: 'x' } })))
+    ).toBeUndefined()
+    // Present but non-numeric — ignored, never thrown.
+    expect(
+      parseSttAudioDurationMs(
+        parseFrame(sttServerFrame({ result: { text: 'x' }, audio_info: { duration: 'oops' } }))
+      )
+    ).toBeUndefined()
+    // Error frames are the transcript parser's job — the duration helper is total.
+    const errFrame = parseFrame(
+      buildSttRequestFrame({
+        messageType: MessageType.ErrorResponse,
+        flags: MessageFlag.PositiveSequence,
+        serialization: Serialization.Json,
+        sequence: 1,
+        payload: encoder.encode('boom'),
+      })
+    )
+    expect(parseSttAudioDurationMs(errFrame)).toBeUndefined()
   })
 
   it('throws on an error-type server frame', () => {
@@ -646,6 +686,83 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
 
     const chunks = await collected
     expect(chunks).toEqual([{ text: '你好', isFinal: true }])
+  })
+})
+
+describe('createVolcengineSpeechProvider.stt — per-connection usage metering', () => {
+  it('reports the LAST cumulative audio_info.duration, not the per-response sum (provider-reported)', async () => {
+    // The server's duration is CUMULATIVE per connection: each full response
+    // carries the total recognized so far. Two responses (1200ms then 3696ms)
+    // must settle as 3696 — summing them (4896) would double-count.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const drained = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
+    await tick()
+    socket.emitMessage(
+      sttServerFrame({
+        result: { text: '你', utterances: [{ definite: false }] },
+        audio_info: { duration: 1200 },
+      })
+    )
+    socket.emitMessage(
+      sttServerFrame({
+        result: { text: '你好', utterances: [{ definite: true }] },
+        audio_info: { duration: 3696 },
+      })
+    )
+    await drained
+
+    expect(stt.lastUsage).toEqual({ durationMs: 3696, source: 'provider-reported' })
+  })
+
+  it('falls back to exact bytes-sent conversion when no response carries audio_info (derived-from-bytes)', async () => {
+    // No audio_info anywhere (the formal field table does not promise it). The
+    // connection sent 8000 + 8000 = 16000 audio payload bytes; at the default
+    // PCM16 mono 16kHz byte rate (32000 B/s) that is exactly 500ms.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const drained = collect(
+      stt.transcribe(await asyncFrom([new Uint8Array(8000), new Uint8Array(8000)]))
+    )
+    await tick()
+    socket.emitMessage(sttServerFrame({ result: { text: '好', utterances: [{ definite: true }] } }))
+    await drained
+
+    expect(stt.lastUsage).toEqual({ durationMs: 500, source: 'derived-from-bytes' })
+  })
+
+  it('resets usage per connection — a later no-report stream does not inherit the prior duration', async () => {
+    // Connection 1 settles provider-reported; connection 2 gets no audio_info
+    // and must settle from ITS OWN bytes, not leak 9999 from the prior stream.
+    const socket1 = new MockSocket()
+    const sockets = [socket1, new MockSocket()]
+    let call = 0
+    const connect: WebSocketConnector = async () => sockets[call++]
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const drained1 = collect(stt.transcribe(await asyncFrom([new Uint8Array(64000)])))
+    await tick()
+    socket1.emitMessage(
+      sttServerFrame({
+        result: { text: 'one', utterances: [{ definite: true }] },
+        audio_info: { duration: 9999 },
+      })
+    )
+    await drained1
+    expect(stt.lastUsage).toEqual({ durationMs: 9999, source: 'provider-reported' })
+
+    const drained2 = collect(stt.transcribe(await asyncFrom([new Uint8Array(32000)])))
+    await tick()
+    sockets[1].emitMessage(
+      sttServerFrame({ result: { text: 'two', utterances: [{ definite: true }] } })
+    )
+    await drained2
+
+    expect(stt.lastUsage).toEqual({ durationMs: 1000, source: 'derived-from-bytes' })
   })
 })
 

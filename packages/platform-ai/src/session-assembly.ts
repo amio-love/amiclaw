@@ -25,6 +25,17 @@ import type { SessionState, TurnProviders } from './turn-pipeline'
 
 /** Everything `createSession` publishes, assembled atomically or not at all. */
 export interface AssembledSession {
+  /**
+   * Freshly minted opaque session id (`crypto.randomUUID()`), one per
+   * successful assembly. Deliberately NOT the Durable Object id (and not a
+   * "DO id + generation counter" composite): the same-named DO instance hosts
+   * many logical sessions over its lifetime — every reconnect/`create` after a
+   * `clearSession`, and any in-memory counter resets to zero on a DO
+   * eviction/restart — so a DO-derived id would collide across distinct
+   * sessions wherever the id must be globally unique (the per-session
+   * `usage:{date}:{user_id}:{session_id}` metering key).
+   */
+  sessionId: string
   userId: string
   providers: TurnProviders
   state: SessionState
@@ -32,8 +43,9 @@ export interface AssembledSession {
 
 /**
  * Run all fallible session-setup steps; return the full publishable bundle or
- * throw. Pure (no instance state touched): a throw leaves no residue, so a
- * failed create cannot bind a user, wire providers, or seed state.
+ * throw. Pure aside from the session-id mint (no instance state touched): a
+ * throw leaves no residue, so a failed create cannot bind a user, wire
+ * providers, or seed state.
  */
 export function assembleSession(
   gameId: string,
@@ -51,6 +63,9 @@ export function assembleSession(
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
+    // Latches to 'derived-from-bytes' on the first turn whose STT seconds did
+    // not come from the provider's own report (see `SessionState.sttSource`).
+    sttSource: 'provider-reported',
   }
-  return { userId, providers, state }
+  return { sessionId: crypto.randomUUID(), userId, providers, state }
 }
