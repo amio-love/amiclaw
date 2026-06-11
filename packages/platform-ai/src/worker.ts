@@ -17,13 +17,22 @@
  */
 
 import { VoiceSessionDO } from './session-do'
+import { CompanionConsolidatorDO } from './consolidator-do'
 import { resolveSessionReader, type AuthSeamEnv } from './auth-seam'
 import type { ProviderEnv } from './providers/factory'
 
-/** Worker env: the DO namespace binding + auth seam + provider creds. */
+/** Worker env: the DO namespace bindings + auth seam + provider creds. */
 export interface WorkerEnv extends AuthSeamEnv, ProviderEnv {
   /** Durable Object namespace binding (`wrangler.toml` name `VOICE_SESSION`). */
   VOICE_SESSION: DurableObjectNamespace
+  /**
+   * Companion-memory bindings (optional — the voice pipeline runs memory-less
+   * without them): the consolidator DO namespace (`COMPANION_CONSOLIDATOR`)
+   * and Companion D1 (`COMPANION_DB`). Consumed by the session DO via its
+   * env, not by this fetch handler.
+   */
+  COMPANION_CONSOLIDATOR?: DurableObjectNamespace
+  COMPANION_DB?: D1Database
 }
 
 /** WS route prefix this Worker owns; pinned at L2 and must not drift. */
@@ -76,4 +85,4 @@ export default {
   },
 }
 
-export { VoiceSessionDO }
+export { VoiceSessionDO, CompanionConsolidatorDO }

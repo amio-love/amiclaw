@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 20 active flows <-> 20 journey
-# scenarios, the regression size budget is 40 (2026-06-09, after the
-# mode② Google-OAuth login flow was added alongside the magic-link flows).
+# 2 x the journey-scenario count. With 23 active flows <-> 23 journey
+# scenarios, the regression size budget is 46 (2026-06-11, after the three
+# mode② companion-memory flows were added as @simulation journeys).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -243,4 +243,46 @@ flows:
       display name derived from the session email plus the email — and the
       honest empty stats state (没有成绩 + a play CTA), not fabricated numbers.
     steps: [account-page-signed-in, real-identity, honest-empty-stats]
+    status: active
+
+  # === mode② companion & memory flows =========================================
+  # The account-anchored companion with two-layer memory (episodes + profile
+  # claims). Data plane only this round — no UI surfaces, and the e2e harness
+  # serves a static build with no Workers runtime — so all three flows are
+  # claimed by @simulation scenarios until downstream UI tasks land
+  # browser-drivable surfaces. Behaviour coverage lives in the vitest suites
+  # against the real schema (packages/companion-memory, packages/api).
+
+  - id: companion-setup
+    name: Companion first-time setup
+    description: >-
+      A signed-in mode② player names their companion and picks its voice via
+      POST /api/companion/setup. The companion is 1:1 with the account (the
+      user_id primary key); a second setup attempt is rejected with 409 — no
+      second-companion path exists anywhere on the platform.
+    steps: [signed-in, companion-setup, one-companion-invariant]
+    status: active
+
+  - id: companion-memory-album
+    name: Memory album and profile control
+    description: >-
+      After a finished session is asynchronously consolidated, the player
+      browses episodic memories (GET /api/companion/memories), reads each
+      profile understanding with its episode evidence chain
+      (GET /api/companion/profile), and deletes a memory — which cascades:
+      understandings that lost their last active evidence retire and stop
+      injecting.
+    steps: [session-end, consolidation, memory-album, evidence-chain, delete-cascade]
+    status: active
+
+  - id: companion-memory-injection
+    name: Next-session memory injection
+    description: >-
+      Starting the next mode② session, the platform resolves the companion
+      context (profile + claim subset + recent/high-salience memories) and
+      injects it deterministically into the system prompt — isomorphic to the
+      manual injection, never via model function-calling. Turning the profile
+      off (PUT /api/companion/profile) stops claim injection immediately while
+      visible memories and the companion identity remain.
+    steps: [session-create, resolver, deterministic-injection, profile-switch]
     status: active

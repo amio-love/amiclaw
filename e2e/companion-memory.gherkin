@@ -1,0 +1,44 @@
+# Companion & memory system (mode②) — the account-anchored AI companion with
+# episodic memories + an implicit understanding-layer profile, consolidated
+# asynchronously after each session and injected deterministically into the
+# next one (architecture: docs/architecture/arch-component-companion-memory.md).
+#
+# Consumption layer: @simulation. This round ships the data plane only — the
+# D1 schema, /api/companion/* endpoints, the resolver and the consolidation
+# job — with NO UI surfaces, and the e2e harness serves a static build with no
+# Workers runtime (no Pages Functions, no D1, no Durable Objects), so none of
+# these journeys is browser-drivable yet. The journeys are pinned here (and in
+# flow-inventory.yaml) so the downstream UI tasks inherit them; the behaviour
+# itself is covered by the vitest suites against the real schema
+# (packages/companion-memory, packages/api companion handlers).
+
+Feature: Companion and memory
+  As a signed-in mode② player
+  I want my AI companion to keep its name, voice and our shared memories
+  So that every session continues a relationship instead of starting a stranger
+
+  # Source: companion-setup
+  @simulation
+  Scenario: First-time setup creates the one and only companion
+    Given I am signed in
+    And I have not set up a companion yet
+    When I name my companion and pick its voice
+    Then my companion is created with that name and voice
+    And a second setup attempt is rejected
+
+  # Source: companion-memory-album
+  @simulation
+  Scenario: A finished session becomes visible memories under my control
+    Given I am signed in with a companion
+    When I finish a voice game session
+    Then the session is consolidated into memories I can browse
+    And I can read each profile understanding with its memory evidence
+    And deleting a memory also retires understandings that lost all evidence
+
+  # Source: companion-memory-injection
+  @simulation
+  Scenario: The next session remembers — unless I turned the profile off
+    Given I am signed in with a companion that has memories
+    When I start the next voice game session
+    Then my companion greets me by name and can reference our shared memories
+    And after I turn the profile off, no understanding is injected anymore

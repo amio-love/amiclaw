@@ -171,9 +171,23 @@ export async function openSocket(
   return createdPairs[createdPairs.length - 1][1]
 }
 
-/** Send the `create` control message over the socket; return the minted session id. */
-export function createSessionOverWs(socket: FakeWebSocket, gameId = 'demo-mock'): string {
+/**
+ * Send the `create` control message over the socket; return the minted session
+ * id. Async: the DO's create branch awaits the (best-effort, absent in this
+ * harness) companion-context resolution before acking, so the `created` reply
+ * lands a task after `receive` returns. The wait is bounded — a missing ack
+ * fails the test instead of hanging it.
+ */
+export async function createSessionOverWs(
+  socket: FakeWebSocket,
+  gameId = 'demo-mock'
+): Promise<string> {
+  const sentBefore = socket.sent.length
   socket.receive(JSON.stringify({ type: 'create', gameId, manualData: MANUAL }))
+  for (let waited = 0; socket.sent.length === sentBefore; waited += 1) {
+    if (waited >= 50) throw new Error('timed out waiting for the create ack')
+    await tick()
+  }
   const raw = socket.sent[socket.sent.length - 1]
   const created = JSON.parse(raw) as { type: string; sessionId?: string }
   if (created.type !== 'created' || created.sessionId === undefined) {

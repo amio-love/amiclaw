@@ -88,7 +88,7 @@ describe('real VoiceSessionDO — post-end cleanup, create-less turn rejected (P
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     // Owner ends the session: summary out, clean close, state cleared.
     socket.receive(END)
@@ -112,7 +112,7 @@ describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh
     // Real demo-mock provider path — no gating needed here.
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    const firstId = createSessionOverWs(socket)
+    const firstId = await createSessionOverWs(socket)
 
     socket.receive(END)
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
@@ -120,7 +120,7 @@ describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh
     // Same user reconnects to the same-named DO and creates again: NOT
     // rejected as already_created — a clean new session with its own UUID.
     const reconnect = await openSocket(doInstance, 'user-A')
-    const secondId = createSessionOverWs(reconnect)
+    const secondId = await createSessionOverWs(reconnect)
 
     expect(secondId).toMatch(UUID_RE)
     expect(secondId).not.toBe(firstId)
@@ -130,7 +130,7 @@ describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh
   it('still rejects a genuine re-create WHILE a session is live (unchanged behaviour)', async () => {
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     // No `end` happened — the session is live, so a second create is rejected.
     socket.receive(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: {} }))
@@ -154,7 +154,7 @@ describe('real VoiceSessionDO — end mid-turn clears, late settle does not revi
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    const firstId = createSessionOverWs(socket)
+    const firstId = await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -185,7 +185,7 @@ describe('real VoiceSessionDO — end mid-turn clears, late settle does not revi
 
     // A fresh create opens a clean new session whose first turn carries NO
     // history from the ended run.
-    const secondId = createSessionOverWs(reconnect)
+    const secondId = await createSessionOverWs(reconnect)
     expect(secondId).not.toBe(firstId)
     reconnect.receive(TURN)
     await tick()
@@ -206,7 +206,7 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    const firstId = createSessionOverWs(socket)
+    const firstId = await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -230,7 +230,7 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
     expect(kit.sttCalls()).toBe(1)
 
     // ...and a reconnect `create` opens a fresh, fully working session.
-    const secondId = createSessionOverWs(reconnect)
+    const secondId = await createSessionOverWs(reconnect)
     expect(secondId).not.toBe(firstId)
     reconnect.receive(TURN)
     await tick()
@@ -248,7 +248,7 @@ describe('real VoiceSessionDO — end teardown gate, only the owner socket ends 
   it('a same-user duplicate socket’s end is rejected fail-loud and tears nothing down', async () => {
     const { doInstance } = makeSessionDo()
     const owner = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(owner)
+    await createSessionOverWs(owner)
     // A second socket for the SAME user (duplicate tab / reconnect).
     const duplicate = await openSocket(doInstance, 'user-A')
 
@@ -271,7 +271,7 @@ describe('real VoiceSessionDO — end teardown gate, only the owner socket ends 
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const owner = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(owner)
+    await createSessionOverWs(owner)
     const duplicate = await openSocket(doInstance, 'user-A')
 
     owner.receive(TURN)

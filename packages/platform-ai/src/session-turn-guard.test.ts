@@ -85,7 +85,7 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     // First turn starts and parks at the gated LLM await (a real turn mid-flight).
     socket.receive(TURN)
@@ -125,7 +125,7 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -154,7 +154,7 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     providerControl.override = bundle.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     // The provider rejects at the LLM step; the listener fail-louds with 1008.
     socket.receive(TURN)
@@ -179,7 +179,7 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -212,7 +212,7 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(END)
 
@@ -232,7 +232,7 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     providerControl.override = bundle.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -258,7 +258,7 @@ describe('real VoiceSessionDO — create during a turn (matrix: create)', () => 
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    const sessionId = createSessionOverWs(socket)
+    const sessionId = await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()
@@ -297,7 +297,7 @@ describe('real VoiceSessionDO — owner close during a turn (matrix: close)', ()
     providerControl.override = kit.providers
     const { doInstance } = makeSessionDo()
     const socket = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket)
+    await createSessionOverWs(socket)
 
     socket.receive(TURN)
     await tick()

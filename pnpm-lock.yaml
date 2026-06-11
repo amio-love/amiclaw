@@ -82,6 +82,18 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@25.9.2)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/companion-memory:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260608.1
+        version: 4.20260608.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@25.9.2)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/game-bombsquad:
     dependencies:
       '@amiclaw/ui':

@@ -95,7 +95,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
 
     // Generation 1: an owner session with a turn parked at a provider await.
     const socket1 = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket1)
+    await createSessionOverWs(socket1)
     socket1.receive(TURN)
     await tick()
     expect(kit.sttCalls()).toBe(1)
@@ -110,7 +110,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // A client reconnects to the SAME-named DO, opens a fresh session, and
     // starts a NEW turn. This is generation 2.
     const socket2 = await openSocket(doInstance, 'user-B')
-    createSessionOverWs(socket2)
+    await createSessionOverWs(socket2)
     socket2.receive(TURN)
     await tick()
     expect(kit.sttCalls()).toBe(2)
@@ -153,7 +153,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
 
     // Generation 1 parks mid-turn, then the owner socket drops WITHOUT `end`.
     const socket1 = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket1)
+    await createSessionOverWs(socket1)
     socket1.receive(TURN)
     await tick()
     socket1.disconnect()
@@ -161,7 +161,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
 
     // Reconnect: fresh session + new turn (generation 2).
     const socket2 = await openSocket(doInstance, 'user-A')
-    createSessionOverWs(socket2)
+    await createSessionOverWs(socket2)
     socket2.receive(TURN)
     await tick()
     expect(kit.sttCalls()).toBe(2)
