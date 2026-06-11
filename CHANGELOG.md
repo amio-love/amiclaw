@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI test suites now exercise the real session engine** - Internal
+refactor. The voice-session test suites that previously asserted against a
+hand-written stand-in now drive the real Durable Object class through a
+production-class harness, so a regression in the actual session engine can no
+longer hide behind a green mirror. No player-facing behavior changes.
+
 **Real usage metering for platform AI sessions** - Every platform-AI voice
 session now measures what it actually consumed instead of estimating.
 Speech-to-text seconds come from the speech provider's own duration report

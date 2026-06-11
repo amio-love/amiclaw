@@ -4,8 +4,10 @@
  * This is the testable core of the DO's session-terminal metering flush
  * (`VoiceSessionDO.flushUsage` is a thin shell over `flushSessionUsage`),
  * extracted pure-ish so the key shape, record shape, and fail-open behavior
- * are unit-testable in Node (the DO class imports `cloudflare:workers` and
- * cannot be instantiated in the test environment).
+ * are unit-testable in Node without any DO harness. (The real `VoiceSessionDO`
+ * is ALSO instantiable in tests via the `vi.mock('cloudflare:workers')`
+ * production-class harness — see `session-do-usage-flush.test.ts`; this pure
+ * core simply stays the cheapest place to pin the storage contract.)
  *
  * Storage contract (L2 §Mechanism Variant 4):
  *  - One write-once record per session: key `usage:{date}:{user_id}:{session_id}`

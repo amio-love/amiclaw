@@ -23,11 +23,11 @@ import type { ProviderEnv } from './providers/factory'
  *
  * The fix extracts every fallible setup step into the pure `assembleSession`
  * (locals only, complete-bundle-or-throw); the DO publishes the bundle in one
- * uninterrupted synchronous block. The DO class itself imports
- * `cloudflare:workers` and cannot be instantiated in the Node test
- * environment, so — exactly as `session-identity.test.ts` does — these tests
- * exercise the extracted pure pieces and model the DO's publish + observer
- * shape around them.
+ * uninterrupted synchronous block. These tests exercise the extracted pure
+ * pieces and model the DO's publish + observer shape around them; the real
+ * class's WS-driven behavior is covered by the production-class DO suites
+ * (harness: `session-do-test-kit.ts`, pattern SSOT
+ * `session-do-usage-flush.test.ts`).
  */
 
 const MANUAL: ManualData = { version: 'test-v1', sections: { intro: 'sample section' } }

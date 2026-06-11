@@ -10,9 +10,12 @@ import {
  * Regression tests for the per-socket session-identity mechanism that
  * `VoiceSessionDO` is a thin shell over (L2 §Mechanism Variant 3, step 3).
  *
- * The DO class itself imports `cloudflare:workers` and cannot be instantiated in
- * the Node test environment, so — exactly as `assertSessionOwnership` and
- * `runTurn` are tested — these tests exercise the extracted pure pieces:
+ * These are the unit tests of the extracted pure pieces in `auth-seam.ts` —
+ * the identity/ownership layer's own contract, independent of the DO shell.
+ * (The real class's enforcement of the same predicates over live sockets is
+ * covered by the production-class DO suites; harness:
+ * `session-do-test-kit.ts`, pattern SSOT `session-do-usage-flush.test.ts`.)
+ * The pieces under test:
  *  - `SocketIdentityRegistry`: binds the handshake-forwarded user id to the
  *    specific accepted socket (F-B), so a second client on the same DO instance
  *    cannot overwrite the first client's identity.

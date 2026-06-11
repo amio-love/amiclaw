@@ -1,8 +1,11 @@
 /**
  * Session assembly — the FALLIBLE half of `VoiceSessionDO.createSession`,
  * extracted pure so the all-or-nothing property is unit-testable in Node
- * (the DO class imports `cloudflare:workers` and cannot be instantiated in
- * the test environment — see `session-identity.test.ts`).
+ * without any DO harness (see `session-identity.test.ts`). The real
+ * `VoiceSessionDO` is also instantiable in tests via the
+ * `vi.mock('cloudflare:workers')` production-class harness — see
+ * `session-do-usage-flush.test.ts` — but the pure extraction remains the
+ * cheapest place to pin the all-or-nothing publish property.
  *
  * Both setup steps can throw:
  *  - `resolveConfig` on an unregistered `gameId` (loud-fail, no default game);
