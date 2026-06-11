@@ -106,6 +106,10 @@ export interface SessionSummary {
   //   no `highlights`  -> only settlement facts are consolidated (no claims);
   //   no `gameRunId`   -> the summary and the run's settlement event
   //                       consolidate independently (no merge);
+  //   no `runInstanceId` -> the capture event id falls back to `sessionId`
+  //                       (pre-existing behaviour: replays still dedup, but
+  //                       successive runs on a reused same-named session
+  //                       collide on the key and only the first captures);
   //   no `userId`      -> the capture entry drops the summary (anonymous
   //                       sessions never produce memories — enforced there,
   //                       since `userId` is non-optional on this contract).
@@ -121,6 +125,14 @@ export interface SessionSummary {
    * event (e.g. the game run id the consumer supplied at `create`).
    */
   gameRunId?: string
+  /**
+   * Per-run instance id generated at session assembly. Identifies THIS run —
+   * unlike `sessionId`, which is the DO id and stays the same when a
+   * same-named DO is reused for a second run after `clearSession()`. The
+   * capture entry prefers it as the event-id source so two runs on one DO
+   * never swallow each other's summary.
+   */
+  runInstanceId?: string
   /** ISO 8601 session-end timestamp (capture provenance metadata). */
   occurredAt?: string
 }

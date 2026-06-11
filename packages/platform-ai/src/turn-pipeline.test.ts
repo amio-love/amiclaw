@@ -104,6 +104,7 @@ function freshState(): SessionState {
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
+    runInstanceId: 'run-instance-test',
   }
 }
 

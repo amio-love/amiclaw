@@ -48,6 +48,7 @@ export function captureInputFromSummary(summary: SessionSummary): SessionSummary
     turnCount: summary.turnCount,
     ...(summary.highlights !== undefined ? { highlights: summary.highlights } : {}),
     ...(summary.gameRunId !== undefined ? { gameRunId: summary.gameRunId } : {}),
+    ...(summary.runInstanceId !== undefined ? { runInstanceId: summary.runInstanceId } : {}),
     ...(summary.occurredAt !== undefined ? { occurredAt: summary.occurredAt } : {}),
   }
 }

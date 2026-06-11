@@ -83,6 +83,20 @@ describe('assembleSession — all-or-nothing session construction', () => {
 
     expect(assembled.state.gameState).toEqual(gameState)
   })
+
+  it('stamps every assembly with a fresh per-run instance id (G5)', () => {
+    // The DO id is stable across `clearSession()` + re-`create` on a reused
+    // same-named DO; the run-scoped capture key must come from here. Two
+    // consecutive assemblies (= two runs on one DO) get distinct ids, so the
+    // second run's summary can never collide with the first's capture event.
+    const run1 = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+    const run2 = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    expect(run1.state.runInstanceId).toMatch(uuid)
+    expect(run2.state.runInstanceId).toMatch(uuid)
+    expect(run2.state.runInstanceId).not.toBe(run1.state.runInstanceId)
+  })
 })
 
 describe('failed create publishes nothing — no half-bound session, no leaked audio', () => {

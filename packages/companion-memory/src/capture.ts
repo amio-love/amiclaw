@@ -32,7 +32,7 @@ export async function captureSessionSummary(
   deps: DomainDeps = defaultDeps
 ): Promise<CaptureResult> {
   if (!input.userId) return { captured: false, reason: 'no-user' }
-  const eventId = summaryEventId(input.sessionId)
+  const eventId = summaryEventId(input)
   const occurredAt = input.occurredAt ?? deps.now()
   const result = await db
     .prepare(

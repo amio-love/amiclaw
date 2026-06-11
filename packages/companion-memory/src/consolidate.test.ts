@@ -123,6 +123,40 @@ describe('capture idempotency', () => {
     expect(result).toEqual({ captured: false, reason: 'no-user' })
     expect(await allRows(db, 'capture_event')).toHaveLength(0)
   })
+
+  it('keys the event off the per-run instance id and still dedups its replay', async () => {
+    const db = createTestDb()
+    const input = { ...SUMMARY, runInstanceId: 'run-inst-1' }
+    const first = await captureSessionSummary(db, input, testDeps())
+    const replay = await captureSessionSummary(db, input, testDeps())
+    expect(first).toEqual({ captured: true, eventId: 'session-summary:run-inst-1' })
+    expect(replay).toEqual({
+      captured: false,
+      reason: 'duplicate',
+      eventId: 'session-summary:run-inst-1',
+    })
+    expect(await allRows(db, 'capture_event')).toHaveLength(1)
+  })
+
+  it('captures two runs reusing the same session id as distinct events (G5)', async () => {
+    // The defect's shape: `sessionId` is the DO id, reused across
+    // `clearSession()` + re-`create` — keyed off it, the second run's summary
+    // would no-op on ON CONFLICT and be silently dropped.
+    const db = createTestDb()
+    const run1 = await captureSessionSummary(
+      db,
+      { ...SUMMARY, runInstanceId: 'run-inst-1', gameRunId: 'run-1' },
+      testDeps()
+    )
+    const run2 = await captureSessionSummary(
+      db,
+      { ...SUMMARY, runInstanceId: 'run-inst-2', gameRunId: 'run-2' },
+      testDeps()
+    )
+    expect(run1).toEqual({ captured: true, eventId: 'session-summary:run-inst-1' })
+    expect(run2).toEqual({ captured: true, eventId: 'session-summary:run-inst-2' })
+    expect(await allRows(db, 'capture_event')).toHaveLength(2)
+  })
 })
 
 describe('settlement consolidation (deterministic path)', () => {
@@ -214,6 +248,39 @@ describe('summary consolidation (LLM path)', () => {
     expect(await allRows<ProfileClaimRecord>(db, 'profile_claim')).toHaveLength(1)
     const evidence = await allRows(db, 'profile_claim_evidence')
     expect(evidence).toHaveLength(1)
+  })
+
+  it('two runs on one reused session id each consolidate into their own episode (G5)', async () => {
+    const db = createTestDb()
+    const deps = testDeps()
+    await seedCompanion(db, 'user-a')
+    // Same `sessionId` (the reused DO), distinct per-run instance ids — the
+    // two summaries land as two capture events and consolidate independently.
+    await captureSessionSummary(db, { ...SUMMARY, runInstanceId: 'run-inst-1' }, deps)
+    await captureSessionSummary(
+      db,
+      {
+        ...SUMMARY,
+        runInstanceId: 'run-inst-2',
+        gameRunId: 'run-2',
+        highlights: ['Second run: the wires module went smoothly'],
+      },
+      deps
+    )
+
+    const outcome = await runConsolidation(db, cannedLlm(), deps)
+    expect(outcome).toEqual({ processed: 2, discarded: 0, remaining: 0 })
+
+    const episodes = await allRows<EpisodeRecord>(db, 'episode')
+    expect(episodes).toHaveLength(2)
+    expect(episodes.map((e) => e.source_ref).sort()).toEqual([
+      'session-summary:run-inst-1',
+      'session-summary:run-inst-2',
+    ])
+    // Replaying EITHER run's summary still adds nothing (per-run idempotency).
+    await captureSessionSummary(db, { ...SUMMARY, runInstanceId: 'run-inst-1' }, deps)
+    await runConsolidation(db, cannedLlm(), deps)
+    expect(await allRows<EpisodeRecord>(db, 'episode')).toHaveLength(2)
   })
 
   it('profile_enabled=false consolidates episodes but never claims', async () => {

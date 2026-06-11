@@ -10,9 +10,17 @@
  * ledger credits, no matter how many times an event is retried.
  */
 
-/** Stable capture event id for one session summary. */
-export function summaryEventId(sessionId: string): string {
-  return `session-summary:${sessionId}`
+/**
+ * Stable capture event id for one session summary. Prefers the per-run
+ * instance id: the `sessionId` is the Durable Object id, which is REUSED
+ * across `clearSession()` + re-`create` on a same-named DO — keying off it
+ * would make a second run's summary collide with the first's and be dropped
+ * as a duplicate. Falls back to `sessionId` for old-shape summaries without a
+ * run instance id (replaying the same payload still dedups, exactly as
+ * before).
+ */
+export function summaryEventId(summary: { sessionId: string; runInstanceId?: string }): string {
+  return `session-summary:${summary.runInstanceId ?? summary.sessionId}`
 }
 
 /** Stable capture event id for one settlement event. */

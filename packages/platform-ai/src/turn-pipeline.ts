@@ -72,6 +72,15 @@ export interface SessionState {
   /** Accumulated usage counters. */
   usage: UsageCounters
   /**
+   * Per-run instance id, freshly generated at session assembly. The DO id
+   * (the opaque `SessionId`) is STABLE across `clearSession()` + re-`create`
+   * on the same-named DO, so it cannot identify one run; this id can — every
+   * assembled session gets its own. It lives inside the state bundle, so
+   * `clearSession()` discards it with the rest and the next run on a reused
+   * DO carries a fresh one.
+   */
+  runInstanceId: string
+  /**
    * Companion context resolved at session assembly (companion-memory).
    * Optional: absent = memory-less session, injection is a no-op.
    */

@@ -84,6 +84,12 @@ export function assembleSession(
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
+    // Per-run instance id (companion-memory capture key). The DO id is stable
+    // across `clearSession()` + re-`create` on a reused DO, so the capture
+    // side cannot key events off it without a second run's summary colliding
+    // with the first's; a fresh id per assembly keys each run distinctly.
+    // Generated here, inside the all-or-nothing bundle (`randomUUID` is total).
+    runInstanceId: crypto.randomUUID(),
     ...(extras.companionContext !== undefined ? { companionContext: extras.companionContext } : {}),
     ...(extras.gameRunId !== undefined ? { gameRunId: extras.gameRunId } : {}),
   }

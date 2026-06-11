@@ -458,6 +458,10 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
       // downstream, outside the session boundary.
       highlights: summarizeHighlights(this.state.history),
       ...(this.state.gameRunId !== undefined ? { gameRunId: this.state.gameRunId } : {}),
+      // Per-run capture key: `sessionId` above is the DO id, stable across
+      // `clearSession()` + re-`create` on this same-named DO, so the capture
+      // side keys the event off this run-scoped id instead.
+      runInstanceId: this.state.runInstanceId,
       occurredAt: new Date().toISOString(),
     }
   }
