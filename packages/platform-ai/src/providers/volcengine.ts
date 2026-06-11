@@ -905,7 +905,18 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       socket.addEventListener('error', (err) => queue.fail(err))
 
       // Pump audio in the background so we can yield transcripts as they arrive.
+      //
+      // `cancelled` is set by the generator's `finally` when the consumer calls
+      // `return()` (turn early-exit — e.g. `collectFinalTranscript` breaks early,
+      // or the turn aborts). The pump checks it before every send and stops pushing
+      // audio at once, rather than continuing to drive the ASR session the consumer
+      // abandoned. The inbound audio source is drained through an explicit iterator
+      // so the `finally` can `return()` it, terminating the pump's `for await` and
+      // releasing the upstream audio generator too.
+      let cancelled = false
+      const audioIterator = audio[Symbol.asyncIterator]()
       const pump = (async () => {
+        if (cancelled) return
         socket.send(
           asArrayBuffer(
             buildSttConfigFrame({
@@ -918,13 +929,17 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         )
         let seq = 1
         let pending: Uint8Array | undefined
-        for await (const frame of audio) {
+        for (;;) {
+          const next = await audioIterator.next()
+          if (next.done) break
+          if (cancelled) return
           if (pending !== undefined) {
             seq += 1
             socket.send(asArrayBuffer(buildSttAudioFrame(pending, seq, false)))
           }
-          pending = frame
+          pending = next.value
         }
+        if (cancelled) return
         // Flag the final audio packet with a negative sequence.
         seq += 1
         const last = pending ?? new Uint8Array(0)
@@ -932,7 +947,28 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       })()
       pump.catch((err) => queue.fail(err))
 
-      yield* queue
+      try {
+        yield* queue
+      } finally {
+        // Runs on every exit path: normal completion (a definite transcript closed
+        // the queue), a provider error (the queue was failed), and — the
+        // resource-leak fix — consumer cancellation via `transcribe`'s iterator
+        // `return()` when the turn exits early. On the cancellation path the queue
+        // is still open and the pump may be parked pulling the next audio frame, so
+        // without this the outbound Volcengine ASR socket would leak and audio keep
+        // streaming. Cleanup is idempotent so it never disturbs the already-settled
+        // normal / error paths:
+        //  - `cancelled` short-circuits any further pump sends;
+        //  - `audioIterator.return()` ends the pump's `for await` and releases the
+        //    upstream audio generator;
+        //  - `queue.close()` is idempotent on an already-closed/failed queue;
+        //  - `socket.close()` deterministically releases the outbound connection
+        //    (idempotent; the normal path already closes it on a final transcript).
+        cancelled = true
+        await audioIterator.return?.(undefined)
+        queue.close()
+        socket.close()
+      }
     },
   }
 
@@ -1021,9 +1057,19 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // immediately after FinishSession) lets the listener drain that tail audio
       // before the connection closes, so the last synthesized frames are never
       // truncated. This mirrors the start-side gating symmetrically.
+      //
+      // `cancelled` is set by the generator's `finally` when the consumer calls
+      // `return()` (turn early-exit). The pump checks it before every send so a
+      // cancellation that lands mid-send-sequence stops issuing frames at once,
+      // rather than continuing to drive (and bill) a session the consumer has
+      // abandoned. The awaited gates are rejected by the same `finally` via
+      // `handshake.abort`, so a pump parked on a gate unblocks instead of hanging.
+      let cancelled = false
       const pump = (async () => {
+        if (cancelled) return
         socket.send(asArrayBuffer(buildTtsStartConnectionFrame()))
         await handshake.connectionStarted
+        if (cancelled) return
         socket.send(
           asArrayBuffer(
             buildTtsStartSessionFrame({
@@ -1036,18 +1082,42 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         )
         await handshake.sessionStarted
         for await (const piece of text) {
+          if (cancelled) return
           if (piece.length === 0) continue
           socket.send(
             asArrayBuffer(buildTtsTaskRequestFrame({ sessionId, text: piece, speaker: ttsSpeaker }))
           )
         }
+        if (cancelled) return
         socket.send(asArrayBuffer(buildTtsFinishSessionFrame(sessionId)))
         await handshake.sessionFinished
+        if (cancelled) return
         socket.send(asArrayBuffer(buildTtsFinishConnectionFrame()))
       })()
       pump.catch((err) => queue.fail(err))
 
-      yield* queue
+      try {
+        yield* queue
+      } finally {
+        // Runs on every exit path: normal completion (SessionFinished closed the
+        // queue), a provider error (the queue was failed), and — the resource-leak
+        // fix — consumer cancellation via `ttsIterator.return()` when the turn
+        // exits early (owner `end`, socket close, STT/LLM failure). On the
+        // cancellation path the queue is still open and the pump may be parked on a
+        // handshake gate or sending TaskRequests, so without this the outbound
+        // Volcengine TTS socket would leak and the session keep billing. Cleanup is
+        // idempotent so it never disturbs the already-settled normal / error paths:
+        //  - `cancelled` short-circuits any further pump sends;
+        //  - `handshake.abort` rejects only NOT-yet-settled gates (no-op once the
+        //    handshake completed normally), unblocking a parked pump;
+        //  - `queue.close()` is idempotent on an already-closed/failed queue;
+        //  - `socket.close()` deterministically releases the outbound connection
+        //    (idempotent; the normal path relies on the server closing it).
+        cancelled = true
+        handshake.abort(new Error('Volcengine TTS synthesize cancelled'))
+        queue.close()
+        socket.close()
+      }
     },
   }
 

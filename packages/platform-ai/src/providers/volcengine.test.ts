@@ -1147,6 +1147,214 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
   })
 })
 
+// --- Resource cleanup on consumer cancellation (iterator.return) -------------
+
+describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.return)', () => {
+  it('TTS synthesize: return() closes the outbound socket and stops the pump sending frames', async () => {
+    // Resource-leak P2: when a turn exits early (owner `end` / socket close /
+    // upstream STT|LLM failure) `runTurn` calls `ttsIterator.return()`. Before the
+    // fix the generator unwound but left the outbound Volcengine TTS socket open
+    // and the background pump parked on a handshake gate — leaking the connection
+    // and possibly continuing to bill the session. The fix wraps `yield* queue` in
+    // try/finally so cancellation: (1) closes the socket; (2) aborts the handshake
+    // gates so the parked pump unblocks; (3) stops any further outbound frames.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    // Never-ending text source: the synthesis session stays open (the pump parks on
+    // a handshake gate), modelling a turn cancelled mid-flight rather than one that
+    // completes on its own.
+    const neverEndingText: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => new Promise<IteratorResult<string>>(() => {}),
+        }
+      },
+    }
+    const iterator = tts.synthesize(neverEndingText)[Symbol.asyncIterator]()
+
+    // Walk the handshake to where the pump is parked awaiting the next text piece /
+    // a gate, having produced one audio frame.
+    const first = iterator.next()
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('AUDIO1'), sessionId))
+    const firstChunk = await first
+    expect(firstChunk.done).toBe(false)
+    expect(decoder.decode((firstChunk.value as { audio: Uint8Array }).audio)).toBe('AUDIO1')
+
+    // The socket is open and the pump has not finished the session.
+    expect(socket.closed).toBe(false)
+    const sentBeforeCancel = socket.sent.length
+
+    // Consumer cancels (mirrors `runTurn`'s `finally`: `ttsIterator.return()`).
+    const ret = await iterator.return?.(undefined)
+    expect(ret).toEqual({ value: undefined, done: true })
+
+    // (1) The outbound Volcengine TTS socket was deterministically closed.
+    expect(socket.closed).toBe(true)
+
+    // (2)+(3) The pump issues no further frames after cancellation — even if late
+    // server events arrive, nothing more is sent (the gates were aborted and the
+    // `cancelled` guard short-circuits every send).
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+    await tick()
+    await tick()
+    expect(socket.sent.length).toBe(sentBeforeCancel)
+  })
+
+  it('ASR transcribe: return() closes the outbound socket and stops the pump pushing audio', async () => {
+    // ASR dual of the TTS cancellation fix. `collectFinalTranscript` drains the
+    // transcript stream; a turn that breaks early (or aborts) calls the iterator's
+    // `return()`. Before the fix the generator unwound but left the outbound ASR
+    // socket open and the pump parked pulling the next audio frame — leaking the
+    // connection and able to keep streaming audio. The fix's try/finally closes the
+    // socket, returns the audio iterator (ending the pump loop), and stops sends.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    // Audio source that yields one frame then parks, so the pump is mid-stream
+    // (awaiting the next frame) when the consumer cancels. `returned` flips when
+    // the adapter's `finally` returns this iterator — proving the upstream audio
+    // generator is released, not left dangling.
+    let returned = false
+    const pausingAudio: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        let sent = false
+        return {
+          next: () => {
+            if (!sent) {
+              sent = true
+              return Promise.resolve({ value: encoder.encode('f1'), done: false })
+            }
+            return new Promise<IteratorResult<Uint8Array>>(() => {})
+          },
+          return: () => {
+            returned = true
+            return Promise.resolve({ value: undefined, done: true })
+          },
+        }
+      },
+    }
+
+    const iterator = stt.transcribe(pausingAudio)[Symbol.asyncIterator]()
+
+    // Start the iteration and let the pump send the config frame + the first audio
+    // frame, then emit a non-final transcript so the consumer receives one chunk.
+    const first = iterator.next()
+    await tick()
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
+    )
+    const firstChunk = await first
+    expect(firstChunk.value).toEqual({ text: '你', isFinal: false })
+
+    // The socket is still open mid-stream and the pump is parked awaiting the next
+    // audio frame (no final transcript yet).
+    expect(socket.closed).toBe(false)
+    const sentBeforeCancel = socket.sent.length
+
+    // Consumer cancels mid-stream (the `collectFinalTranscript`-break path).
+    const ret = await iterator.return?.(undefined)
+    expect(ret).toEqual({ value: undefined, done: true })
+
+    // The outbound ASR socket was deterministically closed and the upstream audio
+    // generator was released (its `return` ran).
+    expect(socket.closed).toBe(true)
+    expect(returned).toBe(true)
+
+    // No further audio frames are sent after cancellation — the pump stopped.
+    await tick()
+    await tick()
+    expect(socket.sent.length).toBe(sentBeforeCancel)
+  })
+
+  it('TTS normal completion still closes via SessionFinished — the finally does not regress it', async () => {
+    // Guard: the cancellation `finally` must not break the normal-completion path.
+    // A run that reaches SessionFinished ends with the final done chunk intact and
+    // the full outbound event sequence unchanged (StartConnection -> StartSession
+    // -> TaskRequest -> FinishSession -> FinishConnection).
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(await asyncFrom(['句一'])))
+
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await tick()
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await tick()
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('AUDIO'), sessionId))
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+
+    const chunks = await collected
+    const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
+    expect(audio).toEqual(['AUDIO'])
+    expect(chunks[chunks.length - 1].done).toBe(true)
+    // The full outbound event sequence is unchanged by the cleanup finally.
+    expect(sentEvents(socket)).toEqual([
+      TtsEvent.StartConnection,
+      TtsEvent.StartSession,
+      TtsEvent.TaskRequest,
+      TtsEvent.FinishSession,
+      TtsEvent.FinishConnection,
+    ])
+  })
+
+  it('TTS premature-close fail-loud is not reverted by the cleanup finally', async () => {
+    // Guard: a socket close before SessionFinished still rejects the consumer (the
+    // earlier premature-close fix), and the cleanup finally on that error unwind
+    // does not swallow the rejection.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
+    await tick()
+    socket.emitClose()
+
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('synthesize did not settle after an early close')), 50)
+    )
+    await expect(Promise.race([consumed, guard])).rejects.toThrow(/closed before session finished/)
+  })
+
+  it('ASR premature-close fail-loud is not reverted by the cleanup finally', async () => {
+    // ASR guard dual: a socket close before a final transcript still rejects the
+    // consumer; the cleanup finally on the error unwind does not mask it.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
+
+    await tick()
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
+    )
+    socket.emitClose()
+
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('transcribe did not settle after an early close')), 50)
+    )
+    await expect(Promise.race([consumed, guard])).rejects.toThrow(
+      /closed before a final transcript/
+    )
+  })
+})
+
 // --- Default Workers connector: binary frame delivery type (F-N) -------------
 
 describe('defaultConnect — outbound socket binary delivery type (F-N)', () => {
