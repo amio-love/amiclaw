@@ -48,6 +48,40 @@ describe('parseCookies / readSessionId', () => {
   })
 })
 
+// --- duplicate-cookie first-match (F-V) ---------------------------------
+//
+// A browser can send the same cookie name more than once in one `Cookie` header
+// (a host-only cookie alongside a domain/path variant). The real auth reader
+// (`packages/api/src/auth/session.ts` `readCookie`) iterates `header.split(';')`
+// and RETURNS ON THE FIRST name match — first-match wins. The seam must align:
+// if it kept the LAST value (a naive last-wins map) it would bind a different
+// `amiclaw_session` id at `/ai-ws/*` than the rest of the app, mis-binding the
+// session or 401-ing an already-signed-in user.
+
+describe('parseCookies / readSessionId — duplicate name keeps the FIRST value (F-V)', () => {
+  it('parseCookies keeps the first value for a repeated name', () => {
+    expect(parseCookies(`${COOKIE}=first; ${COOKIE}=second`)).toEqual({ [COOKIE]: 'first' })
+  })
+
+  it('readSessionId reads the first duplicate, matching the real reader’s first-match', () => {
+    expect(readSessionId(`${COOKIE}=first; ${COOKIE}=second`)).toBe('first')
+  })
+
+  it('first-match holds with other cookies interleaved around the duplicates', () => {
+    // host-only variant first, then a domain/path variant of the same name, with
+    // unrelated cookies on either side — the first `amiclaw_session` still wins.
+    expect(readSessionId(`a=1; ${COOKIE}=host; b=2; ${COOKIE}=domain; c=3`)).toBe('host')
+  })
+
+  it('a malformed first duplicate still wins (no fallthrough to a later value)', () => {
+    // First-match is positional, not "first decodable": a malformed first value is
+    // kept raw (F-D fail-closed) and still shadows a well-formed later duplicate,
+    // exactly as the real reader returns the first match regardless of its content.
+    expect(parseCookies(`${COOKIE}=%; ${COOKIE}=good`)).toEqual({ [COOKIE]: '%' })
+    expect(readSessionId(`${COOKIE}=%; ${COOKIE}=good`)).toBe('%')
+  })
+})
+
 // --- malformed-cookie robustness (F-D) ----------------------------------
 //
 // The `Cookie` header is attacker-controlled. A malformed percent-escape makes

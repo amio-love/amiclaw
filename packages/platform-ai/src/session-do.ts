@@ -40,6 +40,20 @@
  * the owner's next `turn` would transcribe (forging the owner's utterance). So
  * the per-operation ownership invariant (L2 §Mechanism Variant 3) holds per
  * socket across every inbound frame, not just control messages.
+ *
+ * Two ownership grains coexist, split by what the operation does:
+ *  - DRIVE operations (`turn`, binary audio) are gated on the owner USER id: the
+ *    operating socket's authenticated user must equal the bound owner. They run a
+ *    turn / feed audio; they never clear the session.
+ *  - TEARDOWN operations (`end`, owner socket close) are gated on the owner
+ *    SOCKET reference — the exact socket recorded at `createSession`
+ *    (`ownerSocket` / `socketIsBoundSessionOwner`). A user-id grain is too coarse
+ *    here: the SAME user's second socket (a duplicate tab / reconnect) shares the
+ *    owner's user id, so a user-id gate would let that duplicate's `end` or close
+ *    `clearSession()` the still-active original session and truncate its turn.
+ *    Pinning teardown to the creator socket means only the socket that opened the
+ *    session can end it; every other socket's `end`/close (same user or not)
+ *    touches nothing but its own per-socket binding.
  */
 
 import { DurableObject } from 'cloudflare:workers'
@@ -51,7 +65,7 @@ import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
 import {
   assertSessionOwnership,
   assertSocketOwnsBoundSession,
-  socketOwnsBoundSession,
+  socketIsBoundSessionOwner,
   SocketIdentityRegistry,
 } from './auth-seam'
 
@@ -205,6 +219,19 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
    * separate identities and cannot overwrite each other.
    */
   private readonly socketIdentities = new SocketIdentityRegistry<WebSocket>()
+  /**
+   * The exact socket that created/bound the session (recorded in `createSession`),
+   * or `undefined` when no session is bound. This is the OWNER socket: only its
+   * close tears the session down (`onSocketClose`).
+   *
+   * Tracking the owner by socket reference — not by user id — is what stops a
+   * same-user duplicate socket (a second tab / a reconnect to the same
+   * `/ai-ws/{sessionName}` DO) from clearing the still-active original session
+   * when that duplicate socket closes. A user-id match would mark the duplicate
+   * as an owner; the recorded-socket identity does not. Cleared in
+   * `clearSession` so a torn-down session leaves no stale owner reference.
+   */
+  private ownerSocket: WebSocket | undefined
 
   /**
    * WS upgrade entry. The Worker forwards the (already auth-validated) upgrade
@@ -280,18 +307,24 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   /**
    * Socket closed. Always release THIS socket's identity binding (so the
    * registry never leaks). Tear down the shared audio bridge / in-flight turn
-   * ONLY when the closing socket owns the bound session — the same per-socket
-   * ownership gate the control and binary paths enforce.
+   * ONLY when the closing socket is the OWNER socket — the exact socket that
+   * created the session (`socketIsBoundSessionOwner`).
    *
    * Without this gate the close path is the one un-gated mutation of shared
-   * session state: a second authenticated client on the same `/ai-ws/{name}` DO
-   * (which only needs to know the session name) connecting and then disconnecting
-   * would close the owner's bridge and truncate the owner's in-flight turn. A
-   * non-owner close must touch nothing but its own binding. Ownership is checked
-   * with the non-throwing predicate because a close handler must be total.
+   * session state. Two clients can reach this DO and trigger a wrongful teardown:
+   *  - a DIFFERENT user's socket on the same `/ai-ws/{name}` DO — already blocked
+   *    by the prior user-id gate; and
+   *  - the SAME user's SECOND socket (a duplicate tab / a reconnect) — NOT blocked
+   *    by a user-id gate, because its user id equals the owner's. Its close would
+   *    have cleared the still-active original session and truncated the owner's
+   *    in-flight turn. Gating on the owner SOCKET reference (not the user id)
+   *    closes that path: only the creator socket's close tears down; every other
+   *    socket's close (same user or not) releases just its own binding.
+   * Ownership is checked with the total (non-throwing) predicate because a close
+   * handler must never throw.
    */
   private onSocketClose(ws: WebSocket): void {
-    const ownsSession = socketOwnsBoundSession(this.socketIdentities, ws, this.boundIdentity())
+    const ownsSession = socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())
     this.socketIdentities.release(ws)
     if (!ownsSession) return
     // Owner gone: cancel any in-flight turn so its LLM/TTS streams are returned
@@ -443,6 +476,7 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     this.audio = undefined
     this.turnInFlight = false
     this.activeTurn = undefined
+    this.ownerSocket = undefined
   }
 
   /**
@@ -527,6 +561,11 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           msg.manualData,
           msg.gameState
         )
+        // Record THIS socket as the session owner. Only this exact socket's close
+        // tears the session down (`onSocketClose`); a same-user duplicate socket's
+        // close must not. Set after a successful create so a rejected create
+        // (`already_created`) never repoints the owner.
+        this.ownerSocket = ws
         ws.send(JSON.stringify({ type: 'created', sessionId }))
         return
       }
@@ -610,7 +649,22 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
       }
       case 'end': {
         if (this.state && socketUserId) {
-          // `endSession` re-validates ownership (a non-owner `end` throws before
+          // Owner-socket gate on the teardown side (F-W self-consistency): `end`
+          // is the other path — besides owner-close — that `clearSession()`s the
+          // bound session. `endSession`'s `assertOwner` only checks the USER id,
+          // so a SAME-user duplicate socket (a second tab / reconnect) would pass
+          // it and tear down the still-active original session. Gate teardown on
+          // the owner SOCKET reference (mirroring `onSocketClose`): a non-owner
+          // socket's `end` — even same user — is rejected fail-loud (1008 close of
+          // THAT socket, consistent with the cross-user `assertOwner` throw path)
+          // and never reaches teardown, so the owner's session/turn survive.
+          // (`turn` and binary stay user-id-gated: they DRIVE the session, they do
+          // not tear it down — see `assertOwner` / `assertSocketOwner`.)
+          if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) {
+            ws.close(1008, 'end from non-owner socket')
+            return
+          }
+          // `endSession` re-validates ownership (a cross-user `end` throws before
           // any teardown — the throw closes THAT socket with 1008 via the
           // listener, so a non-owner cannot end / cancel the owner's turn),
           // closes the audio bridge (the NEXT turn's bridge, which buffered any

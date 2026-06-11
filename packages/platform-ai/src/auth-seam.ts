@@ -75,6 +75,17 @@ function decodeCookieValue(value: string): string {
  * a `null`/empty header yields an empty map; malformed pairs are skipped; a
  * value with a malformed percent-escape is kept raw rather than throwing (the
  * header is attacker-controlled — see `decodeCookieValue`).
+ *
+ * Duplicate cookie names resolve to the FIRST occurrence, matching the real
+ * auth reader (`packages/api/src/auth/session.ts` `readCookie`, which iterates
+ * `Cookie.split(';')` and returns on the first name match). A browser can send
+ * the same `amiclaw_session` name more than once (a host-only cookie alongside
+ * a domain/path variant); the real reader binds the first, so this seam must
+ * too — otherwise `/ai-ws/*` would bind a different session id (last value)
+ * than the rest of the app, mis-binding or 401-ing an already-signed-in user.
+ * Split-and-trim semantics (name + value `.trim()`, case-sensitive exact name
+ * match, single `Cookie` header) also mirror that reader; only the duplicate
+ * resolution differs from a naive last-wins map, so it is pinned here.
  */
 export function parseCookies(cookieHeader: string | null): Record<string, string> {
   const out: Record<string, string> = {}
@@ -84,6 +95,10 @@ export function parseCookies(cookieHeader: string | null): Record<string, string
     if (eq === -1) continue
     const name = part.slice(0, eq).trim()
     if (name === '') continue
+    // First-match wins: a later duplicate of the same name is ignored, aligning
+    // `readSessionId` with the real reader's first-match. (A naive `out[name] =`
+    // would keep the LAST value and diverge.)
+    if (Object.prototype.hasOwnProperty.call(out, name)) continue
     const value = part.slice(eq + 1).trim()
     out[name] = decodeCookieValue(value)
   }
@@ -230,28 +245,36 @@ export function assertSocketOwnsBoundSession<Socket>(
 }
 
 /**
- * Non-throwing sibling of `assertSocketOwnsBoundSession` for total (no-throw)
- * call sites such as the socket-close handler. Returns `true` only when THIS
- * socket carries a bound identity AND that identity owns the DO's bound session
- * (same predicate the throwing version enforces); `false` for every reject path
- * — no bound identity, no session yet, or a non-owner socket.
+ * Total (no-throw) predicate for the socket-close handler: is the closing socket
+ * the EXACT socket that created/bound the session?
  *
- * The close path must be total: a close event fires for owner and non-owner
- * sockets alike, and a non-owner's close must NOT tear down the owner's shared
- * audio bridge / in-flight turn (otherwise a second authenticated client on the
- * same `/ai-ws/{sessionName}` could disconnect and truncate the owner's turn).
- * Gating bridge teardown on this predicate closes that path while leaving the
- * non-owner free to release only its own identity binding.
+ * Returns `true` only when (a) a session is currently bound (`boundUserId`/
+ * `boundSessionId` defined) and (b) `socket` is reference-equal to
+ * `ownerSocket` — the WebSocket recorded at `createSession`. `false` for every
+ * other case: no session yet, no owner socket recorded, or a different socket
+ * (even one whose user id matches the bound owner).
+ *
+ * Why socket identity, NOT user id: the same already-authenticated user can open
+ * a SECOND socket to the same `/ai-ws/{sessionName}` DO (a duplicate tab or a
+ * reconnect). A user-id match would mark that second socket as an owner, so when
+ * IT closes the handler would `clearSession()` and tear down the STILL-ACTIVE
+ * original session / in-flight turn. Binding teardown to the creator socket's
+ * reference means only the socket that actually owns the session can end it; a
+ * same-user duplicate socket's close releases just its own identity binding.
+ *
+ * The registry param is unused for the owner check (kept for call-site symmetry
+ * with `assertSocketOwnsBoundSession` and to leave room for a future
+ * identity-aware variant); ownership here is purely the recorded-socket identity
+ * plus the bound-session guard.
  */
-export function socketOwnsBoundSession<Socket>(
-  registry: SocketIdentityRegistry<Socket>,
+export function socketIsBoundSessionOwner<Socket>(
   socket: Socket,
+  ownerSocket: Socket | undefined,
   bound: { boundSessionId: string | undefined; boundUserId: string | undefined }
 ): boolean {
-  const socketUserId = registry.resolve(socket)
-  if (socketUserId === undefined) return false
   if (bound.boundUserId === undefined || bound.boundSessionId === undefined) return false
-  return socketUserId === bound.boundUserId
+  if (ownerSocket === undefined) return false
+  return socket === ownerSocket
 }
 
 /**

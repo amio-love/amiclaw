@@ -105,13 +105,22 @@ interface OutboundMessage {
   [k: string]: unknown
 }
 
+/** A stand-in socket — only reference identity matters to the owner-socket gate. */
+type FakeWs = { id: string }
+/** The socket that opens the session in tests that don't pass one explicitly. */
+const OWNER: FakeWs = { id: 'owner-socket' }
+
 /**
  * Mirrors `VoiceSessionDO.handleControl` for `create` / `turn` / `end` plus the
  * owner branch of `onSocketClose` and the `clearSession` reset. It holds the
  * same session-level fields the real DO clears (`state` / `userId` /
- * `providers` / `turnInFlight` / `activeTurn` / `bridge`). The single owner
- * socket is implicit (ownership isolation is covered in
- * `session-identity.test.ts`); here we isolate the post-end cleanup contract.
+ * `providers` / `turnInFlight` / `activeTurn` / `bridge` / `ownerSocket`).
+ *
+ * Teardown grain (F-W): `end` and owner-close are gated on the OWNER SOCKET
+ * reference recorded at `create` (`ownerSocket` / mirrors
+ * `socketIsBoundSessionOwner`), not the user id — so a same-user duplicate
+ * socket cannot tear the original session down. Tests that don't care about the
+ * multi-socket shape omit the socket arg and operate as the `OWNER` socket.
  */
 class FakeSessionDo {
   state: { history: string[]; turnCount: number } | undefined
@@ -120,6 +129,7 @@ class FakeSessionDo {
   turnInFlight = false
   activeTurn: AsyncIterator<AiResponseChunk> | undefined
   bridge: SharedBridge | undefined
+  ownerSocket: FakeWs | undefined
   /** Unblock-the-STT-await hook (the real `this.audio.close()` analogue). */
   onBridgeClose: (() => void) | undefined
   readonly sent: OutboundMessage[] = []
@@ -130,11 +140,23 @@ class FakeSessionDo {
     this.sent.push(msg)
   }
 
+  /** Mirrors `socketIsBoundSessionOwner`: a session is bound AND `ws` is the owner socket. */
+  private isOwnerSocket(ws: FakeWs): boolean {
+    if (this.state === undefined || this.userId === undefined) return false
+    if (this.ownerSocket === undefined) return false
+    return ws === this.ownerSocket
+  }
+
   /**
    * Mirrors the `create` branch: reject a re-create while a session is live,
-   * otherwise bind the session/user/providers. Returns whether a session opened.
+   * otherwise bind the session/user/providers AND record the owner socket.
+   * Returns whether a session opened.
    */
-  create(userId: string, initialState: { history: string[]; turnCount: number }): boolean {
+  create(
+    userId: string,
+    initialState: { history: string[]; turnCount: number },
+    ws: FakeWs = OWNER
+  ): boolean {
     if (this.state) {
       this.send({ type: 'error', code: 'already_created', message: 'session already created' })
       return false
@@ -142,6 +164,7 @@ class FakeSessionDo {
     this.state = initialState
     this.userId = userId
     this.providers = {}
+    this.ownerSocket = ws
     this.send({ type: 'created' })
     return true
   }
@@ -178,19 +201,27 @@ class FakeSessionDo {
   }
 
   /**
-   * Mirrors the post-fix `end` branch: close the bridge (next-turn bridge), then
-   * cancel any in-flight turn FIRE-AND-FORGET (no await), CLEAR the bound session
-   * state, and summarize. `clearSession` MUST follow the cancel so the cancel
-   * captures the live `activeTurn` before it is reset. A no-session `end` is a
-   * no-op (mirrors the `if (this.state && socketUserId)` guard).
+   * Mirrors the post-fix `end` branch: a no-session `end` is a no-op (the
+   * `if (this.state && socketUserId)` guard); a non-owner-SOCKET `end` is rejected
+   * fail-loud (the F-W owner-socket teardown gate) and tears nothing down; only
+   * the owner socket's `end` closes the bridge, cancels any in-flight turn
+   * FIRE-AND-FORGET (no await), CLEARs the bound session, and summarizes.
+   * `clearSession` MUST follow the cancel so the cancel captures the live
+   * `activeTurn` before it is reset. Returns whether teardown ran.
    */
-  end(): void {
-    if (!this.state || !this.userId) return
+  end(ws: FakeWs = OWNER): boolean {
+    if (!this.state || !this.userId) return false
+    if (!this.isOwnerSocket(ws)) {
+      // Same-user duplicate (or any non-owner) socket: reject, do NOT tear down.
+      this.send({ type: 'closed', code: 1008, reason: 'end from non-owner socket' })
+      return false
+    }
     const turnCount = this.state.turnCount
     this.closeBridge()
     void this.cancelActiveTurn()
     this.clearSession()
     this.send({ type: 'summary', turnCount })
+    return true
   }
 
   /**
@@ -229,6 +260,7 @@ class FakeSessionDo {
     this.bridge = undefined
     this.turnInFlight = false
     this.activeTurn = undefined
+    this.ownerSocket = undefined
   }
 }
 
@@ -430,5 +462,99 @@ describe('owner abrupt close — clears the session like end (P2 audit)', () => 
     const opened = do_.create('user-A', { history: [], turnCount: 0 })
     expect(opened).toBe(true)
     expect(do_.state).toEqual({ history: [], turnCount: 0 })
+  })
+})
+
+// --- F-W: `end` from a same-user NON-OWNER socket must not tear down ----------
+//
+// `end` is the second teardown trigger (besides owner-close) — it `clearSession`s
+// the bound session. `endSession`'s `assertOwner` only checks the user id, so a
+// SAME-user second socket (duplicate tab / reconnect) would pass it and tear down
+// the still-active original session. The fix gates `end` teardown on the owner
+// SOCKET reference: a non-owner socket's `end` (even same user) is rejected
+// fail-loud and tears nothing down; the owner's session/turn survive, and the
+// owner's own `end` still ends the session normally afterwards.
+
+describe('end teardown gate — only the owner socket can end the session (F-W)', () => {
+  const DUP: FakeWs = { id: 'same-user-second-socket' }
+
+  it('a same-user duplicate socket’s end is rejected and clears nothing', () => {
+    const do_ = new FakeSessionDo(() => {
+      throw new Error('no turn in this test')
+    })
+    do_.create('user-A', { history: ['live'], turnCount: 2 }) // owner = OWNER socket
+    do_.bridge = { closed: false }
+
+    // A second socket for the SAME user (user-A) sends `end`. Owner-socket gate
+    // rejects it; no summary, no teardown.
+    const tore = do_.end(DUP)
+
+    expect(tore).toBe(false)
+    expect(do_.sent).toContainEqual({
+      type: 'closed',
+      code: 1008,
+      reason: 'end from non-owner socket',
+    })
+    expect(do_.sent).not.toContainEqual({ type: 'summary', turnCount: 2 })
+    // The original session is fully intact — state, owner, bridge all untouched.
+    expect(do_.state).toEqual({ history: ['live'], turnCount: 2 })
+    expect(do_.userId).toBe('user-A')
+    expect(do_.ownerSocket).toBe(OWNER)
+    expect(do_.bridge?.closed).toBe(false)
+  })
+
+  it('after a duplicate socket’s rejected end, the OWNER socket can still end normally', () => {
+    const do_ = new FakeSessionDo(() => {
+      throw new Error('no turn in this test')
+    })
+    do_.create('user-A', { history: [], turnCount: 1 })
+    do_.bridge = { closed: false }
+
+    // Duplicate's end bounces.
+    expect(do_.end(DUP)).toBe(false)
+    expect(do_.state).toBeDefined()
+
+    // The real owner socket ends: now the session tears down and summarizes.
+    const tore = do_.end(OWNER)
+    expect(tore).toBe(true)
+    expect(do_.sent).toContainEqual({ type: 'summary', turnCount: 1 })
+    expect(do_.state).toBeUndefined()
+    expect(do_.ownerSocket).toBeUndefined()
+  })
+
+  it('a same-user duplicate socket’s end does not cancel the owner’s in-flight turn', async () => {
+    const sharedState = { history: [] as string[], turnCount: 0 }
+    const bridge: SharedBridge = { closed: false }
+    const ctrl = makeControllableTurn(sharedState, bridge, [
+      textChunk('partial'),
+      textChunk('', true),
+    ])
+    const do_ = new FakeSessionDo(() => {
+      do_.onBridgeClose = ctrl.cancel
+      return ctrl.generator
+    })
+    do_.create('user-A', sharedState) // owner = OWNER socket
+    do_.bridge = bridge
+
+    const turning = do_.turn()
+    await tick()
+    ctrl.releaseNext()
+    await tick()
+    expect(do_.turnInFlight).toBe(true)
+
+    // Same-user duplicate socket fires `end` mid-turn: rejected, the in-flight
+    // turn keeps running and is NOT canceled.
+    expect(do_.end(DUP)).toBe(false)
+    expect(do_.turnInFlight).toBe(true)
+    expect(ctrl.cleanedUp()).toBe(false)
+
+    // The owner's own turn still completes (and is still cancelable by the OWNER's
+    // `end`, which here lets it settle by releasing the remaining chunk first).
+    ctrl.releaseNext()
+    await tick()
+    ctrl.releaseNext()
+    await turning
+    expect(ctrl.settled()).toBe(true)
+    expect(sharedState.turnCount).toBe(1)
   })
 })
