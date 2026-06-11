@@ -59,8 +59,8 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './contract'
 import type { GameState } from './manual-injection'
-import { resolveConfig } from './provider-config'
-import { createProviders, type ProviderEnv } from './providers/factory'
+import type { ProviderEnv } from './providers/factory'
+import { assembleSession } from './session-assembly'
 import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
 import {
   assertSessionOwnership,
@@ -357,6 +357,20 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
    * Create the session: bind the (already-authenticated) `userId`, resolve the
    * game's provider/prompt config, wire the providers, and initialize state.
    * Returns the DO id string as the opaque `SessionId`.
+   *
+   * Publish-after-success (all-or-nothing): every fallible setup step —
+   * `resolveConfig` (unregistered game) and `createProviders` (a selected real
+   * provider missing its secret) — runs inside `assembleSession` into LOCALS
+   * first. Only once the whole bundle exists are `userId`/`providers`/`state`
+   * assigned, in one synchronous block with no `await` and no throw between the
+   * first and last publish. `boundIdentity()` derives the session's ownership
+   * binding solely from `this.userId`, so observers only ever see a session
+   * that is fully constructed or entirely absent — never half-bound. The prior
+   * interleaving (`this.userId = userId` BEFORE `createProviders`) let a failed
+   * create leave the DO bound to a user with NO `state`/`providers`: that
+   * user's binary frames then passed the ownership gate, lazily created an
+   * audio bridge, and the leaked pre-create frames survived into the next
+   * SUCCESSFUL session's first turn (create does not reset `this.audio`).
    */
   createSession(
     gameId: string,
@@ -364,17 +378,11 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     manualData: ManualData,
     gameState?: GameState
   ): string {
-    const config = resolveConfig(gameId)
-    this.userId = userId
-    this.providers = createProviders(config, this.env)
-    this.state = {
-      config,
-      manualData,
-      gameState: gameState ?? { relevantSections: [] },
-      history: [],
-      turnCount: 0,
-      usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
-    }
+    const assembled = assembleSession(gameId, userId, manualData, gameState, this.env)
+    // Atomic publish — nothing below this line can throw or await.
+    this.userId = assembled.userId
+    this.providers = assembled.providers
+    this.state = assembled.state
     return this.ctx.id.toString()
   }
 
