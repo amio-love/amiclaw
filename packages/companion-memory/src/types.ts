@@ -115,11 +115,12 @@ export interface CaptureEventRecord {
 /**
  * Session-summary capture input — the shape the platform-ai `endSession`
  * boundary hands to the capture entry. Mirrors the additive `SessionSummary`
- * fields (highlights / gameRunId / runInstanceId / occurredAt); missing-field
- * degradation: no `userId` -> dropped, no highlights -> settlement facts
- * only, no `gameRunId` -> consolidates independently of settlement events,
- * no `runInstanceId` -> the event id falls back to `sessionId` (replays still
- * dedup, but runs reusing one session id collide on the key).
+ * fields (highlights / gameRunId / occurredAt); missing-field degradation:
+ * no `userId` -> dropped, no highlights -> settlement facts only, no
+ * `gameRunId` -> consolidates independently of settlement events. The event
+ * id is keyed off `sessionId`, which platform-ai mints fresh per session
+ * assembly (per-run, never a DO-derived id — see `summaryEventId`), so
+ * replays of one run dedup while distinct runs never collide.
  */
 export interface SessionSummaryCaptureInput {
   sessionId: string
@@ -128,8 +129,6 @@ export interface SessionSummaryCaptureInput {
   turnCount: number
   highlights?: string[]
   gameRunId?: string
-  /** Per-run instance id — preferred event-id source (see `summaryEventId`). */
-  runInstanceId?: string
   occurredAt?: string
 }
 

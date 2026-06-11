@@ -72,6 +72,20 @@ migrations_dir = "../companion-memory/migrations"
 binding = "AUTH"
 id = "PLACEHOLDER_AUTH_KV_NAMESPACE_ID"
 
+# --- USAGE KV: per-session usage metering records ---
+# The session DO flushes ONE write-once record per ended voice session — key
+# `usage:{date}:{user_id}:{session_id}` (UTC date at flush time, session_id a
+# per-session UUID), value the session's usage counters (LLM tokens + STT/TTS
+# seconds + STT source annotation). Billing-grade data: no TTL. The write is
+# fail-open (a KV failure is logged, never blocks session close) and the
+# binding is OPTIONAL at runtime — a dev/demo config without it just skips the
+# flush. Dedicated namespace; do NOT reuse LEADERBOARD or AUTH. `id` is the
+# production namespace id, filled at deploy wiring time (placeholder until
+# then, same as AUTH above).
+[[kv_namespaces]]
+binding = "USAGE"
+id = "PLACEHOLDER_USAGE_KV_NAMESPACE_ID"
+
 # --- Same-origin WS route on the canonical zone ---
 # Mounting under claw.amio.fans (same zone as the Platform SPA / /api/*) is the
 # structural prerequisite for the session cookie to ride along on the WS

@@ -91,6 +91,29 @@ export interface SttTranscriptChunk {
 }
 
 /**
+ * Where an STT duration measurement came from. `provider-reported` is the
+ * vendor's own duration report (Volcengine ASR `audio_info.duration`);
+ * `derived-from-bytes` is an exact byte-rate conversion of the audio that
+ * actually flowed (PCM16 mono at the configured sample rate). Every metering
+ * entry carries this annotation so downstream aggregation knows its precision.
+ */
+export type SttUsageSource = 'provider-reported' | 'derived-from-bytes'
+
+/**
+ * STT usage for one consumed transcribe stream (one ASR connection — the
+ * pipeline runs one per turn). Mirrors the LLM layer's `lastUsage` pattern:
+ * adapters expose it as an optional `lastUsage` field on the provider instance,
+ * which the turn pipeline reads structurally after the stream is drained (kept
+ * off the chunk stream so the transcript hot path stays text-only).
+ */
+export interface SttUsage {
+  /** Audio duration consumed by the connection, in milliseconds. */
+  durationMs: number
+  /** Provenance of the measurement — see {@link SttUsageSource}. */
+  source: SttUsageSource
+}
+
+/**
  * STT provider layer. The first adapter is Volcengine (火山) modular ASR over
  * its self-owned WebSocket protocol; that adapter is shared with TTS as the
  * platform voice layer.
@@ -100,6 +123,10 @@ export interface SttProvider {
    * Stream player audio frames in, yield transcription chunks out. The input
    * is an async stream of audio frames (the session WebSocket's inbound side);
    * the output is the transcript stream consumed by the LLM step.
+   *
+   * Adapters that can measure the consumed audio duration expose an optional
+   * `lastUsage?: SttUsage` field on the provider instance, populated after each
+   * stream is fully consumed (see {@link SttUsage}).
    */
   transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk>
 }

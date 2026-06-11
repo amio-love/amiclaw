@@ -124,37 +124,25 @@ describe('capture idempotency', () => {
     expect(await allRows(db, 'capture_event')).toHaveLength(0)
   })
 
-  it('keys the event off the per-run instance id and still dedups its replay', async () => {
-    const db = createTestDb()
-    const input = { ...SUMMARY, runInstanceId: 'run-inst-1' }
-    const first = await captureSessionSummary(db, input, testDeps())
-    const replay = await captureSessionSummary(db, input, testDeps())
-    expect(first).toEqual({ captured: true, eventId: 'session-summary:run-inst-1' })
-    expect(replay).toEqual({
-      captured: false,
-      reason: 'duplicate',
-      eventId: 'session-summary:run-inst-1',
-    })
-    expect(await allRows(db, 'capture_event')).toHaveLength(1)
-  })
-
-  it('captures two runs reusing the same session id as distinct events (G5)', async () => {
-    // The defect's shape: `sessionId` is the DO id, reused across
-    // `clearSession()` + re-`create` — keyed off it, the second run's summary
-    // would no-op on ON CONFLICT and be silently dropped.
+  it('captures two runs (two distinct per-run session ids) as distinct events (G5)', async () => {
+    // The defect's shape: were the capture key derived from a STABLE id (the
+    // DO id, reused across `clearSession()` + re-`create`), the second run's
+    // summary would no-op on ON CONFLICT and be silently dropped. The
+    // platform-ai boundary mints `sessionId` fresh per assembly, so two runs
+    // always carry distinct ids and both capture.
     const db = createTestDb()
     const run1 = await captureSessionSummary(
       db,
-      { ...SUMMARY, runInstanceId: 'run-inst-1', gameRunId: 'run-1' },
+      { ...SUMMARY, sessionId: 'sess-run-1', gameRunId: 'run-1' },
       testDeps()
     )
     const run2 = await captureSessionSummary(
       db,
-      { ...SUMMARY, runInstanceId: 'run-inst-2', gameRunId: 'run-2' },
+      { ...SUMMARY, sessionId: 'sess-run-2', gameRunId: 'run-2' },
       testDeps()
     )
-    expect(run1).toEqual({ captured: true, eventId: 'session-summary:run-inst-1' })
-    expect(run2).toEqual({ captured: true, eventId: 'session-summary:run-inst-2' })
+    expect(run1).toEqual({ captured: true, eventId: 'session-summary:sess-run-1' })
+    expect(run2).toEqual({ captured: true, eventId: 'session-summary:sess-run-2' })
     expect(await allRows(db, 'capture_event')).toHaveLength(2)
   })
 })
@@ -250,18 +238,20 @@ describe('summary consolidation (LLM path)', () => {
     expect(evidence).toHaveLength(1)
   })
 
-  it('two runs on one reused session id each consolidate into their own episode (G5)', async () => {
+  it('two runs on one reused DO each consolidate into their own episode (G5)', async () => {
     const db = createTestDb()
     const deps = testDeps()
     await seedCompanion(db, 'user-a')
-    // Same `sessionId` (the reused DO), distinct per-run instance ids — the
-    // two summaries land as two capture events and consolidate independently.
-    await captureSessionSummary(db, { ...SUMMARY, runInstanceId: 'run-inst-1' }, deps)
+    // Two runs on a reused same-named DO: each assembly mints its own
+    // `sessionId`, so the two summaries land as two capture events and
+    // consolidate independently — the second is never swallowed as a
+    // duplicate of the first.
+    await captureSessionSummary(db, { ...SUMMARY, sessionId: 'sess-run-1' }, deps)
     await captureSessionSummary(
       db,
       {
         ...SUMMARY,
-        runInstanceId: 'run-inst-2',
+        sessionId: 'sess-run-2',
         gameRunId: 'run-2',
         highlights: ['Second run: the wires module went smoothly'],
       },
@@ -274,11 +264,11 @@ describe('summary consolidation (LLM path)', () => {
     const episodes = await allRows<EpisodeRecord>(db, 'episode')
     expect(episodes).toHaveLength(2)
     expect(episodes.map((e) => e.source_ref).sort()).toEqual([
-      'session-summary:run-inst-1',
-      'session-summary:run-inst-2',
+      'session-summary:sess-run-1',
+      'session-summary:sess-run-2',
     ])
     // Replaying EITHER run's summary still adds nothing (per-run idempotency).
-    await captureSessionSummary(db, { ...SUMMARY, runInstanceId: 'run-inst-1' }, deps)
+    await captureSessionSummary(db, { ...SUMMARY, sessionId: 'sess-run-1' }, deps)
     await runConsolidation(db, cannedLlm(), deps)
     expect(await allRows<EpisodeRecord>(db, 'episode')).toHaveLength(2)
   })

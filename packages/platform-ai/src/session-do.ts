@@ -70,6 +70,7 @@ import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
 import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
+import { flushSessionUsage, type UsageKvWriter } from './usage-flush'
 import {
   assertSessionOwnership,
   assertSocketOwnsBoundSession,
@@ -78,13 +79,16 @@ import {
 } from './auth-seam'
 
 /**
- * Env bindings visible to the DO: provider creds plus the OPTIONAL
+ * Env bindings visible to the DO: provider creds, the optional USAGE KV the
+ * session-terminal metering flush writes to, and the OPTIONAL
  * companion-memory bindings (Companion D1 for the assembly-time resolver
  * read; the consolidator DO namespace for the end-of-session capture
- * hand-off). Both optional — absent bindings degrade to a memory-less
- * session, never an error.
+ * hand-off). All three are optional by design — a deploy without `USAGE`
+ * skips the flush fail-open (see `usage-flush.ts`); absent companion
+ * bindings degrade to a memory-less session, never an error.
  */
 export type SessionDoEnv = ProviderEnv & {
+  USAGE?: UsageKvWriter
   COMPANION_DB?: CompanionDb
   COMPANION_CONSOLIDATOR?: ConsolidatorNamespace
 } & Record<string, unknown>
@@ -180,6 +184,22 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   private state: SessionState | undefined
   /** Bound user id, set on `create`; ownership checks compare against it. */
   private userId: string | undefined
+  /**
+   * The bound session's opaque id — a UUID minted fresh per `createSession`
+   * (see `session-assembly.ts` for why it is NOT the DO id), `undefined` when
+   * no session is bound. Every ownership check, WS protocol message, and the
+   * usage-flush key carry this value, never `ctx.id`.
+   */
+  private sessionId: string | undefined
+  /**
+   * Whether THIS session's usage has been flushed to the USAGE KV. Set at
+   * `create` (false) and flipped by `flushUsage`, so the flush runs exactly
+   * once per session no matter how many terminal paths fire (`endSession` +
+   * owner-socket close). Generation-safe by construction: a new `create`
+   * starts a new session with a fresh `false`, so the guard never bleeds
+   * across the `clearSession` epoch boundary.
+   */
+  private usageFlushed = false
   /** Wired providers for the session. */
   private providers: TurnProviders | undefined
   /** Audio bridge for the in-flight turn, if any. */
@@ -370,7 +390,16 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     // `turn` with no fresh `create` and run a provider turn on the dropped
     // session. Clearing makes that reconnect open a clean new session via
     // `create` and reject a create-less `turn` ("turn before create").
+    //
+    // Abrupt-drop is a session-TERMINAL path that never reaches `endSession`
+    // (the contract-level flush boundary), so it carries its own usage flush —
+    // between the cancel (a canceled turn never settles, so its partial usage
+    // is excluded: undercount-only) and the clear (the flush reads the live
+    // session fields). After an `end`, this branch is unreachable (see above),
+    // so the flush cannot double-fire across the two paths — and the
+    // `usageFlushed` guard backstops it regardless.
     void this.cancelActiveTurn()
+    this.flushUsage()
     this.clearSession()
   }
 
@@ -379,21 +408,24 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   /**
    * Create the session: bind the (already-authenticated) `userId`, resolve the
    * game's provider/prompt config, wire the providers, and initialize state.
-   * Returns the DO id string as the opaque `SessionId`.
+   * Returns the freshly minted opaque `SessionId` — a per-session UUID from
+   * `assembleSession`, NOT the DO id (the resident DO hosts many logical
+   * sessions over its lifetime; see `AssembledSession.sessionId`).
    *
    * Publish-after-success (all-or-nothing): every fallible setup step —
    * `resolveConfig` (unregistered game) and `createProviders` (a selected real
    * provider missing its secret) — runs inside `assembleSession` into LOCALS
-   * first. Only once the whole bundle exists are `userId`/`providers`/`state`
-   * assigned, in one synchronous block with no `await` and no throw between the
-   * first and last publish. `boundIdentity()` derives the session's ownership
-   * binding solely from `this.userId`, so observers only ever see a session
-   * that is fully constructed or entirely absent — never half-bound. The prior
-   * interleaving (`this.userId = userId` BEFORE `createProviders`) let a failed
-   * create leave the DO bound to a user with NO `state`/`providers`: that
-   * user's binary frames then passed the ownership gate, lazily created an
-   * audio bridge, and the leaked pre-create frames survived into the next
-   * SUCCESSFUL session's first turn (create does not reset `this.audio`).
+   * first. Only once the whole bundle exists are
+   * `userId`/`sessionId`/`providers`/`state` assigned, in one synchronous block
+   * with no `await` and no throw between the first and last publish.
+   * `boundIdentity()` derives the session's ownership binding solely from these
+   * published fields, so observers only ever see a session that is fully
+   * constructed or entirely absent — never half-bound. The prior interleaving
+   * (`this.userId = userId` BEFORE `createProviders`) let a failed create leave
+   * the DO bound to a user with NO `state`/`providers`: that user's binary
+   * frames then passed the ownership gate, lazily created an audio bridge, and
+   * the leaked pre-create frames survived into the next SUCCESSFUL session's
+   * first turn (create does not reset `this.audio`).
    */
   createSession(
     gameId: string,
@@ -404,10 +436,12 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   ): string {
     const assembled = assembleSession(gameId, userId, manualData, gameState, this.env, extras)
     // Atomic publish — nothing below this line can throw or await.
+    this.sessionId = assembled.sessionId
     this.userId = assembled.userId
     this.providers = assembled.providers
     this.state = assembled.state
-    return this.ctx.id.toString()
+    this.usageFlushed = false
+    return assembled.sessionId
   }
 
   /**
@@ -437,8 +471,23 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
   }
 
   /**
-   * End the session: validate ownership, settle, and return the summary with
-   * the turn count and usage mount point.
+   * End the session: validate ownership, settle, flush the session's usage to
+   * the USAGE KV, and return the summary with the turn count and usage mount
+   * point.
+   *
+   * The flush lives HERE — in the contract method — because `endSession` is
+   * the single implementation boundary every `end`-shaped termination goes
+   * through: the WS `end` branch calls this method, and a direct consumer
+   * driving the four-method contract over the DO stub reaches it without any
+   * WS framing. Hanging the flush on the WS branch instead would let a direct
+   * contract call end a session unmetered. The owner-socket close path keeps
+   * its own `flushUsage()` — an abrupt drop never reaches `endSession` (see
+   * `onSocketClose`). State is still live at this point, so the flush
+   * naturally precedes any `clearSession` the caller performs. A mid-flight
+   * turn's partial usage stays excluded (undercount-only, per the locked
+   * metering stance): usage counters are written only when a turn settles,
+   * and no `await` separates this snapshot from the teardown that cancels
+   * the turn.
    */
   endSession(sessionId: string, userId: string): SessionSummary {
     this.assertOwner(sessionId, userId)
@@ -447,7 +496,7 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     }
     this.audio?.close()
     this.audio = undefined
-    return {
+    const summary: SessionSummary = {
       sessionId,
       gameId: this.state.config.gameId,
       userId,
@@ -455,15 +504,16 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
       usage: { ...this.state.usage },
       // Companion-memory capture fields (additive). Highlights are the
       // deterministic transcript excerpt — the consolidation LLM summarizes
-      // downstream, outside the session boundary.
+      // downstream, outside the session boundary. The capture side keys its
+      // event off `sessionId` above, which is minted fresh per assembly (see
+      // `AssembledSession.sessionId`) — naturally per-run, so two runs on this
+      // same-named DO can never collide on the capture key.
       highlights: summarizeHighlights(this.state.history),
       ...(this.state.gameRunId !== undefined ? { gameRunId: this.state.gameRunId } : {}),
-      // Per-run capture key: `sessionId` above is the DO id, stable across
-      // `clearSession()` + re-`create` on this same-named DO, so the capture
-      // side keys the event off this run-scoped id instead.
-      runInstanceId: this.state.runInstanceId,
       occurredAt: new Date().toISOString(),
     }
+    this.flushUsage()
+    return summary
   }
 
   // --- Internals ---
@@ -536,11 +586,55 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     this.turnEpoch += 1
     this.state = undefined
     this.userId = undefined
+    this.sessionId = undefined
     this.providers = undefined
     this.audio = undefined
     this.turnInFlight = false
     this.activeTurn = undefined
     this.ownerSocket = undefined
+    this.usageFlushed = false
+  }
+
+  /**
+   * Flush the ended session's usage counters to the USAGE KV — exactly once
+   * per session, reached from the two terminal boundaries: the public
+   * `endSession` body (which the WS `end` branch goes through) and the
+   * owner-socket close path (an abrupt drop never reaches `endSession`).
+   * MUST run BEFORE `clearSession` (it reads the live session fields) and is
+   * idempotent against double-firing: the `usageFlushed` guard flips on the
+   * first call, and a fresh `create` resets it, so the guard can neither
+   * double-write one session nor suppress the next session's flush (the
+   * cross-generation misfire the `turnEpoch` comments warn about — this guard
+   * is per-session state reset at `create`, not a field that survives the
+   * generation boundary).
+   *
+   * The KV write runs in the background, registered on the DO lifecycle via
+   * `ctx.waitUntil` and never awaited here (fail-open): `flushSessionUsage`
+   * never rejects — an absent binding skips, a put failure logs — so a slow
+   * or failing KV can never block or delay session teardown / socket close,
+   * while the registration keeps the runtime from reclaiming an
+   * otherwise-idle DO before the pending put settles. The remaining loss
+   * window is only a termination that runs no callbacks at all (deploy
+   * eviction / crash / OOM) — the accepted undercount-only cost, per the
+   * locked L2 metering stance.
+   */
+  private flushUsage(): void {
+    const state = this.state
+    const sessionId = this.sessionId
+    const userId = this.userId
+    if (!state || sessionId === undefined || userId === undefined) return
+    if (this.usageFlushed) return
+    this.usageFlushed = true
+    this.ctx.waitUntil(
+      flushSessionUsage(this.env.USAGE, {
+        sessionId,
+        userId,
+        gameId: state.config.gameId,
+        turnCount: state.turnCount,
+        usage: { ...state.usage },
+        sttSource: state.sttSource,
+      })
+    )
   }
 
   /**
@@ -589,10 +683,14 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
     assertSocketOwnsBoundSession(this.socketIdentities, ws, this.boundIdentity())
   }
 
-  /** The DO's bound identity in the `{ boundSessionId, boundUserId }` shape. */
+  /**
+   * The DO's bound identity in the `{ boundSessionId, boundUserId }` shape.
+   * Both fields publish/clear together (`createSession` / `clearSession`), so
+   * the pair is always fully bound or fully absent.
+   */
   private boundIdentity(): { boundSessionId: string | undefined; boundUserId: string | undefined } {
     return {
-      boundSessionId: this.userId === undefined ? undefined : this.ctx.id.toString(),
+      boundSessionId: this.sessionId,
       boundUserId: this.userId,
     }
   }
@@ -654,7 +752,8 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         return
       }
       case 'turn': {
-        if (!this.state || !socketUserId) {
+        const sessionId = this.sessionId
+        if (!this.state || !socketUserId || sessionId === undefined) {
           ws.close(1008, 'turn before create')
           return
         }
@@ -675,7 +774,7 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         // the binary frame direction remains player-audio-only. Ownership is
         // checked against THIS socket's user, so a second client on the same DO
         // cannot drive the first user's session.
-        const sessionId = this.ctx.id.toString()
+        //
         // Hold the iterator explicitly so a mid-turn `end` / owner close can
         // cancel it via `return()`. Mark in-flight BEFORE the first `await`
         // (synchronous up to here) so an interleaved second `turn` sees the
@@ -732,7 +831,8 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
         return
       }
       case 'end': {
-        if (this.state && socketUserId) {
+        const sessionId = this.sessionId
+        if (this.state && socketUserId && sessionId !== undefined) {
           // Owner-socket gate on the teardown side (F-W self-consistency): `end`
           // is the other path — besides owner-close — that `clearSession()`s the
           // bound session. `endSession`'s `assertOwner` only checks the USER id,
@@ -754,8 +854,11 @@ export class VoiceSessionDO extends DurableObject<SessionDoEnv> {
           // closes the audio bridge (the NEXT turn's bridge, which buffered any
           // frames that arrived during this turn — the in-flight turn already
           // detached + closed its own bridge at `onAiResponse` start, so its STT
-          // has already terminated), and returns the summary.
-          const summary = this.endSession(this.ctx.id.toString(), socketUserId)
+          // has already terminated), flushes the session's usage to the USAGE
+          // KV (exactly once — the flush boundary lives in the contract method,
+          // not in this branch; see `endSession` / `flushUsage`), and returns
+          // the summary.
+          const summary = this.endSession(sessionId, socketUserId)
           // Cancel the in-flight turn FIRE-AND-FORGET, then summarize + close
           // immediately — do NOT await the cancel. `AsyncIterator.return()` cannot
           // interrupt a provider `await` already pending inside the generator (an

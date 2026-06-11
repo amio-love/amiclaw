@@ -39,6 +39,26 @@ describe('createMockSttProvider', () => {
     const chunks = await collect(stt.transcribe(audioFrames()))
     expect(chunks).toEqual([{ text: MOCK_TRANSCRIPT, isFinal: true }])
   })
+
+  it('exposes injected usage as lastUsage after the stream is drained', async () => {
+    // Controllable usage injection: tests drive the pipeline's structured STT
+    // metering path deterministically through the same lastUsage channel the
+    // Volcengine adapter uses.
+    const stt = createMockSttProvider({
+      usage: { durationMs: 1234, source: 'provider-reported' },
+    })
+    expect(stt.lastUsage).toBeUndefined()
+
+    await collect(stt.transcribe(audioFrames(new Uint8Array([1]))))
+
+    expect(stt.lastUsage).toEqual({ durationMs: 1234, source: 'provider-reported' })
+  })
+
+  it('exposes no usage by default — consumers fall back to byte derivation', async () => {
+    const stt = createMockSttProvider()
+    await collect(stt.transcribe(audioFrames(new Uint8Array([1]))))
+    expect(stt.lastUsage).toBeUndefined()
+  })
 })
 
 describe('createMockLlmProvider', () => {

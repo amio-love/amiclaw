@@ -27,6 +27,20 @@ import { resolveVendorVoice } from './voice-id-mapping'
 
 /** Everything `createSession` publishes, assembled atomically or not at all. */
 export interface AssembledSession {
+  /**
+   * Freshly minted opaque session id (`crypto.randomUUID()`), one per
+   * successful assembly. Deliberately NOT the Durable Object id (and not a
+   * "DO id + generation counter" composite): the same-named DO instance hosts
+   * many logical sessions over its lifetime — every reconnect/`create` after a
+   * `clearSession`, and any in-memory counter resets to zero on a DO
+   * eviction/restart — so a DO-derived id would collide across distinct
+   * sessions wherever the id must be globally unique: the per-session
+   * `usage:{date}:{user_id}:{session_id}` metering key, and the
+   * companion-memory capture event id `session-summary:{session_id}`
+   * (`idempotency.ts` — two runs colliding there would silently swallow the
+   * second run's summary).
+   */
+  sessionId: string
   userId: string
   providers: TurnProviders
   state: SessionState
@@ -49,8 +63,9 @@ export interface AssembleSessionExtras {
 
 /**
  * Run all fallible session-setup steps; return the full publishable bundle or
- * throw. Pure (no instance state touched): a throw leaves no residue, so a
- * failed create cannot bind a user, wire providers, or seed state.
+ * throw. Pure aside from the session-id mint (no instance state touched): a
+ * throw leaves no residue, so a failed create cannot bind a user, wire
+ * providers, or seed state.
  */
 export function assembleSession(
   gameId: string,
@@ -84,14 +99,11 @@ export function assembleSession(
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
-    // Per-run instance id (companion-memory capture key). The DO id is stable
-    // across `clearSession()` + re-`create` on a reused DO, so the capture
-    // side cannot key events off it without a second run's summary colliding
-    // with the first's; a fresh id per assembly keys each run distinctly.
-    // Generated here, inside the all-or-nothing bundle (`randomUUID` is total).
-    runInstanceId: crypto.randomUUID(),
+    // Latches to 'derived-from-bytes' on the first turn whose STT seconds did
+    // not come from the provider's own report (see `SessionState.sttSource`).
+    sttSource: 'provider-reported',
     ...(extras.companionContext !== undefined ? { companionContext: extras.companionContext } : {}),
     ...(extras.gameRunId !== undefined ? { gameRunId: extras.gameRunId } : {}),
   }
-  return { userId, providers, state }
+  return { sessionId: crypto.randomUUID(), userId, providers, state }
 }

@@ -24,7 +24,6 @@ const SUMMARY: SessionSummary = {
   usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
   highlights: ['user: which wire?'],
   gameRunId: 'run-1',
-  runInstanceId: 'run-inst-1',
   occurredAt: '2026-06-11T10:00:00.000Z',
 }
 
@@ -61,19 +60,16 @@ describe('captureInputFromSummary', () => {
       turnCount: 3,
       highlights: ['user: which wire?'],
       gameRunId: 'run-1',
-      runInstanceId: 'run-inst-1',
       occurredAt: '2026-06-11T10:00:00.000Z',
     })
     const bare = captureInputFromSummary({
       ...SUMMARY,
       highlights: undefined,
       gameRunId: undefined,
-      runInstanceId: undefined,
       occurredAt: undefined,
     })
     expect('highlights' in bare).toBe(false)
     expect('gameRunId' in bare).toBe(false)
-    expect('runInstanceId' in bare).toBe(false)
     expect('occurredAt' in bare).toBe(false)
   })
 })

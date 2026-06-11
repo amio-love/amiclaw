@@ -11,16 +11,18 @@
  */
 
 /**
- * Stable capture event id for one session summary. Prefers the per-run
- * instance id: the `sessionId` is the Durable Object id, which is REUSED
- * across `clearSession()` + re-`create` on a same-named DO — keying off it
- * would make a second run's summary collide with the first's and be dropped
- * as a duplicate. Falls back to `sessionId` for old-shape summaries without a
- * run instance id (replaying the same payload still dedups, exactly as
- * before).
+ * Stable capture event id for one session summary. Uniqueness rests on the
+ * platform-ai premise that `sessionId` is minted fresh per session assembly
+ * (`crypto.randomUUID()` in `assembleSession` — see
+ * `AssembledSession.sessionId`), NEVER a Durable Object id: the same-named
+ * resident DO is reused across `clearSession()` + re-`create`, so a
+ * DO-derived id would make a second run's summary collide with the first's
+ * and be dropped as a duplicate. With a per-run id, replaying one run's
+ * summary re-derives the same key (dedup) while distinct runs always derive
+ * distinct keys (no cross-run swallowing).
  */
-export function summaryEventId(summary: { sessionId: string; runInstanceId?: string }): string {
-  return `session-summary:${summary.runInstanceId ?? summary.sessionId}`
+export function summaryEventId(summary: { sessionId: string }): string {
+  return `session-summary:${summary.sessionId}`
 }
 
 /** Stable capture event id for one settlement event. */

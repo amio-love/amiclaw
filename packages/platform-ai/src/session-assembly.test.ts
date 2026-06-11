@@ -75,6 +75,9 @@ describe('assembleSession — all-or-nothing session construction', () => {
       sttInputSeconds: 0,
       ttsOutputSeconds: 0,
     })
+    // STT metering annotation starts at the precision ceiling; the pipeline
+    // latches it to 'derived-from-bytes' on the first byte-derived turn.
+    expect(assembled.state.sttSource).toBe('provider-reported')
   })
 
   it('threads an explicit gameState through to the assembled state', () => {
@@ -84,18 +87,26 @@ describe('assembleSession — all-or-nothing session construction', () => {
     expect(assembled.state.gameState).toEqual(gameState)
   })
 
-  it('stamps every assembly with a fresh per-run instance id (G5)', () => {
-    // The DO id is stable across `clearSession()` + re-`create` on a reused
-    // same-named DO; the run-scoped capture key must come from here. Two
-    // consecutive assemblies (= two runs on one DO) get distinct ids, so the
-    // second run's summary can never collide with the first's capture event.
-    const run1 = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
-    const run2 = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+  it('mints a fresh opaque UUID session id per assembly — never a DO-derived id', () => {
+    // The L2 spec forbids the bare DO id (and any "DO id + in-memory counter"
+    // composite) as the session id: the same-named resident DO hosts many
+    // logical sessions, and an eviction resets any counter — colliding the
+    // write-once `usage:{date}:{user_id}:{session_id}` metering keys. The mint
+    // happens in `assembleSession`, so the DO publishes the minted id and
+    // `createSession` returns it instead of `ctx.id`. The companion-memory
+    // capture event id `session-summary:{session_id}` rests on the same
+    // per-run uniqueness (G5): two consecutive assemblies (= two runs on one
+    // reused DO) get distinct ids, so the second run's summary can never
+    // collide with the first's capture event.
+    const a = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
+    const b = assembleSession('demo-mock', 'user-A', MANUAL, undefined, {})
 
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    expect(run1.state.runInstanceId).toMatch(uuid)
-    expect(run2.state.runInstanceId).toMatch(uuid)
-    expect(run2.state.runInstanceId).not.toBe(run1.state.runInstanceId)
+    const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    expect(a.sessionId).toMatch(UUID_V4)
+    expect(b.sessionId).toMatch(UUID_V4)
+    // Two sessions on the same inputs (same DO, same user, same game) still get
+    // distinct ids — the property a DO-derived id cannot provide.
+    expect(a.sessionId).not.toBe(b.sessionId)
   })
 })
 

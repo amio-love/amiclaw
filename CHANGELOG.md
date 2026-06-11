@@ -26,6 +26,19 @@ switch off. No UI ships in this change set — endpoints and data only. See
 `functions/api/companion/PROVISIONING.md` for the one-time D1 setup and
 binding back-fill.
 
+**Real usage metering for platform AI sessions** - Every platform-AI voice
+session now measures what it actually consumed instead of estimating.
+Speech-to-text seconds come from the speech provider's own duration report
+when available, with an exact byte-derived fallback when it is not (each
+record says which path produced it); text-to-speech seconds are converted
+exactly from the audio actually synthesized; LLM token counts stay
+provider-reported. When a session ends — whether closed normally or dropped —
+its totals are persisted once to a dedicated usage store, keyed by user and
+date, as the data foundation for fair quotas and billing on the paid path.
+Recording is fail-open: a storage hiccup is logged and never interrupts a
+player's session. Session ids are now independently minted UUIDs, so usage
+records can never collide across sessions.
+
 **Google sign-in** - You can now sign in with Google as well as by email magic
 link. The `/login` page shows a "用 Google 登录" button that takes you to Google's
 consent screen and back; signing in with Google lands you in the same account as

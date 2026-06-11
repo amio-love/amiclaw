@@ -7,6 +7,7 @@ import type {
   LlmProvider,
   SttProvider,
   SttTranscriptChunk,
+  SttUsage,
   TtsAudioChunk,
   TtsProvider,
 } from './providers/types'
@@ -24,15 +25,25 @@ async function collect(stream: AsyncIterable<AiResponseChunk>): Promise<AiRespon
   return out
 }
 
-/** STT mock: ignores audio, replays a fixed transcript sequence. */
-function mockStt(transcripts: SttTranscriptChunk[]): SttProvider {
-  return {
+/**
+ * STT mock: ignores audio, replays a fixed transcript sequence. When `usage`
+ * is given, exposes it as `lastUsage` after the stream drains (the structured
+ * STT metering channel); without it, the pipeline's byte-tap fallback applies.
+ */
+function mockStt(
+  transcripts: SttTranscriptChunk[],
+  opts: { usage?: SttUsage } = {}
+): SttProvider & { lastUsage?: SttUsage } {
+  const provider: SttProvider & { lastUsage?: SttUsage } = {
     async *transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk> {
+      provider.lastUsage = undefined
       // Drain audio so the bridge closes cleanly, then emit transcripts.
       for await (const _ of audio) void _
+      provider.lastUsage = opts.usage
       yield* fromArray(transcripts)
     },
   }
+  return provider
 }
 
 /** LLM mock: records the request, streams the given content deltas, then done. */
@@ -104,7 +115,7 @@ function freshState(): SessionState {
     history: [],
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
-    runInstanceId: 'run-instance-test',
+    sttSource: 'provider-reported',
   }
 }
 
@@ -209,8 +220,8 @@ describe('runTurn', () => {
     ])
   })
 
-  it('estimates non-zero STT/TTS audio seconds from the bytes that flowed', async () => {
-    // 32000 bytes = 1.0s under the PCM-16 mono 16kHz estimate. Feed exactly that
+  it('derives non-zero STT/TTS audio seconds from the bytes that flowed (no adapter usage)', async () => {
+    // 32000 bytes = 1.0s at the PCM-16 mono 16kHz byte rate. Feed exactly that
     // many inbound audio bytes; the mock TTS emits a frame per sentence whose
     // byte length is the sentence length (see mockTts), so TTS seconds are
     // small-but-non-zero. The point of the assertion: neither stays 0 (the bug
@@ -229,8 +240,112 @@ describe('runTurn', () => {
 
     // 32000 inbound bytes -> exactly 1.0 STT second.
     expect(state.usage.sttInputSeconds).toBeCloseTo(1.0, 5)
-    // TTS produced at least one audio frame, so its seconds estimate is > 0.
+    // TTS produced at least one audio frame, so its seconds figure is > 0.
     expect(state.usage.ttsOutputSeconds).toBeGreaterThan(0)
+    // No structured STT usage was exposed -> the byte fallback ran and the
+    // session's STT metering annotation latched to byte-derived.
+    expect(state.sttSource).toBe('derived-from-bytes')
+  })
+
+  it('prefers the STT adapter usage report over the byte tap (provider-reported)', async () => {
+    // The adapter reports 2500ms via the structured channel; the pipeline's own
+    // byte tap saw 32000 bytes (= 1.0s). The provider value must win, and the
+    // session annotation must STAY provider-reported.
+    const state = freshState()
+    const turn = runTurn(
+      providers(
+        mockStt([{ text: 'hi.', isFinal: true }], {
+          usage: { durationMs: 2500, source: 'provider-reported' },
+        }),
+        mockLlm(['Ok.']),
+        mockTts([])
+      ),
+      state,
+      fromArray<AudioChunk>([new Uint8Array(32000)])
+    )
+    await collect(turn)
+
+    expect(state.usage.sttInputSeconds).toBeCloseTo(2.5, 9)
+    expect(state.sttSource).toBe('provider-reported')
+  })
+
+  it('an adapter-reported byte-derived usage still counts but downgrades the annotation', async () => {
+    // The adapter itself fell back to its byte-rate conversion (no
+    // audio_info.duration in any server response) and says so via the source
+    // tag. The duration is taken as-is; the session annotation downgrades.
+    const state = freshState()
+    const turn = runTurn(
+      providers(
+        mockStt([{ text: 'hi.', isFinal: true }], {
+          usage: { durationMs: 1500, source: 'derived-from-bytes' },
+        }),
+        mockLlm(['Ok.']),
+        mockTts([])
+      ),
+      state,
+      fromArray<AudioChunk>([new Uint8Array(1)])
+    )
+    await collect(turn)
+
+    expect(state.usage.sttInputSeconds).toBeCloseTo(1.5, 9)
+    expect(state.sttSource).toBe('derived-from-bytes')
+  })
+
+  it('one byte-derived turn latches the session annotation even after provider-reported turns', async () => {
+    // Turn 1 is provider-reported; turn 2 has no structured usage (byte
+    // fallback). The aggregate seconds add up and the annotation describes the
+    // precision FLOOR: once any turn is byte-derived, the session is.
+    const state = freshState()
+    await collect(
+      runTurn(
+        providers(
+          mockStt([{ text: 'one.', isFinal: true }], {
+            usage: { durationMs: 1000, source: 'provider-reported' },
+          }),
+          mockLlm(['First.']),
+          mockTts([])
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array(1)])
+      )
+    )
+    expect(state.sttSource).toBe('provider-reported')
+
+    await collect(
+      runTurn(
+        providers(mockStt([{ text: 'two.', isFinal: true }]), mockLlm(['Second.']), mockTts([])),
+        state,
+        fromArray<AudioChunk>([new Uint8Array(32000)])
+      )
+    )
+
+    expect(state.usage.sttInputSeconds).toBeCloseTo(2.0, 5)
+    expect(state.sttSource).toBe('derived-from-bytes')
+  })
+
+  it('converts TTS seconds exactly from the synthesized bytes', async () => {
+    // The TTS mock emits exactly the frames given: 48000 + 16000 bytes =
+    // 64000 bytes = exactly 2.0s at the PCM-16 mono 16kHz byte rate. This is
+    // the actual-product conversion, not an estimate: the tally is over the
+    // frames the turn really yielded.
+    const tts: TtsProvider = {
+      async *synthesize(text: AsyncIterable<string>): AsyncIterable<TtsAudioChunk> {
+        for await (const _ of text) void _
+        yield { audio: new Uint8Array(48000), done: false }
+        yield { audio: new Uint8Array(16000), done: false }
+        yield { audio: new Uint8Array(0), done: true }
+      },
+    }
+    const state = freshState()
+    await collect(
+      runTurn(
+        providers(mockStt([{ text: 'hi.', isFinal: true }]), mockLlm(['Reply here.']), tts),
+        state,
+        fromArray<AudioChunk>([new Uint8Array(1)])
+      )
+    )
+
+    expect(state.usage.ttsOutputSeconds).toBeCloseTo(2.0, 9)
   })
 
   // Intent: single-session ROLLING-HISTORY context, not cross-session
