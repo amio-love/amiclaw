@@ -13,18 +13,26 @@
  *  - `SessionReader` is the one-method contract: cookie header in, resolved
  *    identity out (or `null` when there is no valid session).
  *  - `createDevAuthBypassReader` is the dev-only stub: when `DEV_AUTH_BYPASS`
- *    is on it returns a fixed development identity, standing in for the real
- *    `AUTH` KV lookup until auth-session's shared session-reader lands.
- *  - `createKvSessionReader` is the real-reader plug-in seam: it reads
- *    `session:<id>` from the bound `AUTH` KV and resolves the identity. The
- *    concrete `session:<id>` value schema is owned by auth-session; this reader
- *    consumes a minimal structural view and never writes.
+ *    is on it returns a fixed development identity for demo / local runs,
+ *    standing in for the real `AUTH` KV lookup.
+ *  - `createKvSessionReader` is the real reader: it reads `session:<id>` from
+ *    the bound `AUTH` KV and resolves the identity. The cookie name and the
+ *    `session:<id>` key + value schema are auth-session's real contract
+ *    (`shared/auth-types.ts` `SESSION_COOKIE_NAME`,
+ *    `packages/api/src/auth/{kv-keys,session}.ts`); this reader consumes a
+ *    minimal structural view of that real record and never writes.
  *  - `resolveSessionReader` is the compile/run-time gate that picks the dev
  *    stub vs. the real reader from env, so the prod path never carries the stub.
  *
  * The mounting contract ("validate at handshake, reject if invalid, bind
  * userId") is fixed regardless of which reader is active.
  */
+
+// The cookie name and the stored-record shape are the real auth-session
+// contract (`implement-magic-link-auth`, merged to main). Reuse the shared
+// cookie constant verbatim, and mirror the stored record shape from
+// `packages/api/src/auth/session.ts` (`SessionRecord`) — see `StoredSession`.
+import { SESSION_COOKIE_NAME } from '../../../shared/auth-types'
 
 /** Resolved, already-authenticated identity for a WS session. */
 export interface AuthIdentity {
@@ -43,9 +51,6 @@ export interface SessionReader {
 
 /** Fixed identity returned by the dev bypass stub. */
 export const DEV_AUTH_USER_ID = 'dev-user'
-
-/** Cookie name carrying the auth-session id (owned by auth-session). */
-const SESSION_COOKIE_NAME = 'session'
 
 /**
  * Best-effort percent-decode of a cookie value. The `Cookie` header is
@@ -116,44 +121,44 @@ export interface SessionKvReader {
 }
 
 /**
- * Minimal structural view of a stored `session:<id>` record. The full schema is
- * owned by auth-session; this reader consumes only what it needs to resolve an
- * identity and honour revocation. Unknown extra fields are ignored.
+ * Minimal structural view of a stored `session:<id>` record.
+ *
+ * Shape authority: `packages/api/src/auth/session.ts` `SessionRecord`
+ * (`{ user_id, email, created_at }`, snake_case) — this view MUST stay aligned
+ * with it. The reader only needs `user_id` to resolve identity; `email` /
+ * `created_at` are present in the real record but unused here. Unknown extra
+ * fields are ignored.
+ *
+ * Validity, per the real contract: a session is valid iff its record is present
+ * in KV. Revocation is a KV delete (logout) and expiry is the KV `expirationTtl`
+ * — both surface as an absent record, so there is no in-record `revoked` /
+ * `expiresAt` field to inspect. Presence of the record is the single check.
  */
 interface StoredSession {
-  userId?: string
-  /** Optional epoch-ms expiry; a past value is treated as no valid session. */
-  expiresAt?: number
-  /** Optional revocation flag; `true` is treated as no valid session. */
-  revoked?: boolean
+  user_id?: string
 }
 
 /**
  * Real session-reader plug-in seam: cookie -> session id -> `AUTH` KV `session:<id>`
- * -> identity. Read-only. Returns `null` for a missing cookie, a missing
- * record, a revoked record, or an expired record. `now` is injectable so expiry
- * is testable without wall-clock coupling.
+ * -> identity. Read-only. Returns `null` for a missing cookie or a missing
+ * record (a deleted/expired session is an absent record — see `StoredSession`).
  *
- * The exact `session:<id>` value schema is auth-session's contract; once its
- * shared reader lands this wrapper is the single plug-in point to swap in.
+ * The `session:<id>` key shape and value schema are the auth-session contract
+ * (`packages/api/src/auth/kv-keys.ts` `sessionKey`, `session.ts` `SessionRecord`);
+ * this reader consumes that real shape directly.
  */
-export function createKvSessionReader(
-  kv: SessionKvReader,
-  now: () => number = Date.now
-): SessionReader {
+export function createKvSessionReader(kv: SessionKvReader): SessionReader {
   return {
     async resolve(cookieHeader: string | null): Promise<AuthIdentity | null> {
       const sessionId = readSessionId(cookieHeader)
       if (sessionId === null) return null
 
       const record = (await kv.get(`session:${sessionId}`, 'json')) as StoredSession | null
-      if (record === null || typeof record.userId !== 'string' || record.userId === '') {
+      if (record === null || typeof record.user_id !== 'string' || record.user_id === '') {
         return null
       }
-      if (record.revoked === true) return null
-      if (typeof record.expiresAt === 'number' && record.expiresAt <= now()) return null
 
-      return { userId: record.userId }
+      return { userId: record.user_id }
     },
   }
 }
