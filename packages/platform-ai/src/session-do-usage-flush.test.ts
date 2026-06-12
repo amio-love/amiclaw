@@ -4,12 +4,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
  * Production-class tests for `VoiceSessionDO`'s session-terminal usage flush.
  *
  * The sibling `session-usage-flush.test.ts` covers the pure `usage-flush.ts`
- * core plus a faithful `FakeSessionDo` MIRROR of the DO's terminal-path
- * wiring. A mirror passing does not prove the real class still carries the
- * wiring: a regression in `session-do.ts` (flush dropped from `endSession`,
- * `ctx.waitUntil` replaced with a bare void, the `usageFlushed` guard removed)
- * would leave the mirror green. These tests close that gap by instantiating
- * the REAL `VoiceSessionDO` in Node:
+ * core (key scheme, record shape, fail-open write); these tests own the DO's
+ * terminal-path wiring — flush placement in `endSession`, the `ctx.waitUntil`
+ * registration, the per-session `usageFlushed` guard — by instantiating the
+ * REAL `VoiceSessionDO` in Node:
  *
  *  - `cloudflare:workers` is mocked so the `DurableObject` base becomes a
  *    plain ctx/env-stashing stub — the only base behavior the class relies on.
@@ -340,6 +338,29 @@ describe('real VoiceSessionDO — WS terminal paths', () => {
     await Promise.all(ctx.registered)
     expect(kv.puts).toHaveLength(1)
     expect(kv.puts[0].key).toContain(`:user-A:${sessionId}`)
+  })
+
+  it('the flush guard is per-session: a reconnect session on the same DO flushes again', async () => {
+    // Cross-generation correctness: session 1 ends (flushes, guard tripped),
+    // a new session opens on the SAME resident DO (`create` resets the guard),
+    // and its end must flush AGAIN — under its own minted id.
+    const kv = new RecordingUsageKv()
+    const { doInstance, ctx } = makeDo(kv)
+
+    const first = await openSocket(doInstance, 'user-A')
+    const firstId = await createSessionOverWs(first)
+    first.receive(JSON.stringify({ type: 'end' }))
+
+    const second = await openSocket(doInstance, 'user-A')
+    const secondId = await createSessionOverWs(second)
+    second.receive(JSON.stringify({ type: 'end' }))
+
+    expect(ctx.registered).toHaveLength(2)
+    await Promise.all(ctx.registered)
+    expect(kv.puts).toHaveLength(2)
+    expect(firstId).not.toBe(secondId)
+    expect(kv.puts[0].key).toContain(`:user-A:${firstId}`)
+    expect(kv.puts[1].key).toContain(`:user-A:${secondId}`)
   })
 })
 

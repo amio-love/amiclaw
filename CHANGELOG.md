@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI test suites now exercise the real session engine** - Internal
+refactor. The voice-session test suites that previously asserted against a
+hand-written stand-in now drive the real Durable Object class through a
+production-class harness, so a regression in the actual session engine can no
+longer hide behind a green mirror. No player-facing behavior changes.
+
 **Companion & memory backend (server side)** - The platform now has the data
 layer for a personal AI companion that remembers you across sessions (signed-in
 mode② only; anonymous play is untouched). A new Companion D1 database — the
