@@ -19,8 +19,8 @@ importers:
         specifier: ^21.0.2
         version: 21.0.2
       '@cucumber/gherkin':
-        specifier: ^39.1.0
-        version: 39.1.0
+        specifier: ^40.0.0
+        version: 40.0.0
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.5.0(jiti@2.6.1))
@@ -595,8 +595,8 @@ packages:
   '@cucumber/gherkin@32.2.0':
     resolution: {integrity: sha512-X8xuVhSIqlUjxSRifRJ7t0TycVWyX58fygJH3wDNmHINLg9sYEkvQT0SO2G5YlRZnYc11TIFr4YPenscvdlBIw==}
 
-  '@cucumber/gherkin@39.1.0':
-    resolution: {integrity: sha512-pqmSO2bUWxJm3TbNrKXlDaHjL6c77+ez9kWmfCd9oRPeTRPEVH3spZvpAqdXYWOZYSNYwWFCAAeZ4RGpkauNoQ==}
+  '@cucumber/gherkin@40.0.0':
+    resolution: {integrity: sha512-wMbF0TtNy2ELBJ8nls29eZQWL4XKfuWtMwqDaylUEAiv3qC0/ZAVU0LS2viQ6ZfXe5ROAC38penTOAdrjwYC9Q==}
 
   '@cucumber/html-formatter@21.15.1':
     resolution: {integrity: sha512-tjxEpP161sQ7xc3VREc94v1ymwIckR3ySViy7lTvfi1jUpyqy2Hd/p4oE3YT1kQ9fFDvUflPwu5ugK5mA7BQLA==}
@@ -614,8 +614,8 @@ packages:
   '@cucumber/messages@27.2.0':
     resolution: {integrity: sha512-f2o/HqKHgsqzFLdq6fAhfG1FNOQPdBdyMGpKwhb7hZqg0yZtx9BVqkTyuoNk83Fcvk3wjMVfouFXXHNEk4nddA==}
 
-  '@cucumber/messages@32.3.1':
-    resolution: {integrity: sha512-yNQq1KoXRYaEKrWMFmpUQX7TdeQuU9jeGgJAZ3dArTsC/T4NpJ6DnqaJIIgwPnz/wtQIQTNX7/h0rOuF5xY4qQ==}
+  '@cucumber/messages@33.0.2':
+    resolution: {integrity: sha512-JxWlW9H7+SCuKBlqpD0Puhy+afXStE3qmMutmvJcdF+BWhl4jvFLexyK77uN0Xs+zLlJ+/B6T49nw4OO5BUZxg==}
 
   '@cucumber/query@13.6.0':
     resolution: {integrity: sha512-tiDneuD5MoWsJ9VKPBmQok31mSX9Ybl+U4wqDoXeZgsXHDURqzM3rnpWVV3bC34y9W6vuFxrlwF/m7HdOxwqRw==}
@@ -3553,9 +3553,9 @@ snapshots:
     dependencies:
       '@cucumber/messages': 27.2.0
 
-  '@cucumber/gherkin@39.1.0':
+  '@cucumber/gherkin@40.0.0':
     dependencies:
-      '@cucumber/messages': 32.3.1
+      '@cucumber/messages': 33.0.2
 
   '@cucumber/html-formatter@21.15.1(@cucumber/messages@27.2.0)':
     dependencies:
@@ -3583,10 +3583,7 @@ snapshots:
       reflect-metadata: 0.2.2
       uuid: 11.0.5
 
-  '@cucumber/messages@32.3.1':
-    dependencies:
-      class-transformer: 0.5.1
-      reflect-metadata: 0.2.2
+  '@cucumber/messages@33.0.2': {}
 
   '@cucumber/query@13.6.0(@cucumber/messages@27.2.0)':
     dependencies:
