@@ -26,6 +26,7 @@ import type {
   LlmProvider,
   LlmUsage,
 } from './types'
+import { startDeadline, TIMEOUTS } from './timeout'
 
 /** Default DeepSeek OpenAI-compatible base URL (includes the `/v1` prefix). */
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
@@ -280,14 +281,36 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
       }
       if (request.temperature !== undefined) body.temperature = request.temperature
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${opts.apiKey}`,
-        },
-        body: JSON.stringify(body),
-      })
+      // Connect / first-response timeout: a `fetch` POST can hang indefinitely
+      // before the response headers arrive (DNS, TLS, or a server that accepts
+      // the socket then never responds), with no error and no first byte. An
+      // `AbortController` + connect deadline bounds exactly that window: if the
+      // headers do not arrive in time the controller aborts, `fetch` rejects, and
+      // the turn fails loud instead of parking forever. The deadline is cleared
+      // the instant `fetch` resolves — the SSE body stream that follows is the
+      // model's (legitimately long) streaming output and is NOT timer-bound.
+      const connectController = new AbortController()
+      const connectDeadline = startDeadline(TIMEOUTS.connectMs, () =>
+        connectController.abort(
+          new Error(`deepseek: connect timed out after ${TIMEOUTS.connectMs}ms`)
+        )
+      )
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${opts.apiKey}`,
+          },
+          body: JSON.stringify(body),
+          signal: connectController.signal,
+        })
+      } finally {
+        // Headers arrived (or the fetch failed / aborted) — stop the timer either
+        // way so the streaming phase runs with no deadline and no dangling handle.
+        connectDeadline.cancel()
+      }
 
       if (!response.ok) {
         const detail = await safeReadText(response)

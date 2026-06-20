@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveConfig } from '../provider-config'
+import { TIMEOUTS } from './timeout'
 import {
   buildAuthHeaders,
   buildSttAudioFrame,
@@ -1595,5 +1596,173 @@ describe('defaultConnect — fetch-upgrade URL scheme rewrite', () => {
 
     expect(captured.calls[0].url.startsWith('https://')).toBe(true)
     expect(captured.calls[0].init?.headers).toEqual(headers)
+  })
+})
+
+// --- Connect / first-response timeouts (hung-fetch / hung-gate fail-loud) ----
+
+describe('defaultConnect — WebSocket upgrade connect timeout', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('aborts a hung upgrade fetch after the connect deadline and throws', async () => {
+    // Models a server that accepts the TCP/TLS connection but never returns the
+    // 101 upgrade: the upgrade `fetch` hangs until its AbortSignal aborts. The
+    // connect deadline must abort it so the turn fails loud instead of parking.
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((_url: string, init?: RequestInit): Promise<Response> => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(init.signal?.reason ?? new DOMException('aborted', 'AbortError'))
+        })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const connecting = defaultConnect('wss://example.test/v3', { Upgrade: 'websocket' })
+    const assertion = expect(connecting).rejects.toThrow(/WebSocket upgrade timed out/)
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.connectMs)
+    await assertion
+    // The signal was actually threaded into the upgrade fetch.
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-response timeout', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fails loud when the server never sends ConnectionStarted (hung gate)', async () => {
+    // The server accepts the upgrade but never acknowledges StartConnection. The
+    // pump's `await handshake.connectionStarted` would park forever; the
+    // first-response deadline must abort the handshake so the consumer throws.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(tts.synthesize(asyncFromSync(['x'])))
+    const assertion = expect(consumed).rejects.toThrow(/no ConnectionStarted within/)
+    // Let the pump send StartConnection and park on the gate.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+    // No server event arrives — the first-response deadline fires.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs)
+    await assertion
+    // The pump never advanced past StartConnection.
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection])
+  })
+
+  it('fails loud when the server never sends SessionStarted (hung gate)', async () => {
+    // The connection is accepted but the session never is. The pump parks on
+    // `await handshake.sessionStarted`; the first-response deadline must abort it.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(tts.synthesize(asyncFromSync(['x'])))
+    const assertion = expect(consumed).rejects.toThrow(/no SessionStarted within/)
+    await vi.advanceTimersByTimeAsync(0)
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await vi.advanceTimersByTimeAsync(0)
+    // Now parked on the session gate with no SessionStarted forthcoming.
+    expect(sentEvents(socket)).toEqual([TtsEvent.StartConnection, TtsEvent.StartSession])
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs)
+    await assertion
+    // The pump never reached TaskRequest.
+    expect(sentEvents(socket)).not.toContain(TtsEvent.TaskRequest)
+  })
+
+  it('does NOT bound the close-side: a long synthesis stream past the deadline is not killed', async () => {
+    // Once both opening gates are acknowledged, the session may legitimately stay
+    // open far longer than firstResponseMs while the server streams audio. The
+    // close-side `sessionFinished` gate is intentionally NOT deadlined, so a long
+    // stream (audio arriving well past the first-response budget) completes
+    // normally — bounding it would be a whole-turn timeout, which this fix avoids.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const collected = collect(tts.synthesize(asyncFromSync(['念完整一段话'])))
+    await vi.advanceTimersByTimeAsync(0)
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await vi.advanceTimersByTimeAsync(0)
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Stream audio across a span LONGER than every deadline, then finish.
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A1'), sessionId))
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs + 10_000)
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A2'), sessionId))
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+
+    const chunks = await collected
+    const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
+    expect(audio).toEqual(['A1', 'A2'])
+    expect(chunks[chunks.length - 1].done).toBe(true)
+  })
+})
+
+describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeout', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fails loud when the server accepts the connection then sends no transcript', async () => {
+    // The server accepts the connection but never returns a first transcript: the
+    // ASR queue ends only on a final transcript / error / close, so `yield* queue`
+    // would park forever. The first-response deadline must fail the queue + close
+    // the socket so `collectFinalTranscript` throws (fail loud), not hang the turn.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const consumed = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
+    const assertion = expect(consumed).rejects.toThrow(/no transcript within/)
+    await vi.advanceTimersByTimeAsync(0)
+    // No server frame arrives — the deadline fires, failing the queue.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs)
+    await assertion
+    // The deadline's fail path also closes the outbound socket.
+    expect(socket.closed).toBe(true)
+  })
+
+  it('does NOT kill a slow-first-then-long transcript stream', async () => {
+    // The deadline bounds only the FIRST transcript: a first chunk that arrives in
+    // time cancels it, and subsequent chunks may span far past firstResponseMs. A
+    // first (non-final) chunk lands promptly; the final one arrives much later and
+    // the stream still completes (no whole-stream timeout).
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+
+    const drained = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
+    await vi.advanceTimersByTimeAsync(0)
+    // First (non-final) transcript arrives within the budget — cancels the deadline.
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
+    )
+    // A long pause AFTER the first chunk — longer than firstResponseMs. With the
+    // deadline cancelled this is fine; a whole-stream timeout would wrongly fire.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs + 10_000)
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你好', utterances: [{ definite: true }] } })
+    )
+
+    const chunks = await drained
+    expect(chunks).toEqual([
+      { text: '你', isFinal: false },
+      { text: '你好', isFinal: true },
+    ])
   })
 })

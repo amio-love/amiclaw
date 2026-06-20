@@ -55,6 +55,7 @@
 
 import type { AudioChunk } from '../contract'
 import type { SttProvider, SttTranscriptChunk, SttUsage, TtsAudioChunk, TtsProvider } from './types'
+import { awaitWithTimeout, startDeadline, TIMEOUTS } from './timeout'
 
 // --- Public options ---
 
@@ -776,7 +777,25 @@ function toFetchUpgradeUrl(url: string): string {
  * `http(s)://` URL (see that helper).
  */
 export const defaultConnect: WebSocketConnector = async (url, headers) => {
-  const response = await fetch(toFetchUpgradeUrl(url), { headers })
+  // Connect timeout: the WebSocket upgrade `fetch` can hang indefinitely during
+  // the handshake (the server accepts the TCP/TLS connection but never returns
+  // the 101 upgrade), with no error raised — parking the turn's first provider
+  // `await` forever. An `AbortController` + connect deadline bounds that window:
+  // a stalled upgrade aborts, `fetch` rejects, and the turn fails loud instead of
+  // hanging. The deadline is cleared the instant `fetch` resolves; the streaming
+  // that follows on the socket is driven by the per-frame listeners, not here.
+  const connectController = new AbortController()
+  const connectDeadline = startDeadline(TIMEOUTS.connectMs, () =>
+    connectController.abort(
+      new Error(`Volcengine WebSocket upgrade timed out after ${TIMEOUTS.connectMs}ms`)
+    )
+  )
+  let response: Response
+  try {
+    response = await fetch(toFetchUpgradeUrl(url), { headers, signal: connectController.signal })
+  } finally {
+    connectDeadline.cancel()
+  }
   // Cloudflare's fetch exposes the negotiated socket on the response.
   const socket = (
     response as unknown as {
@@ -927,6 +946,20 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       let reportedDurationMs: number | undefined
       let sentAudioBytes = 0
 
+      // First-response timeout: the ASR queue ends only on a final transcript, a
+      // server error, or a socket close — if the server accepts the connection
+      // then goes silent (never sends a first transcript), `yield* queue` parks
+      // forever and the turn locks up. This deadline bounds the time to the FIRST
+      // transcript chunk; on timeout it fails the queue + closes the socket,
+      // degrading into the same premature-close fail-loud path a mid-handshake
+      // drop already takes. It is cancelled on the first chunk, so a slow first
+      // transcript is tolerated and the streaming that follows is unbounded (only
+      // the first response is deadlined — never the whole stream).
+      const firstResponseDeadline = startDeadline(TIMEOUTS.firstResponseMs, () => {
+        queue.fail(new Error(`Volcengine ASR: no transcript within ${TIMEOUTS.firstResponseMs}ms`))
+        socket.close()
+      })
+
       socket.addEventListener('message', (event) => {
         try {
           const frame = parseFrame(event.data)
@@ -934,6 +967,9 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           if (duration !== undefined) reportedDurationMs = duration
           const chunk = parseSttResponse(frame)
           if (!chunk) return
+          // First transcript landed in time — stop the first-response deadline so
+          // the rest of the stream runs unbounded.
+          firstResponseDeadline.cancel()
           queue.push(chunk)
           // A final/definite transcript is the normal completion signal: end the
           // iteration here instead of waiting for a separate WS `close`. Without
@@ -1039,6 +1075,10 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             ? { durationMs: reportedDurationMs, source: 'provider-reported' }
             : { durationMs: (sentAudioBytes * 1000) / bytesPerSecond, source: 'derived-from-bytes' }
         cancelled = true
+        // Stop the first-response deadline on every exit path (it may still be
+        // armed if the stream ended via cancellation / error before any
+        // transcript) so it never fires late against an already-settled queue.
+        firstResponseDeadline.cancel()
         await audioIterator.return?.(undefined)
         queue.close()
         socket.close()
@@ -1142,7 +1182,26 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       const pump = (async () => {
         if (cancelled) return
         socket.send(asArrayBuffer(buildTtsStartConnectionFrame()))
-        await handshake.connectionStarted
+        // First-response timeout on each OPENING handshake gate: if the server
+        // accepts the upgrade but never sends ConnectionStarted (50) / SessionStarted
+        // (150), the pump would `await` a gate promise forever. Race each gate
+        // against a first-response deadline whose `onTimeout` calls `handshake.abort`
+        // — which rejects the pending gate exactly as a ConnectionFailed/socket-close
+        // would, so a silent server degrades into the existing fail-loud path
+        // (queue.fail -> consumer throws) instead of parking the turn. Only the
+        // opening gates are bounded; the close-side `sessionFinished` gate is NOT,
+        // because it legitimately stays open for the full length of a long synthesis
+        // stream (bounding it would truncate valid tail audio — a whole-turn timeout,
+        // which this fix explicitly avoids).
+        await awaitWithTimeout(
+          handshake.connectionStarted,
+          TIMEOUTS.firstResponseMs,
+          `Volcengine TTS: no ConnectionStarted within ${TIMEOUTS.firstResponseMs}ms`,
+          () =>
+            handshake.abort(
+              new Error(`Volcengine TTS: no ConnectionStarted within ${TIMEOUTS.firstResponseMs}ms`)
+            )
+        )
         if (cancelled) return
         socket.send(
           asArrayBuffer(
@@ -1154,7 +1213,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             })
           )
         )
-        await handshake.sessionStarted
+        await awaitWithTimeout(
+          handshake.sessionStarted,
+          TIMEOUTS.firstResponseMs,
+          `Volcengine TTS: no SessionStarted within ${TIMEOUTS.firstResponseMs}ms`,
+          () =>
+            handshake.abort(
+              new Error(`Volcengine TTS: no SessionStarted within ${TIMEOUTS.firstResponseMs}ms`)
+            )
+        )
         for await (const piece of text) {
           if (cancelled) return
           if (piece.length === 0) continue
