@@ -5,6 +5,7 @@ import {
   sseStreamToChunks,
   trimTrailingSlashes,
 } from './deepseek'
+import { TIMEOUTS } from './timeout'
 import type { LlmCompletionChunk, LlmCompletionRequest } from './types'
 
 // --- helpers -------------------------------------------------------------
@@ -291,5 +292,92 @@ describe('createDeepSeekLlmProvider', () => {
     const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test' })
     await collect(provider.streamCompletion(baseRequest))
     expect(provider.lastUsage).toEqual({ inputTokens: 11, outputTokens: 22 })
+  })
+})
+
+// --- connect timeout: hung fetch must fail loud, not park forever ------------
+
+describe('createDeepSeekLlmProvider — connect timeout', () => {
+  /**
+   * Stub `fetch` with one that hangs until its `AbortSignal` aborts, then
+   * rejects (real `fetch` semantics: aborting an in-flight request rejects it).
+   * This models a provider that accepts the socket but never returns the
+   * response headers — the exact hung-fetch gap the connect deadline closes.
+   */
+  function stubHangingFetch(): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit): Promise<Response> => {
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal
+        if (!signal) return
+        signal.addEventListener('abort', () => {
+          // `signal.reason` carries the connect-timeout Error the adapter passed
+          // to `controller.abort(...)`.
+          reject(signal.reason ?? new DOMException('aborted', 'AbortError'))
+        })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('aborts a hung fetch after the connect deadline and throws (fail loud)', async () => {
+    vi.useFakeTimers()
+    try {
+      stubHangingFetch()
+      const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test' })
+      const consumed = collect(provider.streamCompletion(baseRequest))
+      // Surface the rejection assertion before firing the timer so the rejection
+      // is awaited (no unhandled-rejection noise).
+      const assertion = expect(consumed).rejects.toThrow(/deepseek: connect timed out/)
+      // Before the deadline nothing settles; advancing past it aborts the fetch.
+      await vi.advanceTimersByTimeAsync(TIMEOUTS.connectMs)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('passes the AbortController signal into fetch', async () => {
+    const fetchMock = stubFetch(sseStream('data: [DONE]\n'))
+    const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test' })
+    await collect(provider.streamCompletion(baseRequest))
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('does NOT kill a slow-but-valid response that streams for a long time', async () => {
+    // The timeout bounds the CONNECT phase only: once `fetch` resolves with the
+    // response, the deadline is cleared and the streaming body is unbounded. Model
+    // a body whose deltas arrive across a long span (well past connectMs of fake
+    // time) — every delta must still be delivered, none killed by the timer.
+    vi.useFakeTimers()
+    try {
+      const encoder = new TextEncoder()
+      const slowStream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(encoder.encode(deltaLine('slow ')))
+          // A long pause AFTER the first byte — longer than every deadline. A
+          // whole-turn timeout would wrongly kill the stream here; a connect /
+          // first-response timeout must not.
+          await vi.advanceTimersByTimeAsync(TIMEOUTS.connectMs + TIMEOUTS.firstResponseMs + 5000)
+          controller.enqueue(encoder.encode(deltaLine('tail')))
+          controller.enqueue(encoder.encode('data: [DONE]\n'))
+          controller.close()
+        },
+      })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, _init?: RequestInit) => new Response(slowStream))
+      )
+      const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test' })
+      const chunks = await collect(provider.streamCompletion(baseRequest))
+      expect(chunks).toEqual([
+        { content: 'slow ', done: false },
+        { content: 'tail', done: false },
+        { content: '', done: true },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

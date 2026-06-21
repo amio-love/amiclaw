@@ -60,7 +60,7 @@ new_sqlite_classes = ["CompanionConsolidatorDO"]
 [[d1_databases]]
 binding = "COMPANION_DB"
 database_name = "amiclaw-companion"
-database_id = "PLACEHOLDER_COMPANION_D1_DATABASE_ID"
+database_id = "dd31b70f-03e7-4ed1-9bd0-45393d19c3ad"
 migrations_dir = "../companion-memory/migrations"
 
 # --- AUTH KV: shared session keyspace owned by auth-session ---
@@ -70,7 +70,8 @@ migrations_dir = "../companion-memory/migrations"
 # namespace id, filled at deploy wiring time (placeholder until then).
 [[kv_namespaces]]
 binding = "AUTH"
-id = "PLACEHOLDER_AUTH_KV_NAMESPACE_ID"
+id = "c4a64d33de2f406e825e6249e828f84d"
+preview_id = "5d22a502cb5246408d7f6e5af01a4f7b"
 
 # --- USAGE KV: per-session usage metering records ---
 # The session DO flushes ONE write-once record per ended voice session — key
@@ -84,7 +85,7 @@ id = "PLACEHOLDER_AUTH_KV_NAMESPACE_ID"
 # then, same as AUTH above).
 [[kv_namespaces]]
 binding = "USAGE"
-id = "PLACEHOLDER_USAGE_KV_NAMESPACE_ID"
+id = "5bca263e7860462ea0bef90885b07c1b"
 
 # --- Same-origin WS route on the canonical zone ---
 # Mounting under claw.amio.fans (same zone as the Platform SPA / /api/*) is the

@@ -1,0 +1,74 @@
+name: Deploy Worker (platform-ai)
+
+# This is the repo's FIRST independent Cloudflare Worker deploy chain, separate
+# from the existing Pages deploy chain (pages-deploy.yml). packages/platform-ai
+# is a standalone Worker + Durable Object deploy unit; it ships via
+# `wrangler deploy` from its own directory (which holds its own wrangler.toml),
+# not as part of the Pages artifact.
+#
+# Why the paths filter: this chain only needs to run when the platform-ai
+# package itself changes. Gating on packages/platform-ai/** keeps unrelated
+# Pages-only commits from triggering a Worker redeploy.
+#
+# Why reuse the Pages token: the CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID
+# secrets are the same Cloudflare account credentials already provisioned for
+# pages-deploy.yml. They are reused here so there is one credential source for
+# the account. (The token must carry Workers Scripts edit permission — verified
+# out of band by the operator, see deploy wiring.)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/platform-ai/**'
+  workflow_dispatch:
+
+# Worker-specific concurrency group (distinct from pages-deploy) so a Worker
+# deploy is never cancelled by a Pages deploy and vice versa. Same-ref Worker
+# deploys still supersede each other to avoid racing rollouts.
+concurrency:
+  group: worker-deploy-platform-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy platform-ai Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # The Worker imports monorepo workspace dependencies, so install the
+      # full workspace before deploying. --frozen-lockfile mirrors the Pages
+      # chain and fails fast on lockfile drift.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `wrangler deploy` reads packages/platform-ai/wrangler.toml and applies
+      # the Durable Object migrations (v1/v2) automatically as part of deploy.
+      # D1 schema is NOT migrated here — D1 migrations are managed out of band
+      # via `wrangler d1 migrations apply` and are intentionally kept out of
+      # this workflow.
+      - name: Deploy platform-ai Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: packages/platform-ai
+          command: deploy

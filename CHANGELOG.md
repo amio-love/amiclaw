@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice turns can no longer hang on a stuck provider** - Internal
+reliability hardening. Each AI provider (the LLM and the speech ASR/TTS layers)
+now bounds the time it waits to connect and to receive a first response. If a
+provider accepts the connection but then goes silent — never returns the first
+byte, never acknowledges the voice handshake — the turn now fails cleanly and
+the session is freed, instead of locking up until the platform's hard timeout.
+A legitimately slow-then-long response is untouched: only the connect and
+first-response windows are bounded, never the length of a valid stream. No
+player-facing behavior changes.
+
 **Platform-AI test suites now exercise the real session engine** - Internal
 refactor. The voice-session test suites that previously asserted against a
 hand-written stand-in now drive the real Durable Object class through a
