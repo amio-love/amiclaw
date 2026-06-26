@@ -5,6 +5,20 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice turns can no longer hang when a speech stream stalls
+mid-stream** - Internal reliability hardening. This extends the same fix made for
+the language-model stream to the two speech streams: turning the player's voice
+into text (speech recognition) and turning the AI's reply into audio (speech
+synthesis). Each runs over a live connection that, once it has produced its first
+result, used to have no bound on silence — if the speech server sent some output
+and then went quiet without finishing or closing, the turn parked until the
+platform's hard timeout. Both streams now bound the silent gap between results: a
+stream that has already started but then stalls fails cleanly and frees the
+session instead of hanging. The guard resets on every result, so a legitimately
+long transcription or a long stretch of synthesized speech — pauses and all — is
+never cut off; only a truly stuck stream is. No player-facing behavior changes
+beyond turns no longer hanging.
+
 **Platform-AI voice turns can no longer hang when the LLM stream stalls
 mid-reply** - Internal reliability hardening. The AI's language model streams its
 answer back token by token; if it sent the first token and then went silent —

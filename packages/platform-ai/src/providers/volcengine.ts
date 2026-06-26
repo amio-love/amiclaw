@@ -32,9 +32,12 @@
  *    server-gated*: the client must wait for the server to accept each step
  *    before advancing — StartConnection -> (await ConnectionStarted, event 50)
  *    -> StartSession -> (await SessionStarted, event 150) -> TaskRequest* ->
- *    FinishSession -> FinishConnection; the server then streams `TTSResponse`
- *    (event 352) audio frames + `SessionFinished` (event 152). The handshake
- *    gates live in `TtsHandshake` so the timing is unit-testable with a mock WS.
+ *    FinishSession -> (server streams `TTSResponse` (event 352) audio frames, then
+ *    `SessionFinished` (event 152); await SessionFinished) -> FinishConnection.
+ *    FinishConnection is gated on SessionFinished — not fired right after
+ *    FinishSession — so the tail audio frames are drained before the connection
+ *    closes. The handshake gates live in `TtsHandshake` so the timing is
+ *    unit-testable with a mock WS.
  *
  * Protocol references (consulted 2026-06):
  *  - ASR binary protocol + sequence flags + auth headers:
@@ -66,7 +69,7 @@
 
 import type { AudioChunk } from '../contract'
 import type { SttProvider, SttTranscriptChunk, SttUsage, TtsAudioChunk, TtsProvider } from './types'
-import { awaitWithTimeout, startDeadline, TIMEOUTS } from './timeout'
+import { awaitWithTimeout, startDeadline, TIMEOUTS, type Deadline } from './timeout'
 
 // --- Public options ---
 
@@ -992,6 +995,30 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         socket.close()
       })
 
+      // Inter-chunk idle guard for the streaming phase. `firstResponseDeadline`
+      // above bounds only the gap to the FIRST transcript; once streaming, a server
+      // that falls silent mid-stream (sends no further transcript, no final, never
+      // closes the socket) would park `yield* queue` forever — the same hang the
+      // LLM SSE layer guards with `TIMEOUTS.streamIdleMs`. This bounds the silent
+      // GAP between consecutive transcripts: (re)armed on each non-final chunk,
+      // cancelled the instant the stream ends (final / close / error / generator
+      // exit). A live stream keeps resetting it so only a stall trips it — failing
+      // the queue loud and closing the socket, the existing premature-close fail
+      // path. Volcengine is a push model (AsyncQueue + message listener), so this is
+      // a re-armable deadline reset per pushed frame, NOT the SSE per-read race.
+      let streamIdleDeadline: Deadline | undefined
+      const resetStreamIdle = (): void => {
+        streamIdleDeadline?.cancel()
+        streamIdleDeadline = startDeadline(TIMEOUTS.streamIdleMs, () => {
+          queue.fail(
+            new Error(
+              `Volcengine ASR: stream idle for >${TIMEOUTS.streamIdleMs}ms after first transcript`
+            )
+          )
+          socket.close()
+        })
+      }
+
       socket.addEventListener('message', (event) => {
         try {
           const frame = parseFrame(event.data)
@@ -1012,13 +1039,23 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           // the normal end-of-stream path (idempotent; mirrors the TTS layer).
           if (chunk.isFinal) {
             finalReached = true
+            // Normal end-of-stream: clear the inter-chunk idle guard so it can never
+            // fire late against an already-closed queue.
+            streamIdleDeadline?.cancel()
             queue.close()
             socket.close()
+          } else {
+            // Streaming continues — (re)arm the inter-chunk idle guard for the gap
+            // to the next transcript.
+            resetStreamIdle()
           }
         } catch (err) {
           // Observability: an error frame (parseSttResponse throws with the
           // server's code/message) or a malformed frame lands here — surface it
           // instead of letting it vanish into the generic queue failure.
+          // Clear the idle guard first so a stalled deadline never outlives a
+          // failed stream.
+          streamIdleDeadline?.cancel()
           console.error(
             `[volc-asr] frame error: ${err instanceof Error ? err.message : String(err)}`
           )
@@ -1041,13 +1078,19 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             event?.reason ?? ''
           )} finalReached=${finalReached}`
         )
+        // The stream has ended either way — stop the idle guard so it cannot fire
+        // late against an already-settled queue.
+        streamIdleDeadline?.cancel()
         if (finalReached) {
           queue.close()
         } else {
           queue.fail(new Error('Volcengine ASR socket closed before a final transcript'))
         }
       })
-      socket.addEventListener('error', (err) => queue.fail(err))
+      socket.addEventListener('error', (err) => {
+        streamIdleDeadline?.cancel()
+        queue.fail(err)
+      })
 
       // Pump audio in the background so we can yield transcripts as they arrive.
       //
@@ -1122,10 +1165,12 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             ? { durationMs: reportedDurationMs, source: 'provider-reported' }
             : { durationMs: (sentAudioBytes * 1000) / bytesPerSecond, source: 'derived-from-bytes' }
         cancelled = true
-        // Stop the first-response deadline on every exit path (it may still be
-        // armed if the stream ended via cancellation / error before any
-        // transcript) so it never fires late against an already-settled queue.
+        // Stop both deadlines on every exit path (either may still be armed if the
+        // stream ended via cancellation / error) so neither fires late against an
+        // already-settled queue: the first-response deadline (no transcript yet) and
+        // the inter-chunk idle deadline (streaming was in progress).
         firstResponseDeadline.cancel()
+        streamIdleDeadline?.cancel()
         await audioIterator.return?.(undefined)
         queue.close()
         socket.close()
@@ -1151,11 +1196,44 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // TTS audio fails loudly instead of settling silently without audio.
       let sessionFinished = false
 
+      // Idle guard for the audio-streaming phase. The opening handshake gates
+      // (ConnectionStarted / SessionStarted) are first-response-bounded by
+      // `awaitWithTimeout` in the pump, and the close-side `sessionFinished` gate is
+      // intentionally unbounded (a long synthesis legitimately keeps it open). That
+      // leaves the audio stream that follows the handshake unbounded in two ways:
+      //  (1) after the first `TtsResponse` chunk — the server emits audio then falls
+      //      silent (no further audio, no SessionFinished, never closes); and
+      //  (2) BEFORE any audio — the handshake completes and FinishSession is sent,
+      //      then the server produces neither audio nor SessionFinished.
+      // Either parks `yield* queue` forever — the LLM SSE park, one layer over. This
+      // guard bounds the silent GAP during synthesis: armed when the pump sends
+      // FinishSession (case 2; by then all text is drained, so a slow upstream LLM
+      // can't false-trip it) AND (re)armed on each `TtsResponse` chunk (case 1),
+      // cancelled the instant the session ends (SessionFinished / SessionFailed /
+      // close / error / generator exit). On a stall it drives the same fail-loud path
+      // a mid-stream drop takes (abort the handshake gates, fail the queue, close the
+      // socket). Push model, so it is a re-armable deadline reset per pushed frame /
+      // milestone, NOT the SSE per-read race. Bounds only the gap, never total
+      // synthesis length — a long but live stream keeps resetting it.
+      let streamIdleDeadline: Deadline | undefined
+      const resetStreamIdle = (): void => {
+        streamIdleDeadline?.cancel()
+        streamIdleDeadline = startDeadline(TIMEOUTS.streamIdleMs, () => {
+          const err = new Error(
+            `Volcengine TTS: audio stream idle for >${TIMEOUTS.streamIdleMs}ms during synthesis`
+          )
+          handshake.abort(err)
+          queue.fail(err)
+          socket.close()
+        })
+      }
+
       socket.addEventListener('message', (event) => {
         try {
           const frame = parseFrame(event.data)
           if (frame.messageType === MessageType.ErrorResponse) {
             const err = new Error(`Volcengine TTS error: ${decodeUtf8(frame.payload)}`)
+            streamIdleDeadline?.cancel()
             handshake.abort(err)
             queue.fail(err)
             return
@@ -1168,19 +1246,25 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           }
           if (frame.event === TtsEvent.TtsResponse && frame.payload.length > 0) {
             queue.push({ audio: copyBytes(frame.payload), done: false })
+            // Streaming audio — (re)arm the inter-chunk idle guard for the gap to
+            // the next audio chunk.
+            resetStreamIdle()
           } else if (frame.event === TtsEvent.SessionFinished) {
             // Normal completion: push the final done frame, mark the session
             // finished so a subsequent socket close is the clean end-of-stream,
-            // and end iteration.
+            // and end iteration. Clear the idle guard so it cannot fire late.
             sessionFinished = true
+            streamIdleDeadline?.cancel()
             queue.push({ audio: new Uint8Array(0), done: true })
             queue.close()
           } else if (frame.event === TtsEvent.SessionFailed) {
             const err = new Error(`Volcengine TTS session failed: ${decodeUtf8(frame.payload)}`)
+            streamIdleDeadline?.cancel()
             handshake.abort(err)
             queue.fail(err)
           }
         } catch (err) {
+          streamIdleDeadline?.cancel()
           handshake.abort(err)
           queue.fail(err)
         }
@@ -1190,6 +1274,9 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // `abort` is harmless once the gates have all settled (no-op on a settled
       // gate), so it runs unconditionally on every close.
       socket.addEventListener('close', () => {
+        // The session has ended either way — stop the idle guard so it cannot fire
+        // late against an already-settled queue.
+        streamIdleDeadline?.cancel()
         handshake.abort(new Error('Volcengine TTS socket closed before session completed'))
         // Distinguish a normal-completion close from a premature one. After
         // SessionFinished (152) the close is the expected end-of-stream -> close
@@ -1204,6 +1291,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         }
       })
       socket.addEventListener('error', (err) => {
+        streamIdleDeadline?.cancel()
         handshake.abort(err)
         queue.fail(err)
       })
@@ -1278,6 +1366,14 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         }
         if (cancelled) return
         socket.send(asArrayBuffer(buildTtsFinishSessionFrame(sessionId)))
+        // Arm the idle guard for the synthesis-output phase now that all text is
+        // drained: from here the server must produce audio frames then
+        // SessionFinished. If it instead goes fully silent (no audio, no
+        // SessionFinished), `await handshake.sessionFinished` below — the
+        // intentionally-unbounded close gate — would park the turn forever. Arming
+        // here (post-text, so a slow LLM can't false-trip it) bounds that gap; the
+        // first audio frame / SessionFinished cancels or resets it via the listener.
+        resetStreamIdle()
         await handshake.sessionFinished
         if (cancelled) return
         socket.send(asArrayBuffer(buildTtsFinishConnectionFrame()))
@@ -1302,6 +1398,10 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         //  - `socket.close()` deterministically releases the outbound connection
         //    (idempotent; the normal path relies on the server closing it).
         cancelled = true
+        // Stop the inter-chunk idle guard on every exit path (it may still be armed
+        // if the stream ended via cancellation / error mid-synthesis) so it never
+        // fires late against an already-settled queue.
+        streamIdleDeadline?.cancel()
         handshake.abort(new Error('Volcengine TTS synthesize cancelled'))
         queue.close()
         socket.close()
