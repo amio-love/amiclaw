@@ -4,6 +4,15 @@
 // WebSocket: create -> stream player audio frames -> `turn` -> render the AI's
 // streamed text + audio response.
 //
+// AUDIO FORMAT: player audio is captured as PCM16 16kHz mono — the exact wire
+// format the real STT adapter expects (`volcengine.ts`: format:'pcm', rate:16000,
+// bits:16, channel:1). Capture uses `AudioContext({ sampleRate: 16000 })` +
+// `ScriptProcessorNode`, converting Float32 samples to Int16 little-endian PCM
+// per frame (see `floatTo16BitPCM` in `./audio-pcm.js`). The server defaults to
+// the deterministic mock providers here (gameId `demo-mock`), but because the
+// audio layer is now protocol-correct, this capture path is reusable as-is by a
+// real-provider / live-verification harness.
+//
 // SECURITY INVARIANT (load-bearing): this client connects ONLY to the
 // same-origin Worker WebSocket. It holds NO provider API key and NO system
 // prompt. The gameId (`demo-mock`) is the only game material it sends; the
@@ -15,6 +24,8 @@
 // credentials. Note: the mock TTS frame is the UTF-8 bytes of the sentence (a
 // placeholder, not a real audio codec), so playback is best-effort — the point
 // of the demo is to show the text + audio chunks arriving end to end.
+
+import { floatTo16BitPCM } from './audio-pcm.js'
 
 const els = {
   connect: document.getElementById('connect'),
@@ -39,9 +50,13 @@ const MANUAL_DATA = {
 }
 const GAME_STATE = { relevantSections: ['button-module'] }
 
+const CAPTURE_SAMPLE_RATE = 16000
+
 let ws = null
 let mediaStream = null
-let mediaRecorder = null
+let audioCtx = null
+let sourceNode = null
+let procNode = null
 let currentAiTurn = null
 
 function setStatus(text) {
@@ -151,29 +166,48 @@ async function startSpeaking() {
   } catch {
     setStatus('Microphone permission denied — sending a silent frame instead.')
     // Even without a mic, the mock STT yields its fixed transcript, so the demo
-    // still completes a turn. Send one empty frame to stand in for audio.
-    ws.send(new Uint8Array([0]).buffer)
+    // still completes a turn. Send one empty PCM frame to stand in for audio.
+    ws.send(new ArrayBuffer(0))
     return
   }
-  mediaRecorder = new MediaRecorder(mediaStream)
-  mediaRecorder.addEventListener('dataavailable', async (event) => {
-    if (event.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
-      const buf = await event.data.arrayBuffer()
-      ws.send(buf)
-    }
+  // Capture at 16kHz so the browser resamples the mic to the STT adapter's rate;
+  // no manual downsampling needed. ScriptProcessor is deprecated but universally
+  // supported and sufficient for this dev harness.
+  audioCtx = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE })
+  sourceNode = audioCtx.createMediaStreamSource(mediaStream)
+  procNode = audioCtx.createScriptProcessor(4096, 1, 1)
+  procNode.addEventListener('audioprocess', (event) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    // Mono Float32 samples @16kHz -> Int16 little-endian PCM frame.
+    const pcm = floatTo16BitPCM(event.inputBuffer.getChannelData(0))
+    ws.send(pcm)
   })
-  mediaRecorder.start(250) // emit a frame every 250ms
+  sourceNode.connect(procNode)
+  procNode.connect(audioCtx.destination)
   setStatus('Listening… release to send.')
 }
 
-function stopSpeaking() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop()
+function teardownCapture() {
+  if (procNode) {
+    procNode.disconnect()
+    procNode = null
+  }
+  if (sourceNode) {
+    sourceNode.disconnect()
+    sourceNode = null
+  }
+  if (audioCtx) {
+    audioCtx.close()
+    audioCtx = null
   }
   if (mediaStream) {
     mediaStream.getTracks().forEach((t) => t.stop())
     mediaStream = null
   }
+}
+
+function stopSpeaking() {
+  teardownCapture()
   if (ws && ws.readyState === WebSocket.OPEN) {
     // Give the last audio frame a moment to flush, then request the AI turn.
     setStatus('Thinking…')

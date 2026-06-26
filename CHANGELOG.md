@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice demo now records protocol-correct PCM16 16kHz audio** -
+Internal fix. The first-party voice-session demo harness used to capture
+microphone audio with `MediaRecorder` as webm/opus, which does not match the
+format the real speech-recognition adapter declares. The demo now captures PCM16
+16kHz mono — the exact wire format the adapter expects — via the Web Audio API,
+so the demo's audio layer is protocol-correct and reusable as-is by a
+real-provider verification harness. The deterministic mock round still completes
+unchanged. No player-facing behavior changes.
+
 **Platform-AI voice moved to the current Volcengine sign-in and the upgraded
 speech recognition model** - Internal fix. The voice partner's speech layer now
 authenticates with Volcengine's current console API key instead of the retired
