@@ -11,7 +11,7 @@
  *  - `resolveConfig` on an unregistered `gameId` (loud-fail, no default game);
  *  - `createProviders` when a selected REAL provider is missing its secret
  *    (e.g. `deepseek` without `DEEPSEEK_API_KEY`, `volcengine` without
- *    `VOLC_APP_ID`/`VOLC_ACCESS_KEY`).
+ *    `VOLC_API_KEY`).
  *
  * This function runs every fallible step into locals and returns the complete
  * bundle only when ALL of them succeeded — it never partially constructs. The

@@ -116,20 +116,23 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     tts: {
       // Empty string = the "use the resource-id default model" sentinel: the
       // Doubao TTS 2.0 model is bound by the paired resource id
-      // (`X-Api-Resource-Id: volc.service_type.10029`, the adapter's
+      // (`X-Api-Resource-Id: seed-tts-2.0`, the adapter's
       // `DEFAULT_TTS_RESOURCE_ID`), and `req_params.model` is left OUT of the
-      // `StartSession` frame by default. This aligns with Volcengine's own
-      // first-party speech clients (`volcengine/ai-app-lab` and the bigmodel
+      // `StartSession` frame by default. With `req_params.model` omitted the
+      // server defaults to `seed-tts-2.0-standard`. This aligns with Volcengine's
+      // own first-party speech clients (`volcengine/ai-app-lab` and the bigmodel
       // ASR/TTS clients), which omit `req_params.model` and let the resource id
       // pick the model. An empty model here makes the factory's F-K passthrough a
       // no-op for the wire (the adapter only attaches `req_params.model` when the
       // threaded model is non-empty), so no model token is guessed onto the wire —
       // sending a wrong token is rejected by the server, sending none is the safe
-      // default. The concrete `req_params.model` wire value (`seed-tts-2.0-standard`
-      // / `-expressive` vs omitted) is a DEPLOY-TIME verification item: once the
-      // real endpoint confirms the exact token, set it here and the same F-K
-      // passthrough carries it onto the wire — the mechanism stays available, only
-      // the default is "omit". Doc: https://www.volcengine.com/docs/6561/1329505
+      // default. The resource id is the real knob: the earlier deploy-time TTS
+      // validation item — a 403 `requested resource not granted` — was the retired
+      // `volc.service_type.10029` resource, resolved on 2026-06-25 by switching
+      // `DEFAULT_TTS_RESOURCE_ID` to `seed-tts-2.0`. Omitting `model` already
+      // selects `seed-tts-2.0-standard`; set a concrete token here only to opt into
+      // `seed-tts-2.0-expressive`, carried by the same F-K passthrough.
+      // Doc: https://www.volcengine.com/docs/6561/1329505
       provider: 'volcengine',
       model: '',
     },

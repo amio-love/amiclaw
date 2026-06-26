@@ -5,21 +5,30 @@
  * `providers/types.ts`), because the L2 spec models voice as a single shared
  * platform layer rather than one speech vendor per LLM provider.
  *
- *  - STT: Volcengine big-model streaming ASR over its self-owned binary
- *    WebSocket protocol (`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`,
- *    resource `volc.bigasr.sauc.duration`). The first frame is a JSON
- *    full-client config request; subsequent frames are raw audio. Server
- *    responses carry a JSON transcript whose `utterances[].definite` marks a
- *    stabilized segment. This ASR protocol is *client-push-first by design*:
- *    the documented flow is "send full-client request, then stream audio packets
- *    (~100-200ms each)"; there is NO connection/session-accepted handshake event
- *    the client must wait for before sending audio (unlike the TTS layer below).
- *    So sending config-then-audio without a server "ready" gate is correct here,
- *    not optimistic — the server returns transcripts asynchronously as audio
- *    flows.
+ *  - STT: Volcengine seedasr / big-model streaming ASR 2.0 over its self-owned
+ *    binary WebSocket protocol
+ *    (`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`, resource
+ *    `volc.seedasr.sauc.duration`). The optimized `_async` endpoint is the one
+ *    the ASR 2.0 resource is granted on — the base `/sauc/bigmodel` endpoint
+ *    rejects the 2.0 resource with a 400 "not allowed" (verified by live probe
+ *    2026-06-25). The first frame is a JSON full-client config request;
+ *    subsequent frames are raw audio. Server responses carry a JSON transcript
+ *    whose `utterances[].definite` marks a stabilized segment. This ASR protocol
+ *    is *client-push-first by design*: the documented flow is "send full-client
+ *    request, then stream audio packets (~100-200ms each)"; there is NO
+ *    connection/session-accepted handshake event the client must wait for before
+ *    sending audio (unlike the TTS layer below). So sending config-then-audio
+ *    without a server "ready" gate is correct here, not optimistic — the server
+ *    returns transcripts asynchronously as audio flows. The `_async` optimized
+ *    endpoint returns a new full server response ONLY when the result changes
+ *    (no longer one response per input audio packet), so the receive loop must
+ *    not assume "every input packet yields a response packet" — this adapter's
+ *    loop is already response-count-agnostic (it ends on a definite transcript,
+ *    a server error, a socket close, or the first-response deadline — never on a
+ *    per-packet response count), so the optimized cadence needs no adaptation.
  *  - TTS: Doubao TTS 2.0 bidirectional streaming over the event-based binary
  *    protocol (`wss://openspeech.bytedance.com/api/v3/tts/bidirection`,
- *    resource `volc.service_type.10029`). This protocol is *stateful and
+ *    resource `seed-tts-2.0`). This protocol is *stateful and
  *    server-gated*: the client must wait for the server to accept each step
  *    before advancing — StartConnection -> (await ConnectionStarted, event 50)
  *    -> StartSession -> (await SessionStarted, event 150) -> TaskRequest* ->
@@ -34,11 +43,13 @@
  *    https://www.volcengine.com/docs/6561/1329505
  *
  * Cloudflare Workers runtime note: these v3 endpoints authenticate entirely via
- * custom request headers (`X-Api-App-Key` / `X-Api-Access-Key` /
- * `X-Api-Resource-Id` + a per-connection `X-Api-Connect-Id` UUID) — pure
+ * custom request headers — a single `X-Api-Key` console API key plus
+ * `X-Api-Resource-Id` and a per-connection `X-Api-Connect-Id` UUID — pure
  * token-header auth, no HMAC signature and no secret key (the secret-key
  * signature scheme is the legacy v1/v2 console-auth path this adapter does not
- * use). The bare `new WebSocket(url)` constructor cannot set request headers in
+ * use). The new-console-auth `X-Api-Key` replaces the legacy
+ * `X-Api-App-Key` + `X-Api-Access-Key` pair, which has no Doubao 2.0 speech
+ * grant. The bare `new WebSocket(url)` constructor cannot set request headers in
  * Workers, so the connection is opened with
  * `fetch(url, { headers: { Upgrade: 'websocket', ... } })` and the socket is
  * taken from `response.webSocket`, set to `binaryType = 'arraybuffer'`, and then
@@ -65,18 +76,25 @@ import { awaitWithTimeout, startDeadline, TIMEOUTS } from './timeout'
  * browser client.
  */
 export interface VolcengineSpeechOptions {
-  /** Volcengine app id, sent as the `X-Api-App-Key` header. */
-  appId: string
-  /** Volcengine access token, sent as the `X-Api-Access-Key` header. */
-  accessToken: string
+  /**
+   * Volcengine console API key, sent as the single `X-Api-Key` header. This is
+   * the new-console-auth credential that grants the Doubao 2.0 speech stack
+   * (seedasr ASR + Doubao TTS 2.0). It replaces the legacy
+   * `X-Api-App-Key` + `X-Api-Access-Key` pair, which has no ASR 2.0 grant.
+   */
+  apiKey: string
   /**
    * Resource id for the ASR endpoint (`X-Api-Resource-Id`). Defaults to
-   * `volc.bigasr.sauc.duration` (duration-billed big-model ASR).
+   * `volc.seedasr.sauc.duration` (duration-billed seedasr / big-model ASR 2.0).
    */
   sttResourceId?: string
   /**
    * Resource id for the TTS endpoint (`X-Api-Resource-Id`). Defaults to
-   * `volc.service_type.10029` (Doubao TTS 2.0 bidirectional streaming).
+   * `seed-tts-2.0` (Doubao 语音合成大模型 2.0 bidirectional streaming). The
+   * legacy `volc.service_type.10029` resource was retired by Volcengine and now
+   * yields a 403 `requested resource not granted` (verified at deploy time on
+   * 2026-06-25); `seed-tts-2.0` is the current granted value (sibling
+   * `seed-icl-2.0` selects voice cloning 2.0).
    */
   ttsResourceId?: string
   /** ASR model name in the config request (`request.model_name`). */
@@ -85,19 +103,19 @@ export interface VolcengineSpeechOptions {
    * TTS model id, attached as the Doubao TTS 2.0 `StartSession`
    * `req_params.model` ONLY when it is a non-empty concrete value. By default the
    * field is OMITTED: the TTS model is bound by the paired endpoint resource id
-   * (`X-Api-Resource-Id`, default `volc.service_type.10029`), exactly as
-   * Volcengine's own first-party speech clients drive it (they omit
-   * `req_params.model` and let the resource id select the model). Both `undefined`
-   * and `''` mean "omit" — `''` is the `provider-config` sentinel for "use the
-   * resource-id default model", so the default request shape carries no model
-   * token. The factory threads the resolved config model here (F-K), so once the
-   * concrete wire token is confirmed at deploy time (`seed-tts-2.0-standard` /
-   * `-expressive` are the candidate concrete `req_params.model` values; the
-   * model-FAMILY id `seed-tts-2.0` and the resource id are NOT the in-payload
-   * model value), setting a non-empty `model` in `provider-config` reaches the
-   * wire through this same passthrough. Until then nothing is guessed onto the
-   * wire — sending a wrong token risks server rejection, sending none is the safe
-   * default.
+   * (`X-Api-Resource-Id`, default `seed-tts-2.0`), exactly as Volcengine's own
+   * first-party speech clients drive it (they omit `req_params.model` and let the
+   * resource id select the model). With `req_params.model` omitted the server
+   * defaults to `seed-tts-2.0-standard` (the other concrete value is
+   * `seed-tts-2.0-expressive`). Both `undefined` and `''` mean "omit" — `''` is
+   * the `provider-config` sentinel for "use the resource-id default model", so the
+   * default request shape carries no model token. The factory threads the resolved
+   * config model here (F-K), so setting a non-empty `model`
+   * (`seed-tts-2.0-standard` / `-expressive`) in `provider-config` reaches the wire
+   * through this same passthrough; the resource id is the real knob and omitting
+   * `model` already selects the standard model, so a concrete token is only needed
+   * to opt into `-expressive`. The deploy-time TTS validation (the resource-id 403)
+   * was resolved on 2026-06-25 by switching the resource id to `seed-tts-2.0`.
    */
   ttsModel?: string
   /** TTS speaker / voice type (`req_params.speaker`). */
@@ -122,7 +140,10 @@ export interface AdapterSocket {
   send(data: ArrayBuffer | ArrayBufferView): void
   close(code?: number, reason?: string): void
   addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void
-  addEventListener(type: 'close', listener: () => void): void
+  addEventListener(
+    type: 'close',
+    listener: (event?: { code?: number; reason?: string }) => void
+  ): void
   addEventListener(type: 'error', listener: (event: unknown) => void): void
 }
 
@@ -134,10 +155,10 @@ export type WebSocketConnector = (
 
 // --- Endpoints + protocol constants ---
 
-const STT_URL = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel'
+const STT_URL = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async'
 const TTS_URL = 'wss://openspeech.bytedance.com/api/v3/tts/bidirection'
-const DEFAULT_STT_RESOURCE_ID = 'volc.bigasr.sauc.duration'
-const DEFAULT_TTS_RESOURCE_ID = 'volc.service_type.10029'
+const DEFAULT_STT_RESOURCE_ID = 'volc.seedasr.sauc.duration'
+const DEFAULT_TTS_RESOURCE_ID = 'seed-tts-2.0'
 const DEFAULT_STT_MODEL = 'bigmodel'
 const DEFAULT_TTS_SPEAKER = 'zh_female_cancan_mars_bigtts'
 const DEFAULT_SAMPLE_RATE = 16000
@@ -215,27 +236,29 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 /**
- * Assemble the WebSocket-handshake auth headers. Both the v3 big-model ASR and
+ * Assemble the WebSocket-handshake auth headers. Both the seedasr ASR 2.0 and
  * the Doubao TTS 2.0 endpoints authenticate via the same `X-Api-*` header set;
  * `resourceId` selects the endpoint. `Upgrade: websocket` is required so the
  * Workers `fetch` performs the upgrade (the bare `WebSocket` constructor cannot
  * carry these custom headers).
  *
  * The v3 streaming endpoints use pure token-header auth — no HMAC signature, no
- * secret key. The four headers are: `X-Api-App-Key` (app id), `X-Api-Access-Key`
- * (access token), `X-Api-Resource-Id` (endpoint selector), and `X-Api-Connect-Id`
- * (a per-connection UUID for handshake-level connection tracing — NOT the
- * business `X-Api-Request-Id`, which is the per-request id used by the HTTP/
- * recording-file APIs, not by this WS handshake).
+ * secret key. New-console-auth uses a SINGLE `X-Api-Key` credential (verified by
+ * live WS-upgrade probe 2026-06-25: `X-Api-Key` alone returns 101 on both the
+ * seedasr ASR 2.0 and Doubao TTS 2.0 endpoints; the legacy
+ * `X-Api-App-Key` + `X-Api-Access-Key` pair has no ASR 2.0 grant). The headers
+ * are: `X-Api-Key` (console API key), `X-Api-Resource-Id` (endpoint selector),
+ * and `X-Api-Connect-Id` (a per-connection UUID for handshake-level connection
+ * tracing — NOT the business `X-Api-Request-Id`, which is the per-request id used
+ * by the HTTP/recording-file APIs, not by this WS handshake).
  */
 export function buildAuthHeaders(
-  opts: { appId: string; accessToken: string; resourceId: string },
+  opts: { apiKey: string; resourceId: string },
   connectId: string
 ): Record<string, string> {
   return {
     Upgrade: 'websocket',
-    'X-Api-App-Key': opts.appId,
-    'X-Api-Access-Key': opts.accessToken,
+    'X-Api-Key': opts.apiKey,
     'X-Api-Resource-Id': opts.resourceId,
     'X-Api-Connect-Id': connectId,
   }
@@ -282,7 +305,7 @@ function int32BE(value: number): Uint8Array {
  * server knows the stream is complete.
  *
  * Request-frame flag basis (verified against production clients, 2026-06):
- * the `/api/v3/sauc/bigmodel` streaming ASR server accepts two equivalent
+ * the `/api/v3/sauc/bigmodel_async` streaming ASR server accepts two equivalent
  * client dialects — one that omits sequence numbers (audio frames flagged
  * `NoSequence` 0b0000) and one that carries them (config + audio flagged
  * `PositiveSequence` 0b0001, the final audio frame flagged
@@ -796,6 +819,15 @@ export const defaultConnect: WebSocketConnector = async (url, headers) => {
   } finally {
     connectDeadline.cancel()
   }
+  // Observability: surface the Volcengine handshake verdict (HTTP status + the
+  // `X-Tt-Logid` trace id Volcengine support keys their server logs off) that
+  // the `fetch`-upgrade response carries before the socket is taken. Keyed by
+  // resource id so ASR vs TTS upgrades are distinguishable in `wrangler tail`.
+  console.log(
+    `[volc-ws] upgrade resource=${headers['X-Api-Resource-Id']} status=${response.status} logid=${
+      response.headers.get('X-Tt-Logid') ?? response.headers.get('x-tt-logid') ?? '<none>'
+    }`
+  )
   // Cloudflare's fetch exposes the negotiated socket on the response.
   const socket = (
     response as unknown as {
@@ -923,7 +955,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       stt.lastUsage = undefined
       const connectId = randomId()
       const headers = buildAuthHeaders(
-        { appId: opts.appId, accessToken: opts.accessToken, resourceId: sttResourceId },
+        { apiKey: opts.apiKey, resourceId: sttResourceId },
         connectId
       )
       const socket = await connect(STT_URL, headers)
@@ -984,6 +1016,12 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             socket.close()
           }
         } catch (err) {
+          // Observability: an error frame (parseSttResponse throws with the
+          // server's code/message) or a malformed frame lands here — surface it
+          // instead of letting it vanish into the generic queue failure.
+          console.error(
+            `[volc-asr] frame error: ${err instanceof Error ? err.message : String(err)}`
+          )
           queue.fail(err)
         }
       })
@@ -993,7 +1031,16 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // the close is premature: fail the queue so the consumer
       // (`collectFinalTranscript`) throws and the turn fails loud, rather than
       // continuing with an empty/incomplete transcript.
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
+        // Observability: the Volcengine ASR close code + reason that the generic
+        // "closed before a final transcript" error used to swallow. A clean
+        // 1000/empty close after silence vs a non-1000 protocol close points at
+        // very different root causes.
+        console.log(
+          `[volc-asr] socket close code=${event?.code ?? '-'} reason=${JSON.stringify(
+            event?.reason ?? ''
+          )} finalReached=${finalReached}`
+        )
         if (finalReached) {
           queue.close()
         } else {
@@ -1091,7 +1138,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       const connectId = randomId()
       const sessionId = randomId()
       const headers = buildAuthHeaders(
-        { appId: opts.appId, accessToken: opts.accessToken, resourceId: ttsResourceId },
+        { apiKey: opts.apiKey, resourceId: ttsResourceId },
         connectId
       )
       const socket = await connect(TTS_URL, headers)

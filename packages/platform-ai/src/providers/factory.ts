@@ -41,10 +41,12 @@ export interface ProviderEnv {
   DEEPSEEK_API_KEY?: string
   /** Optional DeepSeek base URL override. */
   DEEPSEEK_BASE_URL?: string
-  /** Volcengine (火山) speech app id. */
-  VOLC_APP_ID?: string
-  /** Volcengine (火山) access token / key for the speech endpoints. */
-  VOLC_ACCESS_KEY?: string
+  /**
+   * Volcengine (火山) console API key, sent as the single `X-Api-Key` header.
+   * New-console-auth credential granting the Doubao 2.0 speech stack; replaces
+   * the legacy `VOLC_APP_ID` + `VOLC_ACCESS_KEY` pair (no longer read).
+   */
+  VOLC_API_KEY?: string
   /** Optional Volcengine ASR resource id override. */
   VOLC_STT_RESOURCE_ID?: string
   /** Optional Volcengine TTS resource id override. */
@@ -120,8 +122,7 @@ function createVolcengineSpeech(
   voice?: SessionVoiceOverrides
 ): { stt: SttProvider; tts: TtsProvider } {
   return createVolcengineSpeechProvider({
-    appId: requireCredential(env.VOLC_APP_ID, 'VOLC_APP_ID', PROVIDER_VOLCENGINE),
-    accessToken: requireCredential(env.VOLC_ACCESS_KEY, 'VOLC_ACCESS_KEY', PROVIDER_VOLCENGINE),
+    apiKey: requireCredential(env.VOLC_API_KEY, 'VOLC_API_KEY', PROVIDER_VOLCENGINE),
     sttResourceId: env.VOLC_STT_RESOURCE_ID,
     ttsResourceId: env.VOLC_TTS_RESOURCE_ID,
     sttModel: resolved.stt.model,

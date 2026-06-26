@@ -52,7 +52,7 @@ describe('assembleSession — all-or-nothing session construction', () => {
     // Volcengine step — the deepest fallible point. Under the old code the
     // user id had long been published by the time this threw.
     const env: ProviderEnv = { DEEPSEEK_API_KEY: 'test-key' }
-    expect(() => assembleSession('demo', 'user-A', MANUAL, undefined, env)).toThrow(/VOLC_APP_ID/)
+    expect(() => assembleSession('demo', 'user-A', MANUAL, undefined, env)).toThrow(/VOLC_API_KEY/)
   })
 
   it('returns the complete publishable bundle when every step succeeds', () => {
