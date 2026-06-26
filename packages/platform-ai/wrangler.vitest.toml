@@ -13,6 +13,7 @@
 name = "platform-ai-test"
 main = "src/worker.ts"
 compatibility_date = "2026-06-08"
+compatibility_flags = ["nodejs_compat"]
 
 # Per-session voice pipeline DO. SQLite-backed (required once the class adopts
 # the Agents SDK `Agent` base, whose constructor uses `ctx.storage.sql`).
