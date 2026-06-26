@@ -23,9 +23,12 @@
  * between turns — rejecting the next message as "turn before create" and losing
  * history; turn-based voice sessions have short idle windows, so the cost saving
  * does not justify persisting + rehydrating session state per message
- * (L2 §Open Questions — "WebSocket Hibernation 是否启用"). With `hibernate: false`
- * partyserver sets each connection's `binaryType = 'arraybuffer'`, so binary
- * audio frames arrive as `ArrayBuffer` in `onMessage` (no manual opt-in). The
+ * (L2 §Open Questions — "WebSocket Hibernation 是否启用"). partyserver assigns
+ * `binaryType = 'arraybuffer'` on each connection (so binary audio frames
+ * normally arrive as `ArrayBuffer` in `onMessage`), but it does so AFTER
+ * `accept()`; `onMessage`'s binary branch does not rely on that assignment — it
+ * recovers the frame bytes defensively for whatever shape the runtime delivers
+ * (`ArrayBuffer` / `ArrayBufferView` / `Blob`, see `audioFrameToBytes`). The
  * SDK's own protocol/text frames are suppressed via `shouldSendProtocolMessages`
  * so they never collide with the hand-rolled JSON envelope channel.
  *
@@ -139,6 +142,40 @@ function base64FromBytes(bytes: Uint8Array): string {
 }
 
 /**
+ * Normalize an inbound binary WS frame to its raw bytes, defensively, regardless
+ * of how the runtime types it. partyserver assigns `binaryType = 'arraybuffer'`
+ * (so frames normally arrive as `ArrayBuffer`), but it does so AFTER
+ * `connection.accept()`; this conversion does NOT rely on that assignment having
+ * happened or on any compat-date default. Each delivered binary shape is handled
+ * for its exact bytes:
+ *  - `ArrayBuffer` — wrap directly (the production hot path).
+ *  - `ArrayBufferView` (typed array / `DataView`) — wrap over its exact byte
+ *    range (`byteOffset` + `byteLength`), so a subview never grabs the whole
+ *    backing buffer.
+ *  - `Blob` — the newer `compatibility_date` default for an accepted socket whose
+ *    `binaryType` was not set before `accept()`; read its bytes via
+ *    `arrayBuffer()` (awaitable — `onMessage` is already `async`). A naive
+ *    `new Uint8Array(blob)` would yield an EMPTY view, silently feeding empty
+ *    audio to STT.
+ * Anything else is rejected (the caller's try/catch turns the throw into a 1008
+ * close), consistent with the control path's fail-loud stance.
+ */
+export async function audioFrameToBytes(
+  message: ArrayBuffer | ArrayBufferView | Blob
+): Promise<Uint8Array> {
+  if (message instanceof ArrayBuffer) {
+    return new Uint8Array(message)
+  }
+  if (ArrayBuffer.isView(message)) {
+    return new Uint8Array(message.buffer, message.byteOffset, message.byteLength)
+  }
+  if (typeof (message as Blob).arrayBuffer === 'function') {
+    return new Uint8Array(await (message as Blob).arrayBuffer())
+  }
+  throw new Error('unsupported binary audio frame type')
+}
+
+/**
  * Async audio bridge: binary WS frames are pushed in; `runTurn`'s STT step
  * pulls them via `for await`. One bridge backs one in-flight turn; `end` closes
  * it so the STT stream terminates.
@@ -187,9 +224,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * in-memory session state (`sessionState` / `providers` / `turnInFlight` /
    * `activeTurn` / `turnEpoch` / `socketIdentities` / `ownerSocket`) between a
    * `create` and a later `turn`, exactly as the prior `server.accept()`
-   * (non-hibernation) DO did. With `hibernate: false` partyserver also sets each
-   * connection's `binaryType = 'arraybuffer'`, so binary audio frames arrive as
-   * `ArrayBuffer` in `onMessage` (no manual `binaryType` opt-in needed).
+   * (non-hibernation) DO did. partyserver assigns `binaryType = 'arraybuffer'`
+   * on each connection (after `accept()`); `onMessage` does not depend on it,
+   * recovering binary audio bytes defensively for whatever shape the runtime
+   * delivers (see `audioFrameToBytes`).
    */
   static options = { hibernate: false }
 
@@ -343,10 +381,13 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // next `turn` transcribes, forging the owner's utterance. The throw on a
       // non-owner frame is caught below and closes THAT connection with 1008
       // (fail loud, control-path-consistent) — the owner's bridge is never
-      // touched. `hibernate: false` delivers binary frames as `ArrayBuffer`.
+      // touched. The frame's bytes are recovered defensively for whatever shape
+      // the runtime delivers (`ArrayBuffer` / `ArrayBufferView` / `Blob`), so
+      // audio fidelity never depends on partyserver's post-accept
+      // `binaryType = 'arraybuffer'` assignment (see `audioFrameToBytes`).
       this.assertSocketOwner(connection)
       const bridge = this.ensureAudioBridge()
-      bridge.push(new Uint8Array(message as ArrayBuffer))
+      bridge.push(await audioFrameToBytes(message))
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'message handling failed'
       connection.close(1008, reason.slice(0, 123))

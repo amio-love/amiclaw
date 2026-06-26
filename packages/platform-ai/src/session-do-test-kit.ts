@@ -328,6 +328,74 @@ export function makeTurnProviders(llm: LlmProvider): {
 }
 
 /**
+ * Byte-INSPECTING STT — the counting STT's sibling for audio-FIDELITY assertions.
+ *
+ * The counting STT above drains the bridge without looking at the bytes ("frames
+ * are consumed, not inspected"), so it cannot tell a byte-intact frame from an
+ * empty one — exactly the blind spot that hid the binary-conversion P1. This
+ * variant additionally CAPTURES every frame it pulls (copied at capture time, so
+ * a later reuse/mutation of the source view can never retroactively rewrite what
+ * was recorded), letting a test assert the bytes that reached STT are non-empty
+ * and byte-equal to what the client sent. It does NOT replace the counting STT —
+ * suites that only need "a turn started" keep using `makeCountingStt`.
+ */
+function makeInspectingStt(): {
+  stt: SttProvider
+  calls(): number
+  frames(): Uint8Array[]
+  bytes(): Uint8Array
+} {
+  let calls = 0
+  const captured: Uint8Array[] = []
+  const stt: SttProvider = {
+    async *transcribe(audio): AsyncIterable<SttTranscriptChunk> {
+      calls += 1
+      for await (const frame of audio) {
+        captured.push(new Uint8Array(frame))
+      }
+      yield { text: 'inspecting harness utterance', isFinal: true }
+    },
+  }
+  const bytes = (): Uint8Array => {
+    const total = captured.reduce((n, f) => n + f.byteLength, 0)
+    const out = new Uint8Array(total)
+    let offset = 0
+    for (const f of captured) {
+      out.set(f, offset)
+      offset += f.byteLength
+    }
+    return out
+  }
+  return { stt, calls: () => calls, frames: () => captured, bytes }
+}
+
+/**
+ * Provider bundle whose STT captures the audio frames it pulls (`frames`/`bytes`)
+ * for byte-level fidelity assertions; the LLM completes immediately so the turn
+ * runs end-to-end with no manual release (no parking — STT drains the buffered
+ * audio, one sentence is synthesized, the turn emits its terminal `done` chunk).
+ */
+export function makeInspectingProviders(): {
+  providers: TurnProviders
+  sttCalls(): number
+  frames(): Uint8Array[]
+  bytes(): Uint8Array
+} {
+  const inspect = makeInspectingStt()
+  const llm: LlmProvider = {
+    async *streamCompletion() {
+      yield { content: 'ok.', done: true }
+    },
+  }
+  return {
+    providers: { stt: inspect.stt, llm, tts: createMockTtsProvider() },
+    sttCalls: inspect.calls,
+    frames: inspect.frames,
+    bytes: inspect.bytes,
+  }
+}
+
+/**
  * Build the gated provider bundle. Each `turn` control message ultimately calls
  * `streamCompletion` once; each call gets its own `DeltaFeed` + handle, so
  * multi-turn and multi-session (reconnect) scenarios stay independently
