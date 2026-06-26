@@ -108,15 +108,21 @@ DEV_AUTH_BYPASS = "false"
 # Provider API keys and any system-prompt material live only server-side as
 # Cloudflare secrets. Set each with `wrangler secret put <NAME>`:
 #   DEEPSEEK_API_KEY   — DeepSeek (OpenAI-compatible) LLM key.
-#   VOLC_ACCESS_KEY    — Volcengine (火山) access key, sent as X-Api-Access-Key.
-#   VOLC_APP_ID        — Volcengine (火山) speech app id, sent as X-Api-App-Key.
+#   VOLC_API_KEY       — Volcengine (火山) console API key, sent as the single
+#                        X-Api-Key header (new-console-auth). Grants the Doubao
+#                        2.0 speech stack (seedasr ASR 2.0 + Doubao TTS 2.0).
 # These are referenced by the provider adapters; declared here only as
 # documentation so the deploy operator knows what to provision.
 #
-# No VOLC_SECRET_KEY: the v3 big-model endpoints this adapter targets —
-# streaming ASR (/api/v3/sauc/bigmodel) and Doubao TTS 2.0 bidirectional
-# (/api/v3/tts/bidirection) — authenticate purely via the X-Api-App-Key /
-# X-Api-Access-Key / X-Api-Resource-Id token headers. They do NOT use the legacy
+# The legacy VOLC_APP_ID / VOLC_ACCESS_KEY pair is no longer read by the adapter
+# (new-console-auth X-Api-Key replaced it; the old pair had no Doubao 2.0 speech
+# grant). Any existing VOLC_APP_ID / VOLC_ACCESS_KEY secrets are now inert and
+# may be deleted with `wrangler secret delete`.
+#
+# No VOLC_SECRET_KEY: the v3 big-model endpoints this adapter targets — seedasr
+# streaming ASR 2.0 (/api/v3/sauc/bigmodel_async) and Doubao TTS 2.0
+# bidirectional (/api/v3/tts/bidirection) — authenticate purely via the
+# X-Api-Key / X-Api-Resource-Id token headers. They do NOT use the legacy
 # `Authorization: HMAC256` signature scheme, so no secret key is needed. (The
 # secret-key signature path is the older console-auth method for the v1/v2
 # endpoints, which this adapter does not use.)

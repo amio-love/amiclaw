@@ -16,8 +16,7 @@ function config(over: Partial<ResolvedConfig> = {}): ResolvedConfig {
 
 const fullEnv: ProviderEnv = {
   DEEPSEEK_API_KEY: 'ds-key',
-  VOLC_APP_ID: 'app',
-  VOLC_ACCESS_KEY: 'token',
+  VOLC_API_KEY: 'volc-key',
 }
 
 describe('createProviders', () => {
@@ -47,12 +46,12 @@ describe('createProviders', () => {
   })
 
   it('throws when a selected vendor credential is missing', () => {
-    expect(() =>
-      createProviders(config(), { VOLC_APP_ID: 'app', VOLC_ACCESS_KEY: 'token' })
-    ).toThrow(/DEEPSEEK_API_KEY is not set/)
-    expect(() =>
-      createProviders(config(), { DEEPSEEK_API_KEY: 'ds', VOLC_ACCESS_KEY: 'token' })
-    ).toThrow(/VOLC_APP_ID is not set/)
+    expect(() => createProviders(config(), { VOLC_API_KEY: 'volc-key' })).toThrow(
+      /DEEPSEEK_API_KEY is not set/
+    )
+    expect(() => createProviders(config(), { DEEPSEEK_API_KEY: 'ds' })).toThrow(
+      /VOLC_API_KEY is not set/
+    )
   })
 
   it('sources credentials only from env (not config)', () => {

@@ -190,7 +190,7 @@ describe('assembleSession — companion extras threading', () => {
 describe('assembleSession — companion voice wiring', () => {
   // The `demo` game selects volcengine on both voice slots, so the speaker
   // threading is observable on the adapter factory's options.
-  const VOLC_ENV = { DEEPSEEK_API_KEY: 'ds', VOLC_APP_ID: 'app', VOLC_ACCESS_KEY: 'token' }
+  const VOLC_ENV = { DEEPSEEK_API_KEY: 'ds', VOLC_API_KEY: 'volc-key' }
 
   afterEach(() => {
     vi.restoreAllMocks()

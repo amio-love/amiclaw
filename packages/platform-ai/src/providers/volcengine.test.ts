@@ -134,30 +134,28 @@ function ttsServerFrame(event: number, payload: Uint8Array, sessionId = 's'): Ui
 // --- Auth header assembly ---------------------------------------------------
 
 describe('buildAuthHeaders', () => {
-  it('maps credentials onto the X-Api-* handshake headers + Upgrade', () => {
+  it('maps the console API key onto the X-Api-* handshake headers + Upgrade', () => {
     const headers = buildAuthHeaders(
-      { appId: 'app-1', accessToken: 'tok-2', resourceId: 'volc.bigasr.sauc.duration' },
+      { apiKey: 'key-1', resourceId: 'volc.seedasr.sauc.duration' },
       'conn-3'
     )
-    // v3 token-header auth: app key + access key + resource id + per-connection
-    // connect id. No signature header, no secret key.
+    // New-console-auth: a single X-Api-Key + resource id + per-connection connect
+    // id. No app key / access key pair, no signature header, no secret key.
     expect(headers).toEqual({
       Upgrade: 'websocket',
-      'X-Api-App-Key': 'app-1',
-      'X-Api-Access-Key': 'tok-2',
-      'X-Api-Resource-Id': 'volc.bigasr.sauc.duration',
+      'X-Api-Key': 'key-1',
+      'X-Api-Resource-Id': 'volc.seedasr.sauc.duration',
       'X-Api-Connect-Id': 'conn-3',
     })
   })
 
   it('never leaks credentials into a logged value: only the documented keys exist', () => {
-    const headers = buildAuthHeaders({ appId: 'a', accessToken: 'secret', resourceId: 'r' }, 'q')
+    const headers = buildAuthHeaders({ apiKey: 'secret', resourceId: 'r' }, 'q')
     // Guard against an accidental extra field carrying credentials elsewhere.
     expect(Object.keys(headers).sort()).toEqual([
       'Upgrade',
-      'X-Api-Access-Key',
-      'X-Api-App-Key',
       'X-Api-Connect-Id',
+      'X-Api-Key',
       'X-Api-Resource-Id',
     ])
   })
@@ -232,7 +230,7 @@ describe('STT frame codec', () => {
   })
 
   it('ASR request frames use the sequence-carrying client dialect (request-side flag pin)', () => {
-    // Ground-truth pin: the /api/v3/sauc/bigmodel streaming ASR server accepts a
+    // Ground-truth pin: the /api/v3/sauc/bigmodel_async streaming ASR server accepts a
     // sequence-carrying client dialect where the config + non-last audio frames
     // are flagged PositiveSequence (0b0001) and the final audio frame is flagged
     // NegativeWithSequence (0b0011), each carrying a 4-byte sequence field.
@@ -425,8 +423,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     const socket = new MockSocket()
     const { connect, calls } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       connect,
     })
 
@@ -458,9 +455,9 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
       { text: '你好', isFinal: true },
     ])
 
-    // Connected to the ASR endpoint with the ASR resource id.
-    expect(calls[0].url).toContain('/sauc/bigmodel')
-    expect(calls[0].headers['X-Api-Resource-Id']).toBe('volc.bigasr.sauc.duration')
+    // Connected to the ASR 2.0 optimized endpoint with the ASR 2.0 resource id.
+    expect(calls[0].url).toContain('/sauc/bigmodel_async')
+    expect(calls[0].headers['X-Api-Resource-Id']).toBe('volc.seedasr.sauc.duration')
 
     // First outbound frame is the JSON config (FullClientRequest); the last is
     // the negative-sequence final audio packet.
@@ -481,8 +478,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       sttModel: 'bigmodel-asr-pro',
       connect,
     })
@@ -509,7 +505,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
   it('falls back to the default sttModel when none is configured', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = (async () => {
       for await (const _chunk of stt.transcribe(await asyncFrom([encoder.encode('f1')]))) {
@@ -531,7 +527,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
   it("resolveConfig('demo').stt.model is a legal Volcengine ASR wire model_name", async () => {
     // P2 regression: the `demo` config's STT model is threaded verbatim into the
     // ASR `request.model_name` (factory F-K passthrough). The Volcengine v3
-    // streaming ASR endpoint (`/api/v3/sauc/bigmodel`) accepts ONLY `bigmodel` as
+    // streaming ASR endpoint (`/api/v3/sauc/bigmodel_async`) accepts ONLY `bigmodel` as
     // `model_name` — a config alias like `bigmodel-asr` was harmless before F-K
     // only because the adapter fell back to its own DEFAULT_STT_MODEL; now that
     // the resolved model is really transmitted, the alias would send an illegal
@@ -545,8 +541,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       // Exactly what the factory threads through: `resolved.stt.model`.
       sttModel: resolved.stt.model,
       connect,
@@ -579,7 +574,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     // and surface the final chunk.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const audio = await asyncFrom([encoder.encode('f1')])
     // Drain to iterator end (no early break) — the exact shape the turn pipeline
@@ -618,7 +613,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
   it('propagates a server error frame as a thrown error', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const stream = stt.transcribe(await asyncFrom([encoder.encode('f')]))
     const consumed = collect(stream)
@@ -646,7 +641,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     // non-definite chunk, then the socket drops.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
 
@@ -673,7 +668,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     // the fail-loud fix over-firing on the normal path.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
 
@@ -697,7 +692,7 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
     // must settle as 3696 — summing them (4896) would double-count.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const drained = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
     await tick()
@@ -724,7 +719,7 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
     // PCM16 mono 16kHz byte rate (32000 B/s) that is exactly 500ms.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const drained = collect(
       stt.transcribe(await asyncFrom([new Uint8Array(8000), new Uint8Array(8000)]))
@@ -743,7 +738,7 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
     const sockets = [socket1, new MockSocket()]
     let call = 0
     const connect: WebSocketConnector = async () => sockets[call++]
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const drained1 = collect(stt.transcribe(await asyncFrom([new Uint8Array(64000)])))
     await tick()
@@ -854,7 +849,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
   it('drives the server-gated event sequence and maps TTSResponse frames to audio', async () => {
     const socket = new MockSocket()
     const { connect, calls } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const text = await asyncFrom(['句一', '句二'])
     const collected = collect(tts.synthesize(text))
@@ -895,7 +890,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
 
     // Connected to the TTS endpoint with the TTS resource id.
     expect(calls[0].url).toContain('/tts/bidirection')
-    expect(calls[0].headers['X-Api-Resource-Id']).toBe('volc.service_type.10029')
+    expect(calls[0].headers['X-Api-Resource-Id']).toBe('seed-tts-2.0')
 
     // Full outbound event sequence: StartConnection -> StartSession ->
     // TaskRequest(x2) -> FinishSession -> FinishConnection.
@@ -917,8 +912,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const withModelSocket = new MockSocket()
     const withModel = mockConnector(withModelSocket)
     const provider = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       ttsModel: 'seed-tts-2.0-standard',
       connect: withModel.connect,
     })
@@ -939,8 +933,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const noModelSocket = new MockSocket()
     const noModel = mockConnector(noModelSocket)
     const plain = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       connect: noModel.connect,
     })
     void collect(plain.tts.synthesize(asyncFromSync(['句一'])))
@@ -962,7 +955,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // resource-id default model"). It is threaded into the adapter (factory F-K
     // passthrough), but the adapter omits `req_params.model` from the StartSession
     // frame for an empty model — so the Doubao TTS 2.0 session is bound by the
-    // paired resource id (`volc.service_type.10029`) alone, matching Volcengine's
+    // paired resource id (`seed-tts-2.0`) alone, matching Volcengine's
     // first-party clients. This pins the default-omit so a guessed concrete token
     // (a reject / mis-route risk) cannot creep back at the config layer; the exact
     // `req_params.model` wire value is a deploy-time verification item.
@@ -973,8 +966,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       // Exactly what the factory threads through: `resolved.tts.model` ('').
       ttsModel: resolved.tts.model,
       connect,
@@ -1003,8 +995,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { tts } = createVolcengineSpeechProvider({
-      appId: 'a',
-      accessToken: 't',
+      apiKey: 'k',
       ttsModel: 'seed-tts-2.0-standard',
       connect,
     })
@@ -1027,7 +1018,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // StartConnection without waiting for ConnectionStarted, racing the server.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['hi'])))
 
@@ -1055,7 +1046,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // rejected/ignored, yielding no audio.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['念这句'])))
 
@@ -1087,7 +1078,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // start-side handshake — so the server's tail audio is fully drained first.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['念完整一段话'])))
 
@@ -1145,7 +1136,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // so the turn fails fast rather than awaiting a frame that never comes.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
     await tick()
@@ -1160,7 +1151,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
   it('surfaces a SessionFailed event as a thrown error', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
 
@@ -1187,7 +1178,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // awaited handshake gate so the pump never hangs awaiting a connection frame.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
     await tick()
@@ -1208,7 +1199,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
     // the fail-loud fix over-firing on the normal path.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['句一'])))
 
@@ -1236,7 +1227,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
   it('skips empty text pieces (no TaskRequest emitted for them)', async () => {
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['', 'real', ''])))
 
@@ -1259,7 +1250,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize', () => {
   })
 
   it('shares one provider instance across the STT and TTS slots', () => {
-    const provider = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't' })
+    const provider = createVolcengineSpeechProvider({ apiKey: 'k' })
     expect(typeof provider.stt.transcribe).toBe('function')
     expect(typeof provider.tts.synthesize).toBe('function')
   })
@@ -1278,7 +1269,7 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     // gates so the parked pump unblocks; (3) stops any further outbound frames.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     // Never-ending text source: the synthesis session stays open (the pump parks on
     // a handshake gate), modelling a turn cancelled mid-flight rather than one that
@@ -1337,7 +1328,7 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     // socket, returns the audio iterator (ending the pump loop), and stops sends.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     // Audio source that yields one frame then parks, so the pump is mid-stream
     // (awaiting the next frame) when the consumer cancels. `returned` flips when
@@ -1402,7 +1393,7 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     // -> TaskRequest -> FinishSession -> FinishConnection).
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(await asyncFrom(['句一'])))
 
@@ -1437,7 +1428,7 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     // does not swallow the rejection.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(await asyncFrom(['x'])))
     await tick()
@@ -1454,7 +1445,7 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     // consumer; the cleanup finally on the error unwind does not mask it.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
 
@@ -1497,9 +1488,15 @@ describe('defaultConnect — outbound socket binary delivery type (F-N)', () => 
   }
 
   function stubFetchWith(socket: FakeRuntimeSocket | undefined): void {
+    // Include `status` + `headers` so the connector's upgrade-observability log
+    // (HTTP status + X-Tt-Logid) reads a faithful Response stand-in, exactly as a
+    // real Cloudflare 101 upgrade response carries them.
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ webSocket: socket }) as unknown as Response)
+      vi.fn(
+        async () =>
+          ({ webSocket: socket, status: 101, headers: new Headers() }) as unknown as Response
+      )
     )
   }
 
@@ -1554,7 +1551,13 @@ describe('defaultConnect — fetch-upgrade URL scheme rewrite', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         calls.push({ url, init })
-        return { webSocket: new AcceptableSocket() } as unknown as Response
+        // `status` + `headers` so the connector's upgrade-observability log reads a
+        // faithful Response stand-in (a real 101 upgrade response carries them).
+        return {
+          webSocket: new AcceptableSocket(),
+          status: 101,
+          headers: new Headers(),
+        } as unknown as Response
       })
     )
     return { calls }
@@ -1576,23 +1579,24 @@ describe('defaultConnect — fetch-upgrade URL scheme rewrite', () => {
   it('rewrites ws:// to http:// while preserving host/path/query', async () => {
     const captured = captureFetchUrl()
 
-    await defaultConnect('ws://example.test:8080/v3/sauc/bigmodel?a=b', { Upgrade: 'websocket' })
+    await defaultConnect('ws://example.test:8080/v3/sauc/bigmodel_async?a=b', {
+      Upgrade: 'websocket',
+    })
 
     expect(captured.calls).toHaveLength(1)
-    expect(captured.calls[0].url).toBe('http://example.test:8080/v3/sauc/bigmodel?a=b')
+    expect(captured.calls[0].url).toBe('http://example.test:8080/v3/sauc/bigmodel_async?a=b')
   })
 
   it('passes the Upgrade + auth headers through unchanged after the rewrite', async () => {
     const captured = captureFetchUrl()
     const headers = {
       Upgrade: 'websocket',
-      'X-Api-App-Key': 'app-123',
-      'X-Api-Access-Key': 'token-456',
-      'X-Api-Resource-Id': 'volc.bigasr.sauc.duration',
+      'X-Api-Key': 'key-123',
+      'X-Api-Resource-Id': 'volc.seedasr.sauc.duration',
       'X-Api-Connect-Id': 'connect-789',
     }
 
-    await defaultConnect('wss://openspeech.bytedance.com/api/v3/sauc/bigmodel', headers)
+    await defaultConnect('wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async', headers)
 
     expect(captured.calls[0].url.startsWith('https://')).toBe(true)
     expect(captured.calls[0].init?.headers).toEqual(headers)
@@ -1642,7 +1646,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-resp
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(asyncFromSync(['x'])))
     const assertion = expect(consumed).rejects.toThrow(/no ConnectionStarted within/)
@@ -1662,7 +1666,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-resp
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(tts.synthesize(asyncFromSync(['x'])))
     const assertion = expect(consumed).rejects.toThrow(/no SessionStarted within/)
@@ -1686,7 +1690,7 @@ describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-resp
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { tts } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const collected = collect(tts.synthesize(asyncFromSync(['念完整一段话'])))
     await vi.advanceTimersByTimeAsync(0)
@@ -1724,7 +1728,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeo
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const consumed = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
     const assertion = expect(consumed).rejects.toThrow(/no transcript within/)
@@ -1744,7 +1748,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeo
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
-    const { stt } = createVolcengineSpeechProvider({ appId: 'a', accessToken: 't', connect })
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
 
     const drained = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
     await vi.advanceTimersByTimeAsync(0)

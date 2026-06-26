@@ -5,6 +5,23 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice moved to the current Volcengine sign-in and the upgraded
+speech recognition model** - Internal fix. The voice partner's speech layer now
+authenticates with Volcengine's current console API key instead of the retired
+app-id/access-key pair, which no longer had access to the latest voice models.
+Speech recognition is upgraded to the Doubao 2.0 (seedasr) model on its
+optimized endpoint, and text-to-speech stays on Doubao voice-synthesis 2.0.
+Together this restores both halves of the voice loop — the AI hearing the
+player and speaking back. No player-facing behavior changes beyond the voice
+working again.
+
+**Platform-AI voice synthesis reconnected to the live Doubao TTS service** -
+Internal fix. The voice partner's text-to-speech layer pointed at a Volcengine
+resource that the vendor has since retired, so the live service rejected every
+synthesis request. The platform now targets the current Doubao voice-synthesis
+2.0 resource, restoring spoken responses. No player-facing behavior changes
+beyond the AI voice working again.
+
 **Platform-AI voice turns can no longer hang on a stuck provider** - Internal
 reliability hardening. Each AI provider (the LLM and the speech ASR/TTS layers)
 now bounds the time it waits to connect and to receive a first response. If a

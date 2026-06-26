@@ -32,7 +32,7 @@ describe('resolveConfig — hit', () => {
     // default model". The factory threads it (F-K passthrough), and the adapter
     // omits `req_params.model` from the Doubao TTS 2.0 StartSession frame for an
     // empty model — so the session is bound by the paired resource id
-    // (`volc.service_type.10029`) alone, matching Volcengine's first-party clients.
+    // (`seed-tts-2.0`) alone, matching Volcengine's first-party clients.
     // This guards a guessed concrete model token (a reject / mis-route risk) from
     // creeping back at the config layer; the exact `req_params.model` wire value
     // (`seed-tts-2.0-standard` / `-expressive` vs omitted) is a deploy-time
