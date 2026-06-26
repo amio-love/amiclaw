@@ -8,23 +8,23 @@
  *      an invalid/absent session is rejected at the handshake (401, no upgrade).
  *   3. Routes to the per-session `VoiceSessionDO` and forwards the upgrade.
  *
- * The DO id is derived from the URL path segment after `/ai-ws/` (the opaque
- * session name the client connects on); `idFromName` makes the same name route
- * to the same DO. The resolved `userId` is forwarded so the DO can bind it.
- *
- * Cloudflare API verified against `@cloudflare/workers-types` 4.20260608.1:
- * `DurableObjectNamespace.idFromName/get`, `DurableObjectStub.fetch`.
+ * The agent is addressed by the URL path segment after `/ai-ws/` (the opaque
+ * session name the client connects on); `getAgentByName` makes the same name
+ * route to the same Agent DO (setting the partyserver room name so the forwarded
+ * upgrade reaches `onConnect`). The resolved `userId` is forwarded so the DO can
+ * bind it.
  */
 
+import { getAgentByName, type AgentNamespace } from 'agents'
 import { VoiceSessionDO } from './session-do'
 import { CompanionConsolidatorDO } from './consolidator-do'
 import { resolveSessionReader, type AuthSeamEnv } from './auth-seam'
 import type { ProviderEnv } from './providers/factory'
 
-/** Worker env: the DO namespace bindings + auth seam + provider creds. */
+/** Worker env: the Agent namespace bindings + auth seam + provider creds. */
 export interface WorkerEnv extends AuthSeamEnv, ProviderEnv {
-  /** Durable Object namespace binding (`wrangler.toml` name `VOICE_SESSION`). */
-  VOICE_SESSION: DurableObjectNamespace
+  /** Agents-SDK namespace binding (`wrangler.toml` name `VOICE_SESSION`). */
+  VOICE_SESSION: AgentNamespace<VoiceSessionDO>
   /**
    * Companion-memory bindings (optional — the voice pipeline runs memory-less
    * without them): the consolidator DO namespace (`COMPANION_CONSOLIDATOR`)
@@ -74,13 +74,14 @@ export default {
       return new Response('missing session name', { status: 400 })
     }
 
-    // Route to the per-session DO and forward the upgrade. The resolved userId
+    // Route to the per-session Agent and forward the upgrade. The resolved userId
     // rides along in a header so the DO can bind ownership; this header is set
-    // server-side here, never trusted from the client.
-    const id = env.VOICE_SESSION.idFromName(sessionName)
-    const stub = env.VOICE_SESSION.get(id)
+    // server-side here, never trusted from the client. `getAgentByName` resolves
+    // the stub and sets the partyserver room name so the forwarded upgrade is
+    // dispatched to the Agent's `onConnect`.
     const forwarded = new Request(request)
     forwarded.headers.set('X-Session-User-Id', identity.userId)
+    const stub = await getAgentByName(env.VOICE_SESSION, sessionName)
     return stub.fetch(forwarded)
   },
 }

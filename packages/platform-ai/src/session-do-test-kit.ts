@@ -1,20 +1,32 @@
 /**
- * Test-only doubles and helpers for running the REAL `VoiceSessionDO` in the
- * Node test environment. Not part of the package's runtime exports — imported
- * exclusively by the `session-do-*.test.ts` / `session-*.test.ts` suites.
+ * Test-only doubles and helpers for running the REAL `VoiceSessionDO` under the
+ * workerd runtime (`@cloudflare/vitest-pool-workers`). Not part of the package's
+ * runtime exports — imported exclusively by the `session-do-*.test.ts` /
+ * `session-*.test.ts` suites.
  *
- * The harness pattern (established by `session-do-usage-flush.test.ts`):
- *  - `cloudflare:workers` is mocked PER TEST FILE (vi.mock must live in the
- *    test file to be hoisted) so the `DurableObject` base becomes a plain
- *    ctx/env-stashing stub — the only base behavior the class relies on.
- *  - `ctx` is a recording double exposing the one member the class uses
- *    (`waitUntil`), plus an `id` to prove the usage key never uses the DO id.
- *  - The WS paths are driven through the real `fetch` upgrade entry with
- *    `WebSocketPair` / `Response` globals stubbed (also per test file, via
- *    `vi.stubGlobal`) to the minimal doubles exported here. The DO accepts
- *    sockets with a plain `accept()` + `addEventListener` (no hibernation
- *    attachments), so the socket double needs only those members. Node's own
- *    `Response` rejects status 101, hence the stub.
+ * The harness pattern (workerd-backed, replaces the prior plain-Node doubles):
+ *  - The DO is the REAL Cloudflare Durable Object: it is instantiated by the
+ *    runtime through the `VOICE_SESSION` binding declared in
+ *    `wrangler.vitest.toml`, never `new`-ed by the test. `cloudflare:workers` is
+ *    NOT mocked and `WebSocketPair` / `Response` are NOT stubbed — the suites
+ *    exercise the genuine runtime so the same tests hold across the later
+ *    Agents-SDK base-class swap.
+ *  - Each `makeSessionDo()` binds a UNIQUE DO name, so every test gets a fresh
+ *    resident instance (no in-memory state leaks between tests).
+ *  - WS paths are driven through a REAL client `WebSocket` obtained from the DO's
+ *    `fetch` upgrade (`stub.fetch(...).webSocket`). Inbound control frames are
+ *    delivered with `socket.send(...)`; the DO's outbound JSON envelopes are
+ *    collected off the client `message` event into `socket.messages`, and its
+ *    `server.close(...)` calls surface as client `close` events in
+ *    `socket.closeEvents`. Because WS delivery is asynchronous in workerd (unlike
+ *    the prior synchronous in-process double), tests synchronize on observable
+ *    effects with `waitFor(...)` instead of a bare `tick()`.
+ *  - `handle.run(fn)` wraps `runInDurableObject` so a test can reach into the
+ *    real instance: drive a contract method directly, spy on `ctx.waitUntil`, or
+ *    overwrite `instance.env` to inject a USAGE KV double. It is ALSO the seam
+ *    that releases a parked gated turn — resolving a provider promise must happen
+ *    inside the DO's I/O context, else workerd rejects the resumed `server.send`
+ *    as cross-Durable-Object I/O.
  *  - Providers either wire through the real `assembleSession` ->
  *    `createProviders` path using the `demo-mock` game (credential-free), or —
  *    for tests that must park a turn mid-flight at a provider `await` — through
@@ -22,6 +34,7 @@
  *    passthrough `vi.mock('./providers/factory')` in the test file.
  */
 
+import { env, runInDurableObject } from 'cloudflare:test'
 import type { ManualData } from './contract'
 import type {
   LlmCompletionRequest,
@@ -32,101 +45,18 @@ import type {
 } from './providers/types'
 import { createMockTtsProvider } from './providers/mock'
 import type { TurnProviders } from './turn-pipeline'
-import type { UsageKvWriter } from './usage-flush'
-import { VoiceSessionDO, type SessionDoEnv } from './session-do'
+import type { VoiceSessionDO } from './session-do'
 
-// --- WS / DO doubles -------------------------------------------------------------
+// --- runtime env handle ----------------------------------------------------------
 
-type MessageListener = (event: { data: string | ArrayBuffer }) => void
-type CloseListener = () => void
-
-/**
- * Minimal server-socket double for the DO's non-hibernating WS usage surface:
- * `binaryType` assignment, `accept()`, `addEventListener('message'|'close')`,
- * `send`, `close`. Tests deliver frames with `receive()` and fire the close
- * event with `disconnect()` — exactly what the runtime would do.
- */
-export class FakeWebSocket {
-  binaryType: string | undefined
-  accepted = false
-  readonly sent: string[] = []
-  readonly closes: Array<{ code?: number; reason?: string }> = []
-  private readonly messageListeners: MessageListener[] = []
-  private readonly closeListeners: CloseListener[] = []
-
-  accept(): void {
-    this.accepted = true
-  }
-
-  send(data: string): void {
-    this.sent.push(data)
-  }
-
-  close(code?: number, reason?: string): void {
-    this.closes.push({ code, reason })
-  }
-
-  addEventListener(type: string, listener: MessageListener | CloseListener): void {
-    if (type === 'message') this.messageListeners.push(listener as MessageListener)
-    if (type === 'close') this.closeListeners.push(listener as CloseListener)
-  }
-
-  /** Deliver one inbound frame (fires the 'message' listeners). */
-  receive(data: string | ArrayBuffer): void {
-    for (const listener of this.messageListeners) listener({ data })
-  }
-
-  /** Fire the 'close' event as the runtime would on disconnect. */
-  disconnect(): void {
-    for (const listener of this.closeListeners) listener()
-  }
+/** The bindings the session-DO suites consume from `wrangler.vitest.toml`. */
+interface TestEnv {
+  VOICE_SESSION: DurableObjectNamespace
+  USAGE: KVNamespace
 }
+const testEnv = env as unknown as TestEnv
 
-/** Pairs created by the stubbed `WebSocketPair` global, newest last. */
-export const createdPairs: Array<{ 0: FakeWebSocket; 1: FakeWebSocket }> = []
-
-/** Stub for the `WebSocketPair` global — registers each pair for `openSocket`. */
-export class FakeWebSocketPair {
-  0 = new FakeWebSocket()
-  1 = new FakeWebSocket()
-
-  constructor() {
-    createdPairs.push(this)
-  }
-}
-
-/** Reset the pair registry between tests. */
-export function resetCreatedPairs(): void {
-  createdPairs.length = 0
-}
-
-/** Node's `Response` rejects status 101; the DO's WS upgrade needs this stub. */
-export class FakeUpgradeResponse {
-  readonly status: number
-  readonly webSocket: unknown
-
-  constructor(_body: unknown, init?: { status?: number; webSocket?: unknown }) {
-    this.status = init?.status ?? 200
-    this.webSocket = init?.webSocket ?? null
-  }
-}
-
-/**
- * Recording `DurableObjectState` double — only the surface `VoiceSessionDO`
- * actually touches: `waitUntil` (the flush's lifecycle registration seam) and
- * an `id` distinct from any minted session UUID.
- */
-export class FakeDoCtx {
-  readonly registered: Promise<unknown>[] = []
-  /** Distinct from every minted session UUID — the usage key must never use it. */
-  readonly id = { toString: (): string => 'do-id-not-a-session-id' }
-
-  waitUntil(promise: Promise<unknown>): void {
-    this.registered.push(promise)
-  }
-}
-
-// --- DO construction + WS driving helpers ----------------------------------------
+// --- DO handle + WS driving helpers ----------------------------------------------
 
 /** Shape of the session ids `assembleSession` mints (never the DO id). */
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -137,88 +67,168 @@ export const MANUAL: ManualData = {
   sections: { intro: 'The red ABORT button is a decoy.' },
 }
 
-/** Build a real `VoiceSessionDO` over the ctx double + the given USAGE binding. */
-export function makeSessionDo(usage?: UsageKvWriter): {
-  doInstance: VoiceSessionDO
-  ctx: FakeDoCtx
-} {
-  const ctx = new FakeDoCtx()
-  const env = (usage === undefined ? {} : { USAGE: usage }) as SessionDoEnv
-  return {
-    doInstance: new VoiceSessionDO(ctx as unknown as DurableObjectState, env),
-    ctx,
-  }
-}
-
-/** Run the real `fetch` upgrade for an authenticated user; return the server socket. */
-export async function openSocket(
-  doInstance: VoiceSessionDO,
-  userId: string
-): Promise<FakeWebSocket> {
-  const request = {
-    headers: {
-      get(name: string): string | null {
-        if (name === 'Upgrade') return 'websocket'
-        if (name === 'X-Session-User-Id') return userId
-        return null
-      },
-    },
-  } as unknown as Request
-  const response = await doInstance.fetch(request)
-  if (response.status !== 101) {
-    throw new Error(`expected a 101 upgrade, got ${response.status}`)
-  }
-  return createdPairs[createdPairs.length - 1][1]
-}
-
-/**
- * Send the `create` control message over the socket; return the minted session
- * id. Async: the DO's create branch awaits the (best-effort, absent in this
- * harness) companion-context resolution before acking, so the `created` reply
- * lands a task after `receive` returns. The wait is bounded — a missing ack
- * fails the test instead of hanging it.
- */
-export async function createSessionOverWs(
-  socket: FakeWebSocket,
-  gameId = 'demo-mock'
-): Promise<string> {
-  const sentBefore = socket.sent.length
-  socket.receive(JSON.stringify({ type: 'create', gameId, manualData: MANUAL }))
-  for (let waited = 0; socket.sent.length === sentBefore; waited += 1) {
-    if (waited >= 50) throw new Error('timed out waiting for the create ack')
-    await tick()
-  }
-  const raw = socket.sent[socket.sent.length - 1]
-  const created = JSON.parse(raw) as { type: string; sessionId?: string }
-  if (created.type !== 'created' || created.sessionId === undefined) {
-    throw new Error(`expected a created ack, got ${raw}`)
-  }
-  return created.sessionId
-}
-
 /** A parsed outbound WS protocol message. */
 export interface WsMessage {
   type: string
   [k: string]: unknown
 }
 
-/** All messages sent on the socket, parsed. */
-export function sentMessages(socket: FakeWebSocket): WsMessage[] {
-  return socket.sent.map((raw) => JSON.parse(raw) as WsMessage)
+/**
+ * A live client WebSocket to one DO, plus the collected server -> client traffic.
+ * `messages` accrues every JSON envelope the DO sends; `closeEvents` accrues the
+ * `server.close(code, reason)` calls (surfaced as client `close` events).
+ */
+export class TestSocket {
+  readonly messages: WsMessage[] = []
+  readonly closeEvents: Array<{ code: number; reason: string }> = []
+
+  constructor(private readonly ws: WebSocket) {
+    ws.addEventListener('message', (event: MessageEvent) => {
+      if (typeof event.data === 'string') this.messages.push(JSON.parse(event.data) as WsMessage)
+    })
+    ws.addEventListener('close', (event: CloseEvent) => {
+      this.closeEvents.push({ code: event.code, reason: event.reason })
+    })
+  }
+
+  /** Deliver one inbound frame to the DO (client -> server). */
+  send(data: string | ArrayBuffer): void {
+    this.ws.send(data)
+  }
+
+  /** Close the client side — the runtime fires the DO's `close` listener. */
+  disconnect(): void {
+    this.ws.close()
+  }
+
+  /** This socket's collected outbound messages of one protocol type. */
+  messagesOfType(type: string): WsMessage[] {
+    return this.messages.filter((message) => message.type === type)
+  }
+
+  /** Whether the turn's terminal `done: true` chunk has arrived on the socket. */
+  sawDoneChunk(): boolean {
+    return this.messagesOfType('chunk').some((chunk) => chunk.done === true)
+  }
 }
 
-/** The socket's sent messages of one protocol type. */
-export function messagesOfType(socket: FakeWebSocket, type: string): WsMessage[] {
-  return sentMessages(socket).filter((message) => message.type === type)
+/** A handle to one resident `VoiceSessionDO`, addressed by a unique DO name. */
+export interface SessionHandle {
+  readonly name: string
+  readonly stub: DurableObjectStub<VoiceSessionDO>
+  /**
+   * Run `fn` inside the DO's own I/O context (via `runInDurableObject`): call a
+   * contract method directly, spy on `ctx.waitUntil`, overwrite `instance.env`,
+   * or release a parked gated turn (the resumed `server.send` then runs
+   * in-context). The instance is the real `VoiceSessionDO`.
+   */
+  run<R>(fn: (instance: VoiceSessionDO, state: DurableObjectState) => R | Promise<R>): Promise<R>
+}
+
+let doSeq = 0
+
+/** Bind a fresh, uniquely-named resident `VoiceSessionDO`. */
+export function makeSessionDo(): SessionHandle {
+  doSeq += 1
+  const name = `session-do-${doSeq}-${crypto.randomUUID()}`
+  const stub = testEnv.VOICE_SESSION.get(
+    testEnv.VOICE_SESSION.idFromName(name)
+  ) as DurableObjectStub<VoiceSessionDO>
+  return {
+    name,
+    stub,
+    run<R>(
+      fn: (instance: VoiceSessionDO, state: DurableObjectState) => R | Promise<R>
+    ): Promise<R> {
+      return runInDurableObject(stub, fn)
+    },
+  }
+}
+
+/** The USAGE KV namespace bound for the suite (read-back assertions). */
+export const usageKv = (): KVNamespace => testEnv.USAGE
+
+/** Run the real `fetch` upgrade for an authenticated user; return the client socket. */
+export async function openSocket(handle: SessionHandle, userId: string): Promise<TestSocket> {
+  const response = await handle.stub.fetch(`https://voice-session/ai-ws/${handle.name}`, {
+    // `x-partykit-room` lets partyserver (the Agents-SDK base) resolve the room
+    // name on a direct `stub.fetch` — the production path uses `getAgentByName`,
+    // which sets it; here it is supplied explicitly. Harmless for the raw DO.
+    headers: {
+      Upgrade: 'websocket',
+      'X-Session-User-Id': userId,
+      'x-partykit-room': handle.name,
+    },
+  })
+  if (response.status !== 101) {
+    throw new Error(`expected a 101 upgrade, got ${response.status}`)
+  }
+  const client = response.webSocket
+  if (!client) throw new Error('no webSocket on the upgrade response')
+  client.accept()
+  return new TestSocket(client)
+}
+
+/**
+ * Poll `predicate` until it holds, or fail with `label`. Replaces the prior
+ * synchronous-double's `tick()`: workerd WS delivery + DO processing are async,
+ * so tests synchronize on the observable effect (an arrived message, a started
+ * turn, a recorded put) rather than a fixed number of macrotasks.
+ */
+export async function waitFor(
+  predicate: () => boolean,
+  label: string,
+  budgetMs = 1000
+): Promise<void> {
+  const deadline = Date.now() + budgetMs
+  for (;;) {
+    if (predicate()) return
+    if (Date.now() > deadline) throw new Error(`waitFor timed out: ${label}`)
+    await new Promise<void>((resolve) => setTimeout(resolve, 2))
+  }
+}
+
+/** Wait until the socket has received a message of `type`. */
+export function waitForMessage(socket: TestSocket, type: string): Promise<void> {
+  return waitFor(() => socket.messagesOfType(type).length > 0, `message ${type}`)
+}
+
+/**
+ * Let pending WS delivery + DO processing drain, so a "nothing further happens"
+ * assertion is meaningful. A short fixed settle is sufficient because the
+ * relevant positive signal each test depends on is awaited explicitly first.
+ */
+export async function settle(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 2))
+  }
+}
+
+/**
+ * Send the `create` control message over the socket; return the minted session
+ * id. Awaits the `created` ack (the DO's create branch first awaits the
+ * best-effort, here absent, companion-context resolution).
+ */
+export async function createSessionOverWs(
+  socket: TestSocket,
+  gameId = 'demo-mock'
+): Promise<string> {
+  socket.send(JSON.stringify({ type: 'create', gameId, manualData: MANUAL }))
+  await waitForMessage(socket, 'created')
+  const created = socket.messagesOfType('created').at(-1) as { type: string; sessionId?: string }
+  if (created.sessionId === undefined) throw new Error('created ack carried no sessionId')
+  return created.sessionId
+}
+
+/** The socket's outbound messages of one protocol type (free-function form). */
+export function messagesOfType(socket: TestSocket, type: string): WsMessage[] {
+  return socket.messagesOfType(type)
 }
 
 /** Whether the turn's terminal `done: true` chunk was sent on the socket. */
-export function sawDoneChunk(socket: FakeWebSocket): boolean {
-  return messagesOfType(socket, 'chunk').some((chunk) => chunk.done === true)
+export function sawDoneChunk(socket: TestSocket): boolean {
+  return socket.sawDoneChunk()
 }
-
-/** Let microtasks + one macrotask drain so an awaiting loop reaches its next park. */
-export const tick = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 // --- gated providers: park a REAL turn mid-flight at a provider await -------------
 

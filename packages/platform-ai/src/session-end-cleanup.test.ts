@@ -1,18 +1,18 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Production-class regression tests for post-`end` (and post-owner-close)
  * session-state cleanup (the P2 from PR #156 review) plus the F-W owner-socket
- * teardown gate, driving the REAL `VoiceSessionDO` in Node — these replaced the
- * earlier `FakeSessionDo` mirror suite, whose green could not prove the real
- * class still cleared its bound state.
+ * teardown gate, driving the REAL `VoiceSessionDO` under the workerd runtime
+ * (`@cloudflare/vitest-pool-workers`).
  *
- * Harness (see `session-do-test-kit.ts` and the pattern's SSOT,
- * `session-do-usage-flush.test.ts`): mocked `cloudflare:workers` base, stubbed
- * `WebSocketPair` / `Response` globals, sockets driven through the real `fetch`
- * upgrade. Tests that must park a turn mid-flight install the gated provider
- * bundle at the `createProviders` seam; the rest run the real `assembleSession`
- * -> `createProviders` path with the credential-free `demo-mock` game.
+ * Harness (see `session-do-test-kit.ts`): the genuine Cloudflare Durable Object,
+ * driven over a real client WebSocket. Tests that must park a turn mid-flight
+ * install the gated provider bundle at the `createProviders` seam; the rest run
+ * the real `assembleSession` -> `createProviders` path with the credential-free
+ * `demo-mock` game. Note a real `1008` close actually closes that client socket,
+ * so a follow-up control message after a fail-loud reject opens a fresh socket —
+ * exactly as a reconnecting client would.
  *
  * The defect's shape: after `end` (or an abrupt owner drop) the DO kept
  * `state` / `userId` / `providers` bound on the resident instance. A later
@@ -23,20 +23,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
  * recorded at `create`, so a same-user duplicate socket cannot tear the
  * still-active session down.
  */
-
-vi.mock('cloudflare:workers', () => {
-  /** Stand-in for the real base: stash `ctx` + `env` like `DurableObject`. */
-  class DurableObjectStub {
-    protected ctx: unknown
-    protected env: unknown
-
-    constructor(ctx: unknown, env: unknown) {
-      this.ctx = ctx
-      this.env = env
-    }
-  }
-  return { DurableObject: DurableObjectStub }
-})
 
 const providerControl = vi.hoisted(() => ({
   override: undefined as import('./turn-pipeline').TurnProviders | undefined,
@@ -53,27 +39,18 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
-  FakeUpgradeResponse,
-  FakeWebSocketPair,
   makeGatedProviders,
   makeSessionDo,
   messagesOfType,
   openSocket,
-  resetCreatedPairs,
   sawDoneChunk,
-  tick,
+  settle,
   UUID_RE,
+  waitFor,
+  waitForMessage,
 } from './session-do-test-kit'
 
-vi.stubGlobal('WebSocketPair', FakeWebSocketPair)
-vi.stubGlobal('Response', FakeUpgradeResponse)
-
-afterAll(() => {
-  vi.unstubAllGlobals()
-})
-
 beforeEach(() => {
-  resetCreatedPairs()
   providerControl.override = undefined
 })
 
@@ -86,21 +63,25 @@ describe('real VoiceSessionDO — post-end cleanup, create-less turn rejected (P
   it('rejects a turn after end with no new create; no provider turn starts', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
     // Owner ends the session: summary out, clean close, state cleared.
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
 
     // A reconnect (same user, same-named DO) sends `turn` with NO fresh
     // `create`. The cleared binding fail-louds it — no provider turn runs on
     // the ended session.
-    const reconnect = await openSocket(doInstance, 'user-A')
-    reconnect.receive(TURN)
-    await tick()
-    expect(reconnect.closes).toContainEqual({ code: 1008, reason: 'turn before create' })
+    const reconnect = await openSocket(session, 'user-A')
+    reconnect.send(TURN)
+    await waitFor(
+      () => reconnect.closeEvents.some((c) => c.code === 1008),
+      'turn-before-create close'
+    )
+    expect(reconnect.closeEvents).toContainEqual({ code: 1008, reason: 'turn before create' })
     expect(kit.sttCalls()).toBe(0)
   })
 })
@@ -110,16 +91,17 @@ describe('real VoiceSessionDO — post-end cleanup, create-less turn rejected (P
 describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh (P2)', () => {
   it('does not reject the post-end create with already_created; mints a new session', async () => {
     // Real demo-mock provider path — no gating needed here.
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     const firstId = await createSessionOverWs(socket)
 
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
 
     // Same user reconnects to the same-named DO and creates again: NOT
     // rejected as already_created — a clean new session with its own UUID.
-    const reconnect = await openSocket(doInstance, 'user-A')
+    const reconnect = await openSocket(session, 'user-A')
     const secondId = await createSessionOverWs(reconnect)
 
     expect(secondId).toMatch(UUID_RE)
@@ -128,12 +110,13 @@ describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh
   })
 
   it('still rejects a genuine re-create WHILE a session is live (unchanged behaviour)', async () => {
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
     // No `end` happened — the session is live, so a second create is rejected.
-    socket.receive(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: {} }))
+    socket.send(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: {} }))
+    await waitForMessage(socket, 'error')
     expect(messagesOfType(socket, 'error')).toContainEqual({
       type: 'error',
       code: 'already_created',
@@ -141,7 +124,8 @@ describe('real VoiceSessionDO — post-end cleanup, create after end opens fresh
     })
 
     // The live session is intact: the owner can still end it normally.
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
   })
 })
@@ -152,49 +136,53 @@ describe('real VoiceSessionDO — end mid-turn clears, late settle does not revi
   it('fire-and-forget cancel + clear; the stale unwind leaves the DO cleanly reusable', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     const firstId = await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
-    kit.llmTurns[0].pushDelta('partial')
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await session.run(() => kit.llmTurns[0].pushDelta('partial'))
+    await settle()
 
-    // `end` arrives mid-turn: summary lands synchronously, the cancel is
-    // fire-and-forget, and the session state is cleared immediately.
-    socket.receive(END)
+    // `end` arrives mid-turn: summary lands while the turn is still parked, the
+    // cancel is fire-and-forget, and the session state is cleared immediately.
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
 
     // The parked provider await settles LATE; the canceled turn unwinds
     // without reaching settle.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'turn unwound')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
     expect(kit.llmTurns[0].settled()).toBe(false)
     expect(sawDoneChunk(socket)).toBe(false)
 
     // The late settle did not revive the session: a create-less turn from a
     // reconnect is still rejected, and no provider turn ran.
-    const reconnect = await openSocket(doInstance, 'user-A')
-    reconnect.receive(TURN)
-    await tick()
-    expect(reconnect.closes).toContainEqual({ code: 1008, reason: 'turn before create' })
+    const reconnect = await openSocket(session, 'user-A')
+    reconnect.send(TURN)
+    await waitFor(
+      () => reconnect.closeEvents.some((c) => c.code === 1008),
+      'turn-before-create close'
+    )
+    expect(reconnect.closeEvents).toContainEqual({ code: 1008, reason: 'turn before create' })
     expect(kit.sttCalls()).toBe(1)
 
     // A fresh create opens a clean new session whose first turn carries NO
     // history from the ended run.
-    const secondId = await createSessionOverWs(reconnect)
+    const reconnect2 = await openSocket(session, 'user-A')
+    const secondId = await createSessionOverWs(reconnect2)
     expect(secondId).not.toBe(firstId)
-    reconnect.receive(TURN)
-    await tick()
-    expect(kit.sttCalls()).toBe(2)
+    reconnect2.send(TURN)
+    await waitFor(() => kit.sttCalls() === 2, 'fresh turn started')
     const freshHistory = kit.llmTurns[1].request.messages.filter((m) => m.role === 'assistant')
     expect(freshHistory).toEqual([])
-    kit.llmTurns[1].finishStream()
-    await tick()
-    expect(sawDoneChunk(reconnect)).toBe(true)
+    await session.run(() => kit.llmTurns[1].finishStream())
+    await waitFor(() => sawDoneChunk(reconnect2), 'fresh done chunk')
+    expect(sawDoneChunk(reconnect2)).toBe(true)
   })
 })
 
@@ -204,41 +192,46 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
   it('an owner drop with no end clears state so a reconnect cannot drive the old session', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     const firstId = await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
-    kit.llmTurns[0].pushDelta('x')
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await session.run(() => kit.llmTurns[0].pushDelta('x'))
+    await settle()
 
     // Owner's socket drops WITHOUT sending `end` (network drop / tab close).
     socket.disconnect()
+    await settle()
 
     // The in-flight turn is cleanly canceled once its provider await settles.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'turn unwound')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
     expect(kit.llmTurns[0].settled()).toBe(false)
 
     // A reconnect's create-less turn is rejected (no provider turn runs)...
-    const reconnect = await openSocket(doInstance, 'user-A')
-    reconnect.receive(TURN)
-    await tick()
-    expect(reconnect.closes).toContainEqual({ code: 1008, reason: 'turn before create' })
+    const reconnect = await openSocket(session, 'user-A')
+    reconnect.send(TURN)
+    await waitFor(
+      () => reconnect.closeEvents.some((c) => c.code === 1008),
+      'turn-before-create close'
+    )
+    expect(reconnect.closeEvents).toContainEqual({ code: 1008, reason: 'turn before create' })
     expect(kit.sttCalls()).toBe(1)
 
     // ...and a reconnect `create` opens a fresh, fully working session.
-    const secondId = await createSessionOverWs(reconnect)
+    const reconnect2 = await openSocket(session, 'user-A')
+    const secondId = await createSessionOverWs(reconnect2)
     expect(secondId).not.toBe(firstId)
-    reconnect.receive(TURN)
-    await tick()
-    expect(kit.sttCalls()).toBe(2)
-    kit.llmTurns[1].finishStream()
-    await tick()
+    reconnect2.send(TURN)
+    await waitFor(() => kit.sttCalls() === 2, 'fresh turn started')
+    await session.run(() => kit.llmTurns[1].finishStream())
+    await waitFor(() => kit.llmTurns[1].settled(), 'fresh turn settled')
     expect(kit.llmTurns[1].settled()).toBe(true)
-    expect(sawDoneChunk(reconnect)).toBe(true)
+    await waitFor(() => sawDoneChunk(reconnect2), 'fresh done chunk')
+    expect(sawDoneChunk(reconnect2)).toBe(true)
   })
 })
 
@@ -246,52 +239,68 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
 
 describe('real VoiceSessionDO — end teardown gate, only the owner socket ends (F-W)', () => {
   it('a same-user duplicate socket’s end is rejected fail-loud and tears nothing down', async () => {
-    const { doInstance } = makeSessionDo()
-    const owner = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const owner = await openSocket(session, 'user-A')
     await createSessionOverWs(owner)
     // A second socket for the SAME user (duplicate tab / reconnect).
-    const duplicate = await openSocket(doInstance, 'user-A')
+    const duplicate = await openSocket(session, 'user-A')
 
-    duplicate.receive(END)
-    await tick()
+    duplicate.send(END)
+    await waitFor(
+      () => duplicate.closeEvents.some((c) => c.code === 1008),
+      'duplicate fail-loud close'
+    )
 
     // The duplicate is closed fail-loud; NO summary, NO teardown anywhere.
-    expect(duplicate.closes).toContainEqual({ code: 1008, reason: 'end from non-owner socket' })
+    expect(duplicate.closeEvents).toContainEqual({
+      code: 1008,
+      reason: 'end from non-owner socket',
+    })
     expect(messagesOfType(duplicate, 'summary')).toEqual([])
     expect(messagesOfType(owner, 'summary')).toEqual([])
 
     // The original session survived: the OWNER socket can still end normally.
-    owner.receive(END)
+    owner.send(END)
+    await waitForMessage(owner, 'summary')
     expect(messagesOfType(owner, 'summary')).toHaveLength(1)
-    expect(owner.closes).toContainEqual({ code: 1000, reason: 'session ended' })
+    await waitFor(() => owner.closeEvents.some((c) => c.code === 1000), 'owner clean close')
+    expect(owner.closeEvents).toContainEqual({ code: 1000, reason: 'session ended' })
   })
 
   it('a same-user duplicate socket’s end does not cancel the owner’s in-flight turn', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const owner = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const owner = await openSocket(session, 'user-A')
     await createSessionOverWs(owner)
-    const duplicate = await openSocket(doInstance, 'user-A')
+    const duplicate = await openSocket(session, 'user-A')
 
-    owner.receive(TURN)
-    await tick()
-    kit.llmTurns[0].pushDelta('partial')
-    await tick()
+    owner.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'owner turn parked')
+    await session.run(() => kit.llmTurns[0].pushDelta('partial'))
+    await settle()
 
     // The duplicate fires `end` mid-turn: rejected; the in-flight turn keeps
     // running and is NOT canceled.
-    duplicate.receive(END)
-    await tick()
-    expect(duplicate.closes).toContainEqual({ code: 1008, reason: 'end from non-owner socket' })
+    duplicate.send(END)
+    await waitFor(
+      () => duplicate.closeEvents.some((c) => c.code === 1008),
+      'duplicate fail-loud close'
+    )
+    expect(duplicate.closeEvents).toContainEqual({
+      code: 1008,
+      reason: 'end from non-owner socket',
+    })
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
 
     // The owner's turn still completes and counts.
-    kit.llmTurns[0].finishStream()
-    await tick()
+    await session.run(() => kit.llmTurns[0].finishStream())
+    await waitFor(() => kit.llmTurns[0].settled(), 'owner turn settled')
     expect(kit.llmTurns[0].settled()).toBe(true)
+    await waitFor(() => sawDoneChunk(owner), 'owner done chunk')
     expect(sawDoneChunk(owner)).toBe(true)
-    owner.receive(END)
+    owner.send(END)
+    await waitForMessage(owner, 'summary')
     const summary = messagesOfType(owner, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(1)
   })
