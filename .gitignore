@@ -53,3 +53,7 @@ packages/*/src/**/*.jsx
 # Codex local session state
 .codex/
 tmp/
+
+# wrangler local secrets (never commit)
+.dev.vars
+**/.dev.vars
