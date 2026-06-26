@@ -1681,12 +1681,16 @@ describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-resp
     expect(sentEvents(socket)).not.toContain(TtsEvent.TaskRequest)
   })
 
-  it('does NOT bound the close-side: a long synthesis stream past the deadline is not killed', async () => {
+  it('does NOT bound the close-side: a long-but-live synthesis stream is not killed (gaps under the idle bound)', async () => {
     // Once both opening gates are acknowledged, the session may legitimately stay
     // open far longer than firstResponseMs while the server streams audio. The
-    // close-side `sessionFinished` gate is intentionally NOT deadlined, so a long
-    // stream (audio arriving well past the first-response budget) completes
-    // normally — bounding it would be a whole-turn timeout, which this fix avoids.
+    // close-side `sessionFinished` gate is intentionally NOT deadlined, and the
+    // inter-chunk idle guard measures only the GAP between audio chunks (reset on
+    // each), never total duration. So a stream whose total span exceeds
+    // firstResponseMs completes normally SO LONG AS each gap stays under
+    // streamIdleMs — here two ~15s gaps sum past firstResponseMs yet neither trips
+    // the idle guard. Bounding total duration would be a whole-turn timeout, which
+    // this fix avoids.
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
@@ -1702,15 +1706,112 @@ describe('createVolcengineSpeechProvider.tts.synthesize — handshake first-resp
     socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
     await vi.advanceTimersByTimeAsync(0)
 
-    // Stream audio across a span LONGER than every deadline, then finish.
+    // Stream audio across a total span LONGER than firstResponseMs, but with each
+    // inter-chunk gap UNDER streamIdleMs so the idle guard keeps resetting.
     socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A1'), sessionId))
-    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs + 10_000)
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
     socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A2'), sessionId))
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A3'), sessionId))
     socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
 
     const chunks = await collected
     const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
-    expect(audio).toEqual(['A1', 'A2'])
+    expect(audio).toEqual(['A1', 'A2', 'A3'])
+    expect(chunks[chunks.length - 1].done).toBe(true)
+  })
+
+  it('fails loud when the audio stream goes idle mid-synthesis after a first chunk', async () => {
+    // The inter-chunk idle guard for the audio-streaming phase: after the opening
+    // handshake and a first audio chunk, a server that falls silent — no further
+    // audio, no SessionFinished, never closing — would park `yield* queue` forever
+    // (the close-side gate is intentionally unbounded). After streamIdleMs of
+    // silence the guard aborts the handshake, fails the queue + closes the socket so
+    // the consumer throws (fail loud) instead of the turn hanging to the platform cap.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const consumed = collect(tts.synthesize(asyncFromSync(['念完整一段话'])))
+    const assertion = expect(consumed).rejects.toThrow(/audio stream idle for >.*during synthesis/)
+    await vi.advanceTimersByTimeAsync(0)
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await vi.advanceTimersByTimeAsync(0)
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await vi.advanceTimersByTimeAsync(0)
+
+    // First audio chunk lands — arms the inter-chunk idle guard.
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A1'), sessionId))
+    // Then the server goes silent past streamIdleMs — the idle guard fires.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs)
+    await assertion
+    // The idle guard's fail path also closes the outbound socket.
+    expect(socket.closed).toBe(true)
+  })
+
+  it('fails loud when the handshake completes but the server produces NO audio and NO SessionFinished', async () => {
+    // The handshake gates (ConnectionStarted / SessionStarted) are first-response-
+    // bounded, and the close-side `sessionFinished` gate is intentionally unbounded.
+    // That leaves a hang window the per-audio-chunk guard alone does not cover: the
+    // session is accepted and FinishSession is sent, but the server then produces
+    // neither an audio frame nor SessionFinished. `await handshake.sessionFinished`
+    // would park forever. The idle guard, armed when FinishSession is sent (all text
+    // already drained, so a slow LLM cannot false-trip it), bounds this gap and fails
+    // loud after streamIdleMs.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const consumed = collect(tts.synthesize(asyncFromSync(['念完整一段话'])))
+    const assertion = expect(consumed).rejects.toThrow(/audio stream idle for >.*during synthesis/)
+    await vi.advanceTimersByTimeAsync(0)
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await vi.advanceTimersByTimeAsync(0)
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    // Pump now sends the TaskRequest(s) + FinishSession and arms the idle guard.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sentEvents(socket)).toContain(TtsEvent.FinishSession)
+    // No audio and no SessionFinished ever arrive — the idle guard fires.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs)
+    await assertion
+    expect(socket.closed).toBe(true)
+  })
+
+  it('does NOT fire the post-FinishSession idle guard when audio then SessionFinished arrive in time', async () => {
+    // Complement to the no-audio hang test: the guard armed at FinishSession must not
+    // kill a session that promptly streams its audio and finishes. A first audio
+    // chunk and SessionFinished arriving within streamIdleMs complete normally.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { tts } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const collected = collect(tts.synthesize(asyncFromSync(['念完整一段话'])))
+    await vi.advanceTimersByTimeAsync(0)
+    socket.emitMessage(ttsServerFrame(TtsEvent.ConnectionStarted, encoder.encode('{}')))
+    await vi.advanceTimersByTimeAsync(0)
+    const sessionId =
+      socket.sent.map((b) => parseFrame(b)).find((f) => f.event === TtsEvent.StartSession)
+        ?.sessionId ?? 's'
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionStarted, encoder.encode('{}'), sessionId))
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Audio arrives a little after FinishSession (under the idle bound), then finish.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
+    socket.emitMessage(ttsServerFrame(TtsEvent.TtsResponse, encoder.encode('A1'), sessionId))
+    socket.emitMessage(ttsServerFrame(TtsEvent.SessionFinished, encoder.encode('{}'), sessionId))
+
+    const chunks = await collected
+    const audio = chunks.filter((c) => !c.done).map((c) => decoder.decode(c.audio))
+    expect(audio).toEqual(['A1'])
     expect(chunks[chunks.length - 1].done).toBe(true)
   })
 })
@@ -1740,11 +1841,13 @@ describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeo
     expect(socket.closed).toBe(true)
   })
 
-  it('does NOT kill a slow-first-then-long transcript stream', async () => {
-    // The deadline bounds only the FIRST transcript: a first chunk that arrives in
-    // time cancels it, and subsequent chunks may span far past firstResponseMs. A
-    // first (non-final) chunk lands promptly; the final one arrives much later and
-    // the stream still completes (no whole-stream timeout).
+  it('does NOT kill a long-but-live transcript stream (gaps under the idle bound)', async () => {
+    // Neither deadline bounds total stream length: the first-response deadline is
+    // cancelled by the first chunk, and the inter-chunk idle deadline only measures
+    // the GAP between consecutive transcripts (reset on each). A stream whose total
+    // span far exceeds firstResponseMs is fine SO LONG AS each gap stays under
+    // streamIdleMs — every transcript resets the idle guard. Here two ~15s gaps sum
+    // to ~30s (> firstResponseMs) yet each is < streamIdleMs, so nothing fires.
     vi.useFakeTimers()
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
@@ -1752,21 +1855,70 @@ describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeo
 
     const drained = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
     await vi.advanceTimersByTimeAsync(0)
-    // First (non-final) transcript arrives within the budget — cancels the deadline.
+    // First (non-final) transcript arrives within the budget — cancels the
+    // first-response deadline and arms the inter-chunk idle guard.
     socket.emitMessage(
       sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
     )
-    // A long pause AFTER the first chunk — longer than firstResponseMs. With the
-    // deadline cancelled this is fine; a whole-stream timeout would wrongly fire.
-    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs + 10_000)
+    // A pause under streamIdleMs, then another chunk that resets the idle guard.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
     socket.emitMessage(
-      sttServerFrame({ result: { text: '你好', utterances: [{ definite: true }] } })
+      sttServerFrame({ result: { text: '你好', utterances: [{ definite: false }] } })
+    )
+    // Another sub-idle pause — total span now exceeds firstResponseMs — then final.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你好吗', utterances: [{ definite: true }] } })
     )
 
     const chunks = await drained
     expect(chunks).toEqual([
       { text: '你', isFinal: false },
-      { text: '你好', isFinal: true },
+      { text: '你好', isFinal: false },
+      { text: '你好吗', isFinal: true },
     ])
+  })
+
+  it('fails loud when the stream goes idle mid-flight after a first transcript', async () => {
+    // The inter-chunk idle guard: once a first transcript lands (first-response
+    // deadline cancelled), a server that then falls silent — no further transcript,
+    // no final, never closing the socket — would park `yield* queue` forever. After
+    // streamIdleMs of silence the guard fails the queue + closes the socket so the
+    // consumer throws (fail loud) instead of the turn hanging to the platform cap.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const consumed = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
+    const assertion = expect(consumed).rejects.toThrow(/stream idle for >.*after first transcript/)
+    await vi.advanceTimersByTimeAsync(0)
+    // First (non-final) transcript lands — cancels first-response, arms idle guard.
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
+    )
+    // Server goes silent for longer than streamIdleMs — the idle guard fires.
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs)
+    await assertion
+    // The idle guard's fail path also closes the outbound socket.
+    expect(socket.closed).toBe(true)
+  })
+
+  it('does NOT fire the idle guard before the first transcript (that window is the first-response deadline)', async () => {
+    // Belt-and-braces: the idle guard arms only once a first transcript has landed.
+    // Before that, the (separate) first-response deadline owns the bound. A connect
+    // with no transcript must reject as a first-response timeout, never a stream-idle
+    // one — confirming the two phases stay distinct.
+    vi.useFakeTimers()
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const consumed = collect(stt.transcribe(asyncFromSync([encoder.encode('f1')])))
+    const assertion = expect(consumed).rejects.toThrow(/no transcript within/)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(TIMEOUTS.firstResponseMs)
+    await assertion
+    expect(socket.closed).toBe(true)
   })
 })
