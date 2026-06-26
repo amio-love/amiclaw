@@ -21,6 +21,9 @@
 name = "platform-ai-demo"
 main = "../src/worker.ts"
 compatibility_date = "2026-06-08"
+# Required by the Agents SDK (VoiceSessionDO extends `Agent`, which imports
+# `node:async_hooks`); matches the production + vitest wrangler configs.
+compatibility_flags = ["nodejs_compat"]
 
 # Serve the demo page + client as static assets; the Worker is invoked first so
 # it can handle the `/ai-ws/*` WebSocket upgrade before asset routing.
