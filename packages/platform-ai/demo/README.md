@@ -1,12 +1,25 @@
 # Platform AI — Voice Session Demo
 
 A minimal first-party harness that drives the whole `@amiclaw/platform-ai`
-pipeline (STT → LLM → TTS) over the same-origin `/ai-ws/*` WebSocket, with **no
-real provider credentials**.
+pipeline (STT → LLM → TTS) over the same-origin `/ai-ws/*` WebSocket. By default
+it runs against the deterministic **mock** providers (gameId `demo-mock`), so it
+needs **no real provider credentials**.
 
 It exists to prove the locked acceptance end to end: _speak → ASR → LLM (grounded
 in the injected manual) → TTS → see / hear a deterministic reply_, and to show
 the security invariant holds — the browser holds no key and no system prompt.
+
+## Audio format
+
+Player audio is captured as **PCM16 16kHz mono** — the exact wire format the real
+STT adapter expects (`../src/providers/volcengine.ts`: `format:'pcm', rate:16000,
+bits:16, channel:1`). Capture uses `AudioContext({ sampleRate: 16000 })` feeding a
+`ScriptProcessorNode`; each frame's Float32 samples are converted to Int16
+little-endian PCM (`floatTo16BitPCM` in `audio-pcm.js`, unit-tested in
+`audio-pcm.test.js`) and sent over the WS binary channel. Because the audio layer
+is now protocol-correct (no more `MediaRecorder` / webm-opus), this same capture
+path is reusable as-is by a real-provider / live-verification harness — only the
+server-side gameId and credentials would change.
 
 ## How it works
 
