@@ -17,6 +17,15 @@ hanging. The guard resets on every token, so a legitimately long answer — even
 one with natural pauses — is never cut off; only a truly stuck stream is. No
 player-facing behavior changes beyond turns no longer hanging.
 
+**E2E test toolchain restored — `playwright-bdd` upgraded to support
+Playwright 1.61** - Internal fix. The end-to-end suite crashed at startup
+because `playwright-bdd@8.5.1` destructured `registerESMLoader` from a
+`@playwright/test@1.61` internal that no longer exposes it, so every PR's e2e
+verification was a no-op. Upgrading `playwright-bdd` to `9.2.0` (which adds
+Playwright 1.61 support) makes the harness boot again; all 26 `@playwright`
+scenarios pass with no scenario, step-definition, or config changes. No
+player-facing behavior changes.
+
 **Platform-AI voice demo now records protocol-correct PCM16 16kHz audio** -
 Internal fix. The first-party voice-session demo harness used to capture
 microphone audio with `MediaRecorder` as webm/opus, which does not match the
