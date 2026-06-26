@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runTurn, splitSentences, type SessionState, type TurnProviders } from './turn-pipeline'
+import { createDeepSeekLlmProvider } from './providers/deepseek'
 import type { AiResponseChunk, AudioChunk, ManualData } from './contract'
 import type {
   LlmCompletionChunk,
@@ -451,5 +452,69 @@ describe('runTurn', () => {
 
     await expect(collect(turn)).rejects.toThrow('llm boom')
     expect(ttsClosed).toBe(true)
+  })
+
+  // Regression (fix-llm-sse-stream-park): the LLM SSE stream returns its first
+  // delta then goes permanently silent. End to end through the REAL DeepSeek
+  // adapter, the turn must fail loud within a bounded time — never park forever —
+  // and the TTS side must be cleaned up. This is the integration counterpart to
+  // the adapter-level idle-timeout tests in deepseek.test.ts.
+  describe('LLM SSE stream parks after its first delta', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    })
+
+    it('fails the turn loud (bounded) instead of parking, and cleans up TTS', async () => {
+      const encoder = new TextEncoder()
+      // DeepSeek-shaped body: one content delta, then never enqueue again and
+      // never close — the observed park. The adapter's inter-chunk idle deadline
+      // (injected small here) is the only thing that turns this into a bounded
+      // failure rather than an infinite hang.
+      const hangingBody = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: 'first ' } }] })}\n`
+            )
+          )
+          // no further enqueue, no close — the park.
+        },
+      })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, _init?: RequestInit) => new Response(hangingBody))
+      )
+
+      let ttsClosed = false
+      const tts: TtsProvider = {
+        async *synthesize(text: AsyncIterable<string>): AsyncIterable<TtsAudioChunk> {
+          try {
+            for await (const sentence of text) {
+              void sentence
+              yield { audio: new Uint8Array(1), done: false }
+            }
+          } finally {
+            ttsClosed = true
+          }
+        },
+      }
+      const llm = createDeepSeekLlmProvider({ apiKey: 'sk-test', streamIdleMs: 40 })
+
+      const start = performance.now()
+      await expect(
+        collect(
+          runTurn(
+            providers(mockStt([{ text: 'q.', isFinal: true }]), llm, tts),
+            freshState(),
+            fromArray<AudioChunk>([new Uint8Array([1])])
+          )
+        )
+      ).rejects.toThrow(/deepseek: SSE stream idle for >40ms after first response/)
+      // Bounded fail-loud, not a hang to the test timeout.
+      expect(performance.now() - start).toBeLessThan(2000)
+      // The turn's cleanup ran: the TTS iterator was returned, nothing leaked.
+      expect(ttsClosed).toBe(true)
+    })
   })
 })

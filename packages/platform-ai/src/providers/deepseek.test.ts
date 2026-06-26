@@ -345,39 +345,141 @@ describe('createDeepSeekLlmProvider — connect timeout', () => {
     expect(init?.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('does NOT kill a slow-but-valid response that streams for a long time', async () => {
-    // The timeout bounds the CONNECT phase only: once `fetch` resolves with the
-    // response, the deadline is cleared and the streaming body is unbounded. Model
-    // a body whose deltas arrive across a long span (well past connectMs of fake
-    // time) — every delta must still be delivered, none killed by the timer.
-    vi.useFakeTimers()
-    try {
-      const encoder = new TextEncoder()
-      const slowStream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          controller.enqueue(encoder.encode(deltaLine('slow ')))
-          // A long pause AFTER the first byte — longer than every deadline. A
-          // whole-turn timeout would wrongly kill the stream here; a connect /
-          // first-response timeout must not.
-          await vi.advanceTimersByTimeAsync(TIMEOUTS.connectMs + TIMEOUTS.firstResponseMs + 5000)
-          controller.enqueue(encoder.encode(deltaLine('tail')))
-          controller.enqueue(encoder.encode('data: [DONE]\n'))
-          controller.close()
-        },
-      })
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async (_url: string, _init?: RequestInit) => new Response(slowStream))
-      )
-      const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test' })
-      const chunks = await collect(provider.streamCompletion(baseRequest))
-      expect(chunks).toEqual([
-        { content: 'slow ', done: false },
-        { content: 'tail', done: false },
-        { content: '', done: true },
-      ])
-    } finally {
-      vi.useRealTimers()
+  it('does NOT kill a long but live stream — each inter-chunk gap stays under the idle window', async () => {
+    // Streaming is bounded by the per-chunk idle deadline, NOT by the connect /
+    // first-response deadlines: once `fetch` resolves, those are cleared. A stream
+    // that keeps producing — with each gap comfortably under the idle window —
+    // must run to completion no matter how long its TOTAL duration is, because the
+    // idle deadline RESETS on every chunk. It bounds a stall, never a long answer.
+    // (Contrast the park test below, where the body goes silent after one delta.)
+    const encoder = new TextEncoder()
+    const streamIdleMs = 200
+    const gapMs = streamIdleMs / 2
+    const liveStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(encoder.encode(deltaLine('one ')))
+        for (const word of ['two ', 'three ', 'four']) {
+          await new Promise((resolve) => setTimeout(resolve, gapMs))
+          controller.enqueue(encoder.encode(deltaLine(word)))
+        }
+        controller.enqueue(encoder.encode('data: [DONE]\n'))
+        controller.close()
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, _init?: RequestInit) => new Response(liveStream))
+    )
+    const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test', streamIdleMs })
+    const chunks = await collect(provider.streamCompletion(baseRequest))
+    expect(chunks).toEqual([
+      { content: 'one ', done: false },
+      { content: 'two ', done: false },
+      { content: 'three ', done: false },
+      { content: 'four', done: false },
+      { content: '', done: true },
+    ])
+  })
+})
+
+// --- streaming idle timeout: a stream that parks after its first delta must
+//     fail loud, not hang the turn forever (the bug this change fixes) -----------
+
+describe('createDeepSeekLlmProvider — streaming idle timeout', () => {
+  /**
+   * Build a body that emits exactly one content delta and then goes permanently
+   * silent: it never enqueues again and never closes. This is the faithful
+   * reproduction of the observed park — DeepSeek returns 200 + a first delta,
+   * then the SSE stream stalls. The first `reader.read()` resolves the delta; the
+   * second parks forever. Without the inter-chunk idle deadline, consuming this
+   * stream hangs indefinitely (the bug); with it, the read loses the race to the
+   * deadline and the provider throws.
+   */
+  function parkAfterFirstDelta(): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder()
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(deltaLine('first ')))
+        // Deliberately no further enqueue and no close() — the park.
+      },
+    })
+  }
+
+  it('aborts a stream that goes silent after the first delta and throws (fail loud, bounded)', async () => {
+    stubFetch(parkAfterFirstDelta())
+    const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test', streamIdleMs: 40 })
+    const start = performance.now()
+    // The first delta surfaces, then consumption rejects within the idle window —
+    // it must NOT hang to the test timeout.
+    await expect(collect(provider.streamCompletion(baseRequest))).rejects.toThrow(
+      /deepseek: SSE stream idle for >40ms after first response/
+    )
+    expect(performance.now() - start).toBeLessThan(2000)
+  })
+})
+
+// --- sseStreamToChunks idle deadline (direct, controlled differential) ---------
+
+describe('sseStreamToChunks — idle deadline', () => {
+  it('rejects when the stream stalls past idleMs after a delta', async () => {
+    const encoder = new TextEncoder()
+    const stalling = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(deltaLine('hi ')))
+        // never enqueue again, never close
+      },
+    })
+    const consume = async (): Promise<LlmCompletionChunk[]> => {
+      const out: LlmCompletionChunk[] = []
+      for await (const chunk of sseStreamToChunks(stalling, undefined, 40)) out.push(chunk)
+      return out
     }
+    const start = performance.now()
+    await expect(consume()).rejects.toThrow(/SSE stream idle for >40ms/)
+    expect(performance.now() - start).toBeLessThan(2000)
+  })
+
+  it('WITHOUT an idle bound, a stalled stream does NOT settle (the park this guards, reproduced)', async () => {
+    // The other half of the controlled differential: the SAME first-delta-then-
+    // silence stream, consumed WITHOUT an idle bound, must NOT settle — that hang
+    // is the bug. We prove it behaviorally without letting the test itself park:
+    // drive the iterator by hand, race the stalled read against a short sentinel
+    // (the sentinel must win = it did not settle), then close the stream so the
+    // pending read resolves and the generator's cleanup runs and the test exits.
+    const encoder = new TextEncoder()
+    let streamController!: ReadableStreamDefaultController<Uint8Array>
+    const stalling = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+        controller.enqueue(encoder.encode(deltaLine('hi ')))
+        // never enqueue again, never close — until the test releases it below
+      },
+    })
+    const iterator = sseStreamToChunks(stalling)[Symbol.asyncIterator]() // no idleMs
+    expect((await iterator.next()).value).toEqual({ content: 'hi ', done: false })
+
+    // The next read parks: no further bytes, no close, and no idle guard.
+    const parkedNext = iterator.next()
+    const sentinel = Symbol('sentinel')
+    const winner = await Promise.race([
+      parkedNext.then(() => 'settled' as const),
+      new Promise<typeof sentinel>((resolve) => setTimeout(() => resolve(sentinel), 100)),
+    ])
+    expect(winner).toBe(sentinel) // did not settle within the window => parked (the bug)
+
+    // Release the park so the test exits cleanly: closing the stream resolves the
+    // pending read, the generator emits its terminal chunk, and cleanup runs.
+    streamController.close()
+    expect(await parkedNext).toEqual({ value: { content: '', done: true }, done: false })
+    await iterator.return?.(undefined)
+  })
+
+  it('does not arm an idle deadline when idleMs is omitted (pure parsing path unchanged)', async () => {
+    const stream = sseStream(deltaLine('a'), 'data: [DONE]\n')
+    const chunks = await collect(sseStreamToChunks(stream))
+    expect(chunks).toEqual([
+      { content: 'a', done: false },
+      { content: '', done: true },
+    ])
   })
 })

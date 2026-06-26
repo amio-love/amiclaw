@@ -5,6 +5,18 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice turns can no longer hang when the LLM stream stalls
+mid-reply** - Internal reliability hardening. The AI's language model streams its
+answer back token by token; if it sent the first token and then went silent —
+the connection still open, but no further output and no error — the turn used to
+park until the platform's hard timeout, leaving the player with an AI that never
+finished speaking and a session that would not free up. The streaming layer now
+bounds the silent gap between tokens: if a stream that has already started goes
+quiet for too long, the turn fails cleanly and the session is freed instead of
+hanging. The guard resets on every token, so a legitimately long answer — even
+one with natural pauses — is never cut off; only a truly stuck stream is. No
+player-facing behavior changes beyond turns no longer hanging.
+
 **Platform-AI voice demo now records protocol-correct PCM16 16kHz audio** -
 Internal fix. The first-party voice-session demo harness used to capture
 microphone audio with `MediaRecorder` as webm/opus, which does not match the

@@ -26,7 +26,7 @@ import type {
   LlmProvider,
   LlmUsage,
 } from './types'
-import { startDeadline, TIMEOUTS } from './timeout'
+import { startDeadline, TIMEOUTS, type Deadline } from './timeout'
 
 /** Default DeepSeek OpenAI-compatible base URL (includes the `/v1` prefix). */
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
@@ -63,6 +63,13 @@ export interface DeepSeekProviderOptions {
    * `LlmCompletionRequest` takes precedence when present.
    */
   model?: string
+  /**
+   * Override the inter-chunk idle deadline (ms) applied to the streaming
+   * response body. Defaults to `TIMEOUTS.streamIdleMs`. Exposed mainly so tests
+   * can inject a small value to drive the idle-abort path without real-time
+   * waits; production callers leave it unset and take the tuned default.
+   */
+  streamIdleMs?: number
 }
 
 /**
@@ -161,19 +168,49 @@ export function parseSseLine(line: string): SseEvent {
  * without one, when the body closes — so consumers always observe a clean end.
  *
  * `onUsage` is invoked if the vendor reports token usage on the final chunk.
+ *
+ * `idleMs`, when given, bounds the silent GAP between consecutive reads: a fresh
+ * idle deadline is armed before each `reader.read()` and cleared the instant it
+ * settles, so a stream that keeps producing runs unbounded while one that goes
+ * silent mid-flight (the DeepSeek SSE park this guards) is failed loud — the read
+ * loses the race to the deadline, this generator throws, and the caller's
+ * existing error path runs. Resetting per read is what makes a long-but-live
+ * stream safe: only a stall trips it, never total duration. Omit it (the default)
+ * to read with no idle bound — e.g. in the pure SSE-parsing unit tests.
  */
 export async function* sseStreamToChunks(
   stream: ReadableStream<Uint8Array>,
-  onUsage?: (usage: LlmUsage) => void
+  onUsage?: (usage: LlmUsage) => void,
+  idleMs?: number
 ): AsyncIterable<LlmCompletionChunk> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let doneEmitted = false
 
+  // Read the next stream segment, bounding only the inter-chunk silence when
+  // `idleMs` is set. The idle deadline is armed per read and cancelled the
+  // instant the read settles, so it measures producer silence — not time the
+  // consumer spends between pulls. A stalled producer rejects here; a live one
+  // (even slow) never does.
+  const readNext = async (): Promise<Awaited<ReturnType<typeof reader.read>>> => {
+    if (idleMs === undefined) return reader.read()
+    let deadline: Deadline | undefined
+    const idle = new Promise<never>((_resolve, reject) => {
+      deadline = startDeadline(idleMs, () =>
+        reject(new Error(`deepseek: SSE stream idle for >${idleMs}ms after first response`))
+      )
+    })
+    try {
+      return await Promise.race([reader.read(), idle])
+    } finally {
+      deadline?.cancel()
+    }
+  }
+
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readNext()
 
       if (value !== undefined) buffer += decoder.decode(value, { stream: true })
 
@@ -206,6 +243,14 @@ export async function* sseStreamToChunks(
       }
     }
   } finally {
+    // An idle-deadline bailout (or the early `[DONE]` return) can leave a read
+    // request outstanding; cancel the stream first so `releaseLock` does not
+    // throw on a pending read, and so the underlying body / socket is torn down.
+    try {
+      await reader.cancel()
+    } catch {
+      // Stream already errored or closed — nothing left to cancel.
+    }
     reader.releaseLock()
   }
 
@@ -255,6 +300,7 @@ function processSse(
 export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSeekLlmProvider {
   const baseUrl = trimTrailingSlashes(opts.baseUrl ?? DEFAULT_BASE_URL)
   const endpoint = `${baseUrl}/chat/completions`
+  const streamIdleMs = opts.streamIdleMs ?? TIMEOUTS.streamIdleMs
 
   const provider: DeepSeekLlmProvider = {
     async *streamCompletion(request: LlmCompletionRequest): AsyncIterable<LlmCompletionChunk> {
@@ -286,9 +332,12 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
       // the socket then never responds), with no error and no first byte. An
       // `AbortController` + connect deadline bounds exactly that window: if the
       // headers do not arrive in time the controller aborts, `fetch` rejects, and
-      // the turn fails loud instead of parking forever. The deadline is cleared
-      // the instant `fetch` resolves — the SSE body stream that follows is the
-      // model's (legitimately long) streaming output and is NOT timer-bound.
+      // the turn fails loud instead of parking forever. The connect deadline is
+      // cleared the instant `fetch` resolves; the SSE body stream that follows is
+      // then bounded NOT by this connect deadline but by the per-chunk
+      // `streamIdleMs` idle deadline inside `sseStreamToChunks` — a long but live
+      // stream runs freely, while one that delivers its first delta and then goes
+      // permanently silent (the park this guards) is failed loud there.
       const connectController = new AbortController()
       const connectDeadline = startDeadline(TIMEOUTS.connectMs, () =>
         connectController.abort(
@@ -307,8 +356,10 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
           signal: connectController.signal,
         })
       } finally {
-        // Headers arrived (or the fetch failed / aborted) — stop the timer either
-        // way so the streaming phase runs with no deadline and no dangling handle.
+        // Headers arrived (or the fetch failed / aborted) — stop the CONNECT timer
+        // either way, leaving no dangling handle. The streaming phase that follows
+        // is not unguarded: it is bounded by the per-chunk `streamIdleMs` idle
+        // deadline inside `sseStreamToChunks`, not by this connect deadline.
         connectDeadline.cancel()
       }
 
@@ -328,9 +379,13 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
       // Reset before consuming so a half-consumed prior stream cannot leak a
       // stale usage value into this completion.
       provider.lastUsage = undefined
-      yield* sseStreamToChunks(response.body, (usage) => {
-        provider.lastUsage = usage
-      })
+      yield* sseStreamToChunks(
+        response.body,
+        (usage) => {
+          provider.lastUsage = usage
+        },
+        streamIdleMs
+      )
     },
   }
 

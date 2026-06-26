@@ -15,12 +15,21 @@
  * (provider throws -> `Promise.race` rejects -> DO closes the WS 1008) instead
  * of hanging.
  *
- * Scope discipline (the load-bearing invariant): these bound the CONNECT and
- * FIRST-RESPONSE phases ONLY, never a whole turn. A legitimate long streaming
- * response — first byte/event arrived in time, then the model streams for a
- * while — must never be killed by a timer. So every call site cancels its timer
- * the instant the first response lands, and the streaming that follows runs with
- * no timeout at all.
+ * Scope discipline (the load-bearing invariant): `connectMs` / `firstResponseMs`
+ * bound the CONNECT and FIRST-RESPONSE phases ONLY, never a whole turn. A
+ * legitimate long streaming response — first byte/event arrived in time, then the
+ * model streams for a while — must never be killed by a timer. So every call site
+ * cancels its connect / first-response timer the instant the first response lands.
+ *
+ * The streaming phase that follows is NOT wholly unbounded, however: a stream that
+ * delivers its first chunk and then goes silent forever is the exact park this
+ * module exists to prevent, one level deeper. `streamIdleMs` closes that gap with
+ * an INTER-CHUNK idle deadline — armed over each streaming read and RESET on every
+ * chunk that arrives, so it bounds only a silent GAP between chunks, never the
+ * stream's total duration. A stream that keeps producing (even slowly) runs as
+ * long as it likes; only a stalled-mid-stream producer is failed loud. This is the
+ * critical distinction from a whole-turn cap: per-chunk reset means a legitimately
+ * long answer is never the thing that trips it — only a dead silence is.
  *
  * The millisecond values in `TIMEOUTS` are conservative defaults chosen for
  * voice-turn reasonableness; they are L3-tunable — the L2 acceptance target says
@@ -30,7 +39,8 @@
  */
 
 /**
- * Connect / first-response deadlines, in milliseconds. Conservative voice-turn
+ * Provider-call deadlines, in milliseconds: the connect + first-response windows
+ * and the per-chunk streaming inter-chunk idle window. Conservative voice-turn
  * defaults; L3-tunable against measured provider latency (see file header).
  */
 export const TIMEOUTS = {
@@ -47,9 +57,26 @@ export const TIMEOUTS = {
    * the first ASR transcript. ~20s tolerates a slow first model token / server
    * handshake (voice models can take several seconds to first output) while
    * still bounding a server that accepts the connection then goes silent. Only
-   * the FIRST response is bounded; subsequent streaming is unbounded.
+   * the FIRST response is bounded by THIS deadline; subsequent streaming is
+   * bounded instead by the per-chunk `streamIdleMs` idle deadline below.
    */
   firstResponseMs: 20_000,
+  /**
+   * Inter-chunk idle window for a streaming response that has already produced
+   * its first chunk: the maximum silent GAP allowed between two consecutive SSE
+   * chunks before the stream is failed loud. Armed over each streaming read and
+   * RESET on every chunk, so it bounds a stall, never the total stream duration —
+   * a model that keeps streaming (even with multi-second think-pauses) is never
+   * killed, while a producer that emits one delta then goes permanently silent
+   * (the DeepSeek SSE park this guards) is aborted within the window instead of
+   * hanging the whole session until the platform hard timeout.
+   *
+   * ~20s is deliberately generous: real mid-stream pauses (the model composing a
+   * long sentence, a brief upstream hiccup) sit well under it, so a healthy turn
+   * never trips it. L3-tunable against measured provider behaviour, like the
+   * connect / first-response values above.
+   */
+  streamIdleMs: 20_000,
 } as const
 
 /**
@@ -108,7 +135,10 @@ export function startDeadline(ms: number, onTimeout: () => void): Deadline {
  * `cause`), so `Promise.race` always settles and the hang this module prevents
  * cannot reappear. The deadline is always cancelled once `promise` settles, so a
  * slow-but-valid first response leaves no live timer and the streaming that
- * follows is unbounded.
+ * follows is unbounded BY THIS deadline (a call site that needs to bound the
+ * streaming phase too — e.g. the DeepSeek SSE adapter — layers a separate
+ * per-chunk `streamIdleMs` idle deadline on top; this helper covers only the
+ * first event).
  *
  * This bounds ONLY the first event it is given — never a whole stream. Call it
  * on the gate/first-chunk await, not around the consuming loop.
