@@ -74,6 +74,7 @@ import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './
 import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
+import { traceTurn } from './trace'
 import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
 import { flushSessionUsage, type UsageKvWriter } from './usage-flush'
 import {
@@ -174,6 +175,37 @@ export async function audioFrameToBytes(
   }
   throw new Error('unsupported binary audio frame type')
 }
+
+/** Max bytes the WebSocket spec allows for a close reason (UTF-8 encoded). */
+const MAX_CLOSE_REASON_BYTES = 123
+
+/**
+ * Clamp a WebSocket close reason to the spec's 123-UTF-8-byte limit, truncating
+ * by BYTES (never UTF-16 code units) so a multibyte string can never exceed the
+ * cap. Passing an over-long reason to `connection.close()` throws
+ * `SyntaxError: WebSocket close reason must not be longer than 123 bytes` — and
+ * on the error path (where the reason is a provider error string) that throw
+ * crashes the fail-loud close itself, parking the turn silently instead of
+ * surfacing a clean 1008. A char-based `slice(0, 123)` is NOT enough: 123 chars
+ * of multibyte text is up to ~369 bytes. This truncates on a UTF-8 code-point
+ * boundary (never splitting a multibyte sequence) so the result is always valid
+ * UTF-8 and ≤123 bytes.
+ */
+export function safeCloseReason(reason: string): string {
+  const encoded = textEncoderForReason.encode(reason)
+  if (encoded.length <= MAX_CLOSE_REASON_BYTES) return reason
+  // Walk back from the byte budget to the start of the last whole code point so
+  // the truncation never splits a multibyte UTF-8 sequence (continuation bytes
+  // match 0b10xxxxxx).
+  let end = MAX_CLOSE_REASON_BYTES
+  while (end > 0 && (encoded[end] & 0b1100_0000) === 0b1000_0000) {
+    end -= 1
+  }
+  return textDecoderForReason.decode(encoded.subarray(0, end))
+}
+
+const textEncoderForReason = new TextEncoder()
+const textDecoderForReason = new TextDecoder()
 
 /**
  * Async audio bridge: binary WS frames are pushed in; `runTurn`'s STT step
@@ -354,7 +386,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   override onConnect(connection: Connection, ctx: ConnectionContext): void {
     const forwardedUserId = ctx.request.headers.get('X-Session-User-Id')
     if (!forwardedUserId) {
-      connection.close(1008, 'missing authenticated identity')
+      connection.close(1008, safeCloseReason('missing authenticated identity'))
       return
     }
     this.socketIdentities.bind(connection, forwardedUserId)
@@ -390,7 +422,12 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       bridge.push(await audioFrameToBytes(message))
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'message handling failed'
-      connection.close(1008, reason.slice(0, 123))
+      // Byte-safe truncation: `reason` is a provider error string of unbounded
+      // length / arbitrary UTF-8. A char-based `slice(0, 123)` could still hand
+      // `close()` a >123-byte reason (multibyte text) and throw, crashing this
+      // fail-loud close and parking the turn. `safeCloseReason` caps it to ≤123
+      // UTF-8 bytes so the turn always fails LOUD with a clean 1008.
+      connection.close(1008, safeCloseReason(reason))
     }
   }
 
@@ -679,6 +716,18 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     if (!state || sessionId === undefined || userId === undefined) return
     if (this.usageFlushed) return
     this.usageFlushed = true
+    // Turn-trace: session usage flush — the terminal accounting boundary. A
+    // park shows up here as turnCount:0 / llmOutputTokens:0 (the deploy task's
+    // last sighting), so this line is the after-the-fact confirmation of which
+    // hops produced nothing.
+    traceTurn('session', 'usage-flush', {
+      sessionId,
+      turnCount: state.turnCount,
+      llmInputTokens: state.usage.llmInputTokens,
+      llmOutputTokens: state.usage.llmOutputTokens,
+      sttInputSeconds: state.usage.sttInputSeconds,
+      ttsOutputSeconds: state.usage.ttsOutputSeconds,
+    })
     this.ctx.waitUntil(
       flushSessionUsage(this.env.USAGE, {
         sessionId,
@@ -757,7 +806,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     switch (msg.type) {
       case 'create': {
         if (!socketUserId) {
-          ws.close(1008, 'no authenticated identity')
+          ws.close(1008, safeCloseReason('no authenticated identity'))
           return
         }
         // A session is already live on this DO. Re-`create` would silently
@@ -808,7 +857,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       case 'turn': {
         const sessionId = this.sessionId
         if (!this.sessionState || !socketUserId || sessionId === undefined) {
-          ws.close(1008, 'turn before create')
+          ws.close(1008, safeCloseReason('turn before create'))
           return
         }
         // Turn in-flight guard: voice turns are serial. A second `turn` while
@@ -823,6 +872,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
           return
         }
+        // Turn-trace: the first hop boundary — a turn was accepted and is about
+        // to drive STT->LLM->TTS. Greppable park-point anchor (see `trace.ts`).
+        traceTurn('turn', 'start', {
+          sessionId,
+        })
         // Stream the AI response chunks back. Text rides as JSON; audio is
         // base64-encoded so the whole turn stays on the JSON text channel and
         // the binary frame direction remains player-audio-only. Ownership is
@@ -899,7 +953,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           // (`turn` and binary stay user-id-gated: they DRIVE the session, they do
           // not tear it down — see `assertOwner` / `assertSocketOwner`.)
           if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) {
-            ws.close(1008, 'end from non-owner socket')
+            ws.close(1008, safeCloseReason('end from non-owner socket'))
             return
           }
           // `endSession` re-validates ownership (a cross-user `end` throws before
@@ -955,7 +1009,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           void handOffSummaryCapture(this.env.COMPANION_CONSOLIDATOR, summary)
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
-        ws.close(1000, 'session ended')
+        ws.close(1000, safeCloseReason('session ended'))
         return
       }
     }

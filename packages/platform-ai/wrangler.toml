@@ -17,6 +17,15 @@ main = "src/worker.ts"
 compatibility_date = "2026-06-08"
 compatibility_flags = ["nodejs_compat"]
 
+# --- Observability: capture this Worker's (and its DOs') logs so a single live
+# voice turn's per-hop `turn-trace` lines are queryable in Workers
+# observability. `head_sampling_rate = 1` keeps 100% of invocations — required
+# to read THE one turn being diagnosed (any rate < 1 risks dropping it).
+# https://developers.cloudflare.com/workers/observability/logs/workers-logs/
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # nodejs_compat is required by the Cloudflare Agents SDK: VoiceSessionDO extends
 # the SDK `Agent` base, which imports `node:async_hooks` (AsyncLocalStorage).
 # The voice provider adapters themselves still target the standard Workers

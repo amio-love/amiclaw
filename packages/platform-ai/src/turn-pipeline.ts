@@ -33,6 +33,7 @@ import type {
 import { assembleLlmContext, type GameState } from './manual-injection'
 import type { ResolvedConfig } from './provider-config'
 import type { ManualData } from './contract'
+import { traceTurn } from './trace'
 
 /** Usage counters accumulated across a session (mirrors `SessionSummary.usage`). */
 export interface UsageCounters {
@@ -244,10 +245,20 @@ export async function* runTurn(
   // 1. STT: transcribe the player's audio; take the final cumulative transcript.
   //    `audioBytes` is the inbound-frame byte total — the fallback STT metering
   //    source at turn settle when the adapter reports no structured usage.
+  const turnStart = Date.now()
+  traceTurn('turn', 'pipeline-start', {
+    turnCount: state.turnCount,
+  })
   const { transcript: playerText, audioBytes: sttAudioBytes } = await collectFinalTranscript(
     providers.stt,
     audio
   )
+  // ASR hop boundary: the final cumulative transcript is in hand (length only —
+  // never the text). An empty transcript here explains a downstream LLM no-op.
+  traceTurn('asr', 'final-transcript', {
+    transcriptChars: playerText.length,
+    elapsedMs: Date.now() - turnStart,
+  })
 
   // 2. Inject: deterministic system message (role + rules + manual subset),
   //    then the rolling history, then this turn's player utterance.
@@ -265,6 +276,21 @@ export async function* runTurn(
   //    (as the LLM streams) with audio chunks (as TTS produces them).
   const sentenceQueue = new SentenceQueue()
   const ttsIterator = providers.tts.synthesize(sentenceQueue)[Symbol.asyncIterator]()
+
+  // Turn-trace counters for the LLM->TTS boundary (the deploy task's last
+  // sighting put the park here). Pure instrumentation: counting + first-event
+  // flags only, no effect on what is pushed/yielded or in what order.
+  let llmDeltaCount = 0
+  let firstDeltaTraced = false
+  let sentenceCount = 0
+  let firstFrameTraced = false
+  let ttsFrameCount = 0
+  // Count sentences crossing the LLM->TTS boundary (reported at turn settle).
+  // Behaviour-identical to `sentenceQueue.push` (same sentences, same order).
+  const queueSentence = (sentence: string): void => {
+    sentenceCount += 1
+    sentenceQueue.push(sentence)
+  }
 
   let assistantText = ''
   let pending = ''
@@ -319,25 +345,43 @@ export async function* runTurn(
             const delta = result.value.content
             assistantText += delta
             pending += delta
+            llmDeltaCount += 1
+            if (!firstDeltaTraced) {
+              firstDeltaTraced = true
+              traceTurn('llm', 'first-delta', { elapsedMs: Date.now() - turnStart })
+            }
             yield { kind: 'text', text: delta, done: false }
           }
           const { sentences, remainder } = splitSentences(pending)
-          for (const sentence of sentences) sentenceQueue.push(sentence)
+          for (const sentence of sentences) queueSentence(sentence)
           pending = remainder
           const tail = pending.trim()
           if (tail.length > 0) {
-            sentenceQueue.push(tail)
+            queueSentence(tail)
             pending = ''
           }
+          // LLM stream finished and all text has crossed into TTS — the boundary
+          // is fully drained. A park AFTER this with no audio isolates TTS.
+          traceTurn('llm', 'stream-end', {
+            deltaCount: llmDeltaCount,
+            sentenceCount,
+            assistantChars: assistantText.length,
+            elapsedMs: Date.now() - turnStart,
+          })
           sentenceQueue.close()
         } else {
           const delta = result.value.content
           if (delta.length > 0) {
             assistantText += delta
             pending += delta
+            llmDeltaCount += 1
+            if (!firstDeltaTraced) {
+              firstDeltaTraced = true
+              traceTurn('llm', 'first-delta', { elapsedMs: Date.now() - turnStart })
+            }
             yield { kind: 'text', text: delta, done: false }
             const { sentences, remainder } = splitSentences(pending)
-            for (const sentence of sentences) sentenceQueue.push(sentence)
+            for (const sentence of sentences) queueSentence(sentence)
             pending = remainder
           }
           nextLlmPromise = llmStream.next()
@@ -350,6 +394,14 @@ export async function* runTurn(
         } else {
           if (result.value.audio.length > 0) {
             ttsAudioBytes += result.value.audio.byteLength
+            ttsFrameCount += 1
+            if (!firstFrameTraced) {
+              firstFrameTraced = true
+              traceTurn('tts', 'first-frame', {
+                frameBytes: result.value.audio.byteLength,
+                elapsedMs: Date.now() - turnStart,
+              })
+            }
             yield { kind: 'audio', audio: result.value.audio, done: false }
           }
           if (result.value.done) {
@@ -403,6 +455,20 @@ export async function* runTurn(
   // PCM16 mono 16 kHz output contract (the Volcengine TTS session requests
   // exactly that format; the mock's placeholder bytes meter the same way).
   state.usage.ttsOutputSeconds += audioSecondsFromBytes(ttsAudioBytes)
+
+  // Turn settle: the per-turn accounting boundary. The counts here are the
+  // single most diagnostic line for the silent-park — e.g. llmDeltaCount:0 +
+  // ttsFrameCount:0 says nothing flowed past LLM; a high llmDeltaCount with
+  // ttsFrameCount:0 isolates TTS at the LLM->TTS boundary.
+  traceTurn('turn', 'settle', {
+    turnCount: state.turnCount,
+    llmDeltaCount,
+    llmOutputTokens: usage?.outputTokens,
+    sentenceCount,
+    ttsFrameCount,
+    ttsAudioBytes,
+    elapsedMs: Date.now() - turnStart,
+  })
 
   yield { kind: 'text', text: '', done: true }
 }
