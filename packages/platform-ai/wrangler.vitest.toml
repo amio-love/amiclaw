@@ -1,0 +1,32 @@
+# Test-only worker config for `@cloudflare/vitest-pool-workers` (workerd).
+#
+# Deliberately MINIMAL and distinct from the production `wrangler.toml`: the
+# session-DO suites exercise `VoiceSessionDO` in isolation — memory-less, with no
+# companion-memory bindings — exactly as the prior Node harness did (empty
+# companion env). Omitting `COMPANION_CONSOLIDATOR` / `COMPANION_DB` keeps
+# `handOffSummaryCapture` / `resolveCompanionContextBestEffort` no-ops, so a
+# session `end` never makes a cross-DO call into the consolidator (which would
+# otherwise hit an unmigrated test D1 and surface as an unhandled rejection).
+#
+# The production `wrangler.toml` stays the deploy SSOT and is untouched.
+
+name = "platform-ai-test"
+main = "src/worker.ts"
+compatibility_date = "2026-06-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Per-session voice pipeline DO. SQLite-backed (required once the class adopts
+# the Agents SDK `Agent` base, whose constructor uses `ctx.storage.sql`).
+[[durable_objects.bindings]]
+name = "VOICE_SESSION"
+class_name = "VoiceSessionDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceSessionDO"]
+
+# Per-session usage metering namespace the terminal flush writes to. A real
+# (miniflare-simulated) KV the suites read back to assert the flush record.
+[[kv_namespaces]]
+binding = "USAGE"
+id = "usage-test"

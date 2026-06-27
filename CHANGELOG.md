@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI session runtime moved onto the Cloudflare Agents SDK** - Internal
+change. The voice session's Durable Object now extends the Agents SDK `Agent`
+base class (with hibernation off, preserving the resident per-session state),
+replacing the hand-rolled WebSocket lifecycle — the first incremental step
+toward the Agents SDK engineering surface (tools / MCP / scheduling). The
+Durable Object test suite was migrated to the Cloudflare Workers vitest pool so
+it runs against the genuine workerd runtime instead of mocks. Behavior-
+preserving: the provider adapters and voice pipeline are byte-frozen and all 274
+tests pass unchanged. No player-facing behavior changes.
+
 **Platform-AI voice turns can no longer hang when a speech stream stalls
 mid-stream** - Internal reliability hardening. This extends the same fix made for
 the language-model stream to the two speech streams: turning the player's voice

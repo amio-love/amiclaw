@@ -1,37 +1,23 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Production-class regression tests for the turn in-flight guard and the DO
  * cross-await reentrancy matrix (the P1 from PR #156 review), driving the REAL
- * `VoiceSessionDO` in Node — these replaced the earlier `FakeSessionDo` mirror
- * suite, whose green could not prove the real class still carried the guard.
+ * `VoiceSessionDO` under the workerd runtime (`@cloudflare/vitest-pool-workers`).
  *
- * Harness (see `session-do-test-kit.ts` and the pattern's SSOT,
- * `session-do-usage-flush.test.ts`): `cloudflare:workers` is mocked to a plain
- * ctx/env-stashing base, `WebSocketPair` / `Response` globals are stubbed to
- * minimal doubles, and sockets are driven through the real `fetch` upgrade
- * entry. Turn parking is real: `createProviders` is passed through except when
- * a test installs the gated provider bundle, whose LLM stream suspends `runTurn`
- * at a genuinely pending provider `await` — exactly the cross-await window an
- * interleaved control message arrives in. The defect's shape: a second `turn`
- * mid-flight would start a second `runTurn` over the same
- * `state`/`providers`/socket, racing shared `history`/`usage` and interleaving
- * two response streams; `end` / owner-close must instead cancel cleanly.
+ * Harness (see `session-do-test-kit.ts`): the DO is the genuine Cloudflare
+ * Durable Object, instantiated through the `VOICE_SESSION` binding and driven
+ * over a REAL client WebSocket; `cloudflare:workers` is NOT mocked. Turn parking
+ * is real: `createProviders` is passed through except when a test installs the
+ * gated provider bundle, whose LLM stream suspends `runTurn` at a genuinely
+ * pending provider `await` — exactly the cross-await window an interleaved
+ * control message arrives in. Releasing a parked turn happens INSIDE the DO's
+ * I/O context (`handle.run(...)`), so the resumed `server.send` is in-context.
+ * The defect's shape: a second `turn` mid-flight would start a second `runTurn`
+ * over the same `state`/`providers`/socket, racing shared `history`/`usage` and
+ * interleaving two response streams; `end` / owner-close must instead cancel
+ * cleanly.
  */
-
-vi.mock('cloudflare:workers', () => {
-  /** Stand-in for the real base: stash `ctx` + `env` like `DurableObject`. */
-  class DurableObjectStub {
-    protected ctx: unknown
-    protected env: unknown
-
-    constructor(ctx: unknown, env: unknown) {
-      this.ctx = ctx
-      this.env = env
-    }
-  }
-  return { DurableObject: DurableObjectStub }
-})
 
 const providerControl = vi.hoisted(() => ({
   override: undefined as import('./turn-pipeline').TurnProviders | undefined,
@@ -48,8 +34,6 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
-  FakeUpgradeResponse,
-  FakeWebSocketPair,
   makeGatedProviders,
   makeSessionDo,
   makeStuckLlm,
@@ -57,20 +41,13 @@ import {
   makeTurnProviders,
   messagesOfType,
   openSocket,
-  resetCreatedPairs,
   sawDoneChunk,
-  tick,
+  settle,
+  waitFor,
+  waitForMessage,
 } from './session-do-test-kit'
 
-vi.stubGlobal('WebSocketPair', FakeWebSocketPair)
-vi.stubGlobal('Response', FakeUpgradeResponse)
-
-afterAll(() => {
-  vi.unstubAllGlobals()
-})
-
 beforeEach(() => {
-  resetCreatedPairs()
   providerControl.override = undefined
 })
 
@@ -83,19 +60,19 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
   it('rejects a second turn while the first is in flight; no second runTurn starts', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
     // First turn starts and parks at the gated LLM await (a real turn mid-flight).
-    socket.receive(TURN)
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'first turn parked at provider await')
     expect(kit.sttCalls()).toBe(1)
     expect(kit.llmTurns).toHaveLength(1)
 
     // Owner double-clicks: a second `turn` arrives while the first is parked.
-    socket.receive(TURN)
-    await tick()
+    socket.send(TURN)
+    await waitForMessage(socket, 'error')
 
     // Rejected with an explicit signal — NOT a second runTurn, NOT a socket close.
     expect(messagesOfType(socket, 'error')).toContainEqual({
@@ -104,18 +81,19 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
       message: 'a turn is already in progress',
     })
     expect(kit.sttCalls()).toBe(1)
-    expect(socket.closes).toEqual([])
+    expect(socket.closeEvents).toEqual([])
 
     // The first turn still completes normally — no concurrent pollution.
-    kit.llmTurns[0].pushDelta('The first wire is safe.')
-    await tick()
-    kit.llmTurns[0].finishStream()
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('The first wire is safe.'))
+    await session.run(() => kit.llmTurns[0].finishStream())
+    await waitFor(() => kit.llmTurns[0].settled(), 'first turn settled')
     expect(kit.llmTurns[0].settled()).toBe(true)
+    await waitFor(() => sawDoneChunk(socket), 'done chunk')
     expect(sawDoneChunk(socket)).toBe(true)
 
     // Exactly one turn counted in the summary.
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(1)
   })
@@ -123,27 +101,28 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
   it('clears the guard after a turn so a subsequent turn runs normally', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
-    kit.llmTurns[0].finishStream()
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'first turn parked')
+    await session.run(() => kit.llmTurns[0].finishStream())
+    await waitFor(() => kit.llmTurns[0].settled(), 'first turn settled')
     expect(kit.llmTurns[0].settled()).toBe(true)
 
     // A fresh turn after the first completes is accepted (a real second runTurn).
-    socket.receive(TURN)
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 2, 'second turn started')
     expect(kit.sttCalls()).toBe(2)
     expect(kit.llmTurns).toHaveLength(2)
-    kit.llmTurns[1].finishStream()
-    await tick()
+    await session.run(() => kit.llmTurns[1].finishStream())
+    await waitFor(() => kit.llmTurns[1].settled(), 'second turn settled')
     expect(kit.llmTurns[1].settled()).toBe(true)
     expect(messagesOfType(socket, 'error')).toEqual([])
 
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(2)
   })
@@ -152,22 +131,30 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     const throwing = makeThrowingLlm('provider boom')
     const bundle = makeTurnProviders(throwing.llm)
     providerControl.override = bundle.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
     // The provider rejects at the LLM step; the listener fail-louds with 1008.
-    socket.receive(TURN)
-    await tick()
+    // Under the real runtime that 1008 close of the OWNER socket also tears the
+    // session down (`onSocketClose`) — so proving the guard is not wedged uses a
+    // fresh session, exactly as a reconnecting client would.
+    socket.send(TURN)
+    await waitFor(() => throwing.calls() === 1, 'provider reached once')
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1008), '1008 fail-loud close')
     expect(throwing.calls()).toBe(1)
-    expect(socket.closes).toContainEqual({ code: 1008, reason: 'provider boom' })
+    expect(socket.closeEvents).toContainEqual({ code: 1008, reason: 'provider boom' })
 
-    // The guard is released despite the throw: the next turn REACHES the
+    // The guard is released despite the throw: a fresh session's turn REACHES the
     // provider again instead of bouncing off a wedged turn_in_flight guard.
-    socket.receive(TURN)
-    await tick()
+    const reconnect = await openSocket(session, 'user-A')
+    await createSessionOverWs(reconnect)
+    reconnect.send(TURN)
+    await waitFor(() => throwing.calls() === 2, 'provider reached again (guard released)')
     expect(throwing.calls()).toBe(2)
-    expect(messagesOfType(socket, 'error').filter((m) => m.code === 'turn_in_flight')).toEqual([])
+    expect(messagesOfType(reconnect, 'error').filter((m) => m.code === 'turn_in_flight')).toEqual(
+      []
+    )
   })
 })
 
@@ -177,31 +164,34 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
   it('cancels the in-flight turn: immediate summary, clean unwind, no settle', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
     // Let one chunk through so the turn is genuinely mid-stream.
-    kit.llmTurns[0].pushDelta('partial')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('partial'))
+    await settle()
     expect(kit.llmTurns[0].settled()).toBe(false)
 
-    // `end` arrives mid-turn: the summary + clean close land SYNCHRONOUSLY,
-    // before the background cancel's unwind — proving `end` never blocks on it.
-    socket.receive(END)
+    // `end` arrives mid-turn: the summary + clean close land while the turn is
+    // still parked at the provider await — proving `end` never blocks on the
+    // fire-and-forget cancel's unwind.
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
-    expect(socket.closes).toContainEqual({ code: 1000, reason: 'session ended' })
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'clean 1000 close')
+    expect(socket.closeEvents).toContainEqual({ code: 1000, reason: 'session ended' })
     // The canceled turn never settles, so it does not count.
     const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(0)
 
     // The parked provider await then settles; the queued cancel unwinds the
     // turn (provider `finally` ran, streams returned) WITHOUT reaching settle.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'turn unwound')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
     expect(kit.llmTurns[0].settled()).toBe(false)
     expect(sawDoneChunk(socket)).toBe(false)
@@ -210,15 +200,17 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
   it('end with no turn in flight is a no-op cancel and still summarizes', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
 
     const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(0)
-    expect(socket.closes).toContainEqual({ code: 1000, reason: 'session ended' })
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'clean close')
+    expect(socket.closeEvents).toContainEqual({ code: 1000, reason: 'session ended' })
     expect(kit.sttCalls()).toBe(0)
   })
 
@@ -230,22 +222,23 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     const stuck = makeStuckLlm()
     const bundle = makeTurnProviders(stuck.llm)
     providerControl.override = bundle.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
-    expect(bundle.sttCalls()).toBe(1)
+    socket.send(TURN)
+    await waitFor(() => bundle.sttCalls() === 1, 'turn parked at stuck provider')
 
-    // `end` lands synchronously even though the turn's cancel can never settle.
-    socket.receive(END)
+    // `end` lands even though the turn's cancel can never settle.
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
-    expect(socket.closes).toContainEqual({ code: 1000, reason: 'session ended' })
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'clean close')
+    expect(socket.closeEvents).toContainEqual({ code: 1000, reason: 'session ended' })
 
     // The stuck turn's `finally` never ran (the provider await is still
     // pending) — proving `end` did not block on the cancel.
-    await tick()
+    await settle()
     expect(stuck.finallyRan()).toBe(false)
   })
 })
@@ -256,30 +249,33 @@ describe('real VoiceSessionDO — create during a turn (matrix: create)', () => 
   it('rejects a re-create and leaves the in-flight session + turn untouched', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     const sessionId = await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
 
     // A second `create` arrives mid-turn: explicit reject, no socket close (a
     // close would truncate the turn streaming on this same socket).
-    socket.receive(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: {} }))
+    socket.send(JSON.stringify({ type: 'create', gameId: 'demo-mock', manualData: {} }))
+    await waitForMessage(socket, 'error')
     expect(messagesOfType(socket, 'error')).toContainEqual({
       type: 'error',
       code: 'already_created',
       message: 'session already created',
     })
-    expect(socket.closes).toEqual([])
+    expect(socket.closeEvents).toEqual([])
 
     // The live session was not clobbered: the same turn completes and the
     // summary still carries the ORIGINAL session id.
-    kit.llmTurns[0].finishStream()
-    await tick()
+    await session.run(() => kit.llmTurns[0].finishStream())
+    await waitFor(() => kit.llmTurns[0].settled(), 'turn settled')
     expect(kit.llmTurns[0].settled()).toBe(true)
+    await waitFor(() => sawDoneChunk(socket), 'done chunk')
     expect(sawDoneChunk(socket)).toBe(true)
-    socket.receive(END)
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
     const summary = messagesOfType(socket, 'summary')[0].summary as {
       sessionId: string
       turnCount: number
@@ -295,22 +291,22 @@ describe('real VoiceSessionDO — owner close during a turn (matrix: close)', ()
   it('owner close cancels the in-flight turn cleanly (no settle, no done chunk)', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
-    const socket = await openSocket(doInstance, 'user-A')
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.receive(TURN)
-    await tick()
-    kit.llmTurns[0].pushDelta('x')
-    await tick()
+    socket.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await session.run(() => kit.llmTurns[0].pushDelta('x'))
+    await settle()
 
     // Owner's socket drops mid-turn (network drop / tab close).
     socket.disconnect()
 
     // The parked provider await settles later; the queued cancel unwinds the
     // turn cleanly — provider `finally` ran, settle never reached.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'turn unwound')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
     expect(kit.llmTurns[0].settled()).toBe(false)
     expect(sawDoneChunk(socket)).toBe(false)

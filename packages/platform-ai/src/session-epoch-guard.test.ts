@@ -1,17 +1,16 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Production-class regression tests for the session-generation EPOCH guard
  * (the P2 from PR #156 review, raised by the prior `clearSession` fix), driving
- * the REAL `VoiceSessionDO` in Node — these replaced the earlier
- * `FakeSessionDo` mirror suite, whose green could not prove the real class
- * still carried the guard.
+ * the REAL `VoiceSessionDO` under the workerd runtime
+ * (`@cloudflare/vitest-pool-workers`).
  *
- * Harness (see `session-do-test-kit.ts` and the pattern's SSOT,
- * `session-do-usage-flush.test.ts`): mocked `cloudflare:workers` base, stubbed
- * `WebSocketPair` / `Response` globals, sockets driven through the real `fetch`
- * upgrade, and the gated provider bundle installed at the `createProviders`
- * seam so each generation's turn parks at a genuinely pending provider `await`.
+ * Harness (see `session-do-test-kit.ts`): the genuine Cloudflare Durable Object,
+ * driven over a real client WebSocket, with the gated provider bundle installed
+ * at the `createProviders` seam so each generation's turn parks at a genuinely
+ * pending provider `await`. Releasing a parked turn happens inside the DO's I/O
+ * context (`handle.run(...)`).
  *
  * The defect's shape (cross-generation clobber): `end` / owner-close mid-turn
  * fire-and-forget the cancel and `clearSession()` makes the same-named DO
@@ -30,20 +29,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
  * unwind lives in `session-end-cleanup.test.ts`.
  */
 
-vi.mock('cloudflare:workers', () => {
-  /** Stand-in for the real base: stash `ctx` + `env` like `DurableObject`. */
-  class DurableObjectStub {
-    protected ctx: unknown
-    protected env: unknown
-
-    constructor(ctx: unknown, env: unknown) {
-      this.ctx = ctx
-      this.env = env
-    }
-  }
-  return { DurableObject: DurableObjectStub }
-})
-
 const providerControl = vi.hoisted(() => ({
   override: undefined as import('./turn-pipeline').TurnProviders | undefined,
 }))
@@ -59,26 +44,17 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
-  FakeUpgradeResponse,
-  FakeWebSocketPair,
   makeGatedProviders,
   makeSessionDo,
   messagesOfType,
   openSocket,
-  resetCreatedPairs,
   sawDoneChunk,
-  tick,
+  settle,
+  waitFor,
+  waitForMessage,
 } from './session-do-test-kit'
 
-vi.stubGlobal('WebSocketPair', FakeWebSocketPair)
-vi.stubGlobal('Response', FakeUpgradeResponse)
-
-afterAll(() => {
-  vi.unstubAllGlobals()
-})
-
 beforeEach(() => {
-  resetCreatedPairs()
   providerControl.override = undefined
 })
 
@@ -91,42 +67,43 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
   it('end mid-turn → reconnect create + new turn → stale finally settles late and is a no-op', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
+    const session = makeSessionDo()
 
     // Generation 1: an owner session with a turn parked at a provider await.
-    const socket1 = await openSocket(doInstance, 'user-A')
+    const socket1 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket1)
-    socket1.receive(TURN)
-    await tick()
+    socket1.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'gen-1 turn parked')
     expect(kit.sttCalls()).toBe(1)
 
     // Owner ends mid-turn: fire-and-forget cancel + clearSession (epoch bump).
     // The gen-1 turn's `finally` has NOT run yet — its cancel is parked on the
     // pending provider promise.
-    socket1.receive(END)
+    socket1.send(END)
+    await waitForMessage(socket1, 'summary')
     expect(messagesOfType(socket1, 'summary')).toHaveLength(1)
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
 
     // A client reconnects to the SAME-named DO, opens a fresh session, and
     // starts a NEW turn. This is generation 2.
-    const socket2 = await openSocket(doInstance, 'user-B')
+    const socket2 = await openSocket(session, 'user-B')
     await createSessionOverWs(socket2)
-    socket2.receive(TURN)
-    await tick()
+    socket2.send(TURN)
+    await waitFor(() => kit.sttCalls() === 2, 'gen-2 turn started')
     expect(kit.sttCalls()).toBe(2)
     expect(kit.llmTurns).toHaveLength(2)
 
     // NOW the gen-1 provider promise settles and the stale `finally` runs —
     // LATE, after gen 2 is live. The epoch guard must make it a no-op.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'gen-1 stale finally ran')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
     expect(kit.llmTurns[0].settled()).toBe(false)
 
     // (1) The new session's overlap guard is STILL set: an overlapping `turn`
     // is rejected, and no third runTurn ever starts.
-    socket2.receive(TURN)
-    await tick()
+    socket2.send(TURN)
+    await waitForMessage(socket2, 'error')
     expect(messagesOfType(socket2, 'error')).toContainEqual({
       type: 'error',
       code: 'turn_in_flight',
@@ -137,10 +114,11 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // (2) The new turn is still cancelable by `end`: the stale finally did not
     // null out gen 2's activeTurn, so end's cancel reaches it and the turn
     // unwinds cleanly without settling.
-    socket2.receive(END)
+    socket2.send(END)
+    await waitForMessage(socket2, 'summary')
     expect(messagesOfType(socket2, 'summary')).toHaveLength(1)
-    kit.llmTurns[1].pushDelta('late-2')
-    await tick()
+    await session.run(() => kit.llmTurns[1].pushDelta('late-2'))
+    await waitFor(() => kit.llmTurns[1].finallyRan(), 'gen-2 turn unwound')
     expect(kit.llmTurns[1].finallyRan()).toBe(true)
     expect(kit.llmTurns[1].settled()).toBe(false)
     expect(sawDoneChunk(socket2)).toBe(false)
@@ -149,41 +127,43 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
   it('owner abrupt close mid-turn → reconnect + new turn → stale finally is a no-op', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
-    const { doInstance } = makeSessionDo()
+    const session = makeSessionDo()
 
     // Generation 1 parks mid-turn, then the owner socket drops WITHOUT `end`.
-    const socket1 = await openSocket(doInstance, 'user-A')
+    const socket1 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket1)
-    socket1.receive(TURN)
-    await tick()
+    socket1.send(TURN)
+    await waitFor(() => kit.sttCalls() === 1, 'gen-1 turn parked')
     socket1.disconnect()
+    await settle()
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
 
     // Reconnect: fresh session + new turn (generation 2).
-    const socket2 = await openSocket(doInstance, 'user-A')
+    const socket2 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket2)
-    socket2.receive(TURN)
-    await tick()
+    socket2.send(TURN)
+    await waitFor(() => kit.sttCalls() === 2, 'gen-2 turn started')
     expect(kit.sttCalls()).toBe(2)
 
     // gen-1's late `finally` runs after gen 2 is live: must be a no-op.
-    kit.llmTurns[0].pushDelta('late')
-    await tick()
+    await session.run(() => kit.llmTurns[0].pushDelta('late'))
+    await waitFor(() => kit.llmTurns[0].finallyRan(), 'gen-1 stale finally ran')
     expect(kit.llmTurns[0].finallyRan()).toBe(true)
 
     // The new session's guard survived (overlap still rejected, no third turn)
     // and its turn still completes normally afterwards.
-    socket2.receive(TURN)
-    await tick()
+    socket2.send(TURN)
+    await waitForMessage(socket2, 'error')
     expect(messagesOfType(socket2, 'error')).toContainEqual({
       type: 'error',
       code: 'turn_in_flight',
       message: 'a turn is already in progress',
     })
     expect(kit.sttCalls()).toBe(2)
-    kit.llmTurns[1].finishStream()
-    await tick()
+    await session.run(() => kit.llmTurns[1].finishStream())
+    await waitFor(() => kit.llmTurns[1].settled(), 'gen-2 turn settled')
     expect(kit.llmTurns[1].settled()).toBe(true)
+    await waitFor(() => sawDoneChunk(socket2), 'gen-2 done chunk')
     expect(sawDoneChunk(socket2)).toBe(true)
   })
 })

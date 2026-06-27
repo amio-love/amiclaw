@@ -15,10 +15,12 @@
 name = "platform-ai"
 main = "src/worker.ts"
 compatibility_date = "2026-06-08"
+compatibility_flags = ["nodejs_compat"]
 
-# Worker runs only the server-side AI orchestration. The Node.js compat flag
-# is intentionally NOT set here — adapters target the standard Workers fetch /
-# WebSocket / streams APIs, decided in a later round if a provider SDK needs it.
+# nodejs_compat is required by the Cloudflare Agents SDK: VoiceSessionDO extends
+# the SDK `Agent` base, which imports `node:async_hooks` (AsyncLocalStorage).
+# The voice provider adapters themselves still target the standard Workers
+# fetch / WebSocket / streams APIs.
 
 # --- Durable Object: per-session voice pipeline state holder ---
 # The DO owns one voice session's conversation history, current phase, and the
