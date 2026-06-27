@@ -400,6 +400,46 @@ describe('TTS event frame codec', () => {
     expect(parsed.event).toBe(TtsEvent.FinishSession)
     expect(parsed.sessionId).toBe('sess-z')
   })
+
+  it('connection-scoped frame omits the session-id field so declared size == payload', () => {
+    // Regression for the live park (Worker 345546ef): the server rejected the TTS
+    // request with `declared body size does not match actual body size:
+    // expected=0 actual=6`. A connection-scoped event (StartConnection) carries NO
+    // session-id field; the previous encoder still wrote a zero-length sessionIdSize
+    // (4 bytes of `00`), which the server read as a payload size of 0 while the real
+    // `[payloadSize=2][{}]` 6 bytes still followed. The fixed layout is
+    // `[header(4)][event(4)][payloadSize(4)][payload]` with NO size field between
+    // the event and the payload size.
+    const frame = buildTtsStartConnectionFrame()
+    const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    // header(4) + event(4) + payloadSize(4) + payload(2) = 14 bytes, never 18.
+    expect(frame.length).toBe(14)
+    expect(view.getInt32(4, false)).toBe(TtsEvent.StartConnection) // event at offset 4
+    const declaredPayloadSize = view.getInt32(8, false) // payload size directly after event
+    const actualPayload = frame.subarray(12)
+    expect(declaredPayloadSize).toBe(actualPayload.length) // declared == actual
+    expect(decoder.decode(actualPayload)).toBe('{}')
+    // The earlier malformed shape would have read 0 here (the zero sessionIdSize).
+    expect(declaredPayloadSize).not.toBe(0)
+  })
+
+  it('session-scoped frame keeps the session-id field with declared size == payload', () => {
+    const payload = encoder.encode('{"k":"v"}')
+    const frame = buildTtsEventFrame({
+      event: TtsEvent.TaskRequest,
+      sessionId: 'sid-7',
+      payload,
+    })
+    const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    expect(view.getInt32(4, false)).toBe(TtsEvent.TaskRequest) // event
+    const sessionIdSize = view.getInt32(8, false)
+    expect(sessionIdSize).toBe('sid-7'.length)
+    let offset = 12 + sessionIdSize
+    const declaredPayloadSize = view.getInt32(offset, false)
+    offset += 4
+    expect(declaredPayloadSize).toBe(payload.length) // declared == actual
+    expect(decoder.decode(frame.subarray(offset))).toBe('{"k":"v"}')
+  })
 })
 
 // --- parseFrame guards ------------------------------------------------------

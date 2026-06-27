@@ -27,6 +27,7 @@ import type {
   LlmUsage,
 } from './types'
 import { startDeadline, TIMEOUTS, type Deadline } from './timeout'
+import { traceTurn, traceTurnError } from '../trace'
 
 /** Default DeepSeek OpenAI-compatible base URL (includes the `/v1` prefix). */
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
@@ -187,6 +188,19 @@ export async function* sseStreamToChunks(
   const decoder = new TextDecoder()
   let buffer = ''
   let doneEmitted = false
+  // Turn-trace state: first-token latency + running delta count (content chars
+  // only; never the content itself).
+  const streamStart = Date.now()
+  let deltaCount = 0
+  let firstTokenTraced = false
+  const traceChunk = (chunk: LlmCompletionChunk): void => {
+    if (chunk.done) return
+    deltaCount += 1
+    if (!firstTokenTraced) {
+      firstTokenTraced = true
+      traceTurn('llm', 'first-token', { elapsedMs: Date.now() - streamStart })
+    }
+  }
 
   // Read the next stream segment, bounding only the inter-chunk silence when
   // `idleMs` is set. The idle deadline is armed per read and cancelled the
@@ -197,9 +211,10 @@ export async function* sseStreamToChunks(
     if (idleMs === undefined) return reader.read()
     let deadline: Deadline | undefined
     const idle = new Promise<never>((_resolve, reject) => {
-      deadline = startDeadline(idleMs, () =>
+      deadline = startDeadline(idleMs, () => {
+        traceTurnError('llm', 'idle-timeout', { idleMs, deltaCount })
         reject(new Error(`deepseek: SSE stream idle for >${idleMs}ms after first response`))
-      )
+      })
     })
     try {
       return await Promise.race([reader.read(), idle])
@@ -218,9 +233,13 @@ export async function* sseStreamToChunks(
         // Flush any trailing bytes, then process whatever remains as a last line.
         buffer += decoder.decode()
         const trailing = processSse(buffer, onUsage)
-        for (const chunk of trailing.chunks) yield chunk
+        for (const chunk of trailing.chunks) {
+          traceChunk(chunk)
+          yield chunk
+        }
         if (trailing.done && !doneEmitted) {
           doneEmitted = true
+          traceTurn('llm', 'stream-end', { deltaCount, streamEndReason: 'done-sentinel-at-close' })
           yield { content: '', done: true }
         }
         break
@@ -234,9 +253,13 @@ export async function* sseStreamToChunks(
       buffer = buffer.slice(newlineIdx + 1)
 
       const processed = processSse(ready, onUsage)
-      for (const chunk of processed.chunks) yield chunk
+      for (const chunk of processed.chunks) {
+        traceChunk(chunk)
+        yield chunk
+      }
       if (processed.done && !doneEmitted) {
         doneEmitted = true
+        traceTurn('llm', 'stream-end', { deltaCount, streamEndReason: 'done-sentinel' })
         yield { content: '', done: true }
         // `[DONE]` is the logical end; stop reading further bytes.
         return
@@ -256,7 +279,10 @@ export async function* sseStreamToChunks(
 
   // Stream closed without an explicit `[DONE]` — still give consumers a clean
   // terminal chunk so the contract's `done` guarantee holds.
-  if (!doneEmitted) yield { content: '', done: true }
+  if (!doneEmitted) {
+    traceTurn('llm', 'stream-end', { deltaCount, streamEndReason: 'body-closed-no-sentinel' })
+    yield { content: '', done: true }
+  }
 }
 
 /**
@@ -383,6 +409,10 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
         response.body,
         (usage) => {
           provider.lastUsage = usage
+          traceTurn('llm', 'usage', {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+          })
         },
         streamIdleMs
       )

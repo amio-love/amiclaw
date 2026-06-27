@@ -5,6 +5,22 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Platform-AI voice turns now complete end to end with the real speech
+providers** - Internal reliability fix. Until now the first real (non-mock) voice
+turn never actually finished: the speech-synthesis step sent a malformed request
+frame that the speech provider rejected, and the error-handling path then crashed
+on an over-long connection-close message — so instead of failing cleanly the turn
+went silent and parked until the platform's hard timeout. Three causes are fixed:
+the synthesis request frame is now encoded with a correct body-size header so the
+provider accepts it; connection-close messages are truncated to the protocol's
+byte limit so the failure path can never throw (a stalled turn now fails loud
+instead of hanging silently); and the default voice was switched to one the
+current synthesis model actually supports. A real turn — speech in, AI reply
+spoken back — now completes. This change also enables the Worker's observability
+logging (which had been entirely off) with sanitized, count-only per-step
+diagnostics, and adds a headless live-turn harness for verifying real-provider
+turns. No player-facing behavior changes beyond turns now working.
+
 **Platform-AI session runtime moved onto the Cloudflare Agents SDK** - Internal
 change. The voice session's Durable Object now extends the Agents SDK `Agent`
 base class (with hibernation off, preserving the resident per-session state),

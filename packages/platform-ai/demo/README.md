@@ -62,3 +62,73 @@ The mock TTS frame is the UTF-8 bytes of the sentence (a placeholder, not a real
 codec), so audio playback is best-effort in mock mode. The point of the demo is
 that the text and audio chunks arrive end to end; a real TTS adapter emits
 decodable audio in the same slot.
+
+## Headless live-turn harness (`live-turn.mjs`)
+
+`demo.js` is the interactive browser page. `live-turn.mjs` is its headless,
+repeatable sibling: a Node WebSocket driver that runs ONE voice turn end to end
+over the same `/ai-ws/*` protocol and **asserts** the full turn completed —
+proving a single orchestrated success, not just per-hop handshakes.
+
+It drives `create → stream PCM16 frames → turn → consume chunks → end`, then
+asserts on the returned `SessionSummary`: `turnCount >= 1`,
+`usage.llmOutputTokens > 0`, `usage.sttInputSeconds > 0`, and that ≥1 `audio`
+chunk arrived. It prints a per-hop report (ASR transcript, LLM token count, TTS
+frame count + bytes) and exits `0` on success / `1` on any failed assertion.
+
+The ASR transcript is not streamed to the client (server-side by design); the
+harness reads it from `SessionSummary.highlights` (the `user:` history entry).
+
+### Mock self-test (no credentials)
+
+In one terminal, start the mock Worker:
+
+```sh
+pnpm exec wrangler dev --config demo/wrangler.dev.toml --port 8787
+```
+
+In another, run the driver against the `demo-mock` gameId:
+
+```sh
+node demo/live-turn.mjs --gameId demo-mock
+```
+
+With no `--fixture`, the driver generates a ~1.5s synthetic PCM16 tone in
+memory — enough for the mock STT to report non-zero `sttInputSeconds` (it yields
+a fixed transcript regardless of audio content). This validates the driver
+mechanics with zero secrets.
+
+### Real-provider run (local secrets)
+
+The real run swaps the mock gameId for `demo` (DeepSeek LLM + Volcengine 火山
+STT/TTS) and supplies credentials via a gitignored `.dev.vars` at the package
+root:
+
+```sh
+# 1. Provide secrets (names only in the example; values stay local + gitignored)
+cp demo/.dev.vars.example .dev.vars
+$EDITOR .dev.vars            # fill DEEPSEEK_API_KEY and VOLC_API_KEY
+
+# 2. Build a real-speech PCM16 16kHz mono fixture (macOS say + afconvert)
+demo/make-fixture.sh "the red wire" demo/fixture-red-wire.pcm
+
+# 3. Start the live Worker
+pnpm exec wrangler dev --config demo/wrangler.live.toml --port 8787
+
+# 4. Drive one real turn
+node demo/live-turn.mjs --gameId demo --fixture demo/fixture-red-wire.pcm
+```
+
+`wrangler.live.toml` keeps `DEV_AUTH_BYPASS = "true"` (no AUTH KV / cookie
+needed) and reads the provider secrets only from `.dev.vars` — no secret value
+ever lands in a tracked file. The driver itself holds no key and no prompt; it
+only sends the gameId + per-run manual data, exactly like `demo.js`.
+
+### Flags
+
+| Flag        | Default               | Meaning                                         |
+| ----------- | --------------------- | ----------------------------------------------- |
+| `--gameId`  | `demo-mock`           | `demo-mock` (mock) or `demo` (real providers)   |
+| `--url`     | `ws://localhost:8787` | Worker WS base URL                              |
+| `--fixture` | _(synthetic tone)_    | Path to a raw PCM16 16kHz mono fixture          |
+| `--name`    | random                | Session name (the `/ai-ws/<name>` path segment) |

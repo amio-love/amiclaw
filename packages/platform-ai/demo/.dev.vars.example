@@ -1,0 +1,26 @@
+# Real-provider secrets for the live-turn harness (wrangler.live.toml).
+#
+# Copy to the PACKAGE ROOT as `.dev.vars`, fill in the values, then run:
+#   cp demo/.dev.vars.example .dev.vars
+#   pnpm exec wrangler dev --config demo/wrangler.live.toml
+#
+# `.dev.vars` is gitignored — never commit real values. This example file
+# carries NAMES ONLY (blank values).
+#
+# These are the credentials the provider factory reads (see
+# ../src/providers/factory.ts `ProviderEnv`):
+
+# DeepSeek LLM API key (the `demo` gameId selects deepseek for the LLM layer).
+DEEPSEEK_API_KEY=
+
+# Volcengine (火山) console API key — the single `X-Api-Key` credential backing
+# BOTH the STT and TTS layers. (This replaces the legacy VOLC_APP_ID +
+# VOLC_ACCESS_KEY pair, which the factory no longer reads.)
+VOLC_API_KEY=
+
+# Optional Volcengine resource-id overrides — leave blank to use the adapter
+# defaults (the `demo` config relies on the defaults). Uncomment to override:
+# VOLC_STT_RESOURCE_ID=
+# VOLC_TTS_RESOURCE_ID=
+# Optional DeepSeek base-URL override:
+# DEEPSEEK_BASE_URL=

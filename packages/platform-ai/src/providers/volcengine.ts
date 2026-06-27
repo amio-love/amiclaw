@@ -70,6 +70,7 @@
 import type { AudioChunk } from '../contract'
 import type { SttProvider, SttTranscriptChunk, SttUsage, TtsAudioChunk, TtsProvider } from './types'
 import { awaitWithTimeout, startDeadline, TIMEOUTS, type Deadline } from './timeout'
+import { traceTurn, traceTurnError } from '../trace'
 
 // --- Public options ---
 
@@ -163,7 +164,11 @@ const TTS_URL = 'wss://openspeech.bytedance.com/api/v3/tts/bidirection'
 const DEFAULT_STT_RESOURCE_ID = 'volc.seedasr.sauc.duration'
 const DEFAULT_TTS_RESOURCE_ID = 'seed-tts-2.0'
 const DEFAULT_STT_MODEL = 'bigmodel'
-const DEFAULT_TTS_SPEAKER = 'zh_female_cancan_mars_bigtts'
+// seed-tts-2.0 voice (the `_uranus_` series). The legacy `_mars_` voices
+// (e.g. `zh_female_cancan_mars_bigtts`) are seed-tts-1.0 and are rejected by the
+// `seed-tts-2.0` resource with "resource ID is mismatched with speaker related
+// resource"; 2.0 voices use the `_uranus_` infix.
+const DEFAULT_TTS_SPEAKER = 'zh_female_vv_uranus_bigtts'
 const DEFAULT_SAMPLE_RATE = 16000
 
 /** byte0: (protocol version 0b0001 << 4) | (header size 0b0001 = 4 bytes). */
@@ -216,6 +221,29 @@ export const TtsEvent = {
   SentenceEnd: 351,
   TtsResponse: 352,
 } as const
+
+/**
+ * TTS event codes that are CONNECTION-scoped rather than SESSION-scoped. On the
+ * wire a connection-scoped event frame carries NO session-id field at all (not
+ * even a zero-length size prefix): its layout is `[header][event][payloadSize][payload]`.
+ * Session-scoped events insert `[sessionIdSize][sessionId]` between the event and
+ * the payload size. The server keys this distinction off the event number, so the
+ * client MUST match it: emitting a zero `sessionIdSize` for a connection-scoped
+ * event makes the server read that zero as the payload size (declared body = 0)
+ * while the real `[payloadSize][payload]` bytes still follow, which it rejects with
+ * `declared body size does not match actual body size: expected=0 actual=N`.
+ * Both build and parse share this set so the framing stays symmetric.
+ */
+const CONNECTION_SCOPED_TTS_EVENTS: ReadonlySet<number> = new Set<number>([
+  TtsEvent.StartConnection,
+  TtsEvent.FinishConnection,
+  TtsEvent.ConnectionStarted,
+  TtsEvent.ConnectionFailed,
+])
+
+function isConnectionScopedTtsEvent(event: number): boolean {
+  return CONNECTION_SCOPED_TTS_EVENTS.has(event)
+}
 
 // --- Pure codec: frame build / parse / auth headers ---
 
@@ -396,11 +424,19 @@ export function buildSttAudioFrame(
 }
 
 /**
- * Build a TTS event frame: `[header][event][sessionIdSize][sessionId?][payloadSize][payload]`.
+ * Build a TTS event frame.
  *
- * Connection-scoped events (StartConnection / FinishConnection) carry an empty
- * session id; session-scoped events (StartSession / TaskRequest /
- * FinishSession) carry the session id assigned by the client.
+ * Layout depends on the event's scope (see `CONNECTION_SCOPED_TTS_EVENTS`):
+ *  - connection-scoped (StartConnection / FinishConnection):
+ *    `[header][event][payloadSize][payload]` — NO session-id field at all.
+ *  - session-scoped (StartSession / TaskRequest / FinishSession):
+ *    `[header][event][sessionIdSize][sessionId][payloadSize][payload]`.
+ *
+ * Emitting a zero `sessionIdSize` for a connection-scoped event is exactly the
+ * bug the server rejects with `declared body size does not match actual body
+ * size: expected=0 actual=N` (it reads that zero as the payload size). So the
+ * session-id pair is written ONLY for session-scoped events; the declared
+ * `payloadSize` always equals the actual payload byte length for every frame.
  */
 export function buildTtsEventFrame(args: {
   event: number
@@ -413,15 +449,15 @@ export function buildTtsEventFrame(args: {
     Serialization.Json,
     Compression.None
   )
-  const sessionIdBytes = textEncoder.encode(args.sessionId)
-  return concatBytes([
-    header,
-    int32BE(args.event),
-    int32BE(sessionIdBytes.length),
-    sessionIdBytes,
-    int32BE(args.payload.length),
-    args.payload,
-  ])
+  const parts: Uint8Array[] = [header, int32BE(args.event)]
+  if (!isConnectionScopedTtsEvent(args.event)) {
+    const sessionIdBytes = textEncoder.encode(args.sessionId)
+    parts.push(int32BE(sessionIdBytes.length))
+    parts.push(sessionIdBytes)
+  }
+  parts.push(int32BE(args.payload.length))
+  parts.push(args.payload)
+  return concatBytes(parts)
 }
 
 /** Build the TTS StartConnection frame (no session, empty JSON payload). */
@@ -697,13 +733,20 @@ export function parseFrame(data: unknown): ParsedFrame {
   }
 
   if ((flags & MessageFlag.WithEvent) === MessageFlag.WithEvent) {
-    // TTS event frame: [event][sessionIdSize][sessionId][payloadSize][payload].
+    // TTS event frame. Connection-scoped events carry no session-id field
+    // (`[event][payloadSize][payload]`); session-scoped events insert it
+    // (`[event][sessionIdSize][sessionId][payloadSize][payload]`). Symmetric to
+    // `buildTtsEventFrame` — both key the session-id field off the event scope.
     frame.event = view.getInt32(offset, false)
     offset += 4
-    const sessionIdSize = view.getInt32(offset, false)
-    offset += 4
-    frame.sessionId = textDecoder.decode(bytes.subarray(offset, offset + sessionIdSize))
-    offset += sessionIdSize
+    if (isConnectionScopedTtsEvent(frame.event)) {
+      frame.sessionId = ''
+    } else {
+      const sessionIdSize = view.getInt32(offset, false)
+      offset += 4
+      frame.sessionId = textDecoder.decode(bytes.subarray(offset, offset + sessionIdSize))
+      offset += sessionIdSize
+    }
   } else if (flags === MessageFlag.PositiveSequence || flags === MessageFlag.NegativeWithSequence) {
     // ASR sequence-carrying frame: [sequence][payloadSize][payload].
     frame.sequence = view.getInt32(offset, false)
@@ -824,13 +867,14 @@ export const defaultConnect: WebSocketConnector = async (url, headers) => {
   }
   // Observability: surface the Volcengine handshake verdict (HTTP status + the
   // `X-Tt-Logid` trace id Volcengine support keys their server logs off) that
-  // the `fetch`-upgrade response carries before the socket is taken. Keyed by
-  // resource id so ASR vs TTS upgrades are distinguishable in `wrangler tail`.
-  console.log(
-    `[volc-ws] upgrade resource=${headers['X-Api-Resource-Id']} status=${response.status} logid=${
-      response.headers.get('X-Tt-Logid') ?? response.headers.get('x-tt-logid') ?? '<none>'
-    }`
-  )
+  // the `fetch`-upgrade response carries before the socket is taken. Resource id
+  // distinguishes ASR vs TTS upgrades in the trace. Emitted as a `turn-trace`
+  // line so it shares the one greppable format (see `trace.ts`).
+  traceTurn('ws', 'upgrade', {
+    resource: headers['X-Api-Resource-Id'],
+    status: response.status,
+    logid: response.headers.get('X-Tt-Logid') ?? response.headers.get('x-tt-logid') ?? '<none>',
+  })
   // Cloudflare's fetch exposes the negotiated socket on the response.
   const socket = (
     response as unknown as {
@@ -957,6 +1001,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // this one (mirrors the DeepSeek `lastUsage` reset).
       stt.lastUsage = undefined
       const connectId = randomId()
+      const asrStart = Date.now()
       const headers = buildAuthHeaders(
         { apiKey: opts.apiKey, resourceId: sttResourceId },
         connectId
@@ -991,6 +1036,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // transcript is tolerated and the streaming that follows is unbounded (only
       // the first response is deadlined — never the whole stream).
       const firstResponseDeadline = startDeadline(TIMEOUTS.firstResponseMs, () => {
+        traceTurnError('asr', 'first-response-timeout', { ms: TIMEOUTS.firstResponseMs })
         queue.fail(new Error(`Volcengine ASR: no transcript within ${TIMEOUTS.firstResponseMs}ms`))
         socket.close()
       })
@@ -1010,6 +1056,7 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       const resetStreamIdle = (): void => {
         streamIdleDeadline?.cancel()
         streamIdleDeadline = startDeadline(TIMEOUTS.streamIdleMs, () => {
+          traceTurnError('asr', 'stream-idle-timeout', { ms: TIMEOUTS.streamIdleMs })
           queue.fail(
             new Error(
               `Volcengine ASR: stream idle for >${TIMEOUTS.streamIdleMs}ms after first transcript`
@@ -1039,6 +1086,12 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           // the normal end-of-stream path (idempotent; mirrors the TTS layer).
           if (chunk.isFinal) {
             finalReached = true
+            // ASR final/definite transcript — the normal completion signal
+            // (length only, never the text).
+            traceTurn('asr', 'final', {
+              transcriptChars: chunk.text.length,
+              elapsedMs: Date.now() - asrStart,
+            })
             // Normal end-of-stream: clear the inter-chunk idle guard so it can never
             // fire late against an already-closed queue.
             streamIdleDeadline?.cancel()
@@ -1051,14 +1104,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           }
         } catch (err) {
           // Observability: an error frame (parseSttResponse throws with the
-          // server's code/message) or a malformed frame lands here — surface it
+          // server's code/message) or a malformed frame lands here — surface
+          // that one occurred (message LENGTH only, never the decoded text)
           // instead of letting it vanish into the generic queue failure.
           // Clear the idle guard first so a stalled deadline never outlives a
           // failed stream.
           streamIdleDeadline?.cancel()
-          console.error(
-            `[volc-asr] frame error: ${err instanceof Error ? err.message : String(err)}`
-          )
+          traceTurnError('asr', 'frame-error', {
+            messageChars: (err instanceof Error ? err.message : String(err)).length,
+          })
           queue.fail(err)
         }
       })
@@ -1069,15 +1123,16 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // (`collectFinalTranscript`) throws and the turn fails loud, rather than
       // continuing with an empty/incomplete transcript.
       socket.addEventListener('close', (event) => {
-        // Observability: the Volcengine ASR close code + reason that the generic
-        // "closed before a final transcript" error used to swallow. A clean
-        // 1000/empty close after silence vs a non-1000 protocol close points at
-        // very different root causes.
-        console.log(
-          `[volc-asr] socket close code=${event?.code ?? '-'} reason=${JSON.stringify(
-            event?.reason ?? ''
-          )} finalReached=${finalReached}`
-        )
+        // Observability: the Volcengine ASR close CODE (numeric) + reason LENGTH
+        // that the generic "closed before a final transcript" error used to
+        // swallow. A clean 1000/empty close after silence vs a non-1000 protocol
+        // close points at very different root causes — the numeric code carries
+        // that signal without logging the raw reason text.
+        traceTurn('asr', 'socket-close', {
+          code: event?.code,
+          reasonChars: (event?.reason ?? '').length,
+          finalReached,
+        })
         // The stream has ended either way — stop the idle guard so it cannot fire
         // late against an already-settled queue.
         streamIdleDeadline?.cancel()
@@ -1182,6 +1237,9 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
     async *synthesize(text: AsyncIterable<string>): AsyncIterable<TtsAudioChunk> {
       const connectId = randomId()
       const sessionId = randomId()
+      const ttsStart = Date.now()
+      let ttsFrameCount = 0
+      let firstFrameTraced = false
       const headers = buildAuthHeaders(
         { apiKey: opts.apiKey, resourceId: ttsResourceId },
         connectId
@@ -1222,6 +1280,11 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           const err = new Error(
             `Volcengine TTS: audio stream idle for >${TIMEOUTS.streamIdleMs}ms during synthesis`
           )
+          traceTurnError('tts', 'stream-idle-timeout', {
+            ms: TIMEOUTS.streamIdleMs,
+            frameCount: ttsFrameCount,
+            sessionId,
+          })
           handshake.abort(err)
           queue.fail(err)
           socket.close()
@@ -1233,6 +1296,8 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           const frame = parseFrame(event.data)
           if (frame.messageType === MessageType.ErrorResponse) {
             const err = new Error(`Volcengine TTS error: ${decodeUtf8(frame.payload)}`)
+            // Payload BYTE length only — never the decoded error text.
+            traceTurnError('tts', 'error-frame', { payloadBytes: frame.payload.length, sessionId })
             streamIdleDeadline?.cancel()
             handshake.abort(err)
             queue.fail(err)
@@ -1245,6 +1310,17 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             return
           }
           if (frame.event === TtsEvent.TtsResponse && frame.payload.length > 0) {
+            ttsFrameCount += 1
+            if (!firstFrameTraced) {
+              firstFrameTraced = true
+              // First synthesized audio frame back from the server — the signal
+              // that crossed the LLM->TTS boundary into actual audio output.
+              traceTurn('tts', 'first-frame', {
+                frameBytes: frame.payload.length,
+                elapsedMs: Date.now() - ttsStart,
+                sessionId,
+              })
+            }
             queue.push({ audio: copyBytes(frame.payload), done: false })
             // Streaming audio — (re)arm the inter-chunk idle guard for the gap to
             // the next audio chunk.
@@ -1254,11 +1330,21 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
             // finished so a subsequent socket close is the clean end-of-stream,
             // and end iteration. Clear the idle guard so it cannot fire late.
             sessionFinished = true
+            traceTurn('tts', 'session-finished', {
+              frameCount: ttsFrameCount,
+              elapsedMs: Date.now() - ttsStart,
+              sessionId,
+            })
             streamIdleDeadline?.cancel()
             queue.push({ audio: new Uint8Array(0), done: true })
             queue.close()
           } else if (frame.event === TtsEvent.SessionFailed) {
             const err = new Error(`Volcengine TTS session failed: ${decodeUtf8(frame.payload)}`)
+            // Payload BYTE length only — never the decoded failure text.
+            traceTurnError('tts', 'session-failed', {
+              payloadBytes: frame.payload.length,
+              sessionId,
+            })
             streamIdleDeadline?.cancel()
             handshake.abort(err)
             queue.fail(err)
@@ -1273,7 +1359,14 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       // gates so the pump fails loudly rather than awaiting a frame forever.
       // `abort` is harmless once the gates have all settled (no-op on a settled
       // gate), so it runs unconditionally on every close.
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
+        traceTurn('tts', 'socket-close', {
+          code: event?.code,
+          reasonChars: (event?.reason ?? '').length,
+          sessionFinished,
+          frameCount: ttsFrameCount,
+          sessionId,
+        })
         // The session has ended either way — stop the idle guard so it cannot fire
         // late against an already-settled queue.
         streamIdleDeadline?.cancel()
@@ -1332,10 +1425,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           handshake.connectionStarted,
           TIMEOUTS.firstResponseMs,
           `Volcengine TTS: no ConnectionStarted within ${TIMEOUTS.firstResponseMs}ms`,
-          () =>
+          () => {
+            traceTurnError('tts', 'connection-started-timeout', {
+              ms: TIMEOUTS.firstResponseMs,
+              sessionId,
+            })
             handshake.abort(
               new Error(`Volcengine TTS: no ConnectionStarted within ${TIMEOUTS.firstResponseMs}ms`)
             )
+          }
         )
         if (cancelled) return
         socket.send(
@@ -1352,10 +1450,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           handshake.sessionStarted,
           TIMEOUTS.firstResponseMs,
           `Volcengine TTS: no SessionStarted within ${TIMEOUTS.firstResponseMs}ms`,
-          () =>
+          () => {
+            traceTurnError('tts', 'session-started-timeout', {
+              ms: TIMEOUTS.firstResponseMs,
+              sessionId,
+            })
             handshake.abort(
               new Error(`Volcengine TTS: no SessionStarted within ${TIMEOUTS.firstResponseMs}ms`)
             )
+          }
         )
         for await (const piece of text) {
           if (cancelled) return
@@ -1365,6 +1468,8 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           )
         }
         if (cancelled) return
+        // All upstream text has been fed; FinishSession is now sent and the
+        // server must produce audio then SessionFinished.
         socket.send(asArrayBuffer(buildTtsFinishSessionFrame(sessionId)))
         // Arm the idle guard for the synthesis-output phase now that all text is
         // drained: from here the server must produce audio frames then

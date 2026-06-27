@@ -1,0 +1,58 @@
+# LIVE real-provider wrangler config for the Platform AI live-turn harness.
+#
+# Same Worker as `wrangler.dev.toml` (../src/worker.ts), but wired so a session
+# created with the REAL-provider gameId (`demo`) drives the actual STT -> LLM ->
+# TTS stack: DeepSeek (LLM) + Volcengine 火山 (STT + TTS). It exists to run ONE
+# orchestrated full turn through the real providers once a local `.dev.vars`
+# carries the credentials.
+#
+# Differences from `wrangler.dev.toml`:
+#   1. Provider secrets are read from a gitignored `.dev.vars` at the package
+#      root (see `.dev.vars.example`). wrangler dev auto-loads `.dev.vars`.
+#   2. DEV_AUTH_BYPASS stays "true" — no AUTH KV / session cookie is needed to
+#      connect locally. (Auth is orthogonal to the provider hop under test.)
+#   3. The harness is invoked with `--gameId demo` (the real-provider entry in
+#      ../src/provider-config.ts), NOT `demo-mock`.
+#
+# Run from the package root (`packages/platform-ai/`):
+#   cp demo/.dev.vars.example .dev.vars   # then fill in the values
+#   pnpm exec wrangler dev --config demo/wrangler.live.toml
+#   node demo/live-turn.mjs --gameId demo --fixture demo/fixture-red-wire.pcm
+#
+# SECURITY: never put real secret VALUES in this file or in `.dev.vars.example`.
+# They live only in the gitignored `.dev.vars`, read by wrangler at runtime.
+
+name = "platform-ai-live"
+main = "../src/worker.ts"
+compatibility_date = "2026-06-08"
+# Required by the Agents SDK (VoiceSessionDO extends `Agent`, which imports
+# `node:async_hooks`); matches the production + vitest + demo wrangler configs.
+compatibility_flags = ["nodejs_compat"]
+
+# Serve the demo directory as static assets; the Worker is invoked first so it
+# can handle the `/ai-ws/*` WebSocket upgrade before asset routing.
+[assets]
+directory = "."
+run_worker_first = ["/ai-ws/*"]
+
+# Per-session voice pipeline DO (same class as production).
+[[durable_objects.bindings]]
+name = "VOICE_SESSION"
+class_name = "VoiceSessionDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceSessionDO"]
+
+[vars]
+# Dev auth bypass ON for local live-turn runs only — never set in production.
+DEV_AUTH_BYPASS = "true"
+
+# Provider secrets (DEEPSEEK_API_KEY, VOLC_API_KEY, and any optional resource-id
+# overrides) are NOT listed here as [vars]. wrangler dev auto-loads them from a
+# gitignored `.dev.vars` at the package root as runtime secrets, so no secret
+# value ever lands in a tracked file. See `.dev.vars.example`.
+#
+# The optional USAGE KV binding is omitted: `flushUsage` degrades to a no-op
+# when the binding is absent, so the turn still completes and the summary still
+# carries the in-memory usage counters this harness asserts on.
