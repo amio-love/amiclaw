@@ -59,6 +59,19 @@ export interface ManualData {
 }
 
 /**
+ * Game state that drives manual-subset selection. `relevantSections` is the
+ * ordered list of manual section ids the platform deems relevant for the
+ * current turn (e.g. the current module/phase). The game owns how it derives
+ * this list; injection only consumes it. Kept here in the pure contract module
+ * (rather than alongside the injection runtime) so browser-side consumers can
+ * type their game state without pulling any server runtime.
+ */
+export interface GameState {
+  /** Ordered manual section ids to inject for this turn. */
+  relevantSections: string[]
+}
+
+/**
  * One chunk of the AI's streamed response. A turn produces an ordered stream of
  * these: incremental assistant text plus the synthesized audio frames pushed
  * back over the same WebSocket. `kind` discriminates the two; `done` marks the

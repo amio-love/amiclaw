@@ -68,7 +68,30 @@ export default defineConfig({
     baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // The mode② voice-panel scenario needs a deterministic mic + audio:
+        //  - fake media: getUserMedia returns a synthetic mic stream and the
+        //    permission prompt is auto-accepted, so push-to-talk capture works
+        //    headless with no real device.
+        //  - autoplay relaxation: the panel's TTS AudioContext can start without
+        //    a user-gesture gate, so the "AI is speaking" playback indicator
+        //    fires deterministically.
+        // Harmless to every other scenario (none uses getUserMedia or Web Audio
+        // assertions).
+        launchOptions: {
+          args: [
+            '--use-fake-ui-for-media-stream',
+            '--use-fake-device-for-media-stream',
+            '--autoplay-policy=no-user-gesture-required',
+          ],
+        },
+      },
+    },
+  ],
   webServer: {
     // Serve the assembled `pnpm build` artifact (packages/platform/dist — the
     // deploy root that hosts the platform shell at /, BombSquad under

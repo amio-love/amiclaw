@@ -20,20 +20,14 @@
  */
 
 import type { CompanionContext } from '../../companion-memory/src/types'
-import type { ManualData } from './contract'
+import type { GameState, ManualData } from './contract'
 import type { ChatMessage } from './providers/types'
 import type { SystemPromptConfig } from './provider-config'
 
-/**
- * Game state that drives manual-subset selection. `relevantSections` is the
- * ordered list of manual section ids the platform deems relevant for the
- * current turn (e.g. the current module/phase). The game owns how it derives
- * this list; injection only consumes it.
- */
-export interface GameState {
-  /** Ordered manual section ids to inject for this turn. */
-  relevantSections: string[]
-}
+// `GameState` is defined in the pure contract module; re-exported here so the
+// existing `from './manual-injection'` importers (turn-pipeline, session-do,
+// session-assembly) keep their import path unchanged.
+export type { GameState }
 
 /** Input to `assembleLlmContext`. */
 export interface AssembleLlmContextInput {

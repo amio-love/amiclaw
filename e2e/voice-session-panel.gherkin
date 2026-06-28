@@ -1,0 +1,38 @@
+# In-game voice partner panel (mode②) — the platform voice session wired into a
+# daily run. An opted-in daily run (`?mode=daily&partner=platform`) mounts the
+# VoicePanel, which connects to the platform-ai `/ai-ws/*` bridge, runs one
+# push-to-talk turn, renders the AI's streamed text reply, shows the "AI is
+# speaking" cue while the TTS audio plays, and tears the session down when the
+# run is exited.
+#
+# Deterministic + hermetic: the `/ai-ws/*` WebSocket is stubbed at the harness
+# boundary (e2e/steps/fixtures.ts `routeWebSocket`) so the panel is driven
+# through created -> chunk(text) -> chunk(audio) frames with no live Worker, no
+# DeepSeek/Volcengine, and no real network. The mic is the Chromium fake media
+# device (playwright.config.ts launch flags), so `getUserMedia` resolves without
+# a real microphone or a permission prompt. The real-provider voice turn is
+# verified separately by a human play-green plus the standalone live-turn
+# harness — this scenario asserts the panel's UI states only, never real audio
+# or provider output.
+
+Feature: In-game voice partner panel (mode②)
+  As a daily-challenge player who opted into the platform voice partner
+  I want an in-game voice panel that connects, takes a push-to-talk turn, and
+  shows the AI replying
+  So that I can talk to my AI partner without leaving the run
+
+  Background:
+    Given I open /
+
+  # Source: mode2-voice-session-turn
+  @playwright
+  Scenario: A mode② daily run drives one voice turn through the panel
+    When I enter a mode② daily run with the platform voice partner
+    Then the voice panel shows the AI partner is connected
+
+    When I push and hold the talk button, then release
+    Then the panel renders the AI's stubbed voice reply
+    And the panel shows the "AI is speaking" indicator while the reply audio plays
+
+    When I exit the run
+    Then the voice session ends and the panel is gone
