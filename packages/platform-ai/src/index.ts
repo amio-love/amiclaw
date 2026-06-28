@@ -16,6 +16,7 @@ export type {
   UserId,
   AudioChunk,
   ManualData,
+  GameState,
   AiResponseChunk,
   SessionSummary,
   VoiceSessionContract,
@@ -48,7 +49,7 @@ export type {
 export { resolveConfig } from './provider-config'
 
 // Deterministic manual injection.
-export type { GameState, AssembleLlmContextInput } from './manual-injection'
+export type { AssembleLlmContextInput } from './manual-injection'
 export { assembleLlmContext } from './manual-injection'
 
 // Provider factory — wire a resolved config to concrete R2 adapters.

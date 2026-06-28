@@ -100,6 +100,28 @@ const LEADERBOARD_DEFAULT = readJson<{ get: LeaderboardGetResponse; post: Submit
   'leaderboard-default.json'
 )
 
+// --- Voice-session stub ------------------------------------------------------
+//
+// The mode② voice panel connects to the platform-ai bridge over the same-origin
+// `/ai-ws/*` WebSocket. The harness mocks that socket (page.routeWebSocket) so
+// the panel is driven deterministically with no live Worker / provider. The
+// stubbed turn streams one text chunk then one audio chunk; the audio is a few
+// seconds of PCM16 16 kHz mono silence — long enough that the "AI is speaking"
+// indicator (which the hook drives off Web Audio playback) is observable.
+const VOICE_REPLY_TEXT = '把红色的线接到第三个接线柱，先别动其它线。'
+/** PCM16 mono @16 kHz; the hook plays it back to set the "speaking" indicator. */
+const VOICE_AUDIO_SECONDS = 4
+const VOICE_AUDIO_BASE64 = Buffer.alloc(16_000 * VOICE_AUDIO_SECONDS * 2).toString('base64')
+
+interface VoiceMockState {
+  /** The AI's stubbed text reply rendered by the panel for the push-to-talk turn. */
+  reply: string
+  /** Base64 PCM16 16 kHz mono TTS payload streamed as the turn's audio. */
+  audioBase64: string
+  /** Captured client->server JSON frames (create / turn / end) for assertions. */
+  clientFrames: Record<string, unknown>[]
+}
+
 /** Buffer that comfortably exceeds the install -> goto -> pauseAt latency. */
 const CLOCK_BUFFER_MS = 60_000
 /** Countdown budgets — verbatim from store/game-context.tsx TIME_BUDGET_MS. */
@@ -130,6 +152,12 @@ export class World {
   authIdentity: { user_id: string; email: string } | null = null
   /** Captured POST /api/auth/magic-link/request bodies for assertions. */
   readonly magicLinkRequests: Record<string, unknown>[] = []
+  /** Stub config + captured frames for the mode② voice WebSocket. */
+  readonly voice: VoiceMockState = {
+    reply: VOICE_REPLY_TEXT,
+    audioBase64: VOICE_AUDIO_BASE64,
+    clientFrames: [],
+  }
   private clockInstalled = false
 
   constructor(page: Page) {
@@ -280,6 +308,23 @@ export class World {
     await this.waitForRunStarted()
   }
 
+  /**
+   * Enter a mode② daily run with the platform voice partner. The voice panel
+   * mounts only on a daily run opted in via `?partner=platform` (there is no
+   * connect-flow affordance for it yet — it is a pure URL signal), so the run is
+   * reached by a direct deep-link goto. The seed-pinning clock installed by the
+   * preceding `I open /` step stays frozen across this navigation, so GamePage
+   * mounts under the pinned daily seed exactly as a connect-flow entry would,
+   * and the route-mocked manual loads the same fixture. PLAYING (the visible
+   * stopwatch) implies the manual loaded, so the VoicePanel is mounted and its
+   * `/ai-ws/*` socket — stubbed in the fixture wiring — is connecting.
+   */
+  async startPlatformVoiceDailyRun(): Promise<void> {
+    this.runMode = 'daily'
+    await this.page.goto('/bombsquad/run?mode=daily&partner=platform')
+    await this.waitForRunStarted()
+  }
+
   // --- Module solving --------------------------------------------------------
 
   /**
@@ -409,6 +454,43 @@ export const test = base.extend<{ world: World }>({
       // Daily/practice manual fetch -> fixture YAML.
       await page.route('**/manual/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'text/yaml', body: MANUAL_YAML })
+      })
+
+      // mode② voice bridge — mock the same-origin `/ai-ws/*` WebSocket the
+      // VoicePanel hook opens. Inert for every non-voice scenario (none opens
+      // that socket). Mock mode (no connectToServer) means Playwright opens the
+      // page socket automatically, so the hook's `onopen` create handshake runs.
+      // The stub mirrors the real session-do.ts envelope: `created` on create,
+      // then a text chunk + an audio chunk on each turn. Binary mic PCM frames
+      // (sent while the player holds to talk) arrive here as Buffers and are
+      // ignored — no STT runs. No `end`/`summary` is sent because the panel has
+      // no end control; the session ends by panel teardown on run exit.
+      await page.routeWebSocket(/\/ai-ws\//, (ws) => {
+        ws.onMessage((message) => {
+          if (typeof message !== 'string') return // binary mic audio — ignore
+          let frame: { type?: string }
+          try {
+            frame = JSON.parse(message) as { type?: string }
+          } catch {
+            return
+          }
+          world.voice.clientFrames.push(frame as Record<string, unknown>)
+          if (frame.type === 'create') {
+            ws.send(JSON.stringify({ type: 'created', sessionId: 'e2e-voice-session' }))
+          } else if (frame.type === 'turn') {
+            ws.send(
+              JSON.stringify({ type: 'chunk', kind: 'text', text: world.voice.reply, done: false })
+            )
+            ws.send(
+              JSON.stringify({
+                type: 'chunk',
+                kind: 'audio',
+                audio: world.voice.audioBase64,
+                done: true,
+              })
+            )
+          }
+        })
       })
 
       // Fire-and-forget telemetry -> 200 stub. POST bodies are captured first

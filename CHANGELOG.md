@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② in-game voice partner (opt-in wiring)** - BombSquad's daily
+run can now host the platform's AI defuse partner over an in-page voice panel:
+hold to talk, and the AI guides you by voice using the manual it can see while
+you only see the device. It is wired into the daily run behind an explicit
+opt-in (`?partner=platform`) — the polished mode-selection landing and the login
+gate are separate follow-ups, so there is no change to the default experience
+yet. The bring-your-own-AI flow (mode①), the puzzle game, timer, and strikes are
+untouched. The whole voice turn runs server-side; the browser holds no API key
+or system prompt, and the AI's per-module guidance comes from the manual the
+platform injects for the current module only.
+
 **BombSquad registered as a platform-AI game** - Internal change. Adds a
 `bombsquad` configuration to the platform AI's server-side game registry: a
 Chinese system prompt giving the AI the persona of a calm, precise defuse-expert

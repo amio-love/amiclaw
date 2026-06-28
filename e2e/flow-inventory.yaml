@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 23 active flows <-> 23 journey
-# scenarios, the regression size budget is 46 (2026-06-11, after the three
-# mode② companion-memory flows were added as @simulation journeys).
+# 2 x the journey-scenario count. With 24 active flows <-> 24 journey
+# scenarios, the regression size budget is 48 (2026-06-28, after the mode②
+# in-game voice-panel flow was added as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -285,4 +285,33 @@ flows:
       off (PUT /api/companion/profile) stops claim injection immediately while
       visible memories and the companion identity remain.
     steps: [session-create, resolver, deterministic-injection, profile-switch]
+    status: active
+
+  # === mode② in-game voice flow ===============================================
+  # The account-anchored platform voice partner wired into a daily run. The
+  # real-provider turn (DeepSeek + Volcengine over the live `/ai-ws/*` bridge) is
+  # verified by a human play-green plus the standalone live-turn harness, so the
+  # e2e journey stubs the WebSocket boundary and the mic and asserts the panel's
+  # UI states only — never real audio or provider output.
+
+  - id: mode2-voice-session-turn
+    name: mode② in-game voice turn
+    description: >-
+      An opted-in daily run (`?mode=daily&partner=platform`) mounts the in-game
+      platform voice panel: it connects to the platform-ai bridge and reaches the
+      ready/connected state, the player runs one push-to-talk turn, the AI's
+      streamed text reply renders, the "AI is speaking" indicator shows while the
+      stubbed TTS audio plays, and exiting the run tears the voice session down.
+      The `/ai-ws/*` WebSocket and the microphone are stubbed deterministically
+      (no live provider, no real audio); the real-provider turn is verified by a
+      human play-green and the standalone live-turn harness.
+    steps:
+      [
+        daily-platform-partner,
+        voice-connected,
+        push-to-talk-turn,
+        ai-text-reply,
+        ai-speaking,
+        session-teardown,
+      ]
     status: active

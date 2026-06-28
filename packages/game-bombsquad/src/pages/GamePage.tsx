@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
@@ -34,6 +34,8 @@ import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { generateSceneInfo } from '@/engine/scene-info'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext } from '@/audio/audio-context'
+import VoicePanel from '@/voice/VoicePanel'
+import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
 import styles from './GamePage.module.css'
 
 // Module display labels — the Atlas redesign renames three of the four
@@ -194,6 +196,22 @@ export default function GamePage() {
   const customUrl = searchParams.get('url')
 
   const { state, dispatch } = useGame()
+
+  // mode② gate: the in-game platform voice partner mounts ONLY on a daily run
+  // explicitly opted in via `?partner=platform`. Practice and an un-opted daily
+  // run stay mode① (BYO-AI) and never mount the panel. Additive — derives from
+  // game state only, never alters game logic.
+  const usePlatformVoice = isPlatformVoicePartner(mode, searchParams.get('partner'))
+
+  // Voice-session inputs for the current module, recomputed only when the loaded
+  // manual or the current module changes (NOT on every timer-frame re-render).
+  // `moduleKey` keys the panel's remount so advancing modules tears down the old
+  // session and reconnects with the new module's `relevantSections`.
+  const voiceInputs = useMemo(
+    () => (usePlatformVoice ? deriveVoicePanelInputs(state) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [usePlatformVoice, state.manual, state.currentModuleIndex]
+  )
 
   // A wrong answer pulses a red border around the whole module panel so the
   // mistake is obvious at a glance in both modes. Incrementing this key
@@ -635,6 +653,14 @@ export default function GamePage() {
           <div key={`ok-${successPulseKey}`} className={styles.successPulse} aria-hidden="true" />
         )}
       </div>
+
+      {voiceInputs && (
+        <VoicePanel
+          key={voiceInputs.moduleKey}
+          manualData={voiceInputs.manualData}
+          gameState={voiceInputs.gameState}
+        />
+      )}
 
       <div className={styles.bottomArea}>
         {state.sceneInfo && (
