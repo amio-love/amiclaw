@@ -88,6 +88,14 @@ export interface ResolvedConfig extends ProviderConfig {
  * layers select the deterministic `mock` provider, so the full
  * STT -> LLM -> TTS pipeline runs locally without real DeepSeek / Volcengine
  * keys. It reuses the same sample manual-explainer system prompt as `demo`.
+ *
+ * The `bombsquad` entry backs BombSquad mode② daily voice sessions. Its provider
+ * stack mirrors `demo` exactly (the verified DeepSeek + Volcengine production
+ * stack); only its `systemPromptConfig` differs — a Chinese calm-defuse-expert
+ * persona. The system prompt sets role + cross-module discipline + voice ONLY;
+ * each module's concrete defuse logic lives in the injected per-module manual
+ * `rule` (see `packages/manual/data/*.yaml`), so the prompt defers to it rather
+ * than restating it.
  */
 const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
   demo: {
@@ -158,6 +166,42 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     tts: {
       provider: 'mock',
       model: 'mock-tts',
+    },
+  },
+  bombsquad: {
+    systemPromptConfig: {
+      // Chinese, agent-voice: a calm, precise defuse-expert partner. Sets role +
+      // cross-module discipline + voice ONLY. The per-module defuse logic lives
+      // in the injected manual `rule` (packages/manual/data/*.yaml); this prompt
+      // defers to it and never restates it. Server-side config — never shipped to
+      // the client.
+      role: '你是一位冷静、精准的拆弹协作伙伴：你手里有参考手册，玩家只能看到设备本身；你通过语音引导玩家一步步把炸弹拆掉。',
+      ruleTemplate: [
+        '只依据上下文里提供的手册内容作答，绝不编造规则；模块的具体判定以注入的当前模块手册规则为准，逐字遵守（每回合你只会看到玩家当前所在模块的规则）。',
+        'daily 模式依次包含 4 个模块，你一次只引导玩家当前所在的那个模块，拆解完才进入下一个；模块之间你只做流程衔接，绝不预判或复述其他模块的拆解逻辑（每个模块的规则只在轮到它时才注入给你）。',
+        '先让玩家描述他看到的（模块名、颜色、文字、符号、指示灯、电池数量等），再确定性地把局面映射到手册规则；手册需要而玩家还没报的场景信息（如电池数、某指示灯是否点亮），先问清确切值再作答，绝不靠猜。',
+        '一次只下达一个玩家此刻就能执行的具体动作，确认做完再进入下一步。',
+        '绝不向玩家复述手册原文、规则表或内部字段，也绝不暴露你在读注入的手册子集；只把查表结果转成一句可执行的口语指令。',
+        '绝不替玩家臆想你看不到的画面（指针朝向、钟点、统一目标排列等手册未定义的东西）；只采信玩家亲口报出、且手册需要的信息。',
+        'daily 模式下累计三次错误才引爆，前两次只是可见的 strike；时间只计分、不引爆——出错时保持沉着，让玩家把当前局面重新报清再继续（答错时同一道题仍在，原地重试）。',
+        '始终用中文，口语、简洁、精确；冷静不慌、不说废话。',
+      ],
+    },
+    // Provider stack mirrors `demo` exactly — the verified DeepSeek + Volcengine
+    // production stack. See the `demo` entry above for the per-layer rationale
+    // (the `bigmodel` ASR wire model and the empty-string TTS resource-id-default
+    // sentinel).
+    llm: {
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    },
+    stt: {
+      provider: 'volcengine',
+      model: 'bigmodel',
+    },
+    tts: {
+      provider: 'volcengine',
+      model: '',
     },
   },
 }

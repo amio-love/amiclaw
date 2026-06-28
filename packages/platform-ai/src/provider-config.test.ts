@@ -55,6 +55,48 @@ describe('resolveConfig — hit', () => {
   })
 })
 
+describe('resolveConfig — bombsquad', () => {
+  it('resolves the bombsquad game config with a Chinese defuse-expert persona and full rule discipline', () => {
+    const resolved = resolveConfig('bombsquad')
+    expect(resolved.gameId).toBe('bombsquad')
+
+    const { role, ruleTemplate } = resolved.systemPromptConfig
+
+    // Persona marker: a Chinese calm-defuse-expert voice, not an empty/stub role.
+    expect(role.length).toBeGreaterThan(0)
+    expect(role).toContain('拆弹')
+
+    // The rule set carries the full discipline contract, not a placeholder:
+    // manual-only + cross-module flow + ask-for-values + one-action +
+    // no-recite + no-imagine + daily-strike + Chinese-voice.
+    expect(ruleTemplate.length).toBeGreaterThanOrEqual(8)
+    for (const rule of ruleTemplate) {
+      expect(rule.length).toBeGreaterThan(0)
+    }
+
+    // Key discipline markers, asserted semantically so a future reword does not
+    // break the test: defer to the manual, speak Chinese, and the daily
+    // 3-strike detonation rule.
+    const joined = ruleTemplate.join('\n')
+    expect(joined).toContain('手册')
+    expect(joined).toContain('中文')
+    expect(joined).toContain('引爆')
+  })
+
+  it('mirrors the demo provider stack: DeepSeek v4 LLM + Volcengine voice', () => {
+    // BombSquad runs the same verified production stack as `demo`: DeepSeek v4
+    // flash LLM, Volcengine `bigmodel` ASR, and the empty-string TTS
+    // resource-id-default sentinel. Only the system prompt differs.
+    const { llm, stt, tts } = resolveConfig('bombsquad')
+    expect(llm.provider).toBe('deepseek')
+    expect(llm.model).toBe('deepseek-v4-flash')
+    expect(stt.provider).toBe('volcengine')
+    expect(stt.model).toBe('bigmodel')
+    expect(tts.provider).toBe('volcengine')
+    expect(tts.model).toBe('')
+  })
+})
+
 describe('resolveConfig — miss', () => {
   it('throws an explicit error on an unregistered gameId (no silent fallback)', () => {
     expect(() => resolveConfig('not-a-real-game')).toThrowError(
