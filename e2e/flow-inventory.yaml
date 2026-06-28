@@ -295,23 +295,26 @@ flows:
   # UI states only — never real audio or provider output.
 
   - id: mode2-voice-session-turn
-    name: mode② in-game voice turn
+    name: mode② in-game hands-free voice greeting
     description: >-
       An opted-in daily run (`?mode=daily&partner=platform`) mounts the in-game
-      platform voice panel: it connects to the platform-ai bridge and reaches the
-      ready/connected state, the player runs one push-to-talk turn, the AI's
-      streamed text reply renders, the "AI is speaking" indicator shows while the
-      stubbed TTS audio plays, and exiting the run tears the voice session down.
-      The `/ai-ws/*` WebSocket and the microphone are stubbed deterministically
-      (no live provider, no real audio); the real-provider turn is verified by a
-      human play-green and the standalone live-turn harness.
+      platform voice panel, hands-free full-duplex: it connects to the platform-ai
+      bridge and the AI greets first with no player input, the AI's streamed text
+      reply renders, the "说话中" (speaking) indicator shows while the stubbed TTS
+      audio plays, the panel settles back to "聆听中" (listening) when the greeting
+      ends, and exiting the run tears the voice session down. The `/ai-ws/*`
+      WebSocket and the microphone are stubbed deterministically (no live provider,
+      no real audio; the fake mic is fed a silent capture file so the client VAD
+      never fires a player turn); the real-provider turn and the VAD-triggered
+      player turn are verified by a human play-green and the standalone live-turn
+      harness.
     steps:
       [
         daily-platform-partner,
         voice-connected,
-        push-to-talk-turn,
-        ai-text-reply,
+        ai-greets-first,
         ai-speaking,
+        settle-listening,
         session-teardown,
       ]
     status: active
