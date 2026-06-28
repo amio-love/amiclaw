@@ -38,6 +38,46 @@ export function floatTo16BitPCM(samples: Float32Array): ArrayBuffer {
 }
 
 /**
+ * Linear-resample mono Float32 PCM samples from `fromRate` to `toRate`.
+ *
+ * The mic capture wire format is fixed at PCM16 16 kHz mono, but a browser is
+ * free to ignore `new AudioContext({ sampleRate: 16000 })` and hand back a
+ * context at the hardware rate (commonly 48000). Sending those samples to the
+ * server mislabelled as 16 kHz feeds the STT garbage and the server fails the
+ * session loud with a 1008. Resampling to the true 16 kHz before
+ * `floatTo16BitPCM` keeps the wire contract correct on any device.
+ *
+ * Linear interpolation is sufficient for speech (the directive's accepted
+ * trade-off): output sample `i` lands at input position `i * fromRate / toRate`
+ * and is the linear blend of its two neighbouring input samples. When the rates
+ * already match (or the input is empty) the input is returned unchanged, so the
+ * common 16 kHz path stays allocation-free. Downsampling applies no anti-alias
+ * pre-filter — acceptable for the narrow-band speech the STT consumes.
+ */
+export function resamplePcmFloat32(
+  input: Float32Array,
+  fromRate: number,
+  toRate: number
+): Float32Array {
+  if (fromRate <= 0 || toRate <= 0) {
+    throw new Error('resamplePcmFloat32: sample rates must be positive')
+  }
+  if (fromRate === toRate || input.length === 0) return input
+  const outLength = Math.max(1, Math.round((input.length * toRate) / fromRate))
+  const out = new Float32Array(outLength)
+  const step = fromRate / toRate
+  const lastIndex = input.length - 1
+  for (let i = 0; i < outLength; i += 1) {
+    const pos = i * step
+    const i0 = Math.floor(pos)
+    const i1 = i0 < lastIndex ? i0 + 1 : lastIndex
+    const frac = pos - i0
+    out[i] = input[i0] * (1 - frac) + input[i1] * frac
+  }
+  return out
+}
+
+/**
  * Decode a base64 string (a JSON-transported audio frame) to its raw bytes.
  * Uses the browser `atob` over a latin1 string, byte-by-byte — the inverse of the
  * server's `base64FromBytes` (`session-do.ts`). Frames are small per-sentence TTS

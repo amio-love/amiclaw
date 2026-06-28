@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: later turns no longer drop the connection** - Fix. In
+the in-game voice partner, the first turn worked but a later turn (or the next
+module's session) could close with a connection error. The microphone capture
+asked the browser for 16 kHz audio but did not verify the browser actually
+honoured it; when it silently ran at the hardware rate, the audio sent to the
+speech recognizer was the wrong speed and the server rejected the turn. Capture
+now reads the real sample rate and resamples to 16 kHz, fully tears down its
+audio resources between turns (so nothing leaks across turns or module changes),
+and surfaces the server's close reason in the error text.
+
 **BombSquad mode② in-game voice partner (opt-in wiring)** - BombSquad's daily
 run can now host the platform's AI defuse partner over an in-page voice panel:
 hold to talk, and the AI guides you by voice using the manual it can see while

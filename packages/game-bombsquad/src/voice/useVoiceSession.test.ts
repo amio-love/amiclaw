@@ -18,7 +18,7 @@ class MockWebSocket {
   onopen: Listener = null
   onmessage: ((event: { data: unknown }) => void) | null = null
   onerror: Listener = null
-  onclose: ((event: { code: number }) => void) | null = null
+  onclose: ((event: { code: number; reason?: string }) => void) | null = null
 
   constructor(url: string) {
     this.url = url
@@ -31,7 +31,7 @@ class MockWebSocket {
 
   close(): void {
     this.readyState = MockWebSocket.CLOSED
-    this.onclose?.({ code: 1000 })
+    this.onclose?.({ code: 1000, reason: '' })
   }
 
   // --- test drivers ---
@@ -48,9 +48,9 @@ class MockWebSocket {
     this.onerror?.()
   }
 
-  fireClose(code: number): void {
+  fireClose(code: number, reason = ''): void {
     this.readyState = MockWebSocket.CLOSED
-    this.onclose?.({ code })
+    this.onclose?.({ code, reason })
   }
 
   /** The control messages this socket received, parsed. */
@@ -256,6 +256,19 @@ describe('useVoiceSession', () => {
     act(() => ws.fireClose(1006))
     expect(result.current.status).toBe('error')
     expect(result.current.error).toContain('1006')
+  })
+
+  it('surfaces the server close reason alongside the code on a 1008', () => {
+    const { result } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
+    act(() => ws.fireClose(1008, 'turn before create'))
+    expect(result.current.status).toBe('error')
+    expect(result.current.error).toContain('1008')
+    expect(result.current.error).toContain('turn before create')
   })
 
   it('closes the socket on unmount (lifecycle hygiene)', () => {

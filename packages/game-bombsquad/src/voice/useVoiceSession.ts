@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
-import { base64ToBytes, floatTo16BitPCM, pcm16ToFloat32 } from './audio-pcm'
+import { base64ToBytes, floatTo16BitPCM, pcm16ToFloat32, resamplePcmFloat32 } from './audio-pcm'
 import {
   buildSessionUrl,
   initialVoiceState,
@@ -44,6 +44,29 @@ const TTS_OUTPUT_SAMPLE_RATE = 16000
 const CAPTURE_SAMPLE_RATE = 16000
 /** ScriptProcessor buffer size (frames). Matches the demo. */
 const CAPTURE_BUFFER_SIZE = 4096
+
+/**
+ * Close an `AudioContext` and release its hardware resources, swallowing the
+ * (possible) rejection. Browsers cap the number of concurrent `AudioContext`s,
+ * so a leaked context across turns / panel remounts eventually starves the next
+ * `new AudioContext(...)` — which is the failure this hardening guards against.
+ * Release is initiated synchronously by `close()`; React's cleanup contract
+ * forbids a top-level `await`, so the returned promise is only used to discard a
+ * rejection (a context already closing).
+ */
+function closeAudioContext(ctx: AudioContext | null): void {
+  if (!ctx) return
+  try {
+    const closing = ctx.close()
+    if (closing && typeof closing.then === 'function') {
+      closing.catch(() => {
+        /* ignore — context may already be closed */
+      })
+    }
+  } catch {
+    /* ignore — context may already be closed */
+  }
+}
 
 export interface UseVoiceSessionOptions {
   /**
@@ -180,16 +203,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
 
   const stopPlayback = useCallback(() => {
     playingCountRef.current = 0
+    playbackCursorRef.current = 0
     setIsAiSpeaking(false)
     const ctx = playbackCtxRef.current
     playbackCtxRef.current = null
-    if (ctx) {
-      try {
-        void ctx.close()
-      } catch {
-        // ignore — context may already be closed
-      }
-    }
+    closeAudioContext(ctx)
   }, [])
 
   // --- Mic capture ---
@@ -217,13 +235,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     }
     const ctx = captureCtxRef.current
     captureCtxRef.current = null
-    if (ctx) {
-      try {
-        void ctx.close()
-      } catch {
-        /* ignore */
-      }
-    }
+    closeAudioContext(ctx)
     const stream = mediaStreamRef.current
     if (stream) {
       stream.getTracks().forEach((t) => t.stop())
@@ -304,9 +316,13 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       if (endedRef.current || event.code === 1000) {
         safeDispatch({ type: 'closed' })
       } else {
+        // The server attaches a bounded `safeCloseReason` to every 1008 (e.g.
+        // "turn before create", a provider error code) — surface it so a residual
+        // failure is self-explaining instead of a bare numeric code.
+        const reason = event.reason ? `: ${event.reason}` : ''
         safeDispatch({
           type: 'transport-error',
-          message: `voice connection closed (${event.code})`,
+          message: `voice connection closed (${event.code}${reason})`,
         })
       }
     }
@@ -339,6 +355,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       try {
         const ctx = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE })
         captureCtxRef.current = ctx
+        // Browsers may ignore the requested 16 kHz and run the context at the
+        // hardware rate (e.g. 48000). The wire format is fixed at PCM16 16 kHz —
+        // resample each frame to the true target rate before encoding, so we
+        // never send mislabelled (wrong-rate) audio that the STT rejects (1008).
+        const actualRate = ctx.sampleRate
         const source = ctx.createMediaStreamSource(stream)
         captureSourceRef.current = source
         const proc = ctx.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1)
@@ -346,7 +367,12 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         proc.onaudioprocess = (e) => {
           const socket = wsRef.current
           if (!socket || socket.readyState !== WebSocket.OPEN) return
-          socket.send(floatTo16BitPCM(e.inputBuffer.getChannelData(0)))
+          const frame = e.inputBuffer.getChannelData(0)
+          const pcm =
+            actualRate === CAPTURE_SAMPLE_RATE
+              ? frame
+              : resamplePcmFloat32(frame, actualRate, CAPTURE_SAMPLE_RATE)
+          socket.send(floatTo16BitPCM(pcm))
         }
         source.connect(proc)
         proc.connect(ctx.destination)
