@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad registered as a platform-AI game** - Internal change. Adds a
+`bombsquad` configuration to the platform AI's server-side game registry: a
+Chinese system prompt giving the AI the persona of a calm, precise defuse-expert
+partner (it guides the player by voice and defers all per-module defuse logic to
+the manual injected per module), on the same verified provider stack as the demo.
+This is the AI-side configuration only; it is not yet wired into the BombSquad
+game, so there is no player-facing change.
+
 **Platform-AI voice turns now complete end to end with the real speech
 providers** - Internal reliability fix. Until now the first real (non-mock) voice
 turn never actually finished: the speech-synthesis step sent a malformed request
