@@ -36,6 +36,44 @@ function mirrorGherkinToFeatures(srcDir: string, destDir: string): void {
 mirrorGherkinToFeatures('e2e', '.features-mirror')
 
 /**
+ * The hands-free mode② voice panel opens the mic continuously and runs a client
+ * VAD over the capture stream. Chromium's DEFAULT fake audio device emits a
+ * ~0.13-RMS tone — well above the panel's 0.02 VAD speech threshold — which would
+ * fire a spurious "player is speaking" turn + barge-in that wipes the AI greeting
+ * the e2e asserts. Feeding the fake device a SILENT capture file keeps the
+ * continuous mic deterministically quiet (RMS 0), so no player turn / barge-in
+ * ever fires and only the AI-first greeting drives the asserted UI states. The
+ * file is generated here (gitignored `.cache/`) and handed to Chromium via
+ * `--use-file-for-fake-audio-capture`.
+ */
+const SILENT_MIC_WAV = join(process.cwd(), '.cache', 'e2e', 'fake-mic-silence.wav')
+
+function writeSilentMicWav(file: string): void {
+  const sampleRate = 16_000
+  const dataBytes = sampleRate * 2 // 1s of mono 16-bit silence; Chromium loops it.
+  const buf = Buffer.alloc(44 + dataBytes)
+  buf.write('RIFF', 0)
+  buf.writeUInt32LE(36 + dataBytes, 4)
+  buf.write('WAVE', 8)
+  buf.write('fmt ', 12)
+  buf.writeUInt32LE(16, 16)
+  buf.writeUInt16LE(1, 20) // PCM
+  buf.writeUInt16LE(1, 22) // mono
+  buf.writeUInt32LE(sampleRate, 24)
+  buf.writeUInt32LE(sampleRate * 2, 28) // byte rate
+  buf.writeUInt16LE(2, 32) // block align
+  buf.writeUInt16LE(16, 34) // bits per sample
+  buf.write('data', 36)
+  buf.writeUInt32LE(dataBytes, 40)
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, buf)
+}
+
+// Only the main process writes the file (workers just reference the path); the
+// guard mirrors mirrorGherkinToFeatures so concurrent worker loads don't race.
+if (process.env.TEST_WORKER_INDEX === undefined) writeSilentMicWav(SILENT_MIC_WAV)
+
+/**
  * `tags: '@playwright'` is load-bearing: only `@playwright`-tagged scenarios
  * are turned into runnable specs, so `@simulation` scenarios (the out-of-scope
  * dual-agent layer) never need step definitions. Generated specs land in
@@ -73,19 +111,27 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // The mode② voice-panel scenario needs a deterministic mic + audio:
+        // The mode② hands-free voice-panel scenario needs a deterministic mic +
+        // audio:
         //  - fake media: getUserMedia returns a synthetic mic stream and the
-        //    permission prompt is auto-accepted, so push-to-talk capture works
+        //    permission prompt is auto-accepted, so the continuous capture works
         //    headless with no real device.
+        //  - SILENT capture file: the panel runs a client VAD over the open mic;
+        //    Chromium's default fake audio tone (~0.13 RMS) would cross the 0.02
+        //    VAD threshold and fire a spurious player turn + barge-in that wipes
+        //    the asserted AI greeting, so the fake device is fed a silent WAV
+        //    (RMS 0) — the mic stays deterministically quiet and only the AI-first
+        //    greeting drives the asserted UI states.
         //  - autoplay relaxation: the panel's TTS AudioContext can start without
-        //    a user-gesture gate, so the "AI is speaking" playback indicator
-        //    fires deterministically.
+        //    a user-gesture gate, so the "说话中" playback indicator fires and its
+        //    `onended` lets the panel settle back to "聆听中" deterministically.
         // Harmless to every other scenario (none uses getUserMedia or Web Audio
         // assertions).
         launchOptions: {
           args: [
             '--use-fake-ui-for-media-stream',
             '--use-fake-device-for-media-stream',
+            `--use-file-for-fake-audio-capture=${SILENT_MIC_WAV}`,
             '--autoplay-policy=no-user-gesture-required',
           ],
         },

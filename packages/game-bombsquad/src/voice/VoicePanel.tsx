@@ -1,8 +1,7 @@
-import { memo, useCallback, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import { memo } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
 import { useVoiceSession } from './useVoiceSession'
-import type { VoiceStatus } from './voice-session-protocol'
+import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
 
 interface VoicePanelProps {
@@ -15,105 +14,69 @@ interface VoicePanelProps {
 }
 
 /**
- * In-game voice panel for the BombSquad daily run (mode②). Renders the
- * `useVoiceSession` surface: a connection/turn status indicator, the AI's
- * streamed text reply, an "AI is speaking" cue, a bounded error line, and a
- * push-to-talk control (hold to talk). Presentation only — it reads hook state
- * and drives the hook's `startTalking` / `stopTalking`; it never touches game
- * logic. Dark-only, CSS-only animation (Atlas design system).
+ * In-game voice panel for the BombSquad daily run (mode②), hands-free. Renders
+ * the `useVoiceSession` surface: a prominent 3-state conversation indicator
+ * (聆听中 / 思考中 / 说话中) once the session is live, the connection status before
+ * that, the AI's streamed text reply, and a bounded error line. There is NO
+ * push-to-talk — the mic streams continuously and the AI greets first; the player
+ * just talks. Presentation only: it reads hook state and never touches game logic
+ * or the mic/socket. Dark-only, CSS-only animation (Atlas design system).
  */
 
-/** User-facing connection/turn status copy. Chinese — daily players are the reader. */
-const STATUS_LABEL: Record<VoiceStatus, string> = {
+/** Connection-status copy for the non-live states. Chinese — daily players read it. */
+const STATUS_LABEL: Record<Exclude<VoiceStatus, 'ready'>, string> = {
   idle: '准备中',
   connecting: '连接中',
-  ready: '已连接',
-  'in-turn': '通话中',
   error: '连接出错',
   closed: '已结束',
 }
 
+/** The 3-state conversation phase copy (shown while the session is live). */
+const PHASE_LABEL: Record<ConversationPhase, string> = {
+  listening: '聆听中',
+  thinking: '思考中',
+  speaking: '说话中',
+}
+
+function placeholderFor(status: VoiceStatus, phase: ConversationPhase): string {
+  if (status === 'ready') {
+    if (phase === 'thinking') return 'AI 正在思考…'
+    if (phase === 'speaking') return 'AI 正在回应…'
+    return '开口说话，AI 会即时回应'
+  }
+  if (status === 'closed') return '语音通话已结束'
+  if (status === 'error') return '语音连接已断开'
+  return '正在接通 AI 语音…'
+}
+
 function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
-  const { status, aiText, isAiSpeaking, error, startTalking, stopTalking } = useVoiceSession({
+  const { status, conversationPhase, aiText, isAiSpeaking, error } = useVoiceSession({
     manualData,
     gameState,
     gameId,
   })
 
-  // Whether the player is currently holding the push-to-talk control. Tracked in
-  // state (not derived from `status`) because `in-turn` covers BOTH the player
-  // speaking and the AI responding — only an explicit hold should read as "live
-  // mic". Drives the button label + the listening pulse.
-  const [holding, setHolding] = useState(false)
-
-  // Push-to-talk: hold to talk. Pointer capture binds the release to this
-  // element even if the finger drifts off it, so a pointerup always pairs with
-  // its pointerdown. The hook guards every transition (no-op unless ready /
-  // already talking), so these handlers can fire unconditionally.
-  const beginTalk = useCallback(
-    (e: ReactPointerEvent<HTMLButtonElement>) => {
-      e.preventDefault()
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId)
-      } catch {
-        /* pointer capture unsupported (e.g. jsdom) — the release path still fires */
-      }
-      setHolding(true)
-      startTalking()
-    },
-    [startTalking]
-  )
-
-  const endTalk = useCallback(() => {
-    setHolding((wasHolding) => {
-      if (wasHolding) stopTalking()
-      return false
-    })
-  }, [stopTalking])
-
-  // Keyboard hold-to-talk (Space / Enter) for non-pointer users. `repeat` guards
-  // the key auto-repeat so a held key starts capture exactly once.
-  const onKeyDown = useCallback(
-    (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (e.key !== ' ' && e.key !== 'Enter') return
-      if (e.repeat) return
-      e.preventDefault()
-      setHolding(true)
-      startTalking()
-    },
-    [startTalking]
-  )
-
-  const onKeyUp = useCallback(
-    (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (e.key !== ' ' && e.key !== 'Enter') return
-      endTalk()
-    },
-    [endTalk]
-  )
-
-  // Enabled when the session can take a turn (ready) or one is already in the
-  // player's hand (holding). While the AI responds after release — in-turn but
-  // not holding — the control is disabled, which also blocks starting a second
-  // overlapping turn.
-  const talkEnabled = status === 'ready' || holding
-  const talkLabel = holding ? '松开结束' : '按住说话'
-
-  const replyPlaceholder =
-    status === 'ready' || status === 'in-turn' ? '按住下面的按钮，对 AI 说话' : '正在接通 AI 语音…'
+  const isLive = status === 'ready'
+  // While live, the prominent indicator is the conversation phase; before that
+  // it is the connection status.
+  const indicatorLabel = isLive ? PHASE_LABEL[conversationPhase] : STATUS_LABEL[status]
 
   return (
     <section className={styles.panel} aria-label="AI 语音伙伴">
       <div className={styles.header}>
         <span className={styles.status}>
-          <span className={styles.statusDot} data-status={status} aria-hidden="true" />
+          <span
+            className={styles.statusDot}
+            data-status={status}
+            data-phase={isLive ? conversationPhase : undefined}
+            aria-hidden="true"
+          />
           <span className={styles.statusText} role="status">
-            {STATUS_LABEL[status]}
+            {indicatorLabel}
           </span>
         </span>
-        {isAiSpeaking && (
-          <span className={styles.speaking} role="status">
-            AI 正在回应
+        {isLive && isAiSpeaking && (
+          <span className={styles.speaking} role="status" aria-label="AI 正在说话">
             <span className={styles.speakingDots} aria-hidden="true">
               <i />
               <i />
@@ -127,7 +90,7 @@ function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
         {aiText ? (
           <p className={styles.replyText}>{aiText}</p>
         ) : (
-          <p className={styles.replyPlaceholder}>{replyPlaceholder}</p>
+          <p className={styles.replyPlaceholder}>{placeholderFor(status, conversationPhase)}</p>
         )}
       </div>
 
@@ -137,33 +100,7 @@ function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
         </p>
       )}
 
-      <button
-        type="button"
-        className={`${styles.talkBtn} ${holding ? styles.talkBtnActive : ''}`}
-        onPointerDown={beginTalk}
-        onPointerUp={endTalk}
-        onPointerCancel={endTalk}
-        onKeyDown={onKeyDown}
-        onKeyUp={onKeyUp}
-        disabled={!talkEnabled}
-        aria-pressed={holding}
-        aria-label={talkLabel}
-      >
-        <span className={styles.talkBtnIcon} aria-hidden="true">
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          >
-            <rect x="9" y="3" width="6" height="12" rx="3" />
-            <path d="M5 11 a7 7 0 0 0 14 0 M12 18 V21 M9 21 H15" strokeLinecap="round" />
-          </svg>
-        </span>
-        {talkLabel}
-      </button>
+      <p className={styles.hint}>免提对话已开启，直接对 AI 说话即可，无需按键。</p>
     </section>
   )
 }

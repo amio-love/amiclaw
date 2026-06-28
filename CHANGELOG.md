@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice is now hands-free** - Change. The in-game AI defuse
+partner now runs as a continuous, hands-free conversation instead of hold-to-talk:
+the AI speaks first (it greets you and asks what you see when the session opens),
+you just talk — the client detects when you finish speaking and sends your turn
+automatically — and you can talk over the AI to interrupt it. A clear status
+shows whether the AI is 聆听中 (listening) / 思考中 (thinking) / 说话中 (speaking).
+Still behind the `?partner=platform` opt-in; mode① and the puzzle game are
+unchanged.
+
 **BombSquad mode② voice: later turns no longer drop the connection** - Fix. In
 the in-game voice partner, the first turn worked but a later turn (or the next
 module's session) could close with a connection error. The microphone capture

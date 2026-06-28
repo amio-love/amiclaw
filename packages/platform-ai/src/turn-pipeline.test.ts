@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runTurn, splitSentences, type SessionState, type TurnProviders } from './turn-pipeline'
+import {
+  OPENING_DIRECTIVE,
+  runOpeningTurn,
+  runTurn,
+  splitSentences,
+  type SessionState,
+  type TurnProviders,
+} from './turn-pipeline'
 import { createDeepSeekLlmProvider } from './providers/deepseek'
 import type { AiResponseChunk, AudioChunk, ManualData } from './contract'
 import type {
@@ -516,5 +523,77 @@ describe('runTurn', () => {
       // The turn's cleanup ran: the TTS iterator was returned, nothing leaked.
       expect(ttsClosed).toBe(true)
     })
+  })
+})
+
+// --- runOpeningTurn: the AI-first greeting (LLM->TTS, no player audio) --------
+
+describe('runOpeningTurn', () => {
+  it('runs LLM+TTS with NO player audio, greeting from the server directive', async () => {
+    const ttsReceived: string[] = []
+    let captured: LlmCompletionRequest | undefined
+    const state = freshState()
+    const chunks = await collect(
+      runOpeningTurn(
+        {
+          llm: mockLlm(['你好！', '请描述你看到的。'], { capture: (r) => (captured = r) }),
+          tts: mockTts(ttsReceived),
+        },
+        state
+      )
+    )
+
+    // No STT step: the synthetic, server-side opening directive stands in for the
+    // (absent) player utterance — it is NEVER client-provided.
+    expect(captured?.messages[0].role).toBe('system')
+    expect(captured?.messages.at(-1)).toEqual({ role: 'user', content: OPENING_DIRECTIVE })
+
+    // The greeting streams as text + audio chunks plus exactly one terminal done.
+    const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
+    expect(textChunks.map((c) => c.text)).toEqual(['你好！', '请描述你看到的。'])
+    expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+    expect(ttsReceived).toEqual(['你好！', '请描述你看到的。'])
+
+    // History remembers ONLY the greeting (never the synthetic directive), and the
+    // opening turn does not count as a player turn.
+    expect(state.history).toEqual([{ role: 'assistant', content: '你好！请描述你看到的。' }])
+    expect(state.turnCount).toBe(0)
+  })
+
+  it('AI-speaks-first ordering: the greeting precedes the first player turn in context', async () => {
+    const state = freshState()
+    await collect(runOpeningTurn({ llm: mockLlm(['你好。']), tts: mockTts([]) }, state))
+
+    let captured: LlmCompletionRequest | undefined
+    await collect(
+      runTurn(
+        providers(
+          mockStt([{ text: '红色按钮。', isFinal: true }]),
+          mockLlm(['好的。'], { capture: (r) => (captured = r) }),
+          mockTts([])
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+
+    // The first player turn sees the AI's own greeting as prior context, then the
+    // player's transcribed utterance — exactly: system, assistant greeting, user.
+    expect(captured?.messages).toEqual([
+      { role: 'system', content: captured?.messages[0].content },
+      { role: 'assistant', content: '你好。' },
+      { role: 'user', content: '红色按钮。' },
+    ])
+    expect(state.turnCount).toBe(1)
+  })
+
+  it('does not meter STT for the opening turn (no audio consumed)', async () => {
+    const state = freshState()
+    await collect(runOpeningTurn({ llm: mockLlm(['hi.']), tts: mockTts([]) }, state))
+    // The opening turn consumes no player audio, so STT seconds stay zero and the
+    // session's STT annotation is untouched (still its initial provider-reported).
+    expect(state.usage.sttInputSeconds).toBe(0)
+    expect(state.sttSource).toBe('provider-reported')
   })
 })

@@ -1,12 +1,20 @@
 /**
- * `useVoiceSession` — the BombSquad client for one platform-ai voice session.
+ * `useVoiceSession` — the BombSquad client for one platform-ai voice session,
+ * hands-free full-duplex.
  *
- * Runs the whole turn lifecycle against the deployed `@amiclaw/platform-ai` Worker
- * over the same-origin `/ai-ws/*` WebSocket: connect -> create session -> hold-to-
- * talk PCM16 mic capture -> drive a turn -> render the AI's streamed text + play
- * its TTS audio -> end session. This round is the hook (logic + state) only; the
- * voice-panel UI + GamePage wiring land in the next round, but the API is shaped
- * for a panel to consume directly.
+ * Runs the whole conversation against the deployed `@amiclaw/platform-ai` Worker
+ * over the same-origin `/ai-ws/*` WebSocket: connect -> create session -> open
+ * the mic ONCE and stream PCM16 16 kHz frames continuously -> the AI greets first
+ * and answers each utterance -> render the AI's streamed text + play its TTS audio
+ * -> end session. There is NO push-to-talk; the player just talks.
+ *
+ * Turn model (important): the CLIENT runs the VAD. On `create` the server fires
+ * the AI-first opening greeting (no client input). Thereafter the hook streams the
+ * mic continuously and the client-side VAD detects end-of-utterance (the player
+ * went silent after speaking) and sends `{type:'turn'}`, which the server runs as
+ * a normal STT->LLM->TTS turn over the audio buffered since the last turn. The VAD
+ * additionally drives the 3-state conversation phase (listening / thinking /
+ * speaking) and barge-in (stop local playback when the player talks over the AI).
  *
  * Security invariant (load-bearing, mirrors the demo): this hook connects ONLY to
  * the same-origin Worker WS and sends ONLY `{gameId, manualData, gameState}` plus
@@ -16,27 +24,34 @@
  * Audio formats (both 16 kHz mono PCM16):
  *  - mic capture: `AudioContext({ sampleRate: 16000 })` + `ScriptProcessorNode`,
  *    Float32 -> Int16 LE per frame (`floatTo16BitPCM`), sent as binary WS frames.
- *    ScriptProcessor is deprecated but is what the demo uses and is sufficient
- *    here (capture parity; see the directive's note).
+ *    The mic stays open for the whole session. `getUserMedia` requests echo
+ *    cancellation + noise suppression so the open mic does not pick up the AI's
+ *    own voice (which would self-trigger barge-in).
  *  - TTS playback: base64 audio frame -> Int16 LE -> Float32 (`pcm16ToFloat32`),
- *    wrapped in an `AudioBuffer` at 16000 Hz and scheduled gaplessly. 16000 is the
- *    Volcengine TTS output rate (`volcengine.ts` `DEFAULT_SAMPLE_RATE`, which the
- *    factory never overrides). The playback `AudioContext` runs at its native rate
- *    and resamples the 16 kHz buffers, which is robust across platforms that
- *    refuse a forced 16 kHz output context.
+ *    wrapped in an `AudioBuffer` at 16000 Hz and scheduled gaplessly. The playback
+ *    `AudioContext` runs at its native rate and resamples the 16 kHz buffers.
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
 import { base64ToBytes, floatTo16BitPCM, pcm16ToFloat32, resamplePcmFloat32 } from './audio-pcm'
 import {
   buildSessionUrl,
+  deriveConversationPhase,
   initialVoiceState,
   randomSessionName,
   voiceReducer,
+  type ConversationPhase,
   type ServerFrame,
   type VoiceStatus,
 } from './voice-session-protocol'
+import {
+  computeRms,
+  DEFAULT_VAD_CONFIG,
+  initialVadState,
+  vadStep,
+  type VadState,
+} from './voice-vad'
 
 /** Volcengine TTS output sample rate (`volcengine.ts` `DEFAULT_SAMPLE_RATE`). */
 const TTS_OUTPUT_SAMPLE_RATE = 16000
@@ -50,9 +65,6 @@ const CAPTURE_BUFFER_SIZE = 4096
  * (possible) rejection. Browsers cap the number of concurrent `AudioContext`s,
  * so a leaked context across turns / panel remounts eventually starves the next
  * `new AudioContext(...)` — which is the failure this hardening guards against.
- * Release is initiated synchronously by `close()`; React's cleanup contract
- * forbids a top-level `await`, so the returned promise is only used to discard a
- * rejection (a context already closing).
  */
 function closeAudioContext(ctx: AudioContext | null): void {
   if (!ctx) return
@@ -86,8 +98,12 @@ export interface UseVoiceSessionOptions {
 }
 
 export interface UseVoiceSessionResult {
-  /** Connection / turn status for the panel. */
+  /** Connection lifecycle status for the panel (socket state). */
   status: VoiceStatus
+  /** In-conversation 3-state phase for a live session (listening / thinking / speaking). */
+  conversationPhase: ConversationPhase
+  /** True while the client VAD reports the player is speaking. */
+  playerSpeaking: boolean
   /** Accumulated AI text for the current turn. */
   aiText: string
   /** True while TTS audio is scheduled/playing. */
@@ -96,34 +112,32 @@ export interface UseVoiceSessionResult {
   error: string | null
   /** Session summary, set once the session ends cleanly. */
   summary: import('@amiclaw/platform-ai/contract').SessionSummary | null
-  /** Begin push-to-talk capture (pointer-down). No-op unless `status === 'ready'`. */
-  startTalking: () => void
-  /** End push-to-talk, flush audio, and request the AI turn (pointer-up/leave). */
-  stopTalking: () => void
   /** End the session: send `end`, await the summary, and tear down. */
   endSession: () => void
 }
 
 /**
  * Module-change / `gameState` updates: the wire protocol exposes no mid-session
- * `gameState` update message (only `create` / `turn` / `end`, and a re-`create` is
+ * `gameState` update message (only `create` / `end`, and a re-`create` is
  * rejected `already_created`), so `relevantSections` are pinned at the value
  * captured when the session is created. The hook keeps the LATEST `gameState`/
  * `manualData` in refs and applies them at create time; to inject a new module's
- * sections the consumer creates a fresh session (remount / toggle the hosting
- * panel), which the next round decides. Within one live session, turns reuse the
- * created sections — documented as the chosen "carry, apply at create" behaviour.
+ * sections the consumer creates a fresh session (remount via the `VoicePanel`
+ * key). Within one live session, turns reuse the created sections.
  */
 export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessionResult {
   const { manualData, gameState, gameId = 'bombsquad' } = options
 
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  // Conversation-phase signals. State (drive re-render); mirrored to refs so the
+  // audio-thread callbacks + the once-bound socket handlers read current values.
+  const [playerSpeaking, setPlayerSpeaking] = useState(false)
+  const [awaitingResponse, setAwaitingResponse] = useState(false)
+  const awaitingResponseRef = useRef(false)
 
   // Latest inputs, captured at connect/create time without re-running the connect
-  // effect on every prop identity change. Synced in an effect (not during render)
-  // so the refs are current by the time any event handler / connect effect reads
-  // them, without the lint-flagged ref-write-during-render anti-pattern.
+  // effect on every prop identity change.
   const manualDataRef = useRef<ManualData | null>(manualData)
   const gameStateRef = useRef<GameState>(gameState)
   const gameIdRef = useRef<string>(gameId)
@@ -142,20 +156,32 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const captureCtxRef = useRef<AudioContext | null>(null)
   const captureSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const captureProcRef = useRef<ScriptProcessorNode | null>(null)
-  /** True between a successful mic acquire and `stopTalking` — gates the `turn`. */
+  /** True once the mic is acquired and streaming; guards a double mic-open. */
   const capturingRef = useRef(false)
-  /** True the instant `startTalking` runs; cleared by `stopTalking`, so a release
-   *  during the async `getUserMedia` aborts the capture that is still spinning up. */
-  const talkRequestedRef = useRef(false)
+  /** Running VAD state, folded one capture frame at a time. */
+  const vadStateRef = useRef<VadState>(initialVadState)
+  /** Analyzed-frame wall-clock duration (`bufferSize / actualRate`), ms. */
+  const frameMsRef = useRef<number>((CAPTURE_BUFFER_SIZE / CAPTURE_SAMPLE_RATE) * 1000)
 
   const playbackCtxRef = useRef<AudioContext | null>(null)
   /** Next scheduled playback start time, for gapless PCM frame queueing. */
   const playbackCursorRef = useRef(0)
   /** Count of scheduled-but-not-ended buffers, driving `isAiSpeaking`. */
   const playingCountRef = useRef(0)
+  /** Live scheduled sources, so barge-in can stop them without closing the context. */
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set())
+  /** True while the AI's current turn is still streaming (last chunk not `done`). */
+  const turnStreamingRef = useRef(false)
+  /** True while dropping the tail of a barged-in turn (until its `done` chunk). */
+  const suppressTurnRef = useRef(false)
 
   const safeDispatch = useCallback((action: Parameters<typeof dispatch>[0]) => {
     if (mountedRef.current) dispatch(action)
+  }, [])
+
+  const setAwaiting = useCallback((v: boolean) => {
+    awaitingResponseRef.current = v
+    if (mountedRef.current) setAwaitingResponse(v)
   }, [])
 
   // --- TTS playback (Web Audio side effects) ---
@@ -189,8 +215,10 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         source.start(startAt)
         playbackCursorRef.current = startAt + buffer.duration
         playingCountRef.current += 1
+        activeSourcesRef.current.add(source)
         setIsAiSpeaking(true)
         source.onended = () => {
+          activeSourcesRef.current.delete(source)
           playingCountRef.current = Math.max(0, playingCountRef.current - 1)
           if (playingCountRef.current === 0 && mountedRef.current) setIsAiSpeaking(false)
         }
@@ -201,19 +229,41 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     [ensurePlaybackCtx]
   )
 
-  const stopPlayback = useCallback(() => {
+  /**
+   * Stop all scheduled playback immediately but KEEP the playback context alive
+   * for the next turn. Used by barge-in — the next AI turn reuses the context.
+   */
+  const interruptPlayback = useCallback(() => {
+    for (const source of activeSourcesRef.current) {
+      try {
+        // eslint-disable-next-line react-hooks/immutability -- a Web Audio node held in a ref, not React state; detach its callback before stopping so teardown doesn't re-enter the onended bookkeeping.
+        source.onended = null
+        source.stop?.()
+        source.disconnect?.()
+      } catch {
+        /* ignore — source may already have ended */
+      }
+    }
+    activeSourcesRef.current.clear()
     playingCountRef.current = 0
-    playbackCursorRef.current = 0
-    setIsAiSpeaking(false)
-    const ctx = playbackCtxRef.current
-    playbackCtxRef.current = null
-    closeAudioContext(ctx)
+    playbackCursorRef.current = playbackCtxRef.current?.currentTime ?? 0
+    if (mountedRef.current) setIsAiSpeaking(false)
   }, [])
 
-  // --- Mic capture ---
+  /** Stop playback AND release the context — full teardown (unmount / end). */
+  const teardownPlayback = useCallback(() => {
+    interruptPlayback()
+    const ctx = playbackCtxRef.current
+    playbackCtxRef.current = null
+    playbackCursorRef.current = 0
+    closeAudioContext(ctx)
+  }, [interruptPlayback])
+
+  // --- Mic capture (continuous, full session) ---
 
   const stopCapture = useCallback(() => {
     capturingRef.current = false
+    vadStateRef.current = initialVadState
     const proc = captureProcRef.current
     if (proc) {
       proc.onaudioprocess = null
@@ -242,6 +292,97 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       mediaStreamRef.current = null
     }
   }, [])
+
+  /** A VAD `utterance-end`: the player went silent after speaking. */
+  const onUtteranceEnd = useCallback(() => {
+    setPlayerSpeaking(false)
+    setAwaiting(true)
+    // Wire-spec / back-compat signal. The deployed server detects the endpoint
+    // itself and treats this as a no-op; it does not start the turn.
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'turn' }))
+      } catch {
+        /* non-fatal — a dropped turn just means this utterance isn't answered */
+      }
+    }
+  }, [setAwaiting])
+
+  /** A VAD `speech-start`: the player began an utterance (incl. barge-in). */
+  const onSpeechStart = useCallback(() => {
+    setPlayerSpeaking(true)
+    // Barge-in: the player is talking while the AI's audio is playing. Stop the
+    // playback at once and drop the rest of the interrupted turn's streamed
+    // chunks (text + audio) — the server keeps streaming them (it cancels nothing
+    // in v1), so the client must locally discard them until that turn's `done`.
+    if (playingCountRef.current > 0) {
+      interruptPlayback()
+      if (turnStreamingRef.current) suppressTurnRef.current = true
+      safeDispatch({ type: 'barge-in' })
+    }
+  }, [interruptPlayback, safeDispatch])
+
+  const startCapture = useCallback(() => {
+    if (capturingRef.current) return
+    capturingRef.current = true
+    void (async () => {
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        })
+      } catch {
+        capturingRef.current = false
+        safeDispatch({ type: 'mic-error', message: 'microphone permission denied' })
+        return
+      }
+      // The panel may have unmounted / the socket closed during the async acquire.
+      if (!mountedRef.current || !wsRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        capturingRef.current = false
+        return
+      }
+      mediaStreamRef.current = stream
+      try {
+        const ctx = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE })
+        captureCtxRef.current = ctx
+        // Browsers may ignore the requested 16 kHz and run the context at the
+        // hardware rate (e.g. 48000). The wire format is fixed at PCM16 16 kHz —
+        // resample each frame to the true target rate before encoding.
+        const actualRate = ctx.sampleRate
+        frameMsRef.current = (CAPTURE_BUFFER_SIZE / actualRate) * 1000
+        vadStateRef.current = initialVadState
+        const source = ctx.createMediaStreamSource(stream)
+        captureSourceRef.current = source
+        const proc = ctx.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1)
+        captureProcRef.current = proc
+        proc.onaudioprocess = (e) => {
+          const frame = e.inputBuffer.getChannelData(0)
+          // 1) VAD on the raw frame (energy is rate-independent), driving the
+          //    conversation phase + barge-in.
+          const rms = computeRms(frame)
+          const stepped = vadStep(vadStateRef.current, rms, frameMsRef.current, DEFAULT_VAD_CONFIG)
+          vadStateRef.current = stepped.state
+          if (stepped.event === 'speech-start') onSpeechStart()
+          else if (stepped.event === 'utterance-end') onUtteranceEnd()
+          // 2) Stream the frame continuously as PCM16 16 kHz.
+          const socket = wsRef.current
+          if (!socket || socket.readyState !== WebSocket.OPEN) return
+          const pcm =
+            actualRate === CAPTURE_SAMPLE_RATE
+              ? frame
+              : resamplePcmFloat32(frame, actualRate, CAPTURE_SAMPLE_RATE)
+          socket.send(floatTo16BitPCM(pcm))
+        }
+        source.connect(proc)
+        proc.connect(ctx.destination)
+      } catch {
+        stopCapture()
+        safeDispatch({ type: 'mic-error', message: 'microphone capture failed' })
+      }
+    })()
+  }, [onSpeechStart, onUtteranceEnd, safeDispatch, stopCapture])
 
   // --- WebSocket lifecycle ---
 
@@ -301,8 +442,32 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       } catch {
         return
       }
-      if (frame.type === 'chunk' && frame.kind === 'audio' && frame.audio) {
-        playAudioFrame(base64ToBytes(frame.audio))
+      if (frame.type === 'created') {
+        // The AI greets first: open the mic now and mark the opening greeting
+        // pending (-> "thinking" until its audio plays).
+        setAwaiting(true)
+        startCapture()
+        safeDispatch({ type: 'frame', frame })
+        return
+      }
+      if (frame.type === 'chunk') {
+        // Drop the tail of a turn the player barged in on, until its `done`.
+        if (suppressTurnRef.current) {
+          if (frame.done) {
+            suppressTurnRef.current = false
+            turnStreamingRef.current = false
+          }
+          return
+        }
+        // A real chunk arriving means the AI is responding now — the player's
+        // wait is over.
+        turnStreamingRef.current = !frame.done
+        if (awaitingResponseRef.current) setAwaiting(false)
+        if (frame.kind === 'audio' && frame.audio) {
+          playAudioFrame(base64ToBytes(frame.audio))
+        }
+        safeDispatch({ type: 'frame', frame })
+        return
       }
       safeDispatch({ type: 'frame', frame })
     }
@@ -316,9 +481,8 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       if (endedRef.current || event.code === 1000) {
         safeDispatch({ type: 'closed' })
       } else {
-        // The server attaches a bounded `safeCloseReason` to every 1008 (e.g.
-        // "turn before create", a provider error code) — surface it so a residual
-        // failure is self-explaining instead of a bare numeric code.
+        // The server attaches a bounded `safeCloseReason` to every 1008 — surface
+        // it so a residual failure is self-explaining, not a bare numeric code.
         const reason = event.reason ? `: ${event.reason}` : ''
         safeDispatch({
           type: 'transport-error',
@@ -326,84 +490,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         })
       }
     }
-  }, [playAudioFrame, safeDispatch])
+  }, [playAudioFrame, safeDispatch, setAwaiting, startCapture])
 
   // --- Public actions ---
 
-  const startTalking = useCallback(() => {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
-    // Only one turn at a time, and only once the session is ready.
-    if (state.status !== 'ready' || talkRequestedRef.current) return
-    talkRequestedRef.current = true
-
-    void (async () => {
-      let stream: MediaStream
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      } catch {
-        talkRequestedRef.current = false
-        safeDispatch({ type: 'mic-error', message: 'microphone permission denied' })
-        return
-      }
-      // A release (stopTalking) during the async acquire aborts spin-up.
-      if (!talkRequestedRef.current || !wsRef.current) {
-        stream.getTracks().forEach((t) => t.stop())
-        return
-      }
-      mediaStreamRef.current = stream
-      try {
-        const ctx = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE })
-        captureCtxRef.current = ctx
-        // Browsers may ignore the requested 16 kHz and run the context at the
-        // hardware rate (e.g. 48000). The wire format is fixed at PCM16 16 kHz —
-        // resample each frame to the true target rate before encoding, so we
-        // never send mislabelled (wrong-rate) audio that the STT rejects (1008).
-        const actualRate = ctx.sampleRate
-        const source = ctx.createMediaStreamSource(stream)
-        captureSourceRef.current = source
-        const proc = ctx.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1)
-        captureProcRef.current = proc
-        proc.onaudioprocess = (e) => {
-          const socket = wsRef.current
-          if (!socket || socket.readyState !== WebSocket.OPEN) return
-          const frame = e.inputBuffer.getChannelData(0)
-          const pcm =
-            actualRate === CAPTURE_SAMPLE_RATE
-              ? frame
-              : resamplePcmFloat32(frame, actualRate, CAPTURE_SAMPLE_RATE)
-          socket.send(floatTo16BitPCM(pcm))
-        }
-        source.connect(proc)
-        proc.connect(ctx.destination)
-        capturingRef.current = true
-        safeDispatch({ type: 'talk-start' })
-      } catch {
-        stopCapture()
-        talkRequestedRef.current = false
-        safeDispatch({ type: 'mic-error', message: 'microphone capture failed' })
-      }
-    })()
-  }, [state.status, safeDispatch, stopCapture])
-
-  const stopTalking = useCallback(() => {
-    talkRequestedRef.current = false
-    const wasCapturing = capturingRef.current
-    stopCapture()
-    const ws = wsRef.current
-    // Only request a turn if we actually captured audio — an empty turn would
-    // drive STT over a silent bridge.
-    if (wasCapturing && ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(JSON.stringify({ type: 'turn' }))
-      } catch {
-        safeDispatch({ type: 'transport-error', message: 'failed to send turn' })
-      }
-    }
-  }, [stopCapture, safeDispatch])
-
   const endSession = useCallback(() => {
-    talkRequestedRef.current = false
     stopCapture()
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -432,19 +523,24 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     return () => {
       mountedRef.current = false
       stopCapture()
-      stopPlayback()
+      teardownPlayback()
       closeSocket(true)
     }
-  }, [hasManual, connect, stopCapture, stopPlayback, closeSocket])
+  }, [hasManual, connect, stopCapture, teardownPlayback, closeSocket])
+
+  const conversationPhase = useMemo(
+    () => deriveConversationPhase({ isAiSpeaking, playerSpeaking, awaitingResponse }),
+    [isAiSpeaking, playerSpeaking, awaitingResponse]
+  )
 
   return {
     status: state.status,
+    conversationPhase,
+    playerSpeaking,
     aiText: state.aiText,
     isAiSpeaking,
     error: state.error,
     summary: state.summary,
-    startTalking,
-    stopTalking,
     endSession,
   }
 }
