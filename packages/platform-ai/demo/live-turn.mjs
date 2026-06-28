@@ -158,6 +158,11 @@ async function main() {
         gameId: args.gameId,
         manualData: MANUAL_DATA,
         gameState: GAME_STATE,
+        // This harness verifies ONE client-`turn`-driven player turn in
+        // isolation; suppress the AI-first opening greeting so the first
+        // `done:true` chunk belongs to the player turn (not the greeting), which
+        // is what the `end`-on-done step keys off.
+        opening: false,
       })
     )
   })

@@ -47,22 +47,33 @@
   animation: voice-dot-pulse 1.4s ease-in-out infinite;
 }
 
-.statusDot[data-status='ready'] {
-  background: var(--green);
-  box-shadow: 0 0 8px rgba(75, 210, 102, 0.6);
-}
-
-.statusDot[data-status='in-turn'] {
-  background: var(--y);
-  box-shadow: 0 0 8px var(--y-glow-50);
-}
-
 .statusDot[data-status='error'] {
   background: var(--rose);
 }
 
 .statusDot[data-status='closed'] {
   background: var(--text-muted);
+}
+
+/* ----------  live 3-state conversation phase  ----------
+   When live, `data-phase` overrides the generic `data-status='ready'` dot with a
+   phase-specific colour + animation:聆听中 (green, breathing), 思考中 (yellow,
+   pulsing), 说话中 (yellow, steady glow). */
+.statusDot[data-phase='listening'] {
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(75, 210, 102, 0.6);
+  animation: voice-dot-pulse 1.8s ease-in-out infinite;
+}
+
+.statusDot[data-phase='thinking'] {
+  background: var(--y);
+  box-shadow: 0 0 8px var(--y-glow-50);
+  animation: voice-dot-pulse 0.9s ease-in-out infinite;
+}
+
+.statusDot[data-phase='speaking'] {
+  background: var(--y);
+  box-shadow: 0 0 10px var(--y-glow-70);
 }
 
 .statusText {
@@ -140,59 +151,12 @@
   word-break: break-word;
 }
 
-/* ----------  push-to-talk  ---------- */
-.talkBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--touch-target);
-  padding: 12px 24px;
-  background: var(--y);
-  color: #050511;
-  border: 2px solid transparent;
-  border-radius: var(--radius-pill);
-  font: 600 15px var(--font-body);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  transition:
-    box-shadow 0.15s ease,
-    transform 0.15s ease,
-    background 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.talkBtn:hover,
-.talkBtn:focus-visible {
-  box-shadow: 0 0 24px var(--y-glow-50);
-  outline: none;
-}
-
-.talkBtn:focus-visible {
-  outline: 2px solid var(--y);
-  outline-offset: 3px;
-}
-
-.talkBtn:disabled {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* Live-mic state: a yellow glow pulse so the player can see the hold is
-   captured. Yellow (= active), not rose, per the Atlas palette. */
-.talkBtnActive {
-  border-color: var(--y);
-  animation: voice-talk-pulse 1.1s ease-in-out infinite;
-}
-
-.talkBtnIcon {
-  display: inline-flex;
-  align-items: center;
+/* ----------  hands-free hint  ---------- */
+.hint {
+  margin: 0;
+  font: 400 12px/1.45 var(--font-body);
+  color: var(--text-4);
+  text-align: center;
 }
 
 @keyframes voice-dot-pulse {
@@ -215,20 +179,9 @@
   }
 }
 
-@keyframes voice-talk-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--y-glow-50);
-  }
-  50% {
-    box-shadow: 0 0 22px 2px var(--y-glow-50);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .statusDot,
-  .speakingDots i,
-  .talkBtnActive {
+  .speakingDots i {
     animation: none;
   }
 }

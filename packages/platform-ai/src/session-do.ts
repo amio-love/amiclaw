@@ -7,11 +7,15 @@
  *   - It implements the four-method contract semantics
  *     (`createSession` / `onPlayerAudio` / `onAiResponse` / `endSession`),
  *     enforcing `sessionId <-> userId` ownership on every operation.
- *   - It drives `runTurn` over the WebSocket: inbound binary frames are player
- *     audio; outbound `AiResponseChunk`s are serialized back to the player.
+ *   - It drives `runTurn` over the WebSocket: the player pushes binary audio
+ *     frames, then a client `turn` control message fires the turn; outbound
+ *     `AiResponseChunk`s are serialized back to the player. The client owns turn
+ *     detection (its VAD sends `turn` when the player stops speaking).
+ *   - On `create` it also fires an AI-first opening greeting (`runOpeningTurn`,
+ *     LLM->TTS, no player audio) so the AI speaks first, when enabled (default).
  *
- * The orchestration logic itself lives in `runTurn` (pure, provider-mocked
- * unit tests); this class is the DO/WS adapter around it.
+ * The orchestration logic itself lives in `runTurn` / `runOpeningTurn` (pure,
+ * provider-mocked unit tests); this class is the DO/WS adapter around them.
  *
  * The class extends the Cloudflare Agents SDK `Agent` base (over `partyserver`),
  * with hibernation deliberately OFF (`static options = { hibernate: false }`).
@@ -74,8 +78,8 @@ import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './
 import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
-import { traceTurn } from './trace'
-import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
+import { traceTurn, traceTurnError } from './trace'
+import { runOpeningTurn, runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
 import { flushSessionUsage, type UsageKvWriter } from './usage-flush'
 import {
   assertSessionOwnership,
@@ -111,6 +115,13 @@ interface CreateSessionMessage {
    * metadata only — it never affects session behaviour.
    */
   gameRunId?: string
+  /**
+   * Whether the AI opens the conversation with an unprompted greeting turn
+   * (LLM->TTS, no player audio) right after the session is established. Defaults
+   * to `true` — AI-first is the product behaviour. A consumer (or a test) sets
+   * `false` to suppress the greeting.
+   */
+  opening?: boolean
 }
 
 /**
@@ -767,6 +778,90 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   }
 
   /**
+   * Stream one turn's `AiResponseChunk`s to the socket under the serial-turn
+   * guard, shared by the client-`turn` path (STT->LLM->TTS via `runTurn`) and
+   * the AI-first opening greeting (LLM->TTS via `runOpeningTurn`).
+   *
+   * Holds the iterator explicitly (so a mid-turn `end` / owner close can cancel
+   * it via `return()`) and captures this turn's generation (`myEpoch`) at the
+   * same synchronous point the shared `turnInFlight`/`activeTurn` fields are set,
+   * so the `finally` clears the guard on every exit (normal end, provider error,
+   * cancellation) — but ONLY while this turn is still the live generation: a
+   * stale `finally` whose session was already ended/dropped must not null out a
+   * newer session's `turnInFlight`/`activeTurn` (see `turnEpoch`).
+   */
+  private async streamTurn(ws: Connection, turn: AsyncIterator<AiResponseChunk>): Promise<void> {
+    const myEpoch = this.turnEpoch
+    this.activeTurn = turn
+    this.turnInFlight = true
+    try {
+      for (;;) {
+        const next = await turn.next()
+        if (next.done) break
+        const chunk = next.value
+        if (chunk.kind === 'audio' && chunk.audio) {
+          ws.send(
+            JSON.stringify({
+              type: 'chunk',
+              kind: 'audio',
+              audio: base64FromBytes(chunk.audio),
+              done: chunk.done,
+            })
+          )
+        } else {
+          ws.send(
+            JSON.stringify({
+              type: 'chunk',
+              kind: 'text',
+              text: chunk.text ?? '',
+              done: chunk.done,
+            })
+          )
+        }
+      }
+    } finally {
+      if (this.turnEpoch === myEpoch) {
+        this.turnInFlight = false
+        this.activeTurn = undefined
+      }
+    }
+  }
+
+  /**
+   * Fire the AI-first opening greeting: an LLM->TTS-only turn from the
+   * server-side `OPENING_DIRECTIVE`, streamed to the socket with NO player audio.
+   * Background-launched on `create` (when enabled), so it owns its own errors:
+   * fail-loud (a provider error closes the OWNER socket with a 1008 policy close,
+   * exactly as the synchronous control path does) and self-fencing (the epoch
+   * guard inside `streamTurn` makes a stale `finally` a no-op, and the catch
+   * skips the close once a teardown has advanced the generation). The synthetic
+   * directive is never persisted and the greeting does not count as a player turn
+   * (see `runOpeningTurn`).
+   */
+  private async runOpeningGreeting(ws: Connection): Promise<void> {
+    const myEpoch = this.turnEpoch
+    try {
+      if (!this.sessionState || !this.providers || this.sessionId === undefined) return
+      traceTurn('turn', 'opening-start', { sessionId: this.sessionId })
+      const turn = runOpeningTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
+      await this.streamTurn(ws, turn)
+    } catch (err: unknown) {
+      // Skip the fail-loud close once a teardown has advanced the generation
+      // (the session this greeting belonged to is gone; a newer session may own
+      // the socket now).
+      if (this.turnEpoch === myEpoch) {
+        const reason = err instanceof Error ? err.message : 'opening greeting failed'
+        traceTurnError('turn', 'opening-error', { messageChars: reason.length })
+        try {
+          ws.close(1008, safeCloseReason(reason))
+        } catch {
+          // socket already gone — nothing to fail loud on.
+        }
+      }
+    }
+  }
+
+  /**
    * Reject cross-session / cross-user access. Delegates to the pure
    * `assertSessionOwnership` predicate (the L2 ownership invariant —
    * `onPlayerAudio` / `onAiResponse` / `endSession` verify ownership).
@@ -852,6 +947,13 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // (`already_created`) never repoints the owner.
         this.ownerSocket = ws
         ws.send(JSON.stringify({ type: 'created', sessionId }))
+        // AI speaks first: fire the opening greeting (LLM->TTS, no player audio)
+        // in the background, when enabled (default on — AI-first is the product
+        // behaviour). `runOpeningGreeting` owns its own errors (fail-loud 1008 on
+        // a provider error) and is epoch-fenced, so it is fire-and-forget; a
+        // mid-greeting `end`/owner close cancels it through the same
+        // `activeTurn`/`turnEpoch` machinery as a client turn.
+        if (msg.opening ?? true) void this.runOpeningGreeting(ws)
         return
       }
       case 'turn': {
@@ -877,65 +979,17 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         traceTurn('turn', 'start', {
           sessionId,
         })
-        // Stream the AI response chunks back. Text rides as JSON; audio is
-        // base64-encoded so the whole turn stays on the JSON text channel and
-        // the binary frame direction remains player-audio-only. Ownership is
-        // checked against THIS socket's user, so a second client on the same DO
-        // cannot drive the first user's session.
-        //
-        // Hold the iterator explicitly so a mid-turn `end` / owner close can
-        // cancel it via `return()`. Mark in-flight BEFORE the first `await`
-        // (synchronous up to here) so an interleaved second `turn` sees the
-        // guard set. Capture THIS turn's generation (`myEpoch`) at the same
-        // synchronous point the shared fields are set, so the `finally` can tell
-        // "still my session" from "a newer session reused this DO after my
-        // session was torn down". The `finally` clears the guard + iterator on
-        // every exit (normal end, provider error, or cancellation) so the next
-        // turn can run — but ONLY while this turn is still the live generation
-        // (see `turnEpoch`): a stale `finally` whose session was already ended/
-        // dropped must not null out a newer session's `turnInFlight`/`activeTurn`.
+        // Stream the AI response chunks back under the serial-turn guard. Text
+        // rides as JSON; audio is base64-encoded so the whole turn stays on the
+        // JSON text channel and the binary frame direction remains
+        // player-audio-only. Ownership is checked against THIS socket's user (in
+        // `onAiResponse`), so a second client on the same DO cannot drive the
+        // first user's session. `streamTurn` owns the `turnInFlight`/`activeTurn`/
+        // `turnEpoch` machinery (see its docstring), so a mid-turn `end`/owner
+        // close cancels cleanly and a stale `finally` cannot clobber a newer
+        // session's guard.
         const turn = this.onAiResponse(sessionId, socketUserId)[Symbol.asyncIterator]()
-        const myEpoch = this.turnEpoch
-        this.activeTurn = turn
-        this.turnInFlight = true
-        try {
-          for (;;) {
-            const next = await turn.next()
-            if (next.done) break
-            const chunk = next.value
-            if (chunk.kind === 'audio' && chunk.audio) {
-              ws.send(
-                JSON.stringify({
-                  type: 'chunk',
-                  kind: 'audio',
-                  audio: base64FromBytes(chunk.audio),
-                  done: chunk.done,
-                })
-              )
-            } else {
-              ws.send(
-                JSON.stringify({
-                  type: 'chunk',
-                  kind: 'text',
-                  text: chunk.text ?? '',
-                  done: chunk.done,
-                })
-              )
-            }
-          }
-        } finally {
-          // Epoch guard: only release the guard + iterator if THIS turn is still
-          // the live generation. If `clearSession` (end / owner-close) already
-          // bumped the epoch and a newer session is running on this resident DO,
-          // `this.turnEpoch !== myEpoch` and we leave the new session's
-          // `turnInFlight`/`activeTurn` untouched — the stale `finally` is a
-          // no-op. In the normal single-session path the epoch is unchanged, so
-          // this clears exactly as before.
-          if (this.turnEpoch === myEpoch) {
-            this.turnInFlight = false
-            this.activeTurn = undefined
-          }
-        }
+        await this.streamTurn(ws, turn)
         return
       }
       case 'end': {

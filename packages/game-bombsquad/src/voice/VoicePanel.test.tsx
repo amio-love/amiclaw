@@ -1,28 +1,26 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
 import type { UseVoiceSessionResult } from './useVoiceSession'
 import VoicePanel from './VoicePanel'
 
-// Mock the hook so the panel can be driven through every status / cue without a
+// Mock the hook so the panel can be driven through every status / phase without a
 // real WebSocket, mic, or AudioContext (those are the browser-only play-green).
 vi.mock('./useVoiceSession', () => ({ useVoiceSession: vi.fn() }))
 import { useVoiceSession } from './useVoiceSession'
 const mockHook = vi.mocked(useVoiceSession)
 
-const startTalking = vi.fn()
-const stopTalking = vi.fn()
 const endSession = vi.fn()
 
 function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessionResult {
   return {
     status: 'ready',
+    conversationPhase: 'listening',
+    playerSpeaking: false,
     aiText: '',
     isAiSpeaking: false,
     error: null,
     summary: null,
-    startTalking,
-    stopTalking,
     endSession,
     ...partial,
   }
@@ -38,69 +36,82 @@ function renderPanel(partial: Partial<UseVoiceSessionResult> = {}) {
 
 beforeEach(() => {
   mockHook.mockReset()
-  startTalking.mockReset()
-  stopTalking.mockReset()
   endSession.mockReset()
 })
 
-describe('VoicePanel — status rendering', () => {
-  it('shows the connecting status with the talk control disabled', () => {
+describe('VoicePanel — connection status (non-live)', () => {
+  it('shows the connecting status', () => {
     renderPanel({ status: 'connecting' })
     expect(screen.getByText('连接中')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '按住说话' })).toBeDisabled()
   })
 
-  it('enables push-to-talk once ready', () => {
-    renderPanel({ status: 'ready' })
-    expect(screen.getByText('已连接')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '按住说话' })).toBeEnabled()
-  })
-
-  it('surfaces the connection-error status', () => {
+  it('shows the connection-error status', () => {
     renderPanel({ status: 'error', error: 'voice connection closed (1006)' })
     expect(screen.getByText('连接出错')).toBeInTheDocument()
   })
+
+  it('shows the ended status when closed', () => {
+    renderPanel({ status: 'closed' })
+    expect(screen.getByText('已结束')).toBeInTheDocument()
+  })
 })
 
-describe('VoicePanel — hook-state cues', () => {
+describe('VoicePanel — live 3-state conversation phase', () => {
+  it('shows 聆听中 while listening', () => {
+    renderPanel({ status: 'ready', conversationPhase: 'listening' })
+    expect(screen.getByText('聆听中')).toBeInTheDocument()
+  })
+
+  it('shows 思考中 while thinking', () => {
+    renderPanel({ status: 'ready', conversationPhase: 'thinking' })
+    expect(screen.getByText('思考中')).toBeInTheDocument()
+  })
+
+  it('shows 说话中 while speaking', () => {
+    renderPanel({ status: 'ready', conversationPhase: 'speaking', isAiSpeaking: true })
+    expect(screen.getByText('说话中')).toBeInTheDocument()
+  })
+
+  it('does not show a phase label before the session is live', () => {
+    renderPanel({ status: 'connecting', conversationPhase: 'listening' })
+    expect(screen.queryByText('聆听中')).not.toBeInTheDocument()
+  })
+})
+
+describe('VoicePanel — cues and content', () => {
   it('renders the accumulated AI text', () => {
     renderPanel({ aiText: 'Hold the button.' })
     expect(screen.getByText('Hold the button.')).toBeInTheDocument()
   })
 
-  it('shows the "AI is speaking" cue while speaking', () => {
-    renderPanel({ isAiSpeaking: true })
-    expect(screen.getByText('AI 正在回应')).toBeInTheDocument()
+  it('shows the speaking-bars cue while the AI is speaking and live', () => {
+    const { container } = renderPanel({
+      status: 'ready',
+      conversationPhase: 'speaking',
+      isAiSpeaking: true,
+    })
+    expect(container.querySelector('[aria-label="AI 正在说话"]')).toBeInTheDocument()
   })
 
-  it('hides the "AI is speaking" cue when not speaking', () => {
-    renderPanel({ isAiSpeaking: false })
-    expect(screen.queryByText('AI 正在回应')).not.toBeInTheDocument()
+  it('hides the speaking cue when the AI is not speaking', () => {
+    const { container } = renderPanel({ isAiSpeaking: false })
+    expect(container.querySelector('[aria-label="AI 正在说话"]')).not.toBeInTheDocument()
   })
 
   it('shows a bounded error line as an alert', () => {
     renderPanel({ error: 'microphone permission denied' })
-    const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent('microphone permission denied')
+    expect(screen.getByRole('alert')).toHaveTextContent('microphone permission denied')
   })
 })
 
-describe('VoicePanel — push-to-talk wiring', () => {
-  it('starts talking on press and stops on release', () => {
+describe('VoicePanel — hands-free (no push-to-talk)', () => {
+  it('renders no push-to-talk button', () => {
     renderPanel({ status: 'ready' })
-    const btn = screen.getByRole('button', { name: /说话|结束/ })
-
-    fireEvent.pointerDown(btn)
-    expect(startTalking).toHaveBeenCalledTimes(1)
-
-    fireEvent.pointerUp(btn)
-    expect(stopTalking).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('does not call stopTalking on a release that never began a hold', () => {
+  it('shows the hands-free hint', () => {
     renderPanel({ status: 'ready' })
-    const btn = screen.getByRole('button', { name: '按住说话' })
-    fireEvent.pointerUp(btn)
-    expect(stopTalking).not.toHaveBeenCalled()
+    expect(screen.getByText(/免提对话已开启/)).toBeInTheDocument()
   })
 })

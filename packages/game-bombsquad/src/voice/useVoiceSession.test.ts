@@ -53,7 +53,6 @@ class MockWebSocket {
     this.onclose?.({ code, reason })
   }
 
-  /** The control messages this socket received, parsed. */
   controlMessages(): Array<Record<string, unknown>> {
     return this.sent
       .filter((m): m is string => typeof m === 'string')
@@ -65,12 +64,39 @@ class MockWebSocket {
   }
 }
 
+class MockBufferSource {
+  buffer: unknown = null
+  onended: Listener = null
+  started = false
+  stopped = false
+  connect(): void {}
+  disconnect(): void {}
+  start(): void {
+    this.started = true
+  }
+  stop(): void {
+    this.stopped = true
+  }
+}
+
+class MockScriptProcessor {
+  onaudioprocess: ((e: { inputBuffer: { getChannelData: () => Float32Array } }) => void) | null =
+    null
+  connect(): void {}
+  disconnect(): void {}
+}
+
 class MockAudioContext {
+  static instances: MockAudioContext[] = []
   currentTime = 0
   destination = {}
   sampleRate: number
+  processor: MockScriptProcessor | null = null
+  sources: MockBufferSource[] = []
+
   constructor(opts?: { sampleRate?: number }) {
     this.sampleRate = opts?.sampleRate ?? 48000
+    MockAudioContext.instances.push(this)
   }
   resume(): Promise<void> {
     return Promise.resolve()
@@ -81,19 +107,18 @@ class MockAudioContext {
   createBuffer(_ch: number, len: number, rate: number) {
     return { duration: len / rate, getChannelData: () => new Float32Array(len) }
   }
-  createBufferSource() {
-    return {
-      buffer: null as unknown,
-      connect() {},
-      start() {},
-      onended: null as Listener,
-    }
+  createBufferSource(): MockBufferSource {
+    const s = new MockBufferSource()
+    this.sources.push(s)
+    return s
   }
   createMediaStreamSource() {
     return { connect() {}, disconnect() {} }
   }
-  createScriptProcessor() {
-    return { connect() {}, disconnect() {}, onaudioprocess: null as Listener }
+  createScriptProcessor(): MockScriptProcessor {
+    const p = new MockScriptProcessor()
+    this.processor = p
+    return p
   }
 }
 
@@ -117,9 +142,34 @@ function summary(): SessionSummary {
   }
 }
 
+// The capture context is the only one that creates a ScriptProcessor.
+function captureProcessor(): MockScriptProcessor {
+  const ctx = MockAudioContext.instances.find((c) => c.processor)
+  if (!ctx?.processor) throw new Error('no capture processor yet')
+  return ctx.processor
+}
+
+// The playback context has buffer sources and no processor.
+function playbackSources(): MockBufferSource[] {
+  const ctx = MockAudioContext.instances.find((c) => !c.processor && c.sources.length > 0)
+  return ctx?.sources ?? []
+}
+
+const SAMPLES = 4096 // matches CAPTURE_BUFFER_SIZE; at 16 kHz that is 256ms/frame.
+
+/** Fire one capture frame of the given constant amplitude through the VAD path. */
+function fireFrame(amplitude: number): void {
+  const data = new Float32Array(SAMPLES).fill(amplitude)
+  captureProcessor().onaudioprocess?.({ inputBuffer: { getChannelData: () => data } })
+}
+
+const audioB64 = btoa(String.fromCharCode(0, 0, 1, 0)) // 2 PCM16 samples
+
 beforeEach(() => {
   MockWebSocket.instances = []
+  MockAudioContext.instances = []
   getUserMedia.mockClear()
+  getUserMedia.mockImplementation(async () => ({ getTracks: () => [{ stop() {} }] }))
   vi.stubGlobal('WebSocket', MockWebSocket)
   vi.stubGlobal('AudioContext', MockAudioContext)
   Object.defineProperty(globalThis.navigator, 'mediaDevices', {
@@ -138,7 +188,21 @@ function lastSocket(): MockWebSocket {
   return ws
 }
 
-describe('useVoiceSession', () => {
+/** Bring a hook to a live session with the mic streaming. */
+async function ready() {
+  const rendered = renderHook(() =>
+    useVoiceSession({ manualData: manualData(), gameState: gameState() })
+  )
+  const ws = lastSocket()
+  act(() => ws.fireOpen())
+  await act(async () => {
+    ws.fireMessage({ type: 'created', sessionId: 'sess-1' })
+  })
+  await waitFor(() => captureProcessor())
+  return { ...rendered, ws }
+}
+
+describe('useVoiceSession — connection', () => {
   it('stays idle until a manual is provided', () => {
     const { result } = renderHook(() =>
       useVoiceSession({ manualData: null, gameState: gameState() })
@@ -163,87 +227,8 @@ describe('useVoiceSession', () => {
       manualData: { version: 'v1' },
       gameState: { relevantSections: ['button'] },
     })
-    // Security invariant: no userId / prompt on the wire.
     expect(create).not.toHaveProperty('userId')
     expect(create).not.toHaveProperty('systemPrompt')
-  })
-
-  it('reaches ready on the created frame', () => {
-    const { result } = renderHook(() =>
-      useVoiceSession({ manualData: manualData(), gameState: gameState() })
-    )
-    const ws = lastSocket()
-    act(() => ws.fireOpen())
-    act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
-    expect(result.current.status).toBe('ready')
-  })
-
-  it('runs a full push-to-talk turn: capture -> turn -> stream -> ready', async () => {
-    const { result } = renderHook(() =>
-      useVoiceSession({ manualData: manualData(), gameState: gameState() })
-    )
-    const ws = lastSocket()
-    act(() => ws.fireOpen())
-    act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
-
-    await act(async () => {
-      result.current.startTalking()
-    })
-    await waitFor(() => expect(result.current.status).toBe('in-turn'))
-    expect(getUserMedia).toHaveBeenCalledOnce()
-
-    act(() => result.current.stopTalking())
-    const turn = ws.controlMessages().find((m) => m.type === 'turn')
-    expect(turn).toBeDefined()
-
-    act(() => {
-      ws.fireMessage({ type: 'chunk', kind: 'text', text: 'Hold ', done: false })
-      ws.fireMessage({ type: 'chunk', kind: 'text', text: 'the button.', done: false })
-    })
-    expect(result.current.aiText).toBe('Hold the button.')
-
-    // An audio chunk decodes + schedules playback without throwing, then done.
-    const audioB64 = btoa(String.fromCharCode(0, 0, 1, 0))
-    act(() => ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: false }))
-    act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: '', done: true }))
-    expect(result.current.status).toBe('ready')
-  })
-
-  it('surfaces a bounded mic error and stays usable when permission is denied', async () => {
-    getUserMedia.mockRejectedValueOnce(new Error('denied'))
-    const { result } = renderHook(() =>
-      useVoiceSession({ manualData: manualData(), gameState: gameState() })
-    )
-    const ws = lastSocket()
-    act(() => ws.fireOpen())
-    act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
-
-    await act(async () => {
-      result.current.startTalking()
-    })
-    await waitFor(() => expect(result.current.error).toBe('microphone permission denied'))
-    // Mic failure is not a transport failure — the session is still ready.
-    expect(result.current.status).toBe('ready')
-    // No turn was requested without audio.
-    expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(false)
-  })
-
-  it('endSession sends end and lands closed with the summary', () => {
-    const { result } = renderHook(() =>
-      useVoiceSession({ manualData: manualData(), gameState: gameState() })
-    )
-    const ws = lastSocket()
-    act(() => ws.fireOpen())
-    act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
-
-    act(() => result.current.endSession())
-    expect(ws.controlMessages().some((m) => m.type === 'end')).toBe(true)
-
-    const s = summary()
-    act(() => ws.fireMessage({ type: 'summary', summary: s }))
-    act(() => ws.fireClose(1000))
-    expect(result.current.status).toBe('closed')
-    expect(result.current.summary).toMatchObject({ turnCount: 1 })
   })
 
   it('an unexpected socket close becomes a bounded transport error', () => {
@@ -265,10 +250,10 @@ describe('useVoiceSession', () => {
     const ws = lastSocket()
     act(() => ws.fireOpen())
     act(() => ws.fireMessage({ type: 'created', sessionId: 'sess-1' }))
-    act(() => ws.fireClose(1008, 'turn before create'))
+    act(() => ws.fireClose(1008, 'asr driver failed'))
     expect(result.current.status).toBe('error')
     expect(result.current.error).toContain('1008')
-    expect(result.current.error).toContain('turn before create')
+    expect(result.current.error).toContain('asr driver failed')
   })
 
   it('closes the socket on unmount (lifecycle hygiene)', () => {
@@ -280,5 +265,135 @@ describe('useVoiceSession', () => {
     expect(ws.readyState).toBe(MockWebSocket.OPEN)
     unmount()
     expect(ws.readyState).toBe(MockWebSocket.CLOSED)
+  })
+})
+
+describe('useVoiceSession — hands-free lifecycle', () => {
+  it('reaches ready and auto-opens the mic on created (no push-to-talk)', async () => {
+    const { result, ws } = await ready()
+    expect(result.current.status).toBe('ready')
+    expect(getUserMedia).toHaveBeenCalledOnce()
+    // No startTalking / stopTalking on the surface anymore.
+    expect(result.current).not.toHaveProperty('startTalking')
+    expect(result.current).not.toHaveProperty('stopTalking')
+    // Mic is streaming: a capture frame produces a binary WS frame.
+    act(() => fireFrame(0.0))
+    expect(ws.binaryFrameCount()).toBeGreaterThan(0)
+  })
+
+  it('renders the AI-first opening turn with no player input (thinking -> speaking)', async () => {
+    const { result, ws } = await ready()
+    // Opening greeting pending, AI not yet audible -> thinking.
+    expect(result.current.conversationPhase).toBe('thinking')
+
+    act(() => {
+      ws.fireMessage({ type: 'chunk', kind: 'text', text: 'Hi ', done: false })
+      ws.fireMessage({ type: 'chunk', kind: 'text', text: 'there.', done: false })
+      ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: true })
+    })
+    expect(result.current.aiText).toBe('Hi there.')
+    expect(result.current.isAiSpeaking).toBe(true)
+    expect(result.current.conversationPhase).toBe('speaking')
+  })
+
+  it('clears the speaking state when the last buffer ends', async () => {
+    const { result, ws } = await ready()
+    act(() => ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: true }))
+    expect(result.current.isAiSpeaking).toBe(true)
+    act(() => playbackSources().at(-1)?.onended?.())
+    expect(result.current.isAiSpeaking).toBe(false)
+  })
+
+  it('surfaces a bounded mic error and stays ready when permission is denied', async () => {
+    getUserMedia.mockRejectedValueOnce(new Error('denied'))
+    const { result } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    await act(async () => {
+      ws.fireMessage({ type: 'created', sessionId: 'sess-1' })
+    })
+    await waitFor(() => expect(result.current.error).toBe('microphone permission denied'))
+    expect(result.current.status).toBe('ready')
+  })
+
+  it('endSession sends end and lands closed with the summary', async () => {
+    const { result, ws } = await ready()
+    act(() => result.current.endSession())
+    expect(ws.controlMessages().some((m) => m.type === 'end')).toBe(true)
+
+    const s = summary()
+    act(() => ws.fireMessage({ type: 'summary', summary: s }))
+    act(() => ws.fireClose(1000))
+    expect(result.current.status).toBe('closed')
+    expect(result.current.summary).toMatchObject({ turnCount: 1 })
+  })
+})
+
+describe('useVoiceSession — client VAD', () => {
+  it('tracks the player speaking then going silent, and sends a turn on utterance-end', async () => {
+    const { result, ws } = await ready()
+
+    // One 256ms speech frame qualifies as a speech start.
+    act(() => fireFrame(0.5))
+    expect(result.current.playerSpeaking).toBe(true)
+    expect(result.current.conversationPhase).toBe('listening')
+
+    // Four 256ms silence frames (>= 800ms hangover) end the utterance.
+    act(() => {
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+    })
+    expect(result.current.playerSpeaking).toBe(false)
+    expect(result.current.conversationPhase).toBe('thinking')
+    // Wire-spec / back-compat: a `turn` is sent on utterance-end (server no-ops it).
+    expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(true)
+  })
+
+  it('does not fire a turn on background noise below the threshold', async () => {
+    const { result, ws } = await ready()
+    act(() => {
+      for (let i = 0; i < 10; i += 1) fireFrame(0.005)
+    })
+    expect(result.current.playerSpeaking).toBe(false)
+    expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(false)
+  })
+})
+
+describe('useVoiceSession — barge-in', () => {
+  it('stops AI playback and drops the interrupted turn when the player talks over it', async () => {
+    const { result, ws } = await ready()
+
+    // AI is mid-response: text + audio streaming, not yet done.
+    act(() => {
+      ws.fireMessage({ type: 'chunk', kind: 'text', text: 'a long answer that goes', done: false })
+      ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: false })
+    })
+    expect(result.current.isAiSpeaking).toBe(true)
+    const playing = playbackSources().at(-1)
+
+    // Player barges in.
+    act(() => fireFrame(0.5))
+    expect(playing?.stopped).toBe(true)
+    expect(result.current.isAiSpeaking).toBe(false)
+    expect(result.current.playerSpeaking).toBe(true)
+    expect(result.current.aiText).toBe('') // interrupted turn's text dropped
+
+    // The interrupted turn's tail keeps streaming from the server — drop it.
+    act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: ' on and on', done: true }))
+    expect(result.current.aiText).toBe('')
+
+    // After the player goes silent and the next turn streams, it renders fresh.
+    act(() => {
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+    })
+    act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: 'new answer', done: false }))
+    expect(result.current.aiText).toBe('new answer')
   })
 })

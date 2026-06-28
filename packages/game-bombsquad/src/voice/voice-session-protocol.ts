@@ -19,15 +19,51 @@
 import type { SessionSummary } from '@amiclaw/platform-ai/contract'
 
 /**
- * Connection / turn status surfaced to the panel.
+ * Connection lifecycle surfaced to the panel. This is the SOCKET state, distinct
+ * from the in-conversation `ConversationPhase` (listening / thinking / speaking)
+ * which the hands-free model layers on top of a live `ready` session.
  *  - `idle`        before the manual is ready / before connect.
  *  - `connecting`  socket opening and session being created.
- *  - `ready`       session created; the player may push-to-talk.
- *  - `in-turn`     a turn is in progress (player speaking or AI responding).
+ *  - `ready`       session created and live; the AI-first greeting + the
+ *                  continuous hands-free conversation run while status stays
+ *                  `ready` (the turn-by-turn detail lives in `ConversationPhase`).
  *  - `error`       the socket failed or closed unexpectedly (bounded `error` set).
  *  - `closed`      the session ended cleanly (a `summary` arrived / `end` acked).
  */
-export type VoiceStatus = 'idle' | 'connecting' | 'ready' | 'in-turn' | 'error' | 'closed'
+export type VoiceStatus = 'idle' | 'connecting' | 'ready' | 'error' | 'closed'
+
+/**
+ * In-conversation sub-state for a live (`ready`) hands-free session — the user-
+ * requested 3-state indicator. Derived (purely, see `deriveConversationPhase`)
+ * from live hook signals, NOT stored in the reducer:
+ *  - `listening`  mic open, hearing / waiting for the player.
+ *  - `thinking`   the player finished an utterance; awaiting the AI's response.
+ *  - `speaking`   the AI's TTS audio is playing.
+ */
+export type ConversationPhase = 'listening' | 'thinking' | 'speaking'
+
+/** Live signals the conversation phase is derived from. */
+export interface PhaseSignals {
+  /** TTS audio is currently scheduled / playing. */
+  isAiSpeaking: boolean
+  /** Client VAD reports the player is currently speaking. */
+  playerSpeaking: boolean
+  /** An utterance ended (or the opening greeting is pending) with no AI audio yet. */
+  awaitingResponse: boolean
+}
+
+/**
+ * Map the live signals to the 3-state conversation phase. Pure and total. Order
+ * is a strict priority: the AI speaking wins (`speaking`); else an active player
+ * utterance reads as `listening`; else a pending response reads as `thinking`;
+ * otherwise the session is idly `listening` for the player.
+ */
+export function deriveConversationPhase(s: PhaseSignals): ConversationPhase {
+  if (s.isAiSpeaking) return 'speaking'
+  if (s.playerSpeaking) return 'listening'
+  if (s.awaitingResponse) return 'thinking'
+  return 'listening'
+}
 
 /**
  * One server->client JSON frame. Structurally mirrors the envelope
@@ -46,8 +82,8 @@ export type ServerFrame =
 /** Reducer actions: server frames plus the local lifecycle transitions. */
 export type VoiceAction =
   | { type: 'connecting' }
-  | { type: 'talk-start' }
   | { type: 'frame'; frame: ServerFrame }
+  | { type: 'barge-in' }
   | { type: 'mic-error'; message: string }
   | { type: 'transport-error'; message: string }
   | { type: 'closed' }
@@ -58,6 +94,14 @@ export interface VoiceSessionState {
   sessionId: string | null
   /** Accumulated AI text for the current turn (cleared when a new turn starts). */
   aiText: string
+  /**
+   * True once the current turn's last (`done`) chunk has been seen — so the next
+   * turn's first chunk resets `aiText` instead of appending. With server-driven
+   * hands-free turns there is no client turn-start signal, so the turn boundary
+   * is detected from the `done` flag. Starts `true` so the first turn (the AI
+   * opening greeting) renders fresh.
+   */
+  turnDone: boolean
   /** Last bounded error message, or null. */
   error: string | null
   /** Session summary, set once `end` is acknowledged. */
@@ -68,6 +112,7 @@ export const initialVoiceState: VoiceSessionState = {
   status: 'idle',
   sessionId: null,
   aiText: '',
+  turnDone: true,
   error: null,
   summary: null,
 }
@@ -89,19 +134,19 @@ export function voiceReducer(state: VoiceSessionState, action: VoiceAction): Voi
       // Fresh connect resets the per-session surface.
       return { ...initialVoiceState, status: 'connecting' }
 
-    case 'talk-start':
-      // A new turn begins only from `ready`; clear the prior turn's text + error
-      // so the panel shows this turn's reply fresh.
-      if (state.status !== 'ready') return state
-      return { ...state, status: 'in-turn', aiText: '', error: null }
-
     case 'frame':
       return reduceFrame(state, action.frame)
 
+    case 'barge-in':
+      // The player interrupted the AI mid-response. Drop the interrupted turn's
+      // rendered text and mark the turn boundary closed so the AI's NEXT turn
+      // (the answer to the interruption) starts fresh. The hook separately stops
+      // playback and suppresses the interrupted turn's remaining chunks.
+      return { ...state, aiText: '', turnDone: true }
+
     case 'mic-error':
       // Mic capture failure is NOT a socket failure: surface the bounded message
-      // but keep the session usable (status unchanged — capture never reached
-      // `in-turn`, which is set only after the mic is acquired).
+      // but keep the session usable (status unchanged).
       return { ...state, error: boundError(action.message) }
 
     case 'transport-error':
@@ -123,16 +168,15 @@ function reduceFrame(state: VoiceSessionState, frame: ServerFrame): VoiceSession
       return { ...state, status: 'ready', sessionId: frame.sessionId }
 
     case 'chunk': {
-      // Text chunks accumulate into `aiText`; audio chunks are a playback side
-      // effect the hook handles, so only their `done` flag matters here. ANY
-      // chunk flagged `done` is the turn's last fragment -> back to `ready`.
-      const aiText = frame.kind === 'text' ? state.aiText + (frame.text ?? '') : state.aiText
-      const status: VoiceStatus = frame.done
-        ? 'ready'
-        : state.status === 'ready'
-          ? 'in-turn'
-          : state.status
-      return { ...state, aiText, status }
+      // Server-driven hands-free turns give no turn-start signal, so a turn
+      // boundary is detected from the prior chunk's `done`: the first chunk after
+      // a `done` (or the very first chunk) starts a fresh `aiText`; later chunks
+      // of the same turn append. Audio chunks are a playback side effect the hook
+      // owns — only their `done` flag matters here. Status stays `ready` for the
+      // whole live session; the conversation phase carries the turn-level detail.
+      const base = state.turnDone ? '' : state.aiText
+      const aiText = frame.kind === 'text' ? base + (frame.text ?? '') : base
+      return { ...state, aiText, turnDone: frame.done }
     }
 
     case 'summary':

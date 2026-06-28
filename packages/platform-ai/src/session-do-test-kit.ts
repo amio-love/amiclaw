@@ -208,12 +208,19 @@ export async function settle(): Promise<void> {
  * Send the `create` control message over the socket; return the minted session
  * id. Awaits the `created` ack (the DO's create branch first awaits the
  * best-effort, here absent, companion-context resolution).
+ *
+ * The AI-first opening greeting defaults to OFF here so the guard / cleanup /
+ * metering suites stay isolated from the greeting's chunk stream; pass
+ * `{ opening: true }` to exercise the AI-first path.
  */
 export async function createSessionOverWs(
   socket: TestSocket,
-  gameId = 'demo-mock'
+  gameId = 'demo-mock',
+  opts: { opening?: boolean } = {}
 ): Promise<string> {
-  socket.send(JSON.stringify({ type: 'create', gameId, manualData: MANUAL }))
+  socket.send(
+    JSON.stringify({ type: 'create', gameId, manualData: MANUAL, opening: opts.opening ?? false })
+  )
   await waitForMessage(socket, 'created')
   const created = socket.messagesOfType('created').at(-1) as { type: string; sessionId?: string }
   if (created.sessionId === undefined) throw new Error('created ack carried no sessionId')

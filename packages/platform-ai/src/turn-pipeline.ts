@@ -227,53 +227,73 @@ class SentenceQueue {
 }
 
 /**
- * Run one player turn end to end.
- *
- * Yields the turn's `AiResponseChunk`s in order: incremental `text` chunks as
- * the LLM streams, `audio` chunks as TTS synthesizes the segmented sentences,
- * and exactly one terminal chunk with `done: true`. Mutates `state` (history,
- * turnCount, usage) as a side effect so the next turn sees this turn's context.
- *
- * I/O-free beyond driving the injected providers (it never touches the network,
- * a clock, or a socket directly) — fully unit-testable with mocked STT/LLM/TTS.
+ * Server-side opening directive for the AI-first greeting turn. This rides as
+ * the synthetic `user` message of the opening turn so the LLM has a turn to
+ * respond to; it is NEVER client-provided and NEVER persisted into history (the
+ * greeting it elicits is). The persona's own language rule (e.g. bombsquad's
+ * "always Chinese") governs the greeting language — the directive only sets the
+ * INTENT (greet + invite the player to describe what they see), not the words.
  */
-export async function* runTurn(
-  providers: TurnProviders,
-  state: SessionState,
-  audio: AsyncIterable<AudioChunk>
-): AsyncIterable<AiResponseChunk> {
-  // 1. STT: transcribe the player's audio; take the final cumulative transcript.
-  //    `audioBytes` is the inbound-frame byte total — the fallback STT metering
-  //    source at turn settle when the adapter reports no structured usage.
-  const turnStart = Date.now()
-  traceTurn('turn', 'pipeline-start', {
-    turnCount: state.turnCount,
-  })
-  const { transcript: playerText, audioBytes: sttAudioBytes } = await collectFinalTranscript(
-    providers.stt,
-    audio
-  )
-  // ASR hop boundary: the final cumulative transcript is in hand (length only —
-  // never the text). An empty transcript here explains a downstream LLM no-op.
-  traceTurn('asr', 'final-transcript', {
-    transcriptChars: playerText.length,
-    elapsedMs: Date.now() - turnStart,
-  })
+export const OPENING_DIRECTIVE =
+  '[session start] Open the conversation now. Greet the player warmly in their own ' +
+  'language and invite them to describe the current module — what they see on the ' +
+  'device in front of them. Keep it to one or two short sentences.'
 
-  // 2. Inject: deterministic system message (role + rules + manual subset),
-  //    then the rolling history, then this turn's player utterance.
-  const systemMessages = assembleLlmContext({
+/** The loop-internal tally a settled LLM+TTS turn reports back to its caller. */
+interface LlmTtsResult {
+  assistantText: string
+  ttsAudioBytes: number
+  llmDeltaCount: number
+  sentenceCount: number
+  ttsFrameCount: number
+}
+
+/** Assemble the deterministic server-side system message(s) for a turn. */
+function assembleSystem(state: SessionState): ChatMessage[] {
+  return assembleLlmContext({
     systemPromptConfig: state.config.systemPromptConfig,
     manualData: state.manualData,
     gameState: state.gameState,
     ...(state.companionContext !== undefined ? { companionContext: state.companionContext } : {}),
   })
-  const userMessage: ChatMessage = { role: 'user', content: playerText }
-  const messages: ChatMessage[] = [...systemMessages, ...state.history, userMessage]
+}
 
-  // 3. LLM + 4. TTS run concurrently: the LLM loop segments text into sentences
-  //    and feeds a queue the TTS provider drains. We interleave text chunks
-  //    (as the LLM streams) with audio chunks (as TTS produces them).
+/** Apply the LLM token usage + TTS output-seconds of a settled turn to state. */
+function applyLlmTtsUsage(
+  providers: Pick<TurnProviders, 'llm'>,
+  state: SessionState,
+  result: LlmTtsResult
+): { outputTokens?: number } {
+  const usage = (providers.llm as MaybeUsageProvider).lastUsage
+  if (usage) {
+    state.usage.llmInputTokens += usage.inputTokens
+    state.usage.llmOutputTokens += usage.outputTokens
+  }
+  // TTS seconds: exact conversion of the actual synthesized product — the byte
+  // tally of every audio frame this turn yielded, under the adapters' fixed
+  // PCM16 mono 16 kHz output contract.
+  state.usage.ttsOutputSeconds += audioSecondsFromBytes(result.ttsAudioBytes)
+  return { outputTokens: usage?.outputTokens }
+}
+
+/**
+ * The shared LLM->TTS half of a turn: given the fully-assembled `messages`, run
+ * the LLM stream and TTS concurrently and yield the interleaved `text`/`audio`
+ * chunks (NO terminal `done` — the caller emits that after its own settle). It
+ * is I/O-free beyond driving the injected LLM/TTS providers, and reports the
+ * per-turn tally as the generator's return value so the caller can settle usage
+ * and history. Reused by both `runTurn` (player-audio turn) and
+ * `runOpeningTurn` (the AI-first greeting).
+ */
+async function* streamLlmTts(
+  providers: Pick<TurnProviders, 'llm' | 'tts'>,
+  model: string,
+  messages: ChatMessage[],
+  turnStart: number
+): AsyncGenerator<AiResponseChunk, LlmTtsResult> {
+  // LLM + TTS run concurrently: the LLM loop segments text into sentences and
+  // feeds a queue the TTS provider drains. We interleave text chunks (as the
+  // LLM streams) with audio chunks (as TTS produces them).
   const sentenceQueue = new SentenceQueue()
   const ttsIterator = providers.tts.synthesize(sentenceQueue)[Symbol.asyncIterator]()
 
@@ -300,7 +320,7 @@ export async function* runTurn(
 
   const llmStream = providers.llm
     .streamCompletion({
-      model: state.config.llm.model,
+      model,
       messages,
     })
     [Symbol.asyncIterator]()
@@ -425,17 +445,58 @@ export async function* runTurn(
     await llmStream.return?.(undefined)
   }
 
+  return { assistantText, ttsAudioBytes, llmDeltaCount, sentenceCount, ttsFrameCount }
+}
+
+/**
+ * Run one player turn end to end (player audio -> STT -> LLM -> TTS).
+ *
+ * Yields the turn's `AiResponseChunk`s in order: incremental `text` chunks as
+ * the LLM streams, `audio` chunks as TTS synthesizes the segmented sentences,
+ * and exactly one terminal chunk with `done: true`. Mutates `state` (history,
+ * turnCount, usage) as a side effect so the next turn sees this turn's context.
+ *
+ * I/O-free beyond driving the injected providers (it never touches the network,
+ * a clock, or a socket directly) — fully unit-testable with mocked STT/LLM/TTS.
+ */
+export async function* runTurn(
+  providers: TurnProviders,
+  state: SessionState,
+  audio: AsyncIterable<AudioChunk>
+): AsyncIterable<AiResponseChunk> {
+  // 1. STT: transcribe the player's audio; take the final cumulative transcript.
+  //    `audioBytes` is the inbound-frame byte total — the fallback STT metering
+  //    source at turn settle when the adapter reports no structured usage.
+  const turnStart = Date.now()
+  traceTurn('turn', 'pipeline-start', {
+    turnCount: state.turnCount,
+  })
+  const { transcript: playerText, audioBytes: sttAudioBytes } = await collectFinalTranscript(
+    providers.stt,
+    audio
+  )
+  // ASR hop boundary: the final cumulative transcript is in hand (length only —
+  // never the text). An empty transcript here explains a downstream LLM no-op.
+  traceTurn('asr', 'final-transcript', {
+    transcriptChars: playerText.length,
+    elapsedMs: Date.now() - turnStart,
+  })
+
+  // 2. Inject: deterministic system message (role + rules + manual subset),
+  //    then the rolling history, then this turn's player utterance.
+  const userMessage: ChatMessage = { role: 'user', content: playerText }
+  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+
+  // 3. LLM + 4. TTS run concurrently via the shared half.
+  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+
   // 5. Settle turn state: record history, count, and usage; emit the terminal
   //    chunk so the consumer can close out the turn.
   state.history.push(userMessage)
-  state.history.push({ role: 'assistant', content: assistantText })
+  state.history.push({ role: 'assistant', content: result.assistantText })
   state.turnCount += 1
 
-  const usage = (providers.llm as MaybeUsageProvider).lastUsage
-  if (usage) {
-    state.usage.llmInputTokens += usage.inputTokens
-    state.usage.llmOutputTokens += usage.outputTokens
-  }
+  const { outputTokens } = applyLlmTtsUsage(providers, state, result)
   // STT seconds: prefer the adapter's structured usage report (the Volcengine
   // adapter exposes the server's `audio_info.duration` when reported, or its
   // own exact bytes->duration conversion when not). When the adapter exposes
@@ -450,11 +511,6 @@ export async function* runTurn(
     state.usage.sttInputSeconds += audioSecondsFromBytes(sttAudioBytes)
     state.sttSource = 'derived-from-bytes'
   }
-  // TTS seconds: exact conversion of the actual synthesized product — the byte
-  // tally of every audio frame this turn yielded, under the adapters' fixed
-  // PCM16 mono 16 kHz output contract (the Volcengine TTS session requests
-  // exactly that format; the mock's placeholder bytes meter the same way).
-  state.usage.ttsOutputSeconds += audioSecondsFromBytes(ttsAudioBytes)
 
   // Turn settle: the per-turn accounting boundary. The counts here are the
   // single most diagnostic line for the silent-park — e.g. llmDeltaCount:0 +
@@ -462,11 +518,55 @@ export async function* runTurn(
   // ttsFrameCount:0 isolates TTS at the LLM->TTS boundary.
   traceTurn('turn', 'settle', {
     turnCount: state.turnCount,
-    llmDeltaCount,
-    llmOutputTokens: usage?.outputTokens,
-    sentenceCount,
-    ttsFrameCount,
-    ttsAudioBytes,
+    llmDeltaCount: result.llmDeltaCount,
+    llmOutputTokens: outputTokens,
+    sentenceCount: result.sentenceCount,
+    ttsFrameCount: result.ttsFrameCount,
+    ttsAudioBytes: result.ttsAudioBytes,
+    elapsedMs: Date.now() - turnStart,
+  })
+
+  yield { kind: 'text', text: '', done: true }
+}
+
+/**
+ * Run the AI-first opening greeting — an LLM+TTS-only turn the DO fires on
+ * session establishment, with NO player-audio STT step. The server-side
+ * {@link OPENING_DIRECTIVE} stands in for the (absent) player utterance so the
+ * LLM opens the conversation in the persona's voice.
+ *
+ * Yields the same ordered `AiResponseChunk` stream as `runTurn` (text + audio +
+ * one terminal `done`), reusing the shared LLM->TTS half. The synthetic
+ * directive is NEVER persisted to history (only the greeting it produces is),
+ * and the greeting does NOT count toward `turnCount` — it is not a player turn.
+ * STT seconds are not metered here (no player audio is consumed). Mutates
+ * `state` (history, LLM/TTS usage). I/O-free beyond the injected LLM/TTS
+ * providers.
+ */
+export async function* runOpeningTurn(
+  providers: Pick<TurnProviders, 'llm' | 'tts'>,
+  state: SessionState
+): AsyncIterable<AiResponseChunk> {
+  const turnStart = Date.now()
+  const userMessage: ChatMessage = { role: 'user', content: OPENING_DIRECTIVE }
+  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+
+  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+
+  // Settle. The opening directive is synthetic and must never leak into history
+  // (the greeting it elicits is the only thing remembered). turnCount tracks
+  // player->AI turns, so the opening greeting does not increment it.
+  state.history.push({ role: 'assistant', content: result.assistantText })
+
+  const { outputTokens } = applyLlmTtsUsage(providers, state, result)
+
+  traceTurn('turn', 'opening-settle', {
+    turnCount: state.turnCount,
+    llmDeltaCount: result.llmDeltaCount,
+    llmOutputTokens: outputTokens,
+    sentenceCount: result.sentenceCount,
+    ttsFrameCount: result.ttsFrameCount,
+    ttsAudioBytes: result.ttsAudioBytes,
     elapsedMs: Date.now() - turnStart,
   })
 
