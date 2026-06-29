@@ -96,12 +96,24 @@ describe('deriveVoicePanelInputs (current module -> hook inputs)', () => {
     expect(inputs?.manualData.sections).not.toHaveProperty('morse_code')
   })
 
-  it('produces a distinct moduleKey per module so the panel remounts on advance', () => {
-    const first = deriveVoicePanelInputs(makeState({ currentModuleIndex: 0 }))
-    const second = deriveVoicePanelInputs(makeState({ currentModuleIndex: 1 }))
-    expect(first?.moduleKey).toBe('0-wire')
-    expect(second?.moduleKey).toBe('1-dial')
-    expect(first?.moduleKey).not.toBe(second?.moduleKey)
+  it('keeps a run-stable sessionKey across module advances so the panel never remounts', () => {
+    const first = deriveVoicePanelInputs(makeState({ currentModuleIndex: 0, rngSeed: 42 }))
+    const second = deriveVoicePanelInputs(makeState({ currentModuleIndex: 1, rngSeed: 42 }))
+    // Same run (same seed) → identical key as the module advances → one session.
+    expect(first?.sessionKey).toBe('run-42')
+    expect(second?.sessionKey).toBe('run-42')
+    expect(first?.sessionKey).toBe(second?.sessionKey)
+    // But the per-module sections still change, so the hook can steer the session.
+    expect(first?.gameState.relevantSections).toEqual(['wire_routing'])
+    expect(second?.gameState.relevantSections).toEqual(['symbol_dial'])
+  })
+
+  it('gives a different run a different sessionKey (a genuinely new session)', () => {
+    const runA = deriveVoicePanelInputs(makeState({ rngSeed: 1 }))
+    const runB = deriveVoicePanelInputs(makeState({ rngSeed: 2 }))
+    expect(runA?.sessionKey).toBe('run-1')
+    expect(runB?.sessionKey).toBe('run-2')
+    expect(runA?.sessionKey).not.toBe(runB?.sessionKey)
   })
 
   it('returns null until a manual is loaded', () => {

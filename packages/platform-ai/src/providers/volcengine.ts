@@ -400,7 +400,13 @@ export function buildSttConfigFrame(config: {
       },
       request: {
         model_name: config.model,
-        enable_punc: true,
+        // Punctuation OFF: with it on, slow / deliberate speech (a player
+        // describing symbols one at a time, pausing between each) gets a period
+        // inserted at every pause, which fragments words ("沙漏" -> "沙。漏").
+        // Off yields continuous text the LLM and the caption both read better.
+        enable_punc: false,
+        // ITN ON: keeps spoken numbers as digits ("三个" -> "3 个"), which reads
+        // cleaner and matches how the manual phrases counts.
         enable_itn: true,
       },
     })

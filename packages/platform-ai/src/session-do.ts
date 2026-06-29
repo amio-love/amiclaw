@@ -138,7 +138,26 @@ interface EndSessionMessage {
   type: 'end'
 }
 
-type ControlMessage = CreateSessionMessage | TurnMessage | EndSessionMessage
+/**
+ * Steer the live session's manual injection mid-conversation. Sent by the client
+ * when the player advances modules within ONE continuous run: the whole-run
+ * voice session stays a single conversation (history + the AI-first greeting
+ * persist), and only WHICH manual subset is injected changes. The DO updates the
+ * stored session `gameState.relevantSections` so the NEXT turn injects the new
+ * module's manual; it does NOT create a new session, reset history, re-run the
+ * greeting, or disturb an in-flight turn. `manualData` (the whole manual) was
+ * already provided at `create` — this only re-selects sections from it.
+ */
+interface UpdateGameStateMessage {
+  type: 'update-gamestate'
+  gameState: GameState
+}
+
+type ControlMessage =
+  | CreateSessionMessage
+  | TurnMessage
+  | EndSessionMessage
+  | UpdateGameStateMessage
 
 /**
  * Base64-encode raw bytes for JSON transport of an audio frame. Uses the
@@ -1080,6 +1099,42 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, safeCloseReason('session ended'))
+        return
+      }
+      case 'update-gamestate': {
+        // Steer the live session's manual injection for SUBSEQUENT turns. This
+        // is fire-and-forget session metadata: it adjusts which manual subset
+        // the next turn injects, and must NEVER tear down or interrupt the
+        // running conversation (the whole point of one continuous session across
+        // modules is that history + the AI-first greeting persist). So every
+        // rejection path here is a benign no-op, NOT a 1008 close: no live
+        // session, a non-owner socket, or a malformed payload all just return
+        // without mutating anything.
+        //
+        // Owner-socket gated, mirroring `end`'s teardown gate (only the creator
+        // socket may steer its own session — a same-user duplicate tab / a
+        // second authenticated socket on this DO must not redirect the owner's
+        // injected manual). The non-owner consequence is downgraded from `end`'s
+        // 1008 close to a silent no-op: this message only re-selects sections,
+        // so ignoring a stray one is strictly safer than killing a socket.
+        if (!this.sessionState) return
+        if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) return
+        // Validate the untrusted payload defensively (the `JSON.parse` cast is
+        // unchecked): a missing `gameState`, a non-array `relevantSections`, or a
+        // non-string element is a benign no-op rather than a throw — a throw would
+        // be caught by `onMessage` and 1008-close the owner's socket, losing the
+        // whole conversation.
+        const incoming = (msg.gameState as { relevantSections?: unknown } | undefined)
+          ?.relevantSections
+        if (!Array.isArray(incoming) || !incoming.every((id) => typeof id === 'string')) return
+        // Reassign the FIELD (not the whole `sessionState` object) so history,
+        // turnCount, usage, and any in-flight turn's already-captured `messages`
+        // are untouched; only `assembleSystem`'s NEXT read (at the next turn's
+        // start) picks up the new sections. Copy the array so a later client-side
+        // mutation of the payload can never reach into session state. An in-flight
+        // turn snapshotted its `messages` at its own start, so this update applies
+        // strictly to the next turn — the running turn is never disturbed.
+        this.sessionState.gameState = { relevantSections: [...incoming] }
         return
       }
     }
