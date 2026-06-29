@@ -21,7 +21,7 @@
  * design doc.
  */
 
-import { getAudioContext, getBuffer, getMasterGain } from './audio-context'
+import { getAudioContext, getBuffer, getMasterGain, isSfxSuppressed } from './audio-context'
 import { SFX_PRESETS, type ChimePreset, type SfxType } from './presets'
 
 /**
@@ -57,6 +57,11 @@ function playChime(preset: ChimePreset, ctx: AudioContext): void {
 }
 
 export function playSfx(type: SfxType): void {
+  // Single chokepoint for the voice-active gate: while the mode② voice partner
+  // is up, every cue is silenced so it neither talks over the AI nor leaks into
+  // the open mic. The user's own mute preference is enforced separately, by the
+  // master gain — this leaves it untouched.
+  if (isSfxSuppressed()) return
   const preset = SFX_PRESETS[type]
   if (!preset) return
   const ctx = getAudioContext()

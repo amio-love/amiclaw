@@ -12,8 +12,12 @@
  * the AI-first opening greeting (no client input). Thereafter the hook streams the
  * mic continuously and the client-side VAD detects end-of-utterance (the player
  * went silent after speaking) and sends `{type:'turn'}`, which the server runs as
- * a normal STT->LLM->TTS turn over the audio buffered since the last turn. The VAD
- * additionally drives the 3-state conversation phase (listening / thinking /
+ * a normal STT->LLM->TTS turn over the audio buffered since the last turn. Turns
+ * are SERIAL server-side: a `turn` sent while one is in flight is rejected with a
+ * benign `turn_in_flight`, so the hook only sends when the AI is idle (not
+ * speaking, not awaiting, not mid-stream) — otherwise the open mic picking up the
+ * AI's own greeting / the stopwatch tick would fire spurious, rejected turns. The
+ * VAD additionally drives the 3-state conversation phase (listening / thinking /
  * speaking) and barge-in (stop local playback when the player talks over the AI).
  *
  * Security invariant (load-bearing, mirrors the demo): this hook connects ONLY to
@@ -59,6 +63,12 @@ const TTS_OUTPUT_SAMPLE_RATE = 16000
 const CAPTURE_SAMPLE_RATE = 16000
 /** ScriptProcessor buffer size (frames). Matches the demo. */
 const CAPTURE_BUFFER_SIZE = 4096
+/**
+ * How long to wait for a turn's first response chunk before assuming the server
+ * skipped it (a no-speech / spurious-VAD turn yields no chunks and no `done`).
+ * Generous enough to cover a real STT->LLM->TTS first-chunk latency.
+ */
+const NO_RESPONSE_TIMEOUT_MS = 12000
 
 /**
  * Close an `AudioContext` and release its hardware resources, swallowing the
@@ -135,6 +145,13 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const [playerSpeaking, setPlayerSpeaking] = useState(false)
   const [awaitingResponse, setAwaitingResponse] = useState(false)
   const awaitingResponseRef = useRef(false)
+  /**
+   * Watchdog for a turn that gets no response. The server skips a no-speech turn
+   * (a spurious VAD trigger / inaudible utterance) silently — zero chunks, no
+   * `done` — so without this the UI would hang in `thinking` forever. If no
+   * response chunk arrives within the budget, fall back to `listening`.
+   */
+  const awaitingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Latest inputs, captured at connect/create time without re-running the connect
   // effect on every prop identity change.
@@ -182,6 +199,19 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const setAwaiting = useCallback((v: boolean) => {
     awaitingResponseRef.current = v
     if (mountedRef.current) setAwaitingResponse(v)
+    if (awaitingTimeoutRef.current) {
+      clearTimeout(awaitingTimeoutRef.current)
+      awaitingTimeoutRef.current = null
+    }
+    if (v) {
+      // No response within the budget => the server skipped this turn (no speech);
+      // release the `thinking` wait so the conversation can continue.
+      awaitingTimeoutRef.current = setTimeout(() => {
+        awaitingTimeoutRef.current = null
+        awaitingResponseRef.current = false
+        if (mountedRef.current) setAwaitingResponse(false)
+      }, NO_RESPONSE_TIMEOUT_MS)
+    }
   }, [])
 
   // --- TTS playback (Web Audio side effects) ---
@@ -296,9 +326,22 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   /** A VAD `utterance-end`: the player went silent after speaking. */
   const onUtteranceEnd = useCallback(() => {
     setPlayerSpeaking(false)
+    // Only hand the floor to the server when the AI is idle. The server runs each
+    // `turn` as a real, SERIAL turn and rejects an overlap with `turn_in_flight`,
+    // so a `turn` sent while the AI's audio is still playing, while we are already
+    // awaiting a reply, or while a (non-barged-in) turn is still streaming would
+    // race the in-flight turn — the AI-first opening greeting is the worst case,
+    // where the greeting's own voice / the stopwatch tick leaking into the open
+    // mic fired a spurious utterance. Suppress those. The one mid-stream case that
+    // DOES still send is a genuine barge-in: `onSpeechStart` already stopped
+    // playback and flagged the interrupted turn (`suppressTurnRef`), so the player
+    // has taken the floor and their next utterance is a real turn.
+    const aiHoldsFloor =
+      playingCountRef.current > 0 ||
+      awaitingResponseRef.current ||
+      (turnStreamingRef.current && !suppressTurnRef.current)
+    if (aiHoldsFloor) return
     setAwaiting(true)
-    // Wire-spec / back-compat signal. The deployed server detects the endpoint
-    // itself and treats this as a no-op; it does not start the turn.
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
@@ -469,6 +512,16 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         safeDispatch({ type: 'frame', frame })
         return
       }
+      if (frame.type === 'error') {
+        // A benign in-band rejection leaves the socket open and must NOT read as
+        // an error. The common one is `turn_in_flight` (our VAD raced the server's
+        // own in-flight turn): release any pending "thinking" wait so the UI falls
+        // back to listening. The reducer drops the benign codes, so no error line
+        // shows; an unexpected code still surfaces through the reducer.
+        if (frame.code === 'turn_in_flight' && awaitingResponseRef.current) setAwaiting(false)
+        safeDispatch({ type: 'frame', frame })
+        return
+      }
       safeDispatch({ type: 'frame', frame })
     }
 
@@ -522,6 +575,10 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     connect()
     return () => {
       mountedRef.current = false
+      if (awaitingTimeoutRef.current) {
+        clearTimeout(awaitingTimeoutRef.current)
+        awaitingTimeoutRef.current = null
+      }
       stopCapture()
       teardownPlayback()
       closeSocket(true)

@@ -206,6 +206,129 @@ describe('runTurn', () => {
     expect(capturedRequest?.messages.at(-1)).toEqual({ role: 'user', content: 'I see a red wire' })
   })
 
+  // --- benign no-speech turn (hands-free false-positive VAD) -------------
+  // A `turn` whose STT closes with no final transcript (no speech, no error) is
+  // skipped: no AI response, no state change, no throw — the session stays alive.
+
+  it('skips a no-speech turn: zero chunks, never drives LLM/TTS, no state mutation, no throw', async () => {
+    const state = freshState()
+    let llmCalled = false
+    const ttsReceived: string[] = []
+    const llm: LlmProvider = {
+      async *streamCompletion(): AsyncIterable<LlmCompletionChunk> {
+        llmCalled = true
+        yield { content: '', done: true }
+      },
+    }
+
+    // Empty STT stream — the adapter's benign no-final close surfaces here as an
+    // empty transcript (see collectFinalTranscript / the volcengine close path).
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([]), llm, mockTts(ttsReceived)),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+
+    // No AI response chunks at all (not even a terminal done) and no downstream work.
+    expect(chunks).toEqual([])
+    expect(llmCalled).toBe(false)
+    expect(ttsReceived).toEqual([])
+    // State is byte-for-byte untouched: no history, no turn count, no usage.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
+    expect(state.usage).toEqual({
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      sttInputSeconds: 0,
+      ttsOutputSeconds: 0,
+    })
+    expect(state.sttSource).toBe('provider-reported')
+  })
+
+  it('treats a whitespace-only final transcript as no-speech and skips it', async () => {
+    const state = freshState()
+    let llmCalled = false
+    const llm: LlmProvider = {
+      async *streamCompletion(): AsyncIterable<LlmCompletionChunk> {
+        llmCalled = true
+        yield { content: '', done: true }
+      },
+    }
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([{ text: '   ', isFinal: true }]), llm, mockTts([])),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    expect(chunks).toEqual([])
+    expect(llmCalled).toBe(false)
+    expect(state.turnCount).toBe(0)
+  })
+
+  it('leaves the session usable: a normal turn runs right after a skipped no-speech turn', async () => {
+    const state = freshState()
+    await collect(
+      runTurn(
+        providers(mockStt([]), mockLlm(['ignored.']), mockTts([])),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The skip left no residue.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
+
+    const ttsReceived: string[] = []
+    const chunks = await collect(
+      runTurn(
+        providers(
+          mockStt([{ text: 'I see a red wire.', isFinal: true }]),
+          mockLlm(['Cut it.']),
+          mockTts(ttsReceived)
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The next real turn runs normally end to end.
+    expect(state.turnCount).toBe(1)
+    expect(state.history).toEqual([
+      { role: 'user', content: 'I see a red wire.' },
+      { role: 'assistant', content: 'Cut it.' },
+    ])
+    expect(ttsReceived).toEqual(['Cut it.'])
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+  })
+
+  it('still fails loud when STT throws a real ASR error (NOT a benign no-speech close)', async () => {
+    // A genuine ASR error frame surfaces as a throw out of transcribe. That is a
+    // real fault, not a benign no-speech close: the turn must propagate it (the
+    // DO turns it into a 1008), never silently skip.
+    const state = freshState()
+    const throwingStt: SttProvider = {
+      async *transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk> {
+        for await (const _ of audio) void _
+        yield { text: '部分', isFinal: false }
+        throw new Error('Volcengine ASR error: auth failed')
+      },
+    }
+    await expect(
+      collect(
+        runTurn(
+          providers(throwingStt, mockLlm(['nope.']), mockTts([])),
+          state,
+          fromArray<AudioChunk>([new Uint8Array([1])])
+        )
+      )
+    ).rejects.toThrow(/Volcengine ASR error/)
+    // A failed turn never settles, so it never mutates session state.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
+  })
+
   it('accumulates usage and history across a turn', async () => {
     const state = freshState()
     const turn = runTurn(

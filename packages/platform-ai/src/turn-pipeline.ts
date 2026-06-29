@@ -151,7 +151,10 @@ export function splitSentences(buffer: string): { sentences: string[]; remainder
  * Drain an STT transcript stream and return the player's utterance for the
  * turn: the text of the last `isFinal` chunk (cumulative ASR semantics). If no
  * `isFinal` chunk arrives, fall back to the last chunk's text (best effort), or
- * empty string for an empty stream.
+ * empty string for an empty stream. A clean no-final ASR close (a benign
+ * no-speech turn) surfaces here as that empty/partial transcript rather than a
+ * throw, so `runTurn` can skip the turn; only a genuine fault (error frame,
+ * connect failure, idle stall) throws out of the underlying `transcribe`.
  *
  * Also reports `audioBytes`: the total byte length of the inbound audio frames
  * the STT provider actually pulled, tapped via a counting passthrough. The
@@ -481,6 +484,23 @@ export async function* runTurn(
     transcriptChars: playerText.length,
     elapsedMs: Date.now() - turnStart,
   })
+
+  // Benign no-speech turn: the player's buffered audio held nothing
+  // transcribable (a false-positive VAD trigger — a stopwatch tick, a cough,
+  // ambient noise — surfacing as a clean ASR close with no final transcript).
+  // Skip the turn: emit NO response chunks, mutate NO state (history, turnCount,
+  // usage all untouched), and meter nothing — the player effectively spoke
+  // nothing this turn (undercount-only, consistent with the session metering
+  // stance). The session stays ready and the next `turn` runs normally. This is
+  // NOT an error: a real ASR error frame / connect failure / mid-stream stall
+  // still throws out of `collectFinalTranscript` above and fails the turn loud.
+  if (playerText.trim().length === 0) {
+    traceTurn('turn', 'skip-no-speech', {
+      turnCount: state.turnCount,
+      elapsedMs: Date.now() - turnStart,
+    })
+    return
+  }
 
   // 2. Inject: deterministic system message (role + rules + manual subset),
   //    then the rolling history, then this turn's player utterance.

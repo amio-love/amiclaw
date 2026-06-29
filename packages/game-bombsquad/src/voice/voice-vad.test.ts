@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeRms,
+  DEFAULT_VAD_CONFIG,
   initialVadState,
   vadStep,
   type VadConfig,
@@ -96,6 +97,52 @@ describe('vadStep — noise debounce', () => {
     const { events, state } = drive(Array(20).fill(0.01))
     expect(events).toEqual([])
     expect(state).toEqual(initialVadState)
+  })
+})
+
+describe('DEFAULT_VAD_CONFIG — conservative defaults reject transients', () => {
+  // The real capture frame is 4096 samples at 16 kHz ≈ 256ms, so minSpeechMs
+  // (400) needs 2 contiguous speech frames to qualify; a single transient frame
+  // (a stopwatch tick / click) can never reach it. These cases pin the rejection
+  // of brief loud blips and of faint-but-audible ambient so a device re-tune is a
+  // visible, intentional change rather than a silent regression.
+  const FRAME = 256
+  const TICK_LEVEL = 0.05 // a faint tick / ambient: above the OLD 0.02 floor, below 0.07
+
+  function driveDefault(rmsSeq: number[]) {
+    let state = initialVadState
+    const events: VadEvent[] = []
+    for (const rms of rmsSeq) {
+      const stepped = vadStep(state, rms, FRAME, DEFAULT_VAD_CONFIG)
+      state = stepped.state
+      if (stepped.event) events.push(stepped.event)
+    }
+    return { state, events }
+  }
+
+  it('keeps a high speech threshold and a long min-speech window', () => {
+    expect(DEFAULT_VAD_CONFIG.speechThreshold).toBeGreaterThanOrEqual(0.06)
+    expect(DEFAULT_VAD_CONFIG.minSpeechMs).toBeGreaterThanOrEqual(350)
+  })
+
+  it('rejects a single loud tick frame (one 256ms transient, < minSpeechMs)', () => {
+    const { events, state } = driveDefault([SPEECH, SILENCE, SILENCE, SILENCE, SILENCE])
+    expect(events).toEqual([])
+    expect(state).toEqual(initialVadState)
+  })
+
+  it('treats a faint tick / ambient between the old and new floor as silence', () => {
+    // 0.05 crossed the old 0.02 threshold; under the 0.07 floor it is silence.
+    const { events, state } = driveDefault(Array(10).fill(TICK_LEVEL))
+    expect(events).toEqual([])
+    expect(state).toEqual(initialVadState)
+  })
+
+  it('accepts sustained speech (>= minSpeechMs of contiguous energy)', () => {
+    // 2 frames = 512ms >= 400ms minSpeechMs -> a real utterance starts.
+    const { events, state } = driveDefault([SPEECH, SPEECH, SPEECH])
+    expect(events).toEqual(['speech-start'])
+    expect(state.speaking).toBe(true)
   })
 })
 
