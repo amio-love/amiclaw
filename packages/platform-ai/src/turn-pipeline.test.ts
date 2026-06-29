@@ -186,6 +186,55 @@ describe('runTurn', () => {
     expect(chunks.at(-1)?.done).toBe(true)
   })
 
+  it('emits the player transcript as a leading chunk, before the AI reply chunks', async () => {
+    const turn = runTurn(
+      providers(
+        mockStt([{ text: 'I see a red wire.', isFinal: true }]),
+        mockLlm(['Cut the ', 'blue wire.']),
+        mockTts([])
+      ),
+      freshState(),
+      fromArray<AudioChunk>([new Uint8Array([1])])
+    )
+    const chunks = await collect(turn)
+
+    // Exactly one transcript chunk, carrying the PLAYER's recognized utterance
+    // (not AI text), not the terminal `done`.
+    const transcriptChunks = chunks.filter((c) => c.kind === 'transcript')
+    expect(transcriptChunks).toEqual([
+      { kind: 'transcript', text: 'I see a red wire.', done: false },
+    ])
+
+    // It precedes every AI text/audio chunk: the first emitted chunk IS the
+    // transcript, and no AI chunk appears before it.
+    expect(chunks[0]).toEqual({ kind: 'transcript', text: 'I see a red wire.', done: false })
+    const firstAiIndex = chunks.findIndex((c) => c.kind === 'text' || c.kind === 'audio')
+    expect(chunks.findIndex((c) => c.kind === 'transcript')).toBeLessThan(firstAiIndex)
+
+    // The AI reply chunks are unchanged: same text deltas, audio present, one
+    // terminal done — the transcript chunk (kind 'transcript', done false) is not
+    // counted among them.
+    const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
+    expect(textChunks.map((c) => c.text)).toEqual(['Cut the ', 'blue wire.'])
+    expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+    expect(chunks.at(-1)?.done).toBe(true)
+  })
+
+  it('emits NO transcript chunk on a skipped no-speech turn', async () => {
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([]), mockLlm(['ignored.']), mockTts([])),
+        freshState(),
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The benign no-speech skip returns before yielding anything — no transcript
+    // chunk, no AI chunks at all.
+    expect(chunks.filter((c) => c.kind === 'transcript')).toEqual([])
+    expect(chunks).toEqual([])
+  })
+
   it('takes the last isFinal transcript (cumulative ASR semantics)', async () => {
     let capturedRequest: LlmCompletionRequest | undefined
     const turn = runTurn(

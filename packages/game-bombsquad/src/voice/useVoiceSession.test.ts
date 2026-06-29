@@ -296,6 +296,20 @@ describe('useVoiceSession — hands-free lifecycle', () => {
     expect(result.current.conversationPhase).toBe('speaking')
   })
 
+  it('exposes the player transcript from a transcript frame (before the AI reply)', async () => {
+    const { result, ws } = await ready()
+    expect(result.current.playerTranscript).toBe('')
+
+    // The server sends the player's recognized utterance before the reply chunks.
+    act(() => ws.fireMessage({ type: 'transcript', text: '剪红色的线吗' }))
+    expect(result.current.playerTranscript).toBe('剪红色的线吗')
+
+    // The AI reply streams independently and does not clobber the transcript.
+    act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: '先别剪', done: true }))
+    expect(result.current.aiText).toBe('先别剪')
+    expect(result.current.playerTranscript).toBe('剪红色的线吗')
+  })
+
   it('clears the speaking state when the last buffer ends', async () => {
     const { result, ws } = await ready()
     act(() => ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: true }))
@@ -355,8 +369,10 @@ describe('useVoiceSession — client VAD', () => {
     expect(result.current.playerSpeaking).toBe(true)
     expect(result.current.conversationPhase).toBe('listening')
 
-    // Four 256ms silence frames (>= 800ms hangover) end it -> a turn is sent.
+    // Six 256ms silence frames (1536ms >= 1500ms hangover) end it -> a turn is sent.
     act(() => {
+      fireFrame(0.0)
+      fireFrame(0.0)
       fireFrame(0.0)
       fireFrame(0.0)
       fireFrame(0.0)

@@ -114,6 +114,22 @@
   animation-delay: 0.3s;
 }
 
+/* ----------  player subtitle (own recognized speech)  ----------
+   Visually distinct from the AI reply box below: a lightweight unboxed line in
+   the muted body colour, with the `你：` label in the AMIO-yellow accent so the
+   player reads it as their own voice, not the AI's. */
+.playerTranscript {
+  margin: 0;
+  font: 400 13px/1.5 var(--font-body);
+  color: var(--soft);
+  word-break: break-word;
+}
+
+.playerTranscriptLabel {
+  font-weight: 600;
+  color: var(--y);
+}
+
 /* ----------  AI reply  ---------- */
 .reply {
   min-height: 44px;

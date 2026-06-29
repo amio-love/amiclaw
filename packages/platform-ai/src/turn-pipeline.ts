@@ -502,6 +502,15 @@ export async function* runTurn(
     return
   }
 
+  // 1b. Surface the player's recognized utterance to the client BEFORE the AI
+  //     reply streams, so the UI can show a subtitle of what the AI heard.
+  //     Emitted exactly once per turn and only for a NON-empty transcript (the
+  //     no-speech skip above already returned, so a skipped turn yields nothing).
+  //     This is the player's OWN speech returned to that same client — never
+  //     prompt or secret material; it carries `done: false` (the AI reply's last
+  //     text chunk is still the turn's terminal `done`).
+  yield { kind: 'transcript', text: playerText, done: false }
+
   // 2. Inject: deterministic system message (role + rules + manual subset),
   //    then the rolling history, then this turn's player utterance.
   const userMessage: ChatMessage = { role: 'user', content: playerText }

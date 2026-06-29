@@ -403,6 +403,49 @@ export function makeInspectingProviders(): {
 }
 
 /**
+ * Provider bundle for a benign NO-SPEECH turn: the STT drains the audio bridge
+ * and closes with NO final transcript (a false-positive VAD trigger — a cough /
+ * ambient noise / stopwatch tick, surfacing as a clean no-final ASR close). The
+ * turn must skip: `runTurn` returns before driving the LLM and before yielding
+ * any chunk (including the player-transcript chunk), so the DO sends no
+ * `transcript` frame and no AI reply chunks.
+ *
+ * Exposes `sttCalls()` to confirm the turn still reached STT, and `llmCalls()`
+ * so a test can assert the skip never reached the LLM (a regression that drove
+ * the LLM would surface here AND as stray `chunk` frames on the wire).
+ */
+export function makeNoSpeechProviders(): {
+  providers: TurnProviders
+  sttCalls(): number
+  llmCalls(): number
+} {
+  let sttCalls = 0
+  let llmCalls = 0
+  const stt: SttProvider = {
+    // Drains the bridge, then closes with no transcript chunk: the benign
+    // no-final ASR close `collectFinalTranscript` surfaces as an empty utterance.
+    // eslint-disable-next-line require-yield
+    async *transcribe(audio): AsyncIterable<SttTranscriptChunk> {
+      sttCalls += 1
+      for await (const _frame of audio) {
+        // frames consumed, not inspected — matches the mock adapter
+      }
+    },
+  }
+  const llm: LlmProvider = {
+    async *streamCompletion() {
+      llmCalls += 1
+      yield { content: '', done: true }
+    },
+  }
+  return {
+    providers: { stt, llm, tts: createMockTtsProvider() },
+    sttCalls: () => sttCalls,
+    llmCalls: () => llmCalls,
+  }
+}
+
+/**
  * Build the gated provider bundle. Each `turn` control message ultimately calls
  * `streamCompletion` once; each call gets its own `DeltaFeed` + handle, so
  * multi-turn and multi-session (reconnect) scenarios stay independently
