@@ -73,15 +73,24 @@ export interface GameState {
 
 /**
  * One chunk of the AI's streamed response. A turn produces an ordered stream of
- * these: incremental assistant text plus the synthesized audio frames pushed
- * back over the same WebSocket. `kind` discriminates the two; `done` marks the
- * final chunk of a turn so the consumer can close out the turn without a
- * separate end signal.
+ * these: an optional leading `transcript` chunk carrying the player's recognized
+ * utterance, then the incremental assistant text plus the synthesized audio
+ * frames pushed back over the same WebSocket. `kind` discriminates them; `done`
+ * marks the final chunk of a turn so the consumer can close out the turn without
+ * a separate end signal.
+ *
+ * The `transcript` variant is the PLAYER's own recognized speech (the final STT
+ * transcript), surfaced once per turn BEFORE the AI reply streams so the client
+ * can show a subtitle of what the AI heard. It never carries AI text and never
+ * sets `done` (the terminal chunk is always the AI reply's last `text` chunk).
  */
 export interface AiResponseChunk {
   /** Which modality this chunk carries. */
-  kind: 'text' | 'audio'
-  /** Incremental assistant text (present when `kind === 'text'`). */
+  kind: 'text' | 'audio' | 'transcript'
+  /**
+   * Incremental assistant text (present when `kind === 'text'`), or the player's
+   * recognized utterance (present when `kind === 'transcript'`).
+   */
   text?: string
   /** Synthesized TTS audio frame (present when `kind === 'audio'`). */
   audio?: Uint8Array

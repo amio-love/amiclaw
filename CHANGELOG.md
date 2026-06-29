@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: see what the AI heard, and more time to think** -
+Change. The voice panel now shows a subtitle of your own recognized speech
+(`你：…`) above the AI's reply, so you can tell whether you were understood. And
+the partner waits longer for you to finish — the pause before it takes its turn
+went from 0.8s to 1.5s, so you can think and gather your words mid-sentence
+without it cutting in.
+
 **BombSquad mode② voice: quieter, steadier hands-free conversation** - Fix.
 Three problems from a live device test are fixed. The stopwatch tick and other
 game sounds are now muted for the whole voice session, so they no longer talk

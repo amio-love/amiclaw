@@ -18,6 +18,7 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
     conversationPhase: 'listening',
     playerSpeaking: false,
     aiText: '',
+    playerTranscript: '',
     isAiSpeaking: false,
     error: null,
     summary: null,
@@ -82,6 +83,17 @@ describe('VoicePanel — cues and content', () => {
   it('renders the accumulated AI text', () => {
     renderPanel({ aiText: 'Hold the button.' })
     expect(screen.getByText('Hold the button.')).toBeInTheDocument()
+  })
+
+  it('renders the player subtitle (their own recognized speech) labeled 你：', () => {
+    renderPanel({ playerTranscript: '红色还是蓝色的线' })
+    const subtitle = screen.getByLabelText('你说的话')
+    expect(subtitle).toHaveTextContent('你：红色还是蓝色的线')
+  })
+
+  it('renders nothing for an empty player transcript', () => {
+    renderPanel({ playerTranscript: '' })
+    expect(screen.queryByLabelText('你说的话')).not.toBeInTheDocument()
   })
 
   it('shows the speaking-bars cue while the AI is speaking and live', () => {

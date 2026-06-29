@@ -17,7 +17,8 @@ interface VoicePanelProps {
  * In-game voice panel for the BombSquad daily run (mode②), hands-free. Renders
  * the `useVoiceSession` surface: a prominent 3-state conversation indicator
  * (聆听中 / 思考中 / 说话中) once the session is live, the connection status before
- * that, the AI's streamed text reply, and a bounded error line. There is NO
+ * that, the player's own recognized-speech subtitle (你：…), the AI's streamed
+ * text reply, and a bounded error line. There is NO
  * push-to-talk — the mic streams continuously and the AI greets first; the player
  * just talks. Presentation only: it reads hook state and never touches game logic
  * or the mic/socket. Dark-only, CSS-only animation (Atlas design system).
@@ -50,11 +51,12 @@ function placeholderFor(status: VoiceStatus, phase: ConversationPhase): string {
 }
 
 function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
-  const { status, conversationPhase, aiText, isAiSpeaking, error } = useVoiceSession({
-    manualData,
-    gameState,
-    gameId,
-  })
+  const { status, conversationPhase, aiText, playerTranscript, isAiSpeaking, error } =
+    useVoiceSession({
+      manualData,
+      gameState,
+      gameId,
+    })
 
   const isLive = status === 'ready'
   // While live, the prominent indicator is the conversation phase; before that
@@ -85,6 +87,13 @@ function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
           </span>
         )}
       </div>
+
+      {playerTranscript && (
+        <p className={styles.playerTranscript} aria-label="你说的话">
+          <span className={styles.playerTranscriptLabel}>你：</span>
+          {playerTranscript}
+        </p>
+      )}
 
       <div className={styles.reply} role="log" aria-live="polite">
         {aiText ? (

@@ -116,6 +116,8 @@ export interface UseVoiceSessionResult {
   playerSpeaking: boolean
   /** Accumulated AI text for the current turn. */
   aiText: string
+  /** The player's most recent recognized utterance (from the `transcript` frame). */
+  playerTranscript: string
   /** True while TTS audio is scheduled/playing. */
   isAiSpeaking: boolean
   /** Last bounded error message, or null. */
@@ -595,6 +597,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     conversationPhase,
     playerSpeaking,
     aiText: state.aiText,
+    playerTranscript: state.playerTranscript,
     isAiSpeaking,
     error: state.error,
     summary: state.summary,

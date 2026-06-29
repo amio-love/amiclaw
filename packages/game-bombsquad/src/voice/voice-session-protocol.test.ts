@@ -100,6 +100,31 @@ describe('voiceReducer', () => {
     expect(next.aiText).toBe('second reply')
   })
 
+  it('stores the player transcript without disturbing aiText, turn boundary, or status', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'prior reply', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色还是蓝色的线' } }
+    )
+    expect(next.playerTranscript).toBe('红色还是蓝色的线')
+    // The AI's previous reply text, turn boundary, and status are untouched.
+    expect(next.aiText).toBe('prior reply')
+    expect(next.turnDone).toBe(true)
+    expect(next.status).toBe('ready')
+  })
+
+  it('keeps the latest transcript across turns (most recent utterance wins)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: 'first utterance' } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'reply one', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: 'second utterance' } }
+    )
+    expect(next.playerTranscript).toBe('second utterance')
+  })
+
   it('audio chunks do not change aiText but their done flag closes the turn', () => {
     const next = run(
       { type: 'connecting' },
