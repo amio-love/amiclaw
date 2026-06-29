@@ -13,7 +13,12 @@
  *    rejects the 2.0 resource with a 400 "not allowed" (verified by live probe
  *    2026-06-25). The first frame is a JSON full-client config request;
  *    subsequent frames are raw audio. Server responses carry a JSON transcript
- *    whose `utterances[].definite` marks a stabilized segment. This ASR protocol
+ *    whose `result.text` is the CUMULATIVE recognized text so far; the FINAL
+ *    response (after the client's negative-sequence end-of-audio packet) sets the
+ *    "last package" flag bit (`flags & 0x02`) to mark the whole utterance
+ *    complete. (`utterances[].definite` marks only a per-segment stabilization
+ *    that fires progressively mid-utterance — it is NOT the end-of-utterance.)
+ *    This ASR protocol
  *    is *client-push-first by design*: the documented flow is "send full-client
  *    request, then stream audio packets (~100-200ms each)"; there is NO
  *    connection/session-accepted handshake event the client must wait for before
@@ -23,9 +28,10 @@
  *    endpoint returns a new full server response ONLY when the result changes
  *    (no longer one response per input audio packet), so the receive loop must
  *    not assume "every input packet yields a response packet" — this adapter's
- *    loop is already response-count-agnostic (it ends on a definite transcript,
- *    a server error, a socket close, or the first-response deadline — never on a
- *    per-packet response count), so the optimized cadence needs no adaptation.
+ *    loop is already response-count-agnostic (it ends on the terminal
+ *    last-package transcript, a server error, a socket close, or the
+ *    first-response deadline — never on a per-packet response count), so the
+ *    optimized cadence needs no adaptation.
  *  - TTS: Doubao TTS 2.0 bidirectional streaming over the event-based binary
  *    protocol (`wss://openspeech.bytedance.com/api/v3/tts/bidirection`,
  *    resource `seed-tts-2.0`). This protocol is *stateful and
@@ -760,9 +766,40 @@ export function parseFrame(data: unknown): ParsedFrame {
 }
 
 /**
+ * The "last package" bit of the message-type-specific flags nibble. The
+ * Volcengine big-model ASR server sets it on the FINAL response — the one that
+ * answers the client's negative-sequence end-of-audio packet — to mark the whole
+ * utterance complete. It is shared by both wire dialects of a terminal frame:
+ * no-sequence (`LastNoSequence` 0b0010) and with-sequence (`NegativeWithSequence`
+ * 0b0011) both carry it. Ground truth (first-party + community clients all derive
+ * `is_last_package` from `flags & 0x02`): volcengine/ai-app-lab
+ * arkitect/core/component/asr/asr_client.py (`ASRFullServerResponse.last_package`),
+ * volcengine/veadk-python asr_client.py, and thundersoft-td/mcp-server-speech
+ * src/.../asr_ws.py.
+ */
+const LAST_PACKAGE_FLAG_BIT = 0x02
+
+/** True when the frame's flags carry the "last package" (end-of-utterance) bit. */
+export function isLastPackageFlags(flags: number): boolean {
+  return (flags & LAST_PACKAGE_FLAG_BIT) !== 0
+}
+
+/**
  * Map a parsed ASR server-response frame to a transcript chunk. Returns
- * `undefined` for frames with no transcript text (e.g. an empty ack). A
- * segment is final when any utterance reports `definite: true`.
+ * `undefined` for frames with no transcript text (e.g. an empty ack).
+ *
+ * `text` is the server's CUMULATIVE recognized text (full-so-far, not a
+ * per-segment delta). `isFinal` marks the TERMINAL response — the last-package
+ * frame (`flags & 0x02`) the server sends after it has processed the client's
+ * end-of-audio packet and produced the complete cumulative result.
+ *
+ * It is keyed off the last-package flag, NOT `utterances[].definite`: `definite`
+ * marks a per-segment stabilization that fires PROGRESSIVELY mid-utterance, so
+ * any utterance longer than its first stabilized segment has multiple `definite`
+ * results before the end. Ending on the first `definite` truncated the
+ * transcript to the opening segment — the bug this fix removes. The genuine
+ * end-of-utterance is the last-package response (or, as a fallback, the socket
+ * close the server performs right after it — handled by the transcribe loop).
  */
 export function parseSttResponse(frame: ParsedFrame): SttTranscriptChunk | undefined {
   if (frame.messageType === MessageType.ErrorResponse) {
@@ -772,17 +809,13 @@ export function parseSttResponse(frame: ParsedFrame): SttTranscriptChunk | undef
     return undefined
   }
   const body = JSON.parse(textDecoder.decode(frame.payload)) as {
-    result?: {
-      text?: string
-      utterances?: Array<{ definite?: boolean }>
-    }
+    result?: { text?: string }
   }
   const result = body.result
   if (!result || typeof result.text !== 'string') {
     return undefined
   }
-  const isFinal = (result.utterances ?? []).some((u) => u.definite === true)
-  return { text: result.text, isFinal }
+  return { text: result.text, isFinal: isLastPackageFlags(frame.flags) }
 }
 
 /**
@@ -1008,10 +1041,10 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       )
       const socket = await connect(STT_URL, headers)
       const queue = new AsyncQueue<SttTranscriptChunk>()
-      // Tracks whether a final/definite transcript arrived — the ASR normal
-      // completion signal. Used by the message listener (final → close the queue
-      // and the socket) and surfaced in the close trace. A socket close is a
-      // clean end-of-stream EITHER way now: with a final it is the normal
+      // Tracks whether the terminal (last-package) transcript arrived — the ASR
+      // normal completion signal. Used by the message listener (terminal → close
+      // the queue and the socket) and surfaced in the close trace. A socket close
+      // is a clean end-of-stream EITHER way now: with a terminal it is the normal
       // teardown; without one (and without a prior error frame) it is a benign
       // no-speech turn the consumer skips (see the close listener). Unlike the
       // TTS layer's SessionFinished gate — a missing AI response is a fault — a
@@ -1079,17 +1112,22 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           // First transcript landed in time — stop the first-response deadline so
           // the rest of the stream runs unbounded.
           firstResponseDeadline.cancel()
+          // Every chunk (interim cumulative result + the terminal one) is pushed
+          // to the queue, so the consumer streams them as live subtitle updates.
           queue.push(chunk)
-          // A final/definite transcript is the normal completion signal: end the
-          // iteration here instead of waiting for a separate WS `close`. Without
-          // this, `collectFinalTranscript` (which drains `transcribe` to iterator
-          // end) would hang the whole turn whenever the server keeps the socket
-          // open after the definite result. Push the chunk first, then close, so
-          // the final transcript is never dropped. Also close the ASR socket as
-          // the normal end-of-stream path (idempotent; mirrors the TTS layer).
+          // The TERMINAL (last-package) transcript is the normal completion
+          // signal: end the iteration here instead of waiting for a separate WS
+          // `close`. Without this, the consumer (which drains `transcribe` to
+          // iterator end) would hang the whole turn whenever the server keeps the
+          // socket open after the final result. Push the chunk first, then close,
+          // so the complete transcript is never dropped. Crucially `chunk.isFinal`
+          // now means the last-package response (the whole utterance is done) —
+          // NOT a mid-utterance `definite` segment — so a long utterance is no
+          // longer truncated at its first stabilized segment. Also close the ASR
+          // socket as the normal end-of-stream path (idempotent; mirrors TTS).
           if (chunk.isFinal) {
             finalReached = true
-            // ASR final/definite transcript — the normal completion signal
+            // ASR terminal/last-package transcript — the normal completion signal
             // (length only, never the text).
             traceTurn('asr', 'final', {
               transcriptChars: chunk.text.length,
@@ -1119,11 +1157,13 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           queue.fail(err)
         }
       })
-      // A socket close ends the stream. After a final/definite transcript it is
-      // the expected end-of-stream; before one (and with no prior error frame) it
-      // is a benign no-speech close (see below). Either way the queue settles
-      // cleanly — a genuine fault has already latched the queue error before the
-      // close arrives.
+      // A socket close ends the stream. After the terminal last-package transcript
+      // it is the expected end-of-stream; before one (and with no prior error
+      // frame) it is a benign no-speech close (see below) — and it also backstops
+      // the case where the server closes after the final cumulative result without
+      // setting the last-package flag (the consumer then falls back to the last
+      // cumulative text). Either way the queue settles cleanly — a genuine fault
+      // has already latched the queue error before the close arrives.
       socket.addEventListener('close', (event) => {
         // Observability: the Volcengine ASR close CODE (numeric) + reason LENGTH.
         // A clean 1000/empty close after silence vs a non-1000 protocol close
@@ -1137,15 +1177,15 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         // The stream has ended either way — stop the idle guard so it cannot fire
         // late against an already-settled queue.
         streamIdleDeadline?.cancel()
-        // Settle the queue CLEANLY whether or not a final transcript arrived. A
-        // close AFTER a final/definite transcript is the normal end-of-stream. A
-        // close WITHOUT one and without a prior error frame is a benign no-speech
-        // turn: the player's buffered audio held nothing transcribable (a
-        // false-positive VAD trigger — a stopwatch tick, a cough, ambient noise),
-        // so the server closed without ever sending a definite result. It must
-        // NOT fail the turn — the consumer (`collectFinalTranscript`) surfaces an
-        // empty (or partial, non-definite) transcript and the turn is skipped
-        // upstream, keeping the session alive and listening.
+        // Settle the queue CLEANLY whether or not a terminal transcript arrived. A
+        // close AFTER the terminal last-package transcript is the normal
+        // end-of-stream. A close WITHOUT one and without a prior error frame is a
+        // benign no-speech turn: the player's buffered audio held nothing
+        // transcribable (a false-positive VAD trigger — a stopwatch tick, a cough,
+        // ambient noise), so the server closed without ever sending a terminal
+        // result. It must NOT fail the turn — the consumer (`collectFinalTranscript`)
+        // surfaces an empty (or partial, non-terminal) transcript and the turn is
+        // skipped upstream, keeping the session alive and listening.
         //
         // Genuine faults are unaffected and still fail loud (1008): an error
         // frame (`parseSttResponse` throw), the first-response deadline, and the
@@ -1209,8 +1249,8 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       try {
         yield* queue
       } finally {
-        // Runs on every exit path: normal completion (a definite transcript closed
-        // the queue), a provider error (the queue was failed), and — the
+        // Runs on every exit path: normal completion (the terminal transcript
+        // closed the queue), a provider error (the queue was failed), and — the
         // resource-leak fix — consumer cancellation via `transcribe`'s iterator
         // `return()` when the turn exits early. On the cancellation path the queue
         // is still open and the pump may be parked pulling the next audio frame, so

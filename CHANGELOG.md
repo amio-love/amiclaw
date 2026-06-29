@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: full speech recognition + live captions** - Fix. Two
+problems: the recognizer cut off after your first few words, and your subtitle
+only showed up late. Both came from ending recognition at the first stabilized
+phrase. Recognition now runs to the true end of your utterance (using the speech
+provider's last-packet signal instead of a mid-sentence marker), so the whole
+sentence is captured; and the `你：…` caption now streams live, building up as you
+speak, well before the AI replies.
+
 **BombSquad mode② voice: see what the AI heard, and more time to think** -
 Change. The voice panel now shows a subtitle of your own recognized speech
 (`你：…`) above the AI's reply, so you can tell whether you were understood. And

@@ -15,6 +15,7 @@ import {
   Compression,
   createVolcengineSpeechProvider,
   defaultConnect,
+  isLastPackageFlags,
   MessageFlag,
   MessageType,
   parseFrame,
@@ -122,6 +123,24 @@ function sttServerFrame(body: unknown, flags = MessageFlag.PositiveSequence): Ui
     flags,
     serialization: Serialization.Json,
     sequence: 1,
+    payload,
+  })
+}
+
+/**
+ * Build the TERMINAL ASR server response — the last-package frame the server
+ * sends after the client's end-of-audio packet. It carries the
+ * `NegativeWithSequence` flags (`& 0x02` last-package bit + negative sequence),
+ * exactly as the real server marks the final cumulative result. `parseSttResponse`
+ * keys `isFinal` off this bit (NOT `utterances[].definite`).
+ */
+function sttFinalServerFrame(body: unknown): Uint8Array {
+  const payload = encoder.encode(JSON.stringify(body))
+  return buildSttRequestFrame({
+    messageType: MessageType.FullServerResponse,
+    flags: MessageFlag.NegativeWithSequence,
+    serialization: Serialization.Json,
+    sequence: -1,
     payload,
   })
 }
@@ -264,27 +283,33 @@ describe('STT frame codec', () => {
 // --- ASR server-response mapping --------------------------------------------
 
 describe('parseSttResponse', () => {
-  it('maps a non-definite utterance to a non-final transcript chunk', () => {
-    const chunk = parseSttResponse(
-      parseFrame(sttServerFrame({ result: { text: '你好', utterances: [{ definite: false }] } }))
-    )
+  it('maps a non-terminal (positive-sequence) response to a non-final chunk', () => {
+    const chunk = parseSttResponse(parseFrame(sttServerFrame({ result: { text: '你好' } })))
     expect(chunk).toEqual({ text: '你好', isFinal: false })
   })
 
-  it('marks the chunk final when any utterance is definite', () => {
-    const chunk = parseSttResponse(
-      parseFrame(
-        sttServerFrame({
-          result: { text: '你好世界', utterances: [{ definite: false }, { definite: true }] },
-        })
-      )
+  it('marks the chunk final ONLY on the last-package response, not a mid-utterance definite', () => {
+    // Truncation-bug guard at the parse level: a `definite: true` utterance on a
+    // NON-last-package frame must stay isFinal:false — `definite` marks a
+    // mid-utterance stabilized segment, not the end of the whole utterance.
+    const midDefinite = parseSttResponse(
+      parseFrame(sttServerFrame({ result: { text: '我看到', utterances: [{ definite: true }] } }))
     )
-    expect(chunk).toEqual({ text: '你好世界', isFinal: true })
+    expect(midDefinite).toEqual({ text: '我看到', isFinal: false })
+
+    // The terminal last-package frame (flags & 0x02) is what marks the utterance
+    // complete — even with no `utterances` field at all.
+    const terminal = parseSttResponse(
+      parseFrame(sttFinalServerFrame({ result: { text: '我看到红色的电线' } }))
+    )
+    expect(terminal).toEqual({ text: '我看到红色的电线', isFinal: true })
   })
 
-  it('treats a missing utterances array as not-final', () => {
-    const chunk = parseSttResponse(parseFrame(sttServerFrame({ result: { text: 'hi' } })))
-    expect(chunk).toEqual({ text: 'hi', isFinal: false })
+  it('isLastPackageFlags reads the 0x02 bit for both terminal flag dialects', () => {
+    expect(isLastPackageFlags(MessageFlag.NoSequence)).toBe(false)
+    expect(isLastPackageFlags(MessageFlag.PositiveSequence)).toBe(false)
+    expect(isLastPackageFlags(MessageFlag.LastNoSequence)).toBe(true)
+    expect(isLastPackageFlags(MessageFlag.NegativeWithSequence)).toBe(true)
   })
 
   it('returns undefined for an empty / textless ack frame', () => {
@@ -300,16 +325,17 @@ describe('parseSttResponse', () => {
 
   it('parses audio_info.duration alongside the transcript fields', () => {
     // The example-JSON-only field (doc 6561/1354869): present -> the cumulative
-    // recognized duration in milliseconds.
+    // recognized duration in milliseconds. This is an interim (non-terminal)
+    // frame, so its transcript parse is non-final.
     const frame = parseFrame(
       sttServerFrame({
-        result: { text: '你好', utterances: [{ definite: true }] },
+        result: { text: '你好' },
         audio_info: { duration: 3696 },
       })
     )
     expect(parseSttAudioDurationMs(frame)).toBe(3696)
     // The transcript parse is unaffected by the extra field.
-    expect(parseSttResponse(frame)).toEqual({ text: '你好', isFinal: true })
+    expect(parseSttResponse(frame)).toEqual({ text: '你好', isFinal: false })
   })
 
   it('returns undefined duration when audio_info is absent or malformed (best-effort field)', () => {
@@ -480,14 +506,12 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
       return out
     })()
 
-    // Let the pump send its frames before we emit responses.
+    // Let the pump send its frames before we emit responses. The first response
+    // is an interim (positive sequence); the second is the terminal last-package
+    // response (the complete cumulative result).
     await new Promise((r) => setTimeout(r, 0))
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
-    )
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '你好', utterances: [{ definite: true }] } })
-    )
+    socket.emitMessage(sttServerFrame({ result: { text: '你' } }))
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '你好' } }))
 
     const chunks = await collected
     expect(chunks).toEqual([
@@ -605,13 +629,13 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     await consumed
   })
 
-  it('ends the iteration on a definite transcript without waiting for a WS close', async () => {
+  it('ends the iteration on the terminal last-package response without waiting for a WS close', async () => {
     // Regression: `collectFinalTranscript` drains `transcribe` to iterator end
     // (it does not break early like the test above). If the adapter only closed
     // on a separate WS `close` event, a server that keeps the socket open after
-    // the definite result would hang the whole turn. Here the server emits a
-    // definite frame and never closes the socket; the iterator must still end
-    // and surface the final chunk.
+    // the final result would hang the whole turn. Here the server emits the
+    // terminal last-package frame and never closes the socket; the iterator must
+    // still end and surface the final chunk.
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
@@ -626,20 +650,16 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     })()
     const guard = new Promise<never>((_, reject) =>
       setTimeout(
-        () => reject(new Error('transcribe did not terminate on a definite transcript')),
+        () => reject(new Error('transcribe did not terminate on the last-package response')),
         50
       )
     )
 
     await new Promise((r) => setTimeout(r, 0))
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '在', utterances: [{ definite: false }] } })
-    )
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '在的', utterances: [{ definite: true }] } })
-    )
+    socket.emitMessage(sttServerFrame({ result: { text: '在' } }))
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '在的' } }))
     // Intentionally do NOT emit a WS `close` — termination must come from the
-    // definite transcript alone.
+    // last-package response alone.
 
     const chunks = await Promise.race([drained, guard])
     expect(chunks).toEqual([
@@ -648,6 +668,58 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     ])
     // The adapter also closes the ASR socket as the normal end-of-stream path.
     expect(socket.closed).toBe(true)
+  })
+
+  it('does NOT truncate at a mid-utterance definite — captures the full text through the last-package response', async () => {
+    // The truncation bug, reproduced at the adapter level: Volcengine marks
+    // segments `definite` PROGRESSIVELY as they stabilize, so a long utterance
+    // emits an early `definite: true` segment BEFORE the whole utterance is done.
+    // The OLD adapter ended the stream on that first definite, dropping the rest.
+    // Now `isFinal` keys off the last-package flag, so the early definite is just
+    // another interim and the stream keeps reading until the terminal response —
+    // surfacing the COMPLETE cumulative text, not the truncated head.
+    //
+    // NOTE: this is a MOCK of the live 火山 cadence; the real ASR behavior (does
+    // the server keep streaming past an early definite, and does it set the
+    // last-package bit on the final response) must be confirmed by live verify.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const drained = (async () => {
+      const out = []
+      for await (const chunk of stt.transcribe(await asyncFrom([encoder.encode('f1')]))) {
+        out.push(chunk)
+      }
+      return out
+    })()
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('transcribe did not terminate')), 50)
+    )
+
+    await new Promise((r) => setTimeout(r, 0))
+    // An EARLY stabilized segment (definite) — under the old code this ended the
+    // stream and truncated the transcript to "我看到".
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '我看到', utterances: [{ definite: true }] } })
+    )
+    // The utterance continues (more cumulative text) and only THEN does the
+    // terminal last-package response arrive with the complete utterance.
+    socket.emitMessage(
+      sttServerFrame({ result: { text: '我看到红色', utterances: [{ definite: true }] } })
+    )
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '我看到红色的电线' } }))
+
+    const chunks = await Promise.race([drained, guard])
+    // The stream did NOT stop at the first definite "我看到": every cumulative
+    // result flowed, and the LAST chunk is the complete, untruncated utterance.
+    expect(chunks).toEqual([
+      { text: '我看到', isFinal: false },
+      { text: '我看到红色', isFinal: false },
+      { text: '我看到红色的电线', isFinal: true },
+    ])
+    expect(chunks.at(-1)?.text).toBe('我看到红色的电线')
+    expect(chunks.at(-1)?.isFinal).toBe(true)
   })
 
   it('propagates a server error frame as a thrown error', async () => {
@@ -734,10 +806,8 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     const collected = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
 
     await new Promise((r) => setTimeout(r, 0))
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '你好', utterances: [{ definite: true }] } })
-    )
-    // A close arriving after the definite transcript is the normal teardown
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '你好' } }))
+    // A close arriving after the terminal transcript is the normal teardown
     // (the adapter itself also closes the socket on a final transcript).
     socket.emitClose()
 
@@ -759,13 +829,13 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
     await tick()
     socket.emitMessage(
       sttServerFrame({
-        result: { text: '你', utterances: [{ definite: false }] },
+        result: { text: '你' },
         audio_info: { duration: 1200 },
       })
     )
     socket.emitMessage(
-      sttServerFrame({
-        result: { text: '你好', utterances: [{ definite: true }] },
+      sttFinalServerFrame({
+        result: { text: '你好' },
         audio_info: { duration: 3696 },
       })
     )
@@ -786,7 +856,7 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
       stt.transcribe(await asyncFrom([new Uint8Array(8000), new Uint8Array(8000)]))
     )
     await tick()
-    socket.emitMessage(sttServerFrame({ result: { text: '好', utterances: [{ definite: true }] } }))
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '好' } }))
     await drained
 
     expect(stt.lastUsage).toEqual({ durationMs: 500, source: 'derived-from-bytes' })
@@ -804,8 +874,8 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
     const drained1 = collect(stt.transcribe(await asyncFrom([new Uint8Array(64000)])))
     await tick()
     socket1.emitMessage(
-      sttServerFrame({
-        result: { text: 'one', utterances: [{ definite: true }] },
+      sttFinalServerFrame({
+        result: { text: 'one' },
         audio_info: { duration: 9999 },
       })
     )
@@ -814,9 +884,7 @@ describe('createVolcengineSpeechProvider.stt — per-connection usage metering',
 
     const drained2 = collect(stt.transcribe(await asyncFrom([new Uint8Array(32000)])))
     await tick()
-    sockets[1].emitMessage(
-      sttServerFrame({ result: { text: 'two', utterances: [{ definite: true }] } })
-    )
+    sockets[1].emitMessage(sttFinalServerFrame({ result: { text: 'two' } }))
     await drained2
 
     expect(stt.lastUsage).toEqual({ durationMs: 1000, source: 'derived-from-bytes' })
@@ -1933,11 +2001,10 @@ describe('createVolcengineSpeechProvider.stt.transcribe — first-response timeo
     socket.emitMessage(
       sttServerFrame({ result: { text: '你好', utterances: [{ definite: false }] } })
     )
-    // Another sub-idle pause — total span now exceeds firstResponseMs — then final.
+    // Another sub-idle pause — total span now exceeds firstResponseMs — then the
+    // terminal last-package response ends the stream.
     await vi.advanceTimersByTimeAsync(TIMEOUTS.streamIdleMs - 5_000)
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '你好吗', utterances: [{ definite: true }] } })
-    )
+    socket.emitMessage(sttFinalServerFrame({ result: { text: '你好吗' } }))
 
     const chunks = await drained
     expect(chunks).toEqual([

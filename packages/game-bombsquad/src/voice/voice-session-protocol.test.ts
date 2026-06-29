@@ -125,6 +125,48 @@ describe('voiceReducer', () => {
     expect(next.playerTranscript).toBe('second utterance')
   })
 
+  it('builds the live subtitle up across interim transcript frames (cumulative text)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '红', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色的线', final: false } }
+    )
+    expect(next.playerTranscript).toBe('红色的线')
+  })
+
+  it('settles the full utterance on the final transcript frame', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色的线', final: true } }
+    )
+    expect(next.playerTranscript).toBe('红色的线')
+  })
+
+  it("replaces the prior subtitle on the next utterance's first interim (no append across utterances)", () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '第一句话', final: true } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'reply', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: '第', final: false } }
+    )
+    // The next utterance's first interim ('第') replaces the prior final — never appends.
+    expect(next.playerTranscript).toBe('第')
+  })
+
+  it('treats a transcript with no `final` flag as a non-terminal interim (stores the latest text)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: 'no final flag here' } }
+    )
+    expect(next.playerTranscript).toBe('no final flag here')
+  })
+
   it('audio chunks do not change aiText but their done flag closes the turn', () => {
     const next = run(
       { type: 'connecting' },

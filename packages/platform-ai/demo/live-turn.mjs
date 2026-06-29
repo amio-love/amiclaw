@@ -206,6 +206,10 @@ async function main() {
         }
         break
       }
+      case 'transcript': {
+        console.log(`[transcript ${msg.final ? 'FINAL' : 'interim'}] "${msg.text}"`)
+        break
+      }
       case 'summary': {
         summary = msg.summary
         break
