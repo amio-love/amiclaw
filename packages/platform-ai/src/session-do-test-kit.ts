@@ -403,6 +403,41 @@ export function makeInspectingProviders(): {
 }
 
 /**
+ * Provider bundle whose STT replays a fixed sequence of transcript chunks — the
+ * live-subtitle streaming case. Used to assert the DO relays the player-transcript
+ * SERIES: each non-final chunk surfaces as a `{type:'transcript', text, final:false}`
+ * wire frame (running cumulative text), then the terminal (isFinal) chunk as one
+ * `{type:'transcript', text, final:true}` frame, all before the AI reply chunks.
+ * The LLM completes immediately so the turn runs end-to-end with no manual release.
+ */
+export function makeStreamingTranscriptProviders(transcripts: SttTranscriptChunk[]): {
+  providers: TurnProviders
+  sttCalls(): number
+} {
+  let calls = 0
+  const stt: SttProvider = {
+    async *transcribe(audio): AsyncIterable<SttTranscriptChunk> {
+      calls += 1
+      for await (const _frame of audio) {
+        // frames consumed, not inspected — matches the mock adapter
+      }
+      yield* (async function* () {
+        for (const chunk of transcripts) yield chunk
+      })()
+    },
+  }
+  const llm: LlmProvider = {
+    async *streamCompletion() {
+      yield { content: 'ok.', done: true }
+    },
+  }
+  return {
+    providers: { stt, llm, tts: createMockTtsProvider() },
+    sttCalls: () => calls,
+  }
+}
+
+/**
  * Provider bundle for a benign NO-SPEECH turn: the STT drains the audio bridge
  * and closes with NO final transcript (a false-positive VAD trigger — a cough /
  * ambient noise / stopwatch tick, surfacing as a clean no-final ASR close). The

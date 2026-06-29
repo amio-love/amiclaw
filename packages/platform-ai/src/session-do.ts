@@ -801,14 +801,18 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         const chunk = next.value
         if (chunk.kind === 'transcript') {
           // The player's recognized utterance — its OWN wire frame, NOT a
-          // `chunk`: `{type:'transcript', text}`. Sent once per turn, before the
-          // AI reply chunks, so the client can show a subtitle of what was heard
-          // (`runTurn` only yields this for a non-empty transcript). It carries no
-          // `done` — the AI reply's terminal `chunk` still closes the turn.
+          // `chunk`: `{type:'transcript', text, final}`. Streamed as a series
+          // before the AI reply chunks so the client can build a live subtitle:
+          // zero or more interim frames (`final:false`, running cumulative text)
+          // then one terminal frame (`final:true`, the complete utterance).
+          // `runTurn` only yields these for a non-empty transcript (a no-speech
+          // turn sends none). They carry no `done` — the AI reply's terminal
+          // `chunk` still closes the turn.
           ws.send(
             JSON.stringify({
               type: 'transcript',
               text: chunk.text ?? '',
+              final: chunk.final ?? false,
             })
           )
         } else if (chunk.kind === 'audio' && chunk.audio) {

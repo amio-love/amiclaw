@@ -189,6 +189,8 @@ describe('runTurn', () => {
   it('emits the player transcript as a leading chunk, before the AI reply chunks', async () => {
     const turn = runTurn(
       providers(
+        // A single terminal (isFinal) STT chunk: no interim updates, just the
+        // complete utterance — emitted once as the terminal `final: true` frame.
         mockStt([{ text: 'I see a red wire.', isFinal: true }]),
         mockLlm(['Cut the ', 'blue wire.']),
         mockTts([])
@@ -198,16 +200,22 @@ describe('runTurn', () => {
     )
     const chunks = await collect(turn)
 
-    // Exactly one transcript chunk, carrying the PLAYER's recognized utterance
-    // (not AI text), not the terminal `done`.
+    // Exactly one transcript chunk — the terminal complete utterance (final:true)
+    // carrying the PLAYER's recognized utterance (not AI text), not the turn's
+    // terminal `done`.
     const transcriptChunks = chunks.filter((c) => c.kind === 'transcript')
     expect(transcriptChunks).toEqual([
-      { kind: 'transcript', text: 'I see a red wire.', done: false },
+      { kind: 'transcript', text: 'I see a red wire.', final: true, done: false },
     ])
 
     // It precedes every AI text/audio chunk: the first emitted chunk IS the
     // transcript, and no AI chunk appears before it.
-    expect(chunks[0]).toEqual({ kind: 'transcript', text: 'I see a red wire.', done: false })
+    expect(chunks[0]).toEqual({
+      kind: 'transcript',
+      text: 'I see a red wire.',
+      final: true,
+      done: false,
+    })
     const firstAiIndex = chunks.findIndex((c) => c.kind === 'text' || c.kind === 'audio')
     expect(chunks.findIndex((c) => c.kind === 'transcript')).toBeLessThan(firstAiIndex)
 
@@ -219,6 +227,44 @@ describe('runTurn', () => {
     expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
     expect(chunks.filter((c) => c.done)).toHaveLength(1)
     expect(chunks.at(-1)?.done).toBe(true)
+  })
+
+  it('streams interim transcript frames (final:false) then one terminal final:true', async () => {
+    // The live-subtitle contract: as the cumulative ASR result grows, each interim
+    // result streams as a `transcript` chunk with `final: false` (the running
+    // cumulative text, not a delta); the terminal (isFinal) result is emitted ONCE
+    // as `final: true` carrying the complete utterance — never as a duplicate
+    // interim. This is the full-transcript fix's client-facing half.
+    const turn = runTurn(
+      providers(
+        mockStt([
+          { text: 'I', isFinal: false },
+          { text: 'I see', isFinal: false },
+          { text: 'I see a red wire', isFinal: true },
+        ]),
+        mockLlm(['ok.']),
+        mockTts([])
+      ),
+      freshState(),
+      fromArray<AudioChunk>([new Uint8Array([1])])
+    )
+    const chunks = await collect(turn)
+
+    const transcriptChunks = chunks.filter((c) => c.kind === 'transcript')
+    expect(transcriptChunks).toEqual([
+      { kind: 'transcript', text: 'I', final: false, done: false },
+      { kind: 'transcript', text: 'I see', final: false, done: false },
+      { kind: 'transcript', text: 'I see a red wire', final: true, done: false },
+    ])
+    // Exactly one terminal (final:true) transcript frame, carrying the complete
+    // utterance; it is the last transcript frame and precedes all AI chunks.
+    const finals = transcriptChunks.filter((c) => c.final === true)
+    expect(finals).toHaveLength(1)
+    expect(transcriptChunks.at(-1)?.final).toBe(true)
+    const firstAiIndex = chunks.findIndex((c) => c.kind === 'text' || c.kind === 'audio')
+    const lastTranscriptIndex =
+      chunks.length - 1 - [...chunks].reverse().findIndex((c) => c.kind === 'transcript')
+    expect(lastTranscriptIndex).toBeLessThan(firstAiIndex)
   })
 
   it('emits NO transcript chunk on a skipped no-speech turn', async () => {

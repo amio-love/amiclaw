@@ -96,6 +96,29 @@ describe('VoicePanel — cues and content', () => {
     expect(screen.queryByLabelText('你说的话')).not.toBeInTheDocument()
   })
 
+  it('streams the player subtitle live and replaces it for a new utterance (no append)', () => {
+    // The panel is memoized; in the real app a hook-state change re-renders it.
+    // Pass a fresh (equal) prop object per rerender to force that re-render so the
+    // mocked hook's new value is read — simulating successive `transcript` frames.
+    const props = () => ({ manualData: { ...manualData }, gameState: { ...gameState } })
+
+    mockHook.mockReturnValue(hookState({ playerTranscript: '红' }))
+    const { rerender } = render(<VoicePanel {...props()} />)
+    expect(screen.getByLabelText('你说的话')).toHaveTextContent('你：红')
+
+    // An interim grows: the subtitle builds up to the latest cumulative text.
+    mockHook.mockReturnValue(hookState({ playerTranscript: '红色的线' }))
+    rerender(<VoicePanel {...props()} />)
+    expect(screen.getByLabelText('你说的话')).toHaveTextContent('你：红色的线')
+
+    // The next utterance's first interim replaces the prior subtitle, not appends.
+    mockHook.mockReturnValue(hookState({ playerTranscript: '第' }))
+    rerender(<VoicePanel {...props()} />)
+    const subtitle = screen.getByLabelText('你说的话')
+    expect(subtitle).toHaveTextContent('你：第')
+    expect(subtitle).not.toHaveTextContent('红色的线')
+  })
+
   it('shows the speaking-bars cue while the AI is speaking and live', () => {
     const { container } = renderPanel({
       status: 'ready',

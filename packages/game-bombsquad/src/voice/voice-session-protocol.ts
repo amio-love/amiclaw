@@ -67,16 +67,19 @@ export function deriveConversationPhase(s: PhaseSignals): ConversationPhase {
 
 /**
  * One server->client JSON frame. Structurally mirrors the envelope
- * `session-do.ts` emits: `created` on session create, `transcript` once per turn
- * (only when non-empty) carrying the player's recognized utterance and sent
- * before that turn's AI reply chunks, `chunk` per streamed text/audio fragment
- * (audio base64-encoded for the JSON channel), `summary` on `end`, and a
- * non-fatal in-band `error` (e.g. `turn_in_flight`, `already_created`) that does
- * NOT close the socket.
+ * `session-do.ts` emits: `created` on session create, `transcript` STREAMED as
+ * recognition builds (repeated interim frames whose `text` is the CUMULATIVE
+ * recognized utterance so far with `final: false`/absent, then one `final: true`
+ * frame carrying the full utterance; the running `text` resets per utterance and
+ * a no-speech turn sends none) and arriving before that turn's AI reply chunks,
+ * `chunk` per streamed text/audio fragment (audio base64-encoded for the JSON
+ * channel), `summary` on `end`, and a non-fatal in-band `error` (e.g.
+ * `turn_in_flight`, `already_created`) that does NOT close the socket. `final` is
+ * optional; a missing flag is treated as a non-terminal interim.
  */
 export type ServerFrame =
   | { type: 'created'; sessionId: string }
-  | { type: 'transcript'; text: string }
+  | { type: 'transcript'; text: string; final?: boolean }
   | { type: 'chunk'; kind: 'text'; text?: string; done: boolean }
   | { type: 'chunk'; kind: 'audio'; audio?: string; done: boolean }
   | { type: 'summary'; summary: SessionSummary }
@@ -98,9 +101,11 @@ export interface VoiceSessionState {
   /** Accumulated AI text for the current turn (cleared when a new turn starts). */
   aiText: string
   /**
-   * The player's most recent recognized utterance, from the latest `transcript`
-   * frame. Shown as the player's own subtitle. Empty until the first transcript
-   * arrives; a no-speech turn sends none, so the prior value persists.
+   * The player's live recognized speech, from the latest `transcript` frame. The
+   * server streams it as recognition builds (cumulative `text`, reset per
+   * utterance), so this updates on every interim frame to drive a live subtitle
+   * and is replaced by the next utterance's first interim. Empty until the first
+   * transcript arrives; a no-speech turn sends none, so the prior value persists.
    */
   playerTranscript: string
   /**
@@ -178,9 +183,14 @@ function reduceFrame(state: VoiceSessionState, frame: ServerFrame): VoiceSession
       return { ...state, status: 'ready', sessionId: frame.sessionId }
 
     case 'transcript':
-      // The player's recognized utterance for the turn now starting, sent before
-      // the AI's reply chunks. Store the latest; it does not touch `aiText`, the
-      // turn boundary, or status — the AI reply still streams independently.
+      // Live player subtitle. The server streams the recognized utterance as it
+      // builds: each frame's `text` is the CUMULATIVE text so far (interim frames
+      // grow it; the `final` frame settles the full utterance), and the running
+      // text resets per utterance. So always storing the latest `text` both builds
+      // the subtitle up within an utterance AND replaces it on the next utterance's
+      // first interim — no append, no boundary bookkeeping, and `final` needs no
+      // behavioral branch (a missing flag is non-terminal-safe). It does not touch
+      // `aiText`, the turn boundary, or status — the AI reply streams independently.
       return { ...state, playerTranscript: frame.text }
 
     case 'chunk': {

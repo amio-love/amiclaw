@@ -14,10 +14,14 @@
  * usage) — it is I/O-free, not side-effect-free. Keeping the orchestration here
  * (no WS, no DO, no clock) makes it unit-testable with three mocked providers.
  *
- * Volcengine ASR note: the current Volcengine ASR adapter returns the
- * *cumulative* full transcript on each chunk (not an incremental delta). So the
- * player's utterance for the turn is the text of the LAST `isFinal` chunk — we
- * take the final cumulative text, not a concatenation of fragments.
+ * Volcengine ASR note: the Volcengine ASR adapter returns the *cumulative* full
+ * transcript on each chunk (not an incremental delta), and marks `isFinal` on the
+ * TERMINAL (last-package) result — the whole utterance, not a mid-utterance
+ * stabilized segment. So the player's complete utterance for the turn is the text
+ * of the last `isFinal` chunk (or, absent a terminal, the last chunk seen before
+ * a clean close). The pipeline streams every interim chunk to the client as a
+ * live-subtitle `transcript` frame (`final: false`), then emits the complete
+ * utterance once as the terminal `transcript` frame (`final: true`).
  */
 
 import type { CompanionContext } from '../../companion-memory/src/types'
@@ -148,24 +152,32 @@ export function splitSentences(buffer: string): { sentences: string[]; remainder
 }
 
 /**
- * Drain an STT transcript stream and return the player's utterance for the
- * turn: the text of the last `isFinal` chunk (cumulative ASR semantics). If no
- * `isFinal` chunk arrives, fall back to the last chunk's text (best effort), or
- * empty string for an empty stream. A clean no-final ASR close (a benign
- * no-speech turn) surfaces here as that empty/partial transcript rather than a
- * throw, so `runTurn` can skip the turn; only a genuine fault (error frame,
- * connect failure, idle stall) throws out of the underlying `transcribe`.
+ * Drain an STT transcript stream, STREAMING each interim result to the client as
+ * a live-subtitle `transcript` chunk (`final: false`, carrying the running
+ * cumulative recognized text), and RETURN the player's complete utterance for
+ * the turn: the text of the terminal `isFinal` chunk (cumulative ASR semantics).
+ * If no `isFinal` (last-package) chunk arrives, fall back to the last chunk's
+ * text (best effort), or empty string for an empty stream. A clean no-final ASR
+ * close (a benign no-speech turn) surfaces here as that empty/partial transcript
+ * rather than a throw, so `runTurn` can skip the turn; only a genuine fault
+ * (error frame, connect failure, idle stall) throws out of `transcribe`.
  *
- * Also reports `audioBytes`: the total byte length of the inbound audio frames
+ * The terminal chunk is NOT emitted as an interim here: its text is returned as
+ * `transcript` so `runTurn` emits it once as the terminal `final: true` frame
+ * after the no-speech gate (an empty utterance is skipped — never surfaced).
+ * Interim chunks whose trimmed text is empty are suppressed, so a whitespace-only
+ * stream that resolves to a skip emits no frame at all.
+ *
+ * Also returns `audioBytes`: the total byte length of the inbound audio frames
  * the STT provider actually pulled, tapped via a counting passthrough. The
  * caller uses this as the fallback STT metering path when the adapter exposes
  * no structured usage of its own. The passthrough forwards every frame
  * unchanged, so STT behaviour is unaffected.
  */
-async function collectFinalTranscript(
+async function* collectFinalTranscript(
   stt: SttProvider,
   audio: AsyncIterable<AudioChunk>
-): Promise<{ transcript: string; audioBytes: number }> {
+): AsyncGenerator<AiResponseChunk, { transcript: string; audioBytes: number }> {
   let audioBytes = 0
   const counted: AsyncIterable<AudioChunk> = {
     async *[Symbol.asyncIterator]() {
@@ -180,7 +192,18 @@ async function collectFinalTranscript(
   let lastAny = ''
   for await (const chunk of stt.transcribe(counted)) {
     lastAny = chunk.text
-    if (chunk.isFinal) lastFinal = chunk.text
+    if (chunk.isFinal) {
+      // Terminal/last-package result — the complete utterance. Don't stream it as
+      // an interim; `runTurn` emits it once as the terminal `final: true` frame
+      // (and only when non-empty, preserving the no-speech skip).
+      lastFinal = chunk.text
+      continue
+    }
+    // Interim running text — stream it live as a non-final subtitle update. The
+    // text is the cumulative recognized-so-far, not a delta.
+    if (chunk.text.trim().length > 0) {
+      yield { kind: 'transcript', text: chunk.text, final: false, done: false }
+    }
   }
   return { transcript: (lastFinal ?? lastAny).trim(), audioBytes }
 }
@@ -467,18 +490,21 @@ export async function* runTurn(
   state: SessionState,
   audio: AsyncIterable<AudioChunk>
 ): AsyncIterable<AiResponseChunk> {
-  // 1. STT: transcribe the player's audio; take the final cumulative transcript.
-  //    `audioBytes` is the inbound-frame byte total — the fallback STT metering
-  //    source at turn settle when the adapter reports no structured usage.
+  // 1. STT: transcribe the player's audio, streaming each interim cumulative
+  //    result to the client as a live-subtitle `transcript` chunk (final: false)
+  //    as it arrives, and capturing the complete utterance (the terminal
+  //    last-package result) as the generator's return. `audioBytes` is the
+  //    inbound-frame byte total — the fallback STT metering source at turn settle
+  //    when the adapter reports no structured usage.
   const turnStart = Date.now()
   traceTurn('turn', 'pipeline-start', {
     turnCount: state.turnCount,
   })
-  const { transcript: playerText, audioBytes: sttAudioBytes } = await collectFinalTranscript(
+  const { transcript: playerText, audioBytes: sttAudioBytes } = yield* collectFinalTranscript(
     providers.stt,
     audio
   )
-  // ASR hop boundary: the final cumulative transcript is in hand (length only —
+  // ASR hop boundary: the complete cumulative transcript is in hand (length only —
   // never the text). An empty transcript here explains a downstream LLM no-op.
   traceTurn('asr', 'final-transcript', {
     transcriptChars: playerText.length,
@@ -502,14 +528,17 @@ export async function* runTurn(
     return
   }
 
-  // 1b. Surface the player's recognized utterance to the client BEFORE the AI
-  //     reply streams, so the UI can show a subtitle of what the AI heard.
-  //     Emitted exactly once per turn and only for a NON-empty transcript (the
-  //     no-speech skip above already returned, so a skipped turn yields nothing).
+  // 1b. The complete utterance — the TERMINAL transcript frame (final: true),
+  //     surfaced BEFORE the AI reply streams so the client can lock in the live
+  //     subtitle of what the AI heard. Interim frames (final: false) for this
+  //     utterance already streamed during STT above; this is the single final
+  //     frame. Emitted only for a NON-empty transcript — the no-speech skip above
+  //     already returned (and a skip emits no interim either, since empty /
+  //     whitespace interims are suppressed), so a skipped turn yields nothing.
   //     This is the player's OWN speech returned to that same client — never
   //     prompt or secret material; it carries `done: false` (the AI reply's last
   //     text chunk is still the turn's terminal `done`).
-  yield { kind: 'transcript', text: playerText, done: false }
+  yield { kind: 'transcript', text: playerText, final: true, done: false }
 
   // 2. Inject: deterministic system message (role + rules + manual subset),
   //    then the rolling history, then this turn's player utterance.

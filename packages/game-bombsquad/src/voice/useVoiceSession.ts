@@ -116,7 +116,7 @@ export interface UseVoiceSessionResult {
   playerSpeaking: boolean
   /** Accumulated AI text for the current turn. */
   aiText: string
-  /** The player's most recent recognized utterance (from the `transcript` frame). */
+  /** The player's live recognized speech, streamed as recognition builds (from the `transcript` frames). */
   playerTranscript: string
   /** True while TTS audio is scheduled/playing. */
   isAiSpeaking: boolean
