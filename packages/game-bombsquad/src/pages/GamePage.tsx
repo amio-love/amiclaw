@@ -205,8 +205,10 @@ export default function GamePage() {
 
   // Voice-session inputs for the current module, recomputed only when the loaded
   // manual or the current module changes (NOT on every timer-frame re-render).
-  // `moduleKey` keys the panel's remount so advancing modules tears down the old
-  // session and reconnects with the new module's `relevantSections`.
+  // Advancing modules changes `gameState.relevantSections` but keeps the same
+  // run-stable `sessionKey`, so the panel does NOT remount — the hook steers the
+  // live session with one `update-gamestate` instead of reconnecting (one
+  // continuous conversation per run; the AI greets once and remembers it).
   const voiceInputs = useMemo(
     () => (usePlatformVoice ? deriveVoicePanelInputs(state) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +220,8 @@ export default function GamePage() {
   // disturbs the conversation and bleeds back in as false speech. Only the SOUND
   // is gated — the stopwatch keeps counting (the elapsed time IS the score). A
   // mode① run never mounts the panel (`voiceInputs === null`), so it keeps all
-  // SFX. Cleanup restores audio on exit / module change.
+  // SFX. `voiceActive` stays true for the whole mode② run (the panel no longer
+  // remounts per module), so cleanup restores audio on exit / unmount.
   const voiceActive = voiceInputs !== null
   useEffect(() => {
     setSfxSuppressed(voiceActive)
@@ -668,7 +671,7 @@ export default function GamePage() {
 
       {voiceInputs && (
         <VoicePanel
-          key={voiceInputs.moduleKey}
+          key={voiceInputs.sessionKey}
           manualData={voiceInputs.manualData}
           gameState={voiceInputs.gameState}
         />

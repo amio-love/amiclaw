@@ -76,6 +76,16 @@ const NO_RESPONSE_TIMEOUT_MS = 12000
  * so a leaked context across turns / panel remounts eventually starves the next
  * `new AudioContext(...)` — which is the failure this hardening guards against.
  */
+/**
+ * Stable signature of the manual-subset selection, for change detection across
+ * renders. A new selection (the player advanced modules) yields a different
+ * string; an unchanged selection (a timer-frame re-render) yields the same one,
+ * so the `update-gamestate` steer fires exactly once per real module change.
+ */
+function sectionsSignature(gameState: GameState): string {
+  return JSON.stringify(gameState.relevantSections ?? [])
+}
+
 function closeAudioContext(ctx: AudioContext | null): void {
   if (!ctx) return
   try {
@@ -99,8 +109,10 @@ export interface UseVoiceSessionOptions {
   manualData: ManualData | null
   /**
    * The game state driving manual-subset selection (`relevantSections` via
-   * `moduleKindToRelevantSections`). Applied at session-create time; see the
-   * module-change note on the return type.
+   * `moduleKindToRelevantSections`). The FIRST value rides the `create` message;
+   * a later change (the player advanced modules within one run) is steered on the
+   * live socket with a single `update-gamestate` — see the module-change note on
+   * the return type.
    */
   gameState: GameState
   /** Platform game id. Defaults to `'bombsquad'`. */
@@ -129,13 +141,14 @@ export interface UseVoiceSessionResult {
 }
 
 /**
- * Module-change / `gameState` updates: the wire protocol exposes no mid-session
- * `gameState` update message (only `create` / `end`, and a re-`create` is
- * rejected `already_created`), so `relevantSections` are pinned at the value
- * captured when the session is created. The hook keeps the LATEST `gameState`/
- * `manualData` in refs and applies them at create time; to inject a new module's
- * sections the consumer creates a fresh session (remount via the `VoicePanel`
- * key). Within one live session, turns reuse the created sections.
+ * Module-change / `gameState` updates: ONE continuous session spans the whole
+ * run. The FIRST `gameState.relevantSections` rides the `create` message; when
+ * the player advances modules the sections change and the hook steers the LIVE
+ * session with a single `{type:'update-gamestate', gameState}` on the same open
+ * socket — it does NOT reconnect, so the WS, the mic, the conversation history,
+ * and the AI-first greeting all persist (the AI just gets the new module's manual
+ * subset for subsequent turns). The update is sent exactly once per actual change
+ * and only after the session is `created`; an unchanged re-render sends nothing.
  */
 export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessionResult {
   const { manualData, gameState, gameId = 'bombsquad' } = options
@@ -170,6 +183,13 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const wsRef = useRef<WebSocket | null>(null)
   const endedRef = useRef(false)
   const mountedRef = useRef(true)
+  /**
+   * The `relevantSections` signature already communicated to the live session —
+   * set when `create` is sent (the first selection rides that message) and after
+   * each `update-gamestate`. A module advance whose new signature differs from
+   * this sends exactly one steer; `null` until the session is being created.
+   */
+  const sentSectionsRef = useRef<string | null>(null)
 
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const captureCtxRef = useRef<AudioContext | null>(null)
@@ -454,6 +474,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     const data = manualDataRef.current
     if (!data) return
     endedRef.current = false
+    sentSectionsRef.current = null
     safeDispatch({ type: 'connecting' })
 
     let ws: WebSocket
@@ -474,6 +495,10 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       }
       try {
         ws.send(JSON.stringify(create))
+        // The first module's sections rode this `create`; record them so a later
+        // module advance sends ONE `update-gamestate` (and the module the session
+        // was created with never triggers a redundant steer).
+        sentSectionsRef.current = sectionsSignature(gameStateRef.current)
       } catch {
         safeDispatch({ type: 'transport-error', message: 'failed to create voice session' })
       }
@@ -586,6 +611,30 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       closeSocket(true)
     }
   }, [hasManual, connect, stopCapture, teardownPlayback, closeSocket])
+
+  // --- Module advance within one run: steer the live session, never reconnect ---
+  //
+  // When `relevantSections` change AFTER the session is created (the player moved
+  // to a new module), send ONE `update-gamestate` on the open socket so the
+  // server injects the new module's manual subset for subsequent turns. The first
+  // selection already rode the `create` message (`onopen` set `sentSectionsRef`),
+  // so only a genuine later change sends here, exactly once. Gated on the `ready`
+  // status (set on the `created` frame) so nothing is sent before the session
+  // exists — never as a second `create`. The conversation, history, and greeting
+  // are untouched; this only re-selects which manual sections the next turn sees.
+  const liveSectionsSignature = sectionsSignature(gameState)
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    if (sentSectionsRef.current === liveSectionsSignature) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    sentSectionsRef.current = liveSectionsSignature
+    try {
+      ws.send(JSON.stringify({ type: 'update-gamestate', gameState: gameStateRef.current }))
+    } catch {
+      /* non-fatal — a dropped steer just leaves the next turn on the old sections */
+    }
+  }, [liveSectionsSignature, state.status])
 
   const conversationPhase = useMemo(
     () => deriveConversationPhase({ isAiSpeaking, playerSpeaking, awaitingResponse }),

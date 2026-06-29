@@ -228,7 +228,7 @@ describe('STT frame codec', () => {
     expect(body).toEqual({
       user: { uid: 'user-9' },
       audio: { format: 'pcm', rate: 24000, bits: 16, channel: 1 },
-      request: { model_name: 'bigmodel', enable_punc: true, enable_itn: true },
+      request: { model_name: 'bigmodel', enable_punc: false, enable_itn: true },
     })
   })
 

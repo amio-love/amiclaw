@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: one conversation per run, clearer recognition, longer
+pauses** - Change. The AI partner is now a single continuous conversation for the
+whole daily run: it greets you once and remembers the whole game, and when you
+move to the next module it just gets that module's manual — it no longer
+restarts and re-introduces itself each module. Recognition no longer inserts a
+period at every pause (which had been chopping words apart when you spoke
+slowly), so your speech reads as continuous text. And it now waits 2.5s (up from
+1.5s) before taking its turn, giving you more room to think and gather your words.
+
 **BombSquad mode② voice: full speech recognition + live captions** - Fix. Two
 problems: the recognizer cut off after your first few words, and your subtitle
 only showed up late. Both came from ending recognition at the first stabilized

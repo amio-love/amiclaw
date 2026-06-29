@@ -56,11 +56,11 @@ export interface VadConfig {
  */
 export const DEFAULT_VAD_CONFIG: VadConfig = {
   speechThreshold: 0.07,
-  // 1500ms of trailing silence before an utterance is considered finished. A
-  // generous pause so the player can think and gather their words mid-sentence
+  // 2500ms of trailing silence before an utterance is considered finished. A
+  // long pause so the player can think and gather their words mid-sentence
   // without the turn firing prematurely (a defuse player describes a device, then
   // pauses to read the next part). Tunable per device feedback.
-  silenceHangoverMs: 1500,
+  silenceHangoverMs: 2500,
   minSpeechMs: 400,
 }
 

@@ -369,14 +369,9 @@ describe('useVoiceSession — client VAD', () => {
     expect(result.current.playerSpeaking).toBe(true)
     expect(result.current.conversationPhase).toBe('listening')
 
-    // Six 256ms silence frames (1536ms >= 1500ms hangover) end it -> a turn is sent.
+    // Ten 256ms silence frames (2560ms >= 2500ms hangover) end it -> a turn is sent.
     act(() => {
-      fireFrame(0.0)
-      fireFrame(0.0)
-      fireFrame(0.0)
-      fireFrame(0.0)
-      fireFrame(0.0)
-      fireFrame(0.0)
+      for (let i = 0; i < 10; i += 1) fireFrame(0.0)
     })
     expect(result.current.playerSpeaking).toBe(false)
     expect(result.current.conversationPhase).toBe('thinking')
@@ -421,6 +416,89 @@ describe('useVoiceSession — client VAD', () => {
     )
     expect(result.current.error).toBeNull()
     expect(result.current.status).toBe('ready')
+  })
+})
+
+describe('useVoiceSession — module advance steers one session', () => {
+  /** Render with a controllable gameState prop, then bring it to a live session. */
+  async function readyWithGameState(initial: GameState) {
+    const rendered = renderHook(
+      ({ gs }: { gs: GameState }) => useVoiceSession({ manualData: manualData(), gameState: gs }),
+      { initialProps: { gs: initial } }
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    await act(async () => {
+      ws.fireMessage({ type: 'created', sessionId: 'sess-1' })
+    })
+    await waitFor(() => captureProcessor())
+    return { ...rendered, ws }
+  }
+
+  it('sends the first module via create and never an update for it', async () => {
+    const { ws } = await readyWithGameState({ relevantSections: ['wire_routing'] })
+    const create = ws.controlMessages().find((m) => m.type === 'create')
+    expect(create).toMatchObject({ gameState: { relevantSections: ['wire_routing'] } })
+    expect(ws.controlMessages().some((m) => m.type === 'update-gamestate')).toBe(false)
+  })
+
+  it('advancing a module sends ONE update-gamestate on the SAME socket (no reconnect/re-greet)', async () => {
+    const { ws, rerender } = await readyWithGameState({ relevantSections: ['wire_routing'] })
+    const socketsBefore = MockWebSocket.instances.length
+
+    // Player advances to the next module: relevantSections change.
+    act(() => rerender({ gs: { relevantSections: ['symbol_dial'] } }))
+
+    const updates = ws.controlMessages().filter((m) => m.type === 'update-gamestate')
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toMatchObject({
+      type: 'update-gamestate',
+      gameState: { relevantSections: ['symbol_dial'] },
+    })
+    // Same live socket — no fresh WebSocket constructed (no reconnect), and no
+    // second `create` (no re-greet).
+    expect(MockWebSocket.instances.length).toBe(socketsBefore)
+    expect(ws.controlMessages().filter((m) => m.type === 'create')).toHaveLength(1)
+  })
+
+  it('sends one update per module across several advances', async () => {
+    const { ws, rerender } = await readyWithGameState({ relevantSections: ['wire_routing'] })
+    act(() => rerender({ gs: { relevantSections: ['symbol_dial'] } }))
+    act(() => rerender({ gs: { relevantSections: ['button'] } }))
+    act(() => rerender({ gs: { relevantSections: ['keypad'] } }))
+    const updates = ws.controlMessages().filter((m) => m.type === 'update-gamestate')
+    expect(updates.map((m) => (m.gameState as GameState).relevantSections)).toEqual([
+      ['symbol_dial'],
+      ['button'],
+      ['keypad'],
+    ])
+  })
+
+  it('does not send an update when a re-render leaves the sections unchanged', async () => {
+    const { ws, rerender } = await readyWithGameState({ relevantSections: ['wire_routing'] })
+    // A new object with identical sections (e.g. a stopwatch-frame re-render).
+    act(() => rerender({ gs: { relevantSections: ['wire_routing'] } }))
+    expect(ws.controlMessages().some((m) => m.type === 'update-gamestate')).toBe(false)
+  })
+
+  it('does not send an update before the session is created', async () => {
+    const rendered = renderHook(
+      ({ gs }: { gs: GameState }) => useVoiceSession({ manualData: manualData(), gameState: gs }),
+      { initialProps: { gs: { relevantSections: ['wire_routing'] } as GameState } }
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    // Section change while connecting (no `created` yet) — must not steer a
+    // not-yet-existing session, and must not duplicate a `create`.
+    act(() => rendered.rerender({ gs: { relevantSections: ['symbol_dial'] } }))
+    expect(ws.controlMessages().some((m) => m.type === 'update-gamestate')).toBe(false)
+    // Once created, the latest sections are reconciled with exactly one steer.
+    await act(async () => {
+      ws.fireMessage({ type: 'created', sessionId: 'sess-1' })
+    })
+    const updates = ws.controlMessages().filter((m) => m.type === 'update-gamestate')
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toMatchObject({ gameState: { relevantSections: ['symbol_dial'] } })
   })
 })
 
