@@ -33,7 +33,7 @@ import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { generateSceneInfo } from '@/engine/scene-info'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
-import { getAudioContext } from '@/audio/audio-context'
+import { getAudioContext, setSfxSuppressed } from '@/audio/audio-context'
 import VoicePanel from '@/voice/VoicePanel'
 import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
 import styles from './GamePage.module.css'
@@ -212,6 +212,18 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [usePlatformVoice, state.manual, state.currentModuleIndex]
   )
+
+  // Mute every game SFX while the mode② voice partner is mounted. The stopwatch
+  // tick fires twice a second and the mic is always open, so an unmuted cue both
+  // disturbs the conversation and bleeds back in as false speech. Only the SOUND
+  // is gated — the stopwatch keeps counting (the elapsed time IS the score). A
+  // mode① run never mounts the panel (`voiceInputs === null`), so it keeps all
+  // SFX. Cleanup restores audio on exit / module change.
+  const voiceActive = voiceInputs !== null
+  useEffect(() => {
+    setSfxSuppressed(voiceActive)
+    return () => setSfxSuppressed(false)
+  }, [voiceActive])
 
   // A wrong answer pulses a red border around the whole module panel so the
   // mistake is obvious at a glance in both modes. Incrementing this key

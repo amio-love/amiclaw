@@ -183,9 +183,12 @@ function reduceFrame(state: VoiceSessionState, frame: ServerFrame): VoiceSession
       return { ...state, status: 'closed', summary: frame.summary }
 
     case 'error':
-      // In-band, non-fatal server error (e.g. `turn_in_flight`). Surface the
-      // bounded message; leave status to the streaming/lifecycle handlers (the
-      // rejected message did not close the socket).
+      // In-band, non-fatal server error; it does NOT close the socket. The benign
+      // rejections the hands-free client provokes on its own — `turn_in_flight`
+      // (the VAD raced the server's in-flight turn) and `already_created` (a
+      // duplicate create) — are no-ops the player should never see, so they leave
+      // state untouched. Any other in-band error still surfaces a bounded message.
+      if (frame.code === 'turn_in_flight' || frame.code === 'already_created') return state
       return { ...state, error: boundError(frame.message ?? frame.code ?? 'session error') }
 
     default:

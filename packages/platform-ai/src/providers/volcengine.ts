@@ -1009,11 +1009,14 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
       const socket = await connect(STT_URL, headers)
       const queue = new AsyncQueue<SttTranscriptChunk>()
       // Tracks whether a final/definite transcript arrived — the ASR normal
-      // completion signal. A socket close is only a clean end-of-stream once this
-      // is set; a close BEFORE it (handshake-period failure, mid-stream network
-      // drop) is a premature close that must fail the queue, so a turn does not
-      // proceed with an empty/incomplete transcript. Mirrors the TTS layer's
-      // SessionFinished gate.
+      // completion signal. Used by the message listener (final → close the queue
+      // and the socket) and surfaced in the close trace. A socket close is a
+      // clean end-of-stream EITHER way now: with a final it is the normal
+      // teardown; without one (and without a prior error frame) it is a benign
+      // no-speech turn the consumer skips (see the close listener). Unlike the
+      // TTS layer's SessionFinished gate — a missing AI response is a fault — a
+      // missing player transcript is benign, so the ASR close path does NOT fail
+      // the queue on a no-final close.
       let finalReached = false
       // Per-connection metering state. `reportedDurationMs` follows the server's
       // cumulative `audio_info.duration` — each response overwrites it, so it
@@ -1116,18 +1119,16 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
           queue.fail(err)
         }
       })
-      // Distinguish a normal-completion close from a premature one. After a
-      // final/definite transcript the close is the expected end-of-stream ->
-      // close the queue normally. Before it (handshake race / mid-stream drop)
-      // the close is premature: fail the queue so the consumer
-      // (`collectFinalTranscript`) throws and the turn fails loud, rather than
-      // continuing with an empty/incomplete transcript.
+      // A socket close ends the stream. After a final/definite transcript it is
+      // the expected end-of-stream; before one (and with no prior error frame) it
+      // is a benign no-speech close (see below). Either way the queue settles
+      // cleanly — a genuine fault has already latched the queue error before the
+      // close arrives.
       socket.addEventListener('close', (event) => {
-        // Observability: the Volcengine ASR close CODE (numeric) + reason LENGTH
-        // that the generic "closed before a final transcript" error used to
-        // swallow. A clean 1000/empty close after silence vs a non-1000 protocol
-        // close points at very different root causes — the numeric code carries
-        // that signal without logging the raw reason text.
+        // Observability: the Volcengine ASR close CODE (numeric) + reason LENGTH.
+        // A clean 1000/empty close after silence vs a non-1000 protocol close
+        // points at very different root causes — the numeric code (with
+        // `finalReached`) carries that signal without logging the raw reason text.
         traceTurn('asr', 'socket-close', {
           code: event?.code,
           reasonChars: (event?.reason ?? '').length,
@@ -1136,11 +1137,24 @@ export function createVolcengineSpeechProvider(opts: VolcengineSpeechOptions): {
         // The stream has ended either way — stop the idle guard so it cannot fire
         // late against an already-settled queue.
         streamIdleDeadline?.cancel()
-        if (finalReached) {
-          queue.close()
-        } else {
-          queue.fail(new Error('Volcengine ASR socket closed before a final transcript'))
-        }
+        // Settle the queue CLEANLY whether or not a final transcript arrived. A
+        // close AFTER a final/definite transcript is the normal end-of-stream. A
+        // close WITHOUT one and without a prior error frame is a benign no-speech
+        // turn: the player's buffered audio held nothing transcribable (a
+        // false-positive VAD trigger — a stopwatch tick, a cough, ambient noise),
+        // so the server closed without ever sending a definite result. It must
+        // NOT fail the turn — the consumer (`collectFinalTranscript`) surfaces an
+        // empty (or partial, non-definite) transcript and the turn is skipped
+        // upstream, keeping the session alive and listening.
+        //
+        // Genuine faults are unaffected and still fail loud (1008): an error
+        // frame (`parseSttResponse` throw), the first-response deadline, and the
+        // inter-chunk idle guard each `queue.fail(...)` — latching `queue.error`
+        // — BEFORE this close fires. The iterator checks a latched error ahead of
+        // a clean close, so this `queue.close()` is a no-op on an already-failed
+        // queue and the latched error is what the consumer sees. (A connect
+        // failure throws before the queue exists, so it never reaches here.)
+        queue.close()
       })
       socket.addEventListener('error', (err) => {
         streamIdleDeadline?.cancel()

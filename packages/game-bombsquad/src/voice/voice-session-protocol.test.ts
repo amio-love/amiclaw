@@ -144,17 +144,32 @@ describe('voiceReducer', () => {
     expect(next.summary).toBe(s)
   })
 
-  it('an in-band error frame surfaces a bounded message without changing status', () => {
+  it('an unexpected in-band error frame surfaces a bounded message without changing status', () => {
     const ready = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } }
     )
     const next = voiceReducer(ready, {
       type: 'frame',
-      frame: { type: 'error', code: 'turn_in_flight', message: 'a turn is already in progress' },
+      frame: { type: 'error', code: 'provider_unavailable', message: 'speech provider down' },
     })
     expect(next.status).toBe('ready')
-    expect(next.error).toBe('a turn is already in progress')
+    expect(next.error).toBe('speech provider down')
+  })
+
+  it('drops benign in-band rejections (turn_in_flight / already_created) with no visible error', () => {
+    const ready = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } }
+    )
+    for (const code of ['turn_in_flight', 'already_created'] as const) {
+      const next = voiceReducer(ready, {
+        type: 'frame',
+        frame: { type: 'error', code, message: 'a turn is already in progress' },
+      })
+      expect(next.status).toBe('ready')
+      expect(next.error).toBeNull()
+    }
   })
 
   it('mic-error surfaces a bounded message but keeps the session usable', () => {

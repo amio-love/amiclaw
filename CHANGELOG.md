@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: quieter, steadier hands-free conversation** - Fix.
+Three problems from a live device test are fixed. The stopwatch tick and other
+game sounds are now muted for the whole voice session, so they no longer talk
+over the AI or leak back into the always-on microphone — the timer keeps running,
+only its sound is silenced, and the bring-your-own-AI mode① still plays every
+sound. Voice detection is far less twitchy, so a tick, a click, or the AI's own
+voice no longer registers as you starting to speak. And the partner no longer
+sends a turn while the AI is still speaking or mid-greeting, so the spurious "a
+turn is already in progress" error — and the dropped connection that followed it
+on refresh — is gone; a refresh now restarts the conversation cleanly.
+
 **BombSquad mode② voice is now hands-free** - Change. The in-game AI defuse
 partner now runs as a continuous, hands-free conversation instead of hold-to-talk:
 the AI speaks first (it greets you and asks what you see when the session opens),

@@ -671,14 +671,15 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     await expect(consumed).rejects.toThrow(/Volcengine ASR error/)
   })
 
-  it('fails loudly if the socket closes before a final transcript (premature close)', async () => {
-    // The ASR dual of the TTS premature-close fix. A socket close that arrives
-    // before any final/definite transcript — handshake-period failure or a
-    // mid-stream network drop — must REJECT the consumer, not settle it as a clean
-    // empty/incomplete end-of-stream. Otherwise `collectFinalTranscript` would
-    // proceed with an empty (or partial, non-definite) transcript and the turn
-    // would continue silently on bad input. Here the server emits only a
-    // non-definite chunk, then the socket drops.
+  it('settles cleanly (benign no-speech) when the socket closes before a final transcript', async () => {
+    // The hands-free no-speech reinterpretation: a socket close before any
+    // final/definite transcript, with NO error frame, is benign — the player's
+    // buffered audio held nothing transcribable (a false-positive VAD trigger).
+    // The stream must SETTLE CLEANLY (no throw), yielding only the partial /
+    // non-definite chunks that did arrive, so `collectFinalTranscript` returns an
+    // empty/partial transcript and the turn is skipped upstream instead of the
+    // session being torn down. (Genuine faults — error frame, idle stall — still
+    // fail loud; they latch the queue error before this close path.)
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
@@ -687,7 +688,7 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
 
     await new Promise((r) => setTimeout(r, 0))
     // A partial (non-definite) transcript arrives, then the socket closes BEFORE
-    // any definite/final result — a premature close.
+    // any definite/final result — the benign no-final close.
     socket.emitMessage(
       sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
     )
@@ -696,9 +697,29 @@ describe('createVolcengineSpeechProvider.stt.transcribe', () => {
     const guard = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('transcribe did not settle after an early close')), 50)
     )
-    await expect(Promise.race([consumed, guard])).rejects.toThrow(
-      /closed before a final transcript/
+    const chunks = await Promise.race([consumed, guard])
+    // No throw — the stream ended cleanly with just the non-definite chunk.
+    expect(chunks).toEqual([{ text: '你', isFinal: false }])
+  })
+
+  it('settles cleanly with no chunks when the socket closes having sent nothing (no speech)', async () => {
+    // The pure no-speech case: the server accepts the connection and closes
+    // without ever sending a transcript frame. The stream ends as an EMPTY clean
+    // stream (no throw), so the upstream transcript is empty and the turn skips.
+    const socket = new MockSocket()
+    const { connect } = mockConnector(socket)
+    const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
+
+    const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
+
+    await new Promise((r) => setTimeout(r, 0))
+    socket.emitClose()
+
+    const guard = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('transcribe did not settle after an early close')), 50)
     )
+    const chunks = await Promise.race([consumed, guard])
+    expect(chunks).toEqual([])
   })
 
   it('treats a socket close AFTER a final transcript as a clean end-of-stream', async () => {
@@ -1480,9 +1501,11 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     await expect(Promise.race([consumed, guard])).rejects.toThrow(/closed before session finished/)
   })
 
-  it('ASR premature-close fail-loud is not reverted by the cleanup finally', async () => {
-    // ASR guard dual: a socket close before a final transcript still rejects the
-    // consumer; the cleanup finally on the error unwind does not mask it.
+  it('ASR error-frame fail-loud is not reverted by the cleanup finally', async () => {
+    // ASR guard dual: a genuine fault (an ASR error frame) still rejects the
+    // consumer; the cleanup finally on the error unwind does not mask it. (A bare
+    // no-final close is now benign — covered separately — so the genuine-fault
+    // case here is the error frame, which latches the queue error.)
     const socket = new MockSocket()
     const { connect } = mockConnector(socket)
     const { stt } = createVolcengineSpeechProvider({ apiKey: 'k', connect })
@@ -1490,17 +1513,22 @@ describe('createVolcengineSpeechProvider — cancellation cleanup (iterator.retu
     const consumed = collect(stt.transcribe(await asyncFrom([encoder.encode('f1')])))
 
     await tick()
-    socket.emitMessage(
-      sttServerFrame({ result: { text: '你', utterances: [{ definite: false }] } })
-    )
+    const errFrame = buildSttRequestFrame({
+      messageType: MessageType.ErrorResponse,
+      flags: MessageFlag.PositiveSequence,
+      serialization: Serialization.Json,
+      sequence: 1,
+      payload: encoder.encode('auth failed'),
+    })
+    socket.emitMessage(errFrame)
+    // A close follows the error frame (the adapter closes the socket on unwind).
+    // The cleanup finally's queue.close() must NOT mask the latched error.
     socket.emitClose()
 
     const guard = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('transcribe did not settle after an early close')), 50)
+      setTimeout(() => reject(new Error('transcribe did not settle after an error frame')), 50)
     )
-    await expect(Promise.race([consumed, guard])).rejects.toThrow(
-      /closed before a final transcript/
-    )
+    await expect(Promise.race([consumed, guard])).rejects.toThrow(/Volcengine ASR error/)
   })
 })
 

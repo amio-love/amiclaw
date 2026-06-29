@@ -3,13 +3,17 @@
  * voice session. Side-effect-free (no Web Audio, no React) so the turn-boundary
  * state machine is unit-testable by feeding it a sequence of frame energies.
  *
- * Role (load-bearing): the deployed `@amiclaw/platform-ai` server runs its OWN
- * ASR-endpoint VAD and fires every turn server-side (the client `turn` message is
- * a tolerated no-op — see `session-do.ts`). So this VAD does NOT trigger the
- * turn; it drives two CLIENT concerns the server gives no signal for:
- *  1. the 3-state conversation indicator — `speech-start` flips the UI to
+ * Role (load-bearing): the deployed `@amiclaw/platform-ai` server runs each
+ * client `turn` as a real, SERIAL STT->LLM->TTS turn and rejects an overlapping
+ * one with `turn_in_flight` (see `session-do.ts`). So this VAD gates three CLIENT
+ * concerns off the same frame stream:
+ *  1. the end-of-utterance turn send — `utterance-end` is when the hook may hand
+ *     the buffered audio to the server (the hook additionally suppresses the send
+ *     while the AI holds the floor, so a leaked tick / the AI's own voice cannot
+ *     race the server's in-flight turn);
+ *  2. the 3-state conversation indicator — `speech-start` flips the UI to
  *     "listening", `utterance-end` flips it to "thinking" while the AI replies;
- *  2. barge-in — `speech-start` while the AI is speaking stops local playback.
+ *  3. barge-in — `speech-start` while the AI is speaking stops local playback.
  *
  * The detector is a small pure reducer: `vadStep(state, rms, frameMs, config)`
  * folds one analyzed frame's RMS into the running state and emits at most one
@@ -36,14 +40,24 @@ export interface VadConfig {
 }
 
 /**
- * Default thresholds. Conservative starting point for a noise-suppressed,
- * echo-cancelled mic; the exact values want real-device tuning (flagged) — the
- * silence floor and speech level vary with hardware, AGC, and room noise.
+ * Default thresholds — deliberately conservative so brief, loud transients
+ * (the stopwatch tick, UI clicks, a door slam) and ambient room noise do NOT
+ * start an utterance. Two knobs do the work:
+ *  - `speechThreshold: 0.07` — a stopwatch tick / ambient hum sits well under
+ *    this, while real near-mic speech RMS lands ~0.1–0.3. (The old 0.02 floor
+ *    let a tick + room tone read as speech, false-triggering turns.)
+ *  - `minSpeechMs: 400` — a real utterance must hold the floor for ≥400ms of
+ *    CONTIGUOUS above-threshold energy; a single tick frame (one capture frame
+ *    is 256ms at 16 kHz) can never reach it and is discarded by the debounce.
+ *
+ * These are a STARTING point, not a final tuning: the silence floor and speech
+ * level vary with hardware, AGC, and room noise, so they want a real-device
+ * pass (flagged). They live here, in one place, so re-tuning is a single edit.
  */
 export const DEFAULT_VAD_CONFIG: VadConfig = {
-  speechThreshold: 0.02,
+  speechThreshold: 0.07,
   silenceHangoverMs: 800,
-  minSpeechMs: 200,
+  minSpeechMs: 400,
 }
 
 /** Running detector state. Reset to `initialVadState` per session / per capture. */

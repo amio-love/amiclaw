@@ -331,16 +331,31 @@ describe('useVoiceSession — hands-free lifecycle', () => {
   })
 })
 
-describe('useVoiceSession — client VAD', () => {
-  it('tracks the player speaking then going silent, and sends a turn on utterance-end', async () => {
-    const { result, ws } = await ready()
+/**
+ * Finish the AI-first opening greeting so the AI is idle (awaiting cleared,
+ * playback ended): one done audio chunk, then its source's `onended`. After this
+ * the hook will accept a player turn on the next utterance-end.
+ */
+function finishGreeting(ws: MockWebSocket): void {
+  act(() => ws.fireMessage({ type: 'chunk', kind: 'audio', audio: audioB64, done: true }))
+  act(() => playbackSources().at(-1)?.onended?.())
+}
 
-    // One 256ms speech frame qualifies as a speech start.
-    act(() => fireFrame(0.5))
+describe('useVoiceSession — client VAD', () => {
+  it('sends a turn on utterance-end once the AI is idle', async () => {
+    const { result, ws } = await ready()
+    finishGreeting(ws)
+    expect(result.current.isAiSpeaking).toBe(false)
+
+    // Two 256ms speech frames (>= 400ms minSpeechMs) start the utterance.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
     expect(result.current.playerSpeaking).toBe(true)
     expect(result.current.conversationPhase).toBe('listening')
 
-    // Four 256ms silence frames (>= 800ms hangover) end the utterance.
+    // Four 256ms silence frames (>= 800ms hangover) end it -> a turn is sent.
     act(() => {
       fireFrame(0.0)
       fireFrame(0.0)
@@ -349,8 +364,25 @@ describe('useVoiceSession — client VAD', () => {
     })
     expect(result.current.playerSpeaking).toBe(false)
     expect(result.current.conversationPhase).toBe('thinking')
-    // Wire-spec / back-compat: a `turn` is sent on utterance-end (server no-ops it).
     expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(true)
+  })
+
+  it('does not send a turn while the AI-first opening greeting is in flight', async () => {
+    const { result, ws } = await ready()
+    // No greeting chunk yet: the hook is awaiting the opening reply. Noise the
+    // open mic picks up (the greeting's own voice / the stopwatch tick) must NOT
+    // be handed to the server as a turn — that races the in-flight greeting and
+    // earns a `turn_in_flight` rejection.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+      fireFrame(0.0)
+    })
+    expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(false)
+    expect(result.current.status).toBe('ready')
   })
 
   it('does not fire a turn on background noise below the threshold', async () => {
@@ -360,6 +392,19 @@ describe('useVoiceSession — client VAD', () => {
     })
     expect(result.current.playerSpeaking).toBe(false)
     expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(false)
+  })
+
+  it('treats a turn_in_flight server error as a benign no-op (no visible error)', async () => {
+    const { result, ws } = await ready()
+    act(() =>
+      ws.fireMessage({
+        type: 'error',
+        code: 'turn_in_flight',
+        message: 'a turn is already in progress',
+      })
+    )
+    expect(result.current.error).toBeNull()
+    expect(result.current.status).toBe('ready')
   })
 })
 
@@ -375,8 +420,11 @@ describe('useVoiceSession — barge-in', () => {
     expect(result.current.isAiSpeaking).toBe(true)
     const playing = playbackSources().at(-1)
 
-    // Player barges in.
-    act(() => fireFrame(0.5))
+    // Player barges in (2 frames >= the 400ms minSpeechMs).
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
     expect(playing?.stopped).toBe(true)
     expect(result.current.isAiSpeaking).toBe(false)
     expect(result.current.playerSpeaking).toBe(true)
