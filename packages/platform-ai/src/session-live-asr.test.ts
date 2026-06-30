@@ -35,11 +35,13 @@ vi.mock('./providers/factory', async (importOriginal) => {
   }
 })
 
+import { PREROLL_MAX_BYTES } from './session-do'
 import {
   createSessionOverWs,
   driveUtteranceToLlm,
   makeErroringAsrProviders,
   makeGatedProviders,
+  makeInspectingProviders,
   makeLiveStreamingAsrProviders,
   makeSessionDo,
   messagesOfType,
@@ -188,5 +190,92 @@ describe('real VoiceSessionDO — live per-utterance ASR', () => {
     await waitForMessage(socket, 'summary')
     const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(1)
+  })
+
+  it('pre-roll frames pushed before speech-start are prepended to the bridge in arrival order before live frames', async () => {
+    const kit = makeInspectingProviders()
+    providerControl.override = kit.providers
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    await createSessionOverWs(socket)
+
+    // Three frames pushed BEFORE speech-start: the pre-roll ring buffer captures them.
+    // The DO is continuously streaming audio from the client mic; these represent
+    // the onset bytes that arrive before the client VAD qualifies speech.
+    const preRoll1 = new Uint8Array([10, 20, 30])
+    const preRoll2 = new Uint8Array([40, 50])
+    const preRoll3 = new Uint8Array([60])
+    socket.send(preRoll1.buffer)
+    socket.send(preRoll2.buffer)
+    socket.send(preRoll3.buffer)
+    // Settle so the DO processes all three binary frames before speech-start
+    // arrives (WS frames are ordered, but async DO processing needs draining).
+    await settle()
+
+    // speech-start flushes the pre-roll buffer into the new AudioBridge, then
+    // live frames flow directly into it.
+    socket.send(SPEECH_START)
+    await waitFor(() => kit.sttCalls() === 1, 'recognizer opened on speech-start')
+
+    // Two live frames pushed AFTER speech-start go directly into the bridge.
+    const live1 = new Uint8Array([70, 80, 90])
+    const live2 = new Uint8Array([100])
+    socket.send(live1.buffer)
+    socket.send(live2.buffer)
+
+    // turn closes the bridge: the inspecting STT drains all frames and finalizes.
+    socket.send(TURN)
+    await waitFor(() => sawDoneChunk(socket), 'reply completed after turn')
+
+    // The STT captured exactly 5 frames in arrival order: 3 pre-roll then 2 live.
+    expect(kit.frames()).toHaveLength(5)
+    expect(kit.frames()[0]).toEqual(preRoll1)
+    expect(kit.frames()[1]).toEqual(preRoll2)
+    expect(kit.frames()[2]).toEqual(preRoll3)
+    expect(kit.frames()[3]).toEqual(live1)
+    expect(kit.frames()[4]).toEqual(live2)
+
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
+    const summary = messagesOfType(socket, 'summary')[0].summary as { turnCount: number }
+    expect(summary.turnCount).toBe(1)
+  })
+
+  it('pre-roll ring caps at PREROLL_MAX_BYTES by evicting oldest frames', async () => {
+    const kit = makeInspectingProviders()
+    providerControl.override = kit.providers
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    await createSessionOverWs(socket)
+
+    // Push 50 frames of 1 000 bytes each = 50 000 bytes total, well over the
+    // 22 400 byte cap. The ring must evict the oldest frames so only the newest
+    // ~22 frames (the tail of the stream, closest to speech onset) are retained.
+    const FRAME_BYTES = 1_000
+    const FRAME_COUNT = 50
+    for (let i = 0; i < FRAME_COUNT; i += 1) {
+      // Fill each frame with a distinct byte value so we can identify which
+      // frames the STT received (oldest vs newest).
+      socket.send(new Uint8Array(FRAME_BYTES).fill(i).buffer)
+    }
+    await settle()
+
+    socket.send(SPEECH_START)
+    await waitFor(() => kit.sttCalls() === 1, 'recognizer opened after overflow pre-roll')
+
+    // No live frames; turn closes the bridge immediately.
+    socket.send(TURN)
+    await waitFor(() => sawDoneChunk(socket), 'reply completed after capped pre-roll')
+
+    // Total bytes received by STT must be within the cap (all bytes came from pre-roll).
+    expect(kit.bytes().byteLength).toBeLessThanOrEqual(PREROLL_MAX_BYTES)
+    // At least one frame must be retained.
+    expect(kit.frames().length).toBeGreaterThan(0)
+    // The retained frames are the NEWEST ones (oldest were evicted).
+    // The last frame sent has fill value FRAME_COUNT - 1 = 49.
+    expect(kit.frames().at(-1)![0]).toBe(FRAME_COUNT - 1)
+
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
   })
 })
