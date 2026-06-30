@@ -1,0 +1,122 @@
+.section {
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  font: 500 14px var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px 32px;
+}
+
+.skeleton {
+  min-height: 132px;
+  border-radius: var(--radius-2xl);
+  background: var(--glass-card);
+  border: 1px solid var(--border-hairline);
+}
+
+/* ----------  identity row (exists)  ---------- */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name {
+  font: 400 22px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.voice {
+  font: 500 13px var(--font-body);
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+/* ----------  links into album / profile  ---------- */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font: 500 14px var(--font-body);
+  text-decoration: none;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast);
+}
+
+.link:hover {
+  background: var(--amio-overlay-press);
+  border-color: var(--border-yellow-soft);
+}
+
+/* ----------  setup prompt (none)  ---------- */
+.prompt {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 26px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-yellow);
+  color: #000;
+  font: 600 15px var(--font-body);
+  text-decoration: none;
+  transition:
+    box-shadow var(--t-base),
+    transform var(--t-base);
+}
+
+.cta:hover {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link,
+  .cta {
+    transition: none;
+  }
+  .cta:hover {
+    transform: none;
+  }
+}

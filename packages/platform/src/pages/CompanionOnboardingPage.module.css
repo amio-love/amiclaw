@@ -1,0 +1,150 @@
+.page {
+  padding: 60px 0;
+}
+
+/* ----------  setup form  ---------- */
+.formCard {
+  max-width: 520px;
+  padding: 32px 32px 36px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.label {
+  font: 500 14px var(--font-body);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.optional {
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  background: var(--amio-surface-dark);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font: 400 15px var(--font-body);
+  transition: border-color var(--t-fast);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--amio-yellow);
+}
+
+.errorText {
+  margin: 0;
+  font: 400 13px var(--font-body);
+  color: var(--amio-danger);
+}
+
+/* ----------  already-created identity  ---------- */
+.identityCard {
+  max-width: 520px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.identityHead {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.identityName {
+  font: 400 26px var(--font-display);
+  color: var(--text-1);
+}
+
+.accent {
+  color: var(--amio-yellow);
+  font-style: italic;
+}
+
+.identityVoice {
+  margin-top: 6px;
+  font: 500 13px var(--font-body);
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+.identityAddress {
+  margin-top: 4px;
+  font: 400 13px var(--font-body);
+  color: var(--text-3);
+}
+
+.identityNote {
+  margin: 0;
+  font: 400 14px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+.identityLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.identityLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font: 500 14px var(--font-body);
+  text-decoration: none;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast);
+}
+
+.identityLink:hover {
+  background: var(--amio-overlay-press);
+  border-color: var(--border-yellow-soft);
+}
+
+/* ----------  read-error note  ---------- */
+.note {
+  max-width: 520px;
+  padding: 28px 32px;
+}
+
+.noteText {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input,
+  .identityLink {
+    transition: none;
+  }
+}

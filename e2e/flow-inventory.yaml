@@ -247,20 +247,24 @@ flows:
 
   # === mode② companion & memory flows =========================================
   # The account-anchored companion with two-layer memory (episodes + profile
-  # claims). Data plane only this round — no UI surfaces, and the e2e harness
-  # serves a static build with no Workers runtime — so all three flows are
-  # claimed by @simulation scenarios until downstream UI tasks land
-  # browser-drivable surfaces. Behaviour coverage lives in the vitest suites
+  # claims). The companion-setup flow is now browser-drivable (@playwright): the
+  # onboarding UI (/me/companion) landed and the harness route-mocks
+  # /api/companion* like the auth session. The other two flows stay @simulation:
+  # the memory-capture pipeline that produces real episodes + claims is a
+  # downstream wire task, so the album / profile surfaces have no live data to
+  # drive in a browser yet — their behaviour is covered by the vitest suites
   # against the real schema (packages/companion-memory, packages/api).
 
   - id: companion-setup
     name: Companion first-time setup
     description: >-
-      A signed-in mode② player names their companion and picks its voice via
-      POST /api/companion/setup. The companion is 1:1 with the account (the
-      user_id primary key); a second setup attempt is rejected with 409 — no
-      second-companion path exists anywhere on the platform.
-    steps: [signed-in, companion-setup, one-companion-invariant]
+      A signed-in mode② player opens /me/companion, names their companion and
+      picks one of three platform voices; on success the identity is read back
+      (GET /api/companion) and shown as "你的伙伴 X". The companion is 1:1 with
+      the account (the user_id primary key), so revisiting onboarding shows the
+      existing companion instead of the setup form — no second-companion path
+      exists anywhere on the platform (a second POST is rejected with 409).
+    steps: [signed-in, companion-onboarding, companion-readback, one-companion-invariant]
     status: active
 
   - id: companion-memory-album

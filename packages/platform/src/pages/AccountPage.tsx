@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
+import CompanionCard from '@/components/companion/CompanionCard'
+import { companionSeedEnabled } from '@/lib/companion-seed'
 import styles from './AccountPage.module.css'
 
 /* Account page — handoff §6.11. Reads identity from useAuth():
@@ -12,16 +14,36 @@ import styles from './AccountPage.module.css'
    Platform chrome — every accent is brand yellow; no BombSquad cyan here. */
 export default function AccountPage() {
   const { status, user } = useAuth()
+  // The dev seed lets a Cloudflare preview feel the companion surfaces without a
+  // live session; treat it as enough to show the companion entry here too.
+  const seeded = companionSeedEnabled()
 
   return (
     <div className={styles.page}>
       <EyebrowTag variant="section">我的 · ACCOUNT</EyebrowTag>
-      {status === 'loading' ? null : status === 'authed' && user ? (
+      {status === 'loading' && !seeded ? null : status === 'authed' && user ? (
         <SignedInProfile user={user} />
+      ) : seeded ? (
+        <SeededCompanionPreview />
       ) : (
         <SignedOutGuide />
       )}
     </div>
+  )
+}
+
+/* Dev-seed preview (anonymous + ?companionSeed=1): no real identity, but the
+   companion entry is shown so a Cloudflare preview can reach the album /
+   profile surfaces. Inert for real users (the seed param is off). */
+function SeededCompanionPreview() {
+  return (
+    <>
+      <h2 className={styles.title}>你的星轨。</h2>
+      <p className={styles.lead}>预览模式：这里展示的是示例伙伴与回忆。</p>
+      <div className={styles.detail}>
+        <CompanionCard />
+      </div>
+    </>
   )
 }
 
@@ -60,6 +82,8 @@ function SignedInProfile({ user }: { user: DisplayUser }) {
               </a>
             </GlassCard>
           </section>
+
+          <CompanionCard />
         </div>
       </div>
     </>

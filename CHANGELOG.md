@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Meet your AI companion** - New. Signed-in players can now give their platform
+AI partner a name and choose its voice, so it feels like theirs from the first
+hello. Two new places live under 我的: a memory album to look back on the runs
+you've shared, and an understanding panel where you can see — and correct,
+delete, or switch off — what your companion has come to understand about you,
+with every understanding linking back to the exact memory it came from. Both
+surfaces start out empty, honestly waiting for the story you'll build together.
+
 **BombSquad mode② voice: your first word is no longer dropped, and the AI speaks
 plain spoken words** - Fix. Two recognition/voice polish fixes. First, the very
 start of each utterance was being clipped: the recognizer only opened once the
