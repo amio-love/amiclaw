@@ -654,6 +654,63 @@ export async function* runTurn(
 }
 
 /**
+ * Server-side closing directive for the post-win recap turn.
+ *
+ * Seeded as a synthetic `user` message (like `OPENING_DIRECTIVE`) so the LLM
+ * has a turn to respond to; NEVER client-provided and NEVER persisted into
+ * history (the recap text it elicits is). The persona's own voice rule (spoken
+ * Chinese, no brackets/markdown, etc.) governs the reply; this only constrains
+ * LENGTH and INTENT so the recap stays short and warm.
+ */
+export const CLOSING_DIRECTIVE =
+  '[game complete] The bomb has been fully defused. ' +
+  'In the language you have been speaking (Chinese), congratulate the player warmly in ' +
+  'one short sentence, then give a one-sentence spoken recap of the defusal. ' +
+  'Two sentences total. Spoken naturally. No lists, no brackets, no markdown.'
+
+/**
+ * Run the closing-recap turn — an LLM+TTS-only turn the DO fires after the
+ * player wins a daily defuse, with NO player-audio STT step. Mirrors
+ * {@link runOpeningTurn}: the server-side {@link CLOSING_DIRECTIVE} stands in
+ * for the (absent) player utterance so the LLM speaks a short warm recap before
+ * the results screen appears.
+ *
+ * The synthetic directive is NEVER persisted to history; only the recap text it
+ * produces is. The recap does NOT count toward `turnCount` — it is not a player
+ * turn. LLM/TTS usage IS metered (the turn consumes real provider resources).
+ * I/O-free beyond driving the injected LLM/TTS providers. Mutates `state`
+ * (history, LLM/TTS usage).
+ */
+export async function* runClosingTurn(
+  providers: Pick<TurnProviders, 'llm' | 'tts'>,
+  state: SessionState
+): AsyncIterable<AiResponseChunk> {
+  const turnStart = Date.now()
+  const userMessage: ChatMessage = { role: 'user', content: CLOSING_DIRECTIVE }
+  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+
+  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+
+  // Settle: the closing directive is synthetic and must never leak into history
+  // (the recap it elicits is the only thing remembered). turnCount tracks
+  // player->AI turns, so the closing recap does not increment it.
+  state.history.push({ role: 'assistant', content: result.assistantText })
+  const { outputTokens } = applyLlmTtsUsage(providers, state, result)
+
+  traceTurn('turn', 'closing-settle', {
+    turnCount: state.turnCount,
+    llmDeltaCount: result.llmDeltaCount,
+    llmOutputTokens: outputTokens,
+    sentenceCount: result.sentenceCount,
+    ttsFrameCount: result.ttsFrameCount,
+    ttsAudioBytes: result.ttsAudioBytes,
+    elapsedMs: Date.now() - turnStart,
+  })
+
+  yield { kind: 'text', text: '', done: true }
+}
+
+/**
  * Run the AI-first opening greeting — an LLM+TTS-only turn the DO fires on
  * session establishment, with NO player-audio STT step. The server-side
  * {@link OPENING_DIRECTIVE} stands in for the (absent) player utterance so the
