@@ -5,6 +5,18 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: your first word is no longer dropped, and the AI speaks
+plain spoken words** - Fix. Two recognition/voice polish fixes. First, the very
+start of each utterance was being clipped: the recognizer only opened once the
+client confirmed ~400ms of speech, so the leading word was lost. The server now
+keeps a rolling ~700ms pre-roll buffer of incoming audio and prepends it to the
+recognizer the moment your utterance opens, so the onset is captured. Second, the
+AI partner's replies are read aloud, but it had been emitting parenthetical
+asides and symbol names in brackets (e.g. "the middle wheel (trident)") which got
+spoken literally; its prompt now constrains it to plain spoken Chinese — no
+brackets, markdown, or written-form counts — so a symbol name is woven naturally
+into the sentence instead.
+
 **BombSquad mode② voice: live captions while you speak** - Change. Recognition
 now runs live as you talk instead of waiting until you stop, so your `你：…`
 caption builds up word by word while you're still speaking, and the connection no

@@ -272,6 +272,14 @@ const textEncoderForReason = new TextEncoder()
 const textDecoderForReason = new TextDecoder()
 
 /**
+ * Capacity of the rolling pre-roll audio buffer, in bytes of PCM16 16 kHz audio.
+ * 16 000 samples/s × 0.7 s × 2 bytes/sample = 22 400 bytes (≈700 ms).
+ * This covers the client VAD's `minSpeechMs: 400 ms` qualification window plus
+ * margin for the leading consonant / onset that fires before VAD qualifies.
+ */
+export const PREROLL_MAX_BYTES = 22_400
+
+/**
  * Async audio bridge: binary WS frames are pushed in; the STT step pulls them via
  * `for await`. One bridge backs one live utterance: it is created on
  * `speech-start` (the recognizer opens and starts pulling LIVE while the player
@@ -455,6 +463,19 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * `clearSession` so a torn-down session leaves no stale owner reference.
    */
   private ownerSocket: Connection | undefined
+  /**
+   * Rolling ring-buffer of audio frames received while no live utterance is open
+   * (between utterances, during the AI-first greeting). Frames are appended on
+   * every binary WS message when `liveUtterance` is undefined and evicted (oldest
+   * first) to keep the retained total within `PREROLL_MAX_BYTES`. On
+   * `speech-start`, the buffered frames are prepended to the new `AudioBridge`
+   * before live frames begin flowing, so the onset audio (leading consonant +
+   * first syllable) that arrived before the client VAD qualified is captured by
+   * the recognizer.
+   */
+  private prerollFrames: Uint8Array[] = []
+  /** Running byte total of `prerollFrames` (avoids a per-frame reduce scan). */
+  private prerollBytes = 0
 
   /**
    * Suppress the SDK's own protocol/text frames (identity, `cf_agent_state`, MCP
@@ -520,7 +541,21 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // speaks.
       this.assertSocketOwner(connection)
       const bytes = await audioFrameToBytes(message)
-      this.liveUtterance?.bridge.push(bytes)
+      if (this.liveUtterance !== undefined) {
+        // Utterance open: forward directly to the live recognizer bridge.
+        this.liveUtterance.bridge.push(bytes)
+      } else {
+        // No utterance open: accumulate into the rolling pre-roll ring buffer.
+        // On the next `speech-start`, these frames are prepended to the new
+        // bridge so the recognizer captures the onset audio that arrived before
+        // the client VAD qualified (≈400 ms qualification window).
+        this.prerollFrames.push(bytes)
+        this.prerollBytes += bytes.byteLength
+        // Evict oldest frames until the retained total is within cap.
+        while (this.prerollBytes > PREROLL_MAX_BYTES && this.prerollFrames.length > 0) {
+          this.prerollBytes -= this.prerollFrames.shift()!.byteLength
+        }
+      }
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'message handling failed'
       // Byte-safe truncation: `reason` is a provider error string of unbounded
@@ -727,6 +762,15 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.discardLiveUtterance()
     this.supersedeActiveTurn()
     const bridge = new AudioBridge()
+    // Flush buffered pre-roll frames (onset audio that arrived before the client
+    // VAD qualified) into the new bridge so the recognizer captures the full
+    // utterance from its actual start. Clear after flush: these frames are
+    // consumed once and must not carry over to a subsequent utterance.
+    for (const frame of this.prerollFrames) {
+      bridge.push(frame)
+    }
+    this.prerollFrames = []
+    this.prerollBytes = 0
     const myEpoch = this.turnEpoch
     const utterance: LiveUtterance = {
       bridge,
@@ -883,6 +927,8 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.activeTurn = undefined
     this.ownerSocket = undefined
     this.usageFlushed = false
+    this.prerollFrames = []
+    this.prerollBytes = 0
   }
 
   /**
