@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button, GlassCard, Modal } from '@amiclaw/ui'
 import type { MemoryView } from '@shared/companion-types'
@@ -10,6 +10,10 @@ import MemoryCard from '@/components/companion/MemoryCard'
 import styles from './MemoryAlbumPage.module.css'
 
 type LoadStatus = 'loading' | 'ready' | 'error'
+
+// Bound the focus auto-paginate so a deleted / nonexistent focus id can never
+// loop forever — stop at cursor exhaustion or this many extra pages.
+const MAX_FOCUS_AUTO_PAGES = 20
 
 /* /me/memories — the memory album. Keyset-paginated episode cards, newest
    first; each is a single-delete with a confirm step (deleting a memory can
@@ -26,6 +30,12 @@ export default function MemoryAlbumPage() {
   const [pendingDelete, setPendingDelete] = useState<MemoryView | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteFailed, setDeleteFailed] = useState(false)
+  // How many pages the focus auto-paginate has already pulled (bound the loop).
+  const focusAutoPages = useRef(0)
+
+  // The focused episode (an evidence link's `?focus=`) is resolvable once it is
+  // in the loaded set — or when there is no focus at all.
+  const focusResolved = focusId === null || memories.some((m) => m.id === focusId)
 
   useEffect(() => {
     if (access !== 'ready') return
@@ -45,7 +55,7 @@ export default function MemoryAlbumPage() {
     }
   }, [access])
 
-  async function loadMore() {
+  const loadMore = useCallback(async () => {
     if (cursor === undefined || loadingMore) return
     setLoadingMore(true)
     const result = await fetchMemories(cursor)
@@ -54,7 +64,24 @@ export default function MemoryAlbumPage() {
       setCursor(result.nextCursor)
     }
     setLoadingMore(false)
-  }
+  }, [cursor, loadingMore])
+
+  // A new focus target resets the page budget.
+  useEffect(() => {
+    focusAutoPages.current = 0
+  }, [focusId])
+
+  // Evidence click-back beyond the first page: if the focused episode is not in
+  // the loaded set, auto-paginate (via the existing cursor) until it is found or
+  // pagination is exhausted (cursor === undefined) — bounded by
+  // MAX_FOCUS_AUTO_PAGES. If never found, the album still renders normally.
+  useEffect(() => {
+    if (focusResolved || status !== 'ready') return
+    if (cursor === undefined || loadingMore) return
+    if (focusAutoPages.current >= MAX_FOCUS_AUTO_PAGES) return
+    focusAutoPages.current += 1
+    loadMore()
+  }, [focusResolved, status, cursor, loadingMore, loadMore])
 
   async function confirmDelete() {
     if (pendingDelete === null) return

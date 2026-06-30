@@ -3,9 +3,11 @@
  *
  *   1. an honest empty state (no「即将推出」) when there are no memories;
  *   2. the album lists episode cards;
- *   3. deleting a memory confirms, then removes the card on success.
+ *   3. deleting a memory confirms, then removes the card on success;
+ *   4. an evidence click-back (?focus=) auto-paginates to land an episode that
+ *      lives beyond the first keyset page.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { MemoryView } from '@shared/companion-types'
@@ -14,6 +16,11 @@ import MemoryAlbumPage from './MemoryAlbumPage'
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
 }
+
+// jsdom does not implement scrollIntoView; a focused MemoryCard calls it.
+beforeEach(() => {
+  Element.prototype.scrollIntoView = () => {}
+})
 
 const AUTHED = { authenticated: true, identity: { user_id: 'u_1', email: 'nova@amio.fans' } }
 
@@ -99,5 +106,40 @@ describe('MemoryAlbumPage /me/memories', () => {
     // The card is gone; the other memory survives.
     await screen.findByText('第一次通关每日挑战')
     expect(screen.queryByText('最后三秒拆掉了炸弹')).not.toBeInTheDocument()
+  })
+
+  it('auto-paginates so an evidence click-back lands an episode on page 2', async () => {
+    // page 1 = MEMORIES (+ a cursor); page 2 = the focused episode ep-3.
+    const PAGE2: MemoryView = {
+      id: 'ep-3',
+      occurred_at: '2026-05-10T18:00:00.000Z',
+      game_id: 'bombsquad',
+      title: '更早的那一局',
+      narrative: '一段更久以前的回忆。',
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/auth/session')) return Promise.resolve(json(AUTHED))
+        if (url.includes('/api/companion/memories')) {
+          if (url.includes('cursor=c1')) return Promise.resolve(json({ memories: [PAGE2] }))
+          return Promise.resolve(json({ memories: MEMORIES, next_cursor: 'c1' }))
+        }
+        return Promise.resolve(json({}, 404))
+      })
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/me/memories?focus=ep-3']}>
+        <Routes>
+          <Route path="/me/memories" element={<MemoryAlbumPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // ep-3 lives on page 2; it appears without the player clicking 看更早的回忆.
+    expect(await screen.findByText('更早的那一局')).toBeInTheDocument()
+    expect(screen.getByText('最后三秒拆掉了炸弹')).toBeInTheDocument()
   })
 })

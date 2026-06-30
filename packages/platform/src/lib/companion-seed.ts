@@ -9,15 +9,23 @@
  * across the nested `/me/*` routes within the preview session. `?companionSeed=0`
  * clears it.
  *
- * Three guarantees:
- *  1. MUST render in a Cloudflare preview — a preview is a production `vite
+ * Four guarantees:
+ *  1. PREVIEW / LOCAL ONLY — the seed may activate ONLY on a Cloudflare Pages
+ *     preview host (`*.amiclaw.pages.dev` branch/hash subdomains) or local dev
+ *     (`localhost` / `127.0.0.1`). On the production hosts — the custom domain
+ *     `claw.amio.fans` AND the bare production `amiclaw.pages.dev` — it is inert
+ *     (no flag persisted, no API short-circuit, the login gate stays intact), so
+ *     `?companionSeed=1` can never bypass auth or fake destructive actions in
+ *     production. Note: bare `amiclaw.pages.dev` does NOT end with
+ *     `.amiclaw.pages.dev`, so the `endsWith` check correctly excludes it.
+ *  2. MUST render in a Cloudflare PREVIEW — a preview is a production `vite
  *     build`, so this is NOT gated on `import.meta.env.DEV` (which is statically
  *     false there and would dead-code-eliminate the seed). The gate is the
- *     runtime query param instead.
- *  2. Inert for real users — with no `companionSeed` param (and no persisted
+ *     runtime host + query param instead.
+ *  3. Inert for real users — with no `companionSeed` param (and no persisted
  *     flag) `companionSeedEnabled()` is false and the data layer talks to the
  *     real API exactly as in production.
- *  3. READ-ONLY — the seed never writes anywhere. In seed mode the data layer
+ *  4. READ-ONLY — the seed never writes anywhere. In seed mode the data layer
  *     short-circuits every read to this mock data and turns every mutation into
  *     a local no-op (the page reflects it in React state only); nothing reaches
  *     the backend.
@@ -29,13 +37,29 @@ const SEED_QUERY_KEY = 'companionSeed'
 const SEED_STORAGE_KEY = 'amiclaw:companionSeed'
 
 /**
- * Whether the dev seed is active for this preview session. Reads the
- * `companionSeed` query param (1 enables + persists, 0 disables + clears),
- * else the persisted sessionStorage flag. SSR-safe: returns false with no
- * `window`.
+ * Whether the current host is allowed to run the seed: local dev, or a
+ * Cloudflare Pages preview subdomain (`*.amiclaw.pages.dev`). The custom
+ * production domain and the bare production `amiclaw.pages.dev` are excluded.
+ * SSR-safe.
+ */
+function seedHostAllowed(): boolean {
+  if (typeof window === 'undefined') return false
+  const host = window.location.hostname
+  return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.amiclaw.pages.dev')
+}
+
+/**
+ * Whether the dev seed is active for this preview session. Gated FIRST on the
+ * host (preview / local only — see `seedHostAllowed`); on a production host it
+ * returns false without reading or persisting any flag. On an allowed host it
+ * reads the `companionSeed` query param (1 enables + persists, 0 disables +
+ * clears) else the persisted sessionStorage flag. SSR-safe: returns false with
+ * no `window`.
  */
 export function companionSeedEnabled(): boolean {
   if (typeof window === 'undefined') return false
+  // Production hosts can never enable the seed — no persistence, no bypass.
+  if (!seedHostAllowed()) return false
   try {
     const param = new URLSearchParams(window.location.search).get(SEED_QUERY_KEY)
     if (param === '1') {
