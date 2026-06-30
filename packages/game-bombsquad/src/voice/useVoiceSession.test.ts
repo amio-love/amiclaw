@@ -378,6 +378,35 @@ describe('useVoiceSession — client VAD', () => {
     expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(true)
   })
 
+  it('stays thinking when noise crosses the VAD threshold while awaiting the reply', async () => {
+    const { result, ws } = await ready()
+    finishGreeting(ws)
+    // A real player utterance: speech then silence -> turn sent -> thinking.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    act(() => {
+      for (let i = 0; i < 10; i += 1) fireFrame(0.0)
+    })
+    expect(result.current.conversationPhase).toBe('thinking')
+    const speechStartsBefore = ws.controlMessages().filter((m) => m.type === 'speech-start').length
+
+    // Still awaiting the reply (no chunk yet). The open mic picks up a breath /
+    // room-noise tail crossing the threshold for >= minSpeechMs. This must NOT
+    // yank the indicator from `thinking` back to `listening`, nor open a spurious
+    // server utterance — the AI still holds the floor.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    expect(result.current.playerSpeaking).toBe(false)
+    expect(result.current.conversationPhase).toBe('thinking')
+    expect(ws.controlMessages().filter((m) => m.type === 'speech-start').length).toBe(
+      speechStartsBefore
+    )
+  })
+
   it('sends speech-start then turn, in order, for a real player utterance', async () => {
     const { ws } = await ready()
     finishGreeting(ws)
