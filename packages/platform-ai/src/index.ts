@@ -85,9 +85,12 @@ export {
   DEV_AUTH_USER_ID,
 } from './auth-seam'
 
-// Testable turn-pipeline orchestration (DO is a thin shell over this).
-export type { UsageCounters, SessionState, TurnProviders } from './turn-pipeline'
-export { runTurn, splitSentences } from './turn-pipeline'
+// Testable turn-pipeline orchestration (DO is a thin shell over this). The live
+// WS transport drives the two phases separately — `runUtteranceStt` on
+// `speech-start` (interim captions WHILE the player speaks) and `runReply` on
+// `turn`; `runTurn` is their end-to-end composition (the buffered primitive).
+export type { UsageCounters, SessionState, TurnProviders, UtteranceResult } from './turn-pipeline'
+export { runTurn, runUtteranceStt, runReply, splitSentences } from './turn-pipeline'
 
 // Session-terminal usage metering flush (the DO is a thin shell over this).
 export type { UsageKvWriter, UsageRecord, SessionUsageSnapshot } from './usage-flush'

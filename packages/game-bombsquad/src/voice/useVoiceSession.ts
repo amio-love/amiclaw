@@ -10,15 +10,20 @@
  *
  * Turn model (important): the CLIENT runs the VAD. On `create` the server fires
  * the AI-first opening greeting (no client input). Thereafter the hook streams the
- * mic continuously and the client-side VAD detects end-of-utterance (the player
- * went silent after speaking) and sends `{type:'turn'}`, which the server runs as
- * a normal STT->LLM->TTS turn over the audio buffered since the last turn. Turns
- * are SERIAL server-side: a `turn` sent while one is in flight is rejected with a
- * benign `turn_in_flight`, so the hook only sends when the AI is idle (not
- * speaking, not awaiting, not mid-stream) — otherwise the open mic picking up the
- * AI's own greeting / the stopwatch tick would fire spurious, rejected turns. The
- * VAD additionally drives the 3-state conversation phase (listening / thinking /
- * speaking) and barge-in (stop local playback when the player talks over the AI).
+ * mic continuously; the client-side VAD detects utterance START (the player began
+ * speaking) and sends `{type:'speech-start'}`, which opens the server recognizer
+ * so it transcribes LIVE while the player talks, then detects end-of-utterance
+ * (the player went silent) and sends `{type:'turn'}`, which finalizes that turn as
+ * a normal STT->LLM->TTS turn over the audio buffered since the last turn. One
+ * speech-start per utterance, paired with the one turn. Turns are SERIAL
+ * server-side: a `turn` sent while one is in flight is rejected with a benign
+ * `turn_in_flight`, so BOTH sends fire only when the AI is idle (not speaking, not
+ * awaiting, not mid-stream) — otherwise the open mic picking up the AI's own
+ * greeting / the stopwatch tick would open a spurious utterance / fire a rejected
+ * turn. The one mid-stream exception is a genuine barge-in (the player talks over
+ * the AI): it stops local playback AND signals speech-start, since the player has
+ * taken the floor. The VAD additionally drives the 3-state conversation phase
+ * (listening / thinking / speaking).
  *
  * Security invariant (load-bearing, mirrors the demo): this hook connects ONLY to
  * the same-origin Worker WS and sends ONLY `{gameId, manualData, gameState}` plus
@@ -381,10 +386,34 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     // playback at once and drop the rest of the interrupted turn's streamed
     // chunks (text + audio) — the server keeps streaming them (it cancels nothing
     // in v1), so the client must locally discard them until that turn's `done`.
-    if (playingCountRef.current > 0) {
+    const bargeIn = playingCountRef.current > 0
+    if (bargeIn) {
       interruptPlayback()
       if (turnStreamingRef.current) suppressTurnRef.current = true
       safeDispatch({ type: 'barge-in' })
+    }
+    // Signal the utterance START to the server so it opens the recognizer and
+    // transcribes LIVE while the player speaks; the matching `turn` on
+    // utterance-end finalizes it (one speech-start per utterance, paired with the
+    // one turn). Guard it the SAME way the `turn` send in `onUtteranceEnd` is
+    // guarded — only signal a REAL utterance. A genuine barge-in (the player took
+    // the floor over the AI's own audio) IS a real utterance, so it signals after
+    // the interrupt above; otherwise suppress while the AI holds the floor (the
+    // AI-first opening greeting / a pending reply — `awaitingResponse`, set until
+    // the first reply chunk — or a non-barged-in turn still streaming), so the
+    // greeting's own voice or a leaked stopwatch tick cannot open a spurious
+    // utterance. The mic only opens on `created`, so this never fires pre-session.
+    const aiHoldsFloor =
+      !bargeIn &&
+      (awaitingResponseRef.current || (turnStreamingRef.current && !suppressTurnRef.current))
+    if (aiHoldsFloor) return
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'speech-start' }))
+      } catch {
+        /* non-fatal — a dropped speech-start just defers live transcription to the turn */
+      }
     }
   }, [interruptPlayback, safeDispatch])
 

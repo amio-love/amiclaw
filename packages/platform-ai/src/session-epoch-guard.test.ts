@@ -44,6 +44,7 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
+  driveUtteranceToLlm,
   makeGatedProviders,
   makeSessionDo,
   messagesOfType,
@@ -72,8 +73,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // Generation 1: an owner session with a turn parked at a provider await.
     const socket1 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket1)
-    socket1.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'gen-1 turn parked')
+    await driveUtteranceToLlm(socket1, kit, 1)
     expect(kit.sttCalls()).toBe(1)
 
     // Owner ends mid-turn: fire-and-forget cancel + clearSession (epoch bump).
@@ -88,8 +88,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // starts a NEW turn. This is generation 2.
     const socket2 = await openSocket(session, 'user-B')
     await createSessionOverWs(socket2)
-    socket2.send(TURN)
-    await waitFor(() => kit.sttCalls() === 2, 'gen-2 turn started')
+    await driveUtteranceToLlm(socket2, kit, 2)
     expect(kit.sttCalls()).toBe(2)
     expect(kit.llmTurns).toHaveLength(2)
 
@@ -132,8 +131,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // Generation 1 parks mid-turn, then the owner socket drops WITHOUT `end`.
     const socket1 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket1)
-    socket1.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'gen-1 turn parked')
+    await driveUtteranceToLlm(socket1, kit, 1)
     socket1.disconnect()
     await settle()
     expect(kit.llmTurns[0].finallyRan()).toBe(false)
@@ -141,8 +139,7 @@ describe('real VoiceSessionDO — epoch guard, stale finally is a no-op (P2)', (
     // Reconnect: fresh session + new turn (generation 2).
     const socket2 = await openSocket(session, 'user-A')
     await createSessionOverWs(socket2)
-    socket2.send(TURN)
-    await waitFor(() => kit.sttCalls() === 2, 'gen-2 turn started')
+    await driveUtteranceToLlm(socket2, kit, 2)
     expect(kit.sttCalls()).toBe(2)
 
     // gen-1's late `finally` runs after gen 2 is live: must be a no-op.
