@@ -53,6 +53,22 @@ export class ManualNetworkError extends Error {
   }
 }
 
+/**
+ * Converts a daily manual HTML share URL (`/manual/<date>`) to its
+ * machine-readable YAML data URL (`/manual/data/<date>.yaml`).
+ *
+ * The engine always fetches the YAML data file for puzzle generation; the HTML
+ * page at `/manual/<date>` is the human/AI-readable share link. This helper
+ * lets callers normalise the URL before fetching regardless of which form
+ * they receive. If the URL is already a data URL (contains `/manual/data/`)
+ * it is returned unchanged. URLs that do not match the expected pattern are
+ * also returned unchanged (no silent data loss).
+ */
+export function toManualDataUrl(shareUrl: string): string {
+  if (shareUrl.includes('/manual/data/')) return shareUrl
+  return shareUrl.replace(/(\/manual\/)([0-9]{4}-[0-9]{2}-[0-9]{2})$/, '$1data/$2.yaml')
+}
+
 export async function loadManual(url: string): Promise<Manual> {
   if (CACHE.has(url)) return CACHE.get(url)!
 
