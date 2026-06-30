@@ -20,7 +20,7 @@ import { fetchCompanion, type CompanionStats } from '@/lib/companion-api'
 export type CompanionState =
   | { status: 'loading'; companion: null }
   | { status: 'none'; companion: null }
-  | { status: 'exists'; companion: CompanionIdentity; stats?: CompanionStats }
+  | { status: 'exists'; companion: CompanionIdentity; stats: CompanionStats }
   | { status: 'error'; companion: null }
 
 export function useCompanion(enabled: boolean): {

@@ -59,7 +59,12 @@ describe('companion-api (real path)', () => {
 
   it('fetchCompanion maps 200 / 404 / error', async () => {
     stubFetch(() => Promise.resolve(jsonResponse(SEED_COMPANION, 200)))
-    expect(await fetchCompanion()).toEqual({ kind: 'exists', companion: SEED_COMPANION })
+    // Real mode always carries honest-zero game stats (no per-user source yet).
+    expect(await fetchCompanion()).toEqual({
+      kind: 'exists',
+      companion: SEED_COMPANION,
+      stats: { games_completed: 0, successes: 0 },
+    })
 
     stubFetch(() => Promise.resolve(jsonResponse({ error: 'no companion set up' }, 404)))
     expect(await fetchCompanion()).toEqual({ kind: 'none' })

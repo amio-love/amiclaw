@@ -43,6 +43,14 @@ export type { CompanionStats } from './companion-seed'
 const BASE = `${API_BASE}/api/companion`
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
+/**
+ * Real-mode companionship counters. There is NO per-user game-stats source yet
+ * — the leaderboard `user_id` migration and the capture pipeline are both
+ * downstream — so the honest current count IS zero. These are genuine 0s, never
+ * fabricated non-zero numbers; swap in the real read once that data lands.
+ */
+const REAL_STATS_PLACEHOLDER: CompanionStats = { games_completed: 0, successes: 0 }
+
 /** Pull a server-supplied `{ error }` string off a non-ok response, if any. */
 async function readError(res: Response): Promise<string | undefined> {
   try {
@@ -56,13 +64,13 @@ async function readError(res: Response): Promise<string | undefined> {
 // --- Identity read -----------------------------------------------------------
 
 export type CompanionReadResult =
-  | { kind: 'exists'; companion: CompanionIdentity; stats?: CompanionStats }
+  | { kind: 'exists'; companion: CompanionIdentity; stats: CompanionStats }
   | { kind: 'none' }
   | { kind: 'error' }
 
 export async function fetchCompanion(): Promise<CompanionReadResult> {
-  // Seed mode carries illustrative companionship counters; real mode has none
-  // (no per-user game-stats source yet), so `stats` stays undefined there.
+  // `stats` is ALWAYS present: illustrative counters in seed mode, honest zeros
+  // in real mode (no per-user game-stats source yet). The card shows all three.
   if (companionSeedEnabled()) {
     return { kind: 'exists', companion: SEED_COMPANION, stats: seedCompanionStats() }
   }
@@ -71,7 +79,7 @@ export async function fetchCompanion(): Promise<CompanionReadResult> {
     if (res.status === 404) return { kind: 'none' }
     if (!res.ok) return { kind: 'error' }
     const companion = (await res.json()) as CompanionResponse
-    return { kind: 'exists', companion }
+    return { kind: 'exists', companion, stats: REAL_STATS_PLACEHOLDER }
   } catch {
     return { kind: 'error' }
   }

@@ -24,7 +24,18 @@
   border: 1px solid var(--border-hairline);
 }
 
-/* ----------  identity row (exists)  ---------- */
+/* ----------  header: identity (left) + stat cluster (right)  ----------
+   Uses the full card width on desktop — identity pinned left, stats pinned
+   right. Wraps to a stacked, full-width layout on narrow mobile so the stats
+   never leave a right-empty gap. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
 .identity {
   display: flex;
   align-items: center;
@@ -53,11 +64,25 @@
   letter-spacing: 0.04em;
 }
 
-/* ----------  companionship stats strip  ---------- */
+/* ----------  companionship stats cluster  ---------- */
 .stats {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+/* Narrow mobile: stack identity above a full-width stat row, the three pills
+   spread edge-to-edge so the row fills the width (no right-empty gap). */
+@media (max-width: 560px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+  }
+
+  .stats {
+    justify-content: space-between;
+  }
 }
 
 /* ----------  links into album / profile  ---------- */

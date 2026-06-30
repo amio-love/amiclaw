@@ -22,16 +22,21 @@ export default function CompanionCard() {
         <div className={styles.skeleton} aria-hidden="true" />
       ) : state.status === 'exists' ? (
         <GlassCard radius="2xl" className={styles.card}>
-          <div className={styles.identity}>
-            <ConicAvatar size={64} letter={state.companion.name.charAt(0)} ariaHidden />
-            <div className={styles.meta}>
-              <div className={styles.name}>
-                你的伙伴 <span className={styles.accent}>{state.companion.name}</span>
+          {/* Identity on the left, the stat cluster on the right — the row uses
+              the full card width and wraps to a stacked layout on narrow mobile
+              so the stats never leave a right-empty gap. */}
+          <div className={styles.header}>
+            <div className={styles.identity}>
+              <ConicAvatar size={64} letter={state.companion.name.charAt(0)} ariaHidden />
+              <div className={styles.meta}>
+                <div className={styles.name}>
+                  你的伙伴 <span className={styles.accent}>{state.companion.name}</span>
+                </div>
+                <div className={styles.voice}>{voiceName(state.companion.voice_id)}</div>
               </div>
-              <div className={styles.voice}>{voiceName(state.companion.voice_id)}</div>
             </div>
+            <CompanionStatsStrip createdAt={state.companion.created_at} stats={state.stats} />
           </div>
-          <CompanionStatsStrip createdAt={state.companion.created_at} stats={state.stats} />
           <div className={styles.links}>
             <Link to="/me/memories" className={styles.link}>
               回忆相册
@@ -57,28 +62,23 @@ export default function CompanionCard() {
   )
 }
 
-/* The companionship stats strip.
-     - 「在一起 X 天」 is REAL — computed from the companion's `created_at` — so it
-       always shows, in production too.
-     - 「完成 N 局」/「成功 N 次」 have no real per-user source yet (they need the
-       leaderboard user_id migration + the capture pipeline), so they come from
-       an optional `stats` object populated ONLY in seed mode. In production
-       `stats` is undefined and these two are hidden entirely — never a fake 0. */
-function CompanionStatsStrip({ createdAt, stats }: { createdAt: string; stats?: CompanionStats }) {
+/* The companionship stats cluster — three pills, idiomatic StatPill usage
+   (number+unit in `value`, a clean Chinese word in `label`; no "·", which
+   belongs to bilingual eyebrows, not stat copy):
+     - 「在一起 X 天」 — REAL, from the companion's `created_at`.
+     - 「完成 N 局」/「成功 N 次」 — always shown, an honest 0 in production until
+       the per-user game-stats source lands; illustrative numbers in seed mode. */
+function CompanionStatsStrip({ createdAt, stats }: { createdAt: string; stats: CompanionStats }) {
   const days = daysTogether(createdAt)
   return (
     <div className={styles.stats}>
       {days >= 1 ? (
-        <StatPill value={days} label="在一起 · 天" />
+        <StatPill value={`${days} 天`} label="在一起" />
       ) : (
         <StatPill value="今天" label="认识你" />
       )}
-      {stats ? (
-        <>
-          <StatPill value={stats.games_completed} label="完成 · 局" />
-          <StatPill value={stats.successes} label="成功 · 次" />
-        </>
-      ) : null}
+      <StatPill value={`${stats.games_completed} 局`} label="完成" />
+      <StatPill value={`${stats.successes} 次`} label="成功" />
     </div>
   )
 }

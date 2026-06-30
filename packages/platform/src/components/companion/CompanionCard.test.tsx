@@ -40,7 +40,7 @@ describe('CompanionCard stats strip', () => {
     window.sessionStorage.clear()
   })
 
-  it('real mode: computes 在一起 N 天 from created_at and hides game stats', async () => {
+  it('real mode: shows 在一起 N 天 from created_at plus honest-zero game stats', async () => {
     const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString()
     vi.stubGlobal(
       'fetch',
@@ -64,15 +64,14 @@ describe('CompanionCard stats strip', () => {
     renderCard()
 
     expect(await screen.findByText('小南')).toBeInTheDocument()
-    // The real days-together stat.
-    const daysPill = pillByLabel('在一起 · 天')
-    expect(within(daysPill).getByText('5')).toBeInTheDocument()
-    // The seed-only game stats are hidden in production / real mode.
-    expect(screen.queryByText('完成 · 局')).not.toBeInTheDocument()
-    expect(screen.queryByText('成功 · 次')).not.toBeInTheDocument()
+    // The real days-together stat — number + unit in the value, clean label.
+    expect(within(pillByLabel('在一起')).getByText('5 天')).toBeInTheDocument()
+    // The game stats are ALWAYS shown — an honest 0 in production, never hidden.
+    expect(within(pillByLabel('完成')).getByText('0 局')).toBeInTheDocument()
+    expect(within(pillByLabel('成功')).getByText('0 次')).toBeInTheDocument()
   })
 
-  it('seed mode: shows the full strip and never calls fetch', async () => {
+  it('seed mode: shows the full strip with illustrative numbers and never calls fetch', async () => {
     // jsdom host is localhost (a seed-allowed host); the persisted flag enables seed.
     window.sessionStorage.setItem(SEED_STORAGE_KEY, '1')
     const fetchSpy = vi.fn(() => Promise.reject(new Error('fetch must not run in seed mode')))
@@ -83,10 +82,10 @@ describe('CompanionCard stats strip', () => {
     expect(await screen.findByText('小南')).toBeInTheDocument()
     // A days-together pill is always present (exact copy depends on the clock vs
     // the seed's 2026-05-30 created_at, so assert either form).
-    expect(screen.queryByText('在一起 · 天') ?? screen.queryByText('认识你')).toBeInTheDocument()
-    // The seed-only counters.
-    expect(within(pillByLabel('完成 · 局')).getByText('12')).toBeInTheDocument()
-    expect(within(pillByLabel('成功 · 次')).getByText('9')).toBeInTheDocument()
+    expect(screen.queryByText('在一起') ?? screen.queryByText('认识你')).toBeInTheDocument()
+    // The illustrative seed counters.
+    expect(within(pillByLabel('完成')).getByText('12 局')).toBeInTheDocument()
+    expect(within(pillByLabel('成功')).getByText('9 次')).toBeInTheDocument()
 
     expect(fetchSpy).not.toHaveBeenCalled()
   })
