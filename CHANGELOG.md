@@ -15,6 +15,17 @@ with every understanding linking back to the exact memory it came from. If you
 haven't met your companion yet, both places guide you to do that first. They
 start out empty, honestly waiting for the story you'll build together.
 
+**BombSquad leaderboard: a single run can no longer appear twice** - Fix. One
+finished daily run was sometimes posted to the leaderboard more than once
+(showing two identical rows), because the result page had several submit paths
+that could each fire and the backend appended a new row on every POST. The fix
+adds two layers: the result page now latches submission so a run is sent at most
+once per page lifecycle (the retry button still works after a real failure), and
+every run carries a stable client-generated `run_id` so the backend replaces any
+existing row with that id instead of appending — a refresh or network race
+collapses to one row. `run_id` is internal and never exposed in the public
+leaderboard response.
+
 **BombSquad mode② voice: your first word is no longer dropped, and the AI speaks
 plain spoken words** - Fix. Two recognition/voice polish fixes. First, the very
 start of each utterance was being clipped: the recognizer only opened once the
