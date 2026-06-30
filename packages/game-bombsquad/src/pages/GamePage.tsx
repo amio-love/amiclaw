@@ -7,6 +7,7 @@ import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
 import {
   loadManual,
+  toManualDataUrl,
   ManualNetworkError,
   ManualNotFoundError,
   ManualParseError,
@@ -340,10 +341,16 @@ export default function GamePage() {
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
         : 'https://claw.amio.fans'
+    // Daily: the engine fetches the machine-readable YAML data file
+    // (`/manual/data/<date>.yaml`), NOT the HTML share page (`/manual/<date>`).
+    // The player→AI share URL stays at `/manual/<date>` (ConnectPage sources it
+    // independently from useDailyChallenge — it never reads state.manualUrl).
+    // `customUrl` arrives as the HTML share URL from the `?url=` param; convert
+    // it to its YAML equivalent so the engine always fetches parseable YAML.
     const manualUrl =
       mode === 'practice'
         ? `${origin}/manual/practice`
-        : (customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
+        : toManualDataUrl(customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
     const attemptNumber = getAttemptNumberForMode(mode)
 
     dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })

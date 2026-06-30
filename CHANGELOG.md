@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad daily challenge: "手册格式异常" on start** - Fix. The daily run
+always showed a parse error on load because the game engine was fetching the
+human-readable HTML manual page (`/manual/<date>`) and trying to parse it as
+YAML. The engine now fetches the machine-readable YAML data file
+(`/manual/data/<date>.yaml`). The player→AI share link that ConnectPage copies
+to the clipboard is unchanged — it still points to the HTML page at
+`/manual/<date>`, which is what the AI partner reads.
+
 **BombSquad mode② voice: one conversation per run, clearer recognition, longer
 pauses** - Change. The AI partner is now a single continuous conversation for the
 whole daily run: it greets you once and remembers the whole game, and when you
