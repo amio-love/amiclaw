@@ -28,6 +28,19 @@ function makeManual(): Manual {
         rule: 'keypad rule text',
       },
     },
+    symbols: {
+      delta: { description: '等边三角形' },
+      star: { description: '五角星' },
+      diamond: { description: '菱形' },
+      trident: { description: '三叉戟,易被误描述为叉子' },
+      cross: { description: '十字' },
+      psi: { description: 'U 形碗加竖线,易被误描述为三叉戟' },
+      omega: { description: '马蹄铁形' },
+      lambda: { description: '倒 V 形' },
+      sigma: { description: 'Σ 形' },
+      theta: { description: '椭圆中横线' },
+      phi: { description: '圆加竖线' },
+    },
     decoy_modules: {
       morse_code: { rule: 'a decoy module that must not leak into ManualData' },
     },
@@ -76,13 +89,55 @@ describe('bombsquadManualToManualData', () => {
     )
   })
 
-  it('preserves each module section content verbatim', () => {
+  it('preserves non-symbol module sections verbatim', () => {
     const manual = makeManual()
     const { sections } = bombsquadManualToManualData(manual, 'v1')
     expect(sections.wire_routing).toEqual(manual.modules.wire_routing)
-    expect(sections.symbol_dial).toEqual(manual.modules.symbol_dial)
     expect(sections.button).toEqual(manual.modules.button)
-    expect(sections.keypad).toEqual(manual.modules.keypad)
+  })
+
+  it('preserves symbol module fields and adds symbol_descriptions', () => {
+    const manual = makeManual()
+    const { sections } = bombsquadManualToManualData(manual, 'v1')
+    // Original module fields ride through unchanged…
+    expect(sections.symbol_dial).toMatchObject(manual.modules.symbol_dial)
+    expect(sections.keypad).toMatchObject(manual.modules.keypad)
+    // …plus the referenced symbols' visual descriptions.
+    expect(sections.symbol_dial).toHaveProperty('symbol_descriptions')
+    expect(sections.keypad).toHaveProperty('symbol_descriptions')
+  })
+
+  it('injects descriptions for every symbol referenced by symbol_dial', () => {
+    const manual = makeManual()
+    const { sections } = bombsquadManualToManualData(manual, 'v1')
+    const descriptions = (sections.symbol_dial as { symbol_descriptions: Record<string, string> })
+      .symbol_descriptions
+    // The dial's single column references these five symbols.
+    expect(Object.keys(descriptions).sort()).toEqual(
+      ['cross', 'delta', 'diamond', 'star', 'trident'].sort()
+    )
+    // The disambiguation text (the whole point) survives intact.
+    expect(descriptions.trident).toContain('易被误描述为叉子')
+  })
+
+  it('injects descriptions for every symbol referenced by keypad', () => {
+    const manual = makeManual()
+    const { sections } = bombsquadManualToManualData(manual, 'v1')
+    const descriptions = (sections.keypad as { symbol_descriptions: Record<string, string> })
+      .symbol_descriptions
+    expect(Object.keys(descriptions).sort()).toEqual(
+      ['lambda', 'omega', 'phi', 'psi', 'sigma', 'theta'].sort()
+    )
+    expect(descriptions.psi).toContain('易被误描述为三叉戟')
+  })
+
+  it('tolerates a manual with no top-level symbols block (empty descriptions)', () => {
+    const manual = makeManual()
+    delete manual.symbols
+    const { sections } = bombsquadManualToManualData(manual, 'v1')
+    expect((sections.symbol_dial as { symbol_descriptions: unknown }).symbol_descriptions).toEqual(
+      {}
+    )
   })
 
   it('excludes decoy_modules — only real modules are injected', () => {

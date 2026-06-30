@@ -15,6 +15,27 @@ with every understanding linking back to the exact memory it came from. If you
 haven't met your companion yet, both places guide you to do that first. They
 start out empty, honestly waiting for the story you'll build together.
 
+**BombSquad mode② voice: the indicator no longer flips back to "聆听中" mid-think** -
+Fix. After you finished speaking, the indicator would show "思考中" and then snap
+straight back to "聆听中" without the AI answering. A breath or room-noise tail
+crossing the voice-detection threshold for a moment while the AI was still
+thinking was being treated as the start of a new utterance for the indicator
+only — the server request was already suppressed, but the on-screen phase was
+flipped before that same guard ran. The indicator now stays "思考中" until the AI
+replies (or the no-response fallback fires); a genuine interruption while the AI
+is speaking still works.
+
+**BombSquad mode② voice: the AI can now tell the symbols apart** - Fix. On the
+星盘 (dial) and 星符 (keypad) modules the AI kept asking the player to re-describe
+a symbol — it only received the lookup table of bare symbol names (psi / spiral /
+crescent / …) and never the visual descriptions, so it could not map a player's
+shape description ("海神叉", "咖啡豆") to the right name. Those descriptions live in
+the manual's top-level `symbols` block, which sits outside any single module
+section and so never rode the per-module injection. The two symbol modules now
+embed the visual description of each symbol they reference, so the AI receives
+both the lookup table and what each symbol looks like — including the built-in
+disambiguation for look-alike pairs (psi vs trident, hourglass vs delta).
+
 **BombSquad mode② voice: the AI gives a short closing recap when you win** - Add.
 After a successful daily defuse the results screen used to appear instantly,
 cutting the voice partner off before it could react. Now, on a daily win, the AI
