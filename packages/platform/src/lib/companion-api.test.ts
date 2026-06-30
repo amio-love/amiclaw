@@ -181,7 +181,12 @@ describe('companion-api (dev seed)', () => {
   it('reads return mock data without calling fetch', async () => {
     const fn = stubFetch(() => Promise.reject(new Error('fetch must not be called in seed mode')))
 
-    expect(await fetchCompanion()).toEqual({ kind: 'exists', companion: SEED_COMPANION })
+    // Seed mode also carries illustrative companionship counters.
+    expect(await fetchCompanion()).toEqual({
+      kind: 'exists',
+      companion: SEED_COMPANION,
+      stats: { games_completed: 12, successes: 9 },
+    })
     const memories = await fetchMemories()
     expect(memories.kind).toBe('ok')
     expect(memories.kind === 'ok' && memories.memories.length).toBe(SEED_MEMORIES.length)

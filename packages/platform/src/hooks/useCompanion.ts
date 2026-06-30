@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CompanionIdentity } from '@shared/companion-types'
-import { fetchCompanion } from '@/lib/companion-api'
+import { fetchCompanion, type CompanionStats } from '@/lib/companion-api'
 
 /**
  * The companion identity read (`GET /api/companion`, or the dev seed). Used by
@@ -20,7 +20,7 @@ import { fetchCompanion } from '@/lib/companion-api'
 export type CompanionState =
   | { status: 'loading'; companion: null }
   | { status: 'none'; companion: null }
-  | { status: 'exists'; companion: CompanionIdentity }
+  | { status: 'exists'; companion: CompanionIdentity; stats?: CompanionStats }
   | { status: 'error'; companion: null }
 
 export function useCompanion(enabled: boolean): {
@@ -37,7 +37,7 @@ export function useCompanion(enabled: boolean): {
     fetchCompanion().then((result) => {
       if (!active) return
       if (result.kind === 'exists') {
-        setState({ status: 'exists', companion: result.companion })
+        setState({ status: 'exists', companion: result.companion, stats: result.stats })
       } else if (result.kind === 'none') {
         setState({ status: 'none', companion: null })
       } else {

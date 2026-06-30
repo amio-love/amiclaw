@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
-import { ConicAvatar, GlassCard } from '@amiclaw/ui'
+import { ConicAvatar, GlassCard, StatPill } from '@amiclaw/ui'
+import type { CompanionStats } from '@/lib/companion-api'
 import { useCompanion } from '@/hooks/useCompanion'
 import { voiceName } from '@/lib/companion-voices'
+import { daysTogether } from '@/lib/companion-format'
 import styles from './CompanionCard.module.css'
 
 /* The companion entry on the AccountPage detail column.
@@ -29,6 +31,7 @@ export default function CompanionCard() {
               <div className={styles.voice}>{voiceName(state.companion.voice_id)}</div>
             </div>
           </div>
+          <CompanionStatsStrip createdAt={state.companion.created_at} stats={state.stats} />
           <div className={styles.links}>
             <Link to="/me/memories" className={styles.link}>
               回忆相册
@@ -51,5 +54,31 @@ export default function CompanionCard() {
         </GlassCard>
       )}
     </section>
+  )
+}
+
+/* The companionship stats strip.
+     - 「在一起 X 天」 is REAL — computed from the companion's `created_at` — so it
+       always shows, in production too.
+     - 「完成 N 局」/「成功 N 次」 have no real per-user source yet (they need the
+       leaderboard user_id migration + the capture pipeline), so they come from
+       an optional `stats` object populated ONLY in seed mode. In production
+       `stats` is undefined and these two are hidden entirely — never a fake 0. */
+function CompanionStatsStrip({ createdAt, stats }: { createdAt: string; stats?: CompanionStats }) {
+  const days = daysTogether(createdAt)
+  return (
+    <div className={styles.stats}>
+      {days >= 1 ? (
+        <StatPill value={days} label="在一起 · 天" />
+      ) : (
+        <StatPill value="今天" label="认识你" />
+      )}
+      {stats ? (
+        <>
+          <StatPill value={stats.games_completed} label="完成 · 局" />
+          <StatPill value={stats.successes} label="成功 · 次" />
+        </>
+      ) : null}
+    </div>
   )
 }

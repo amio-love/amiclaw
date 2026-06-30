@@ -189,3 +189,20 @@ export function seedMemories(): MemoryView[] {
 export function seedClaims(): ProfileClaimView[] {
   return SEED_CLAIMS.map((c) => ({ ...c, evidence: c.evidence.map((e) => ({ ...e })) }))
 }
+
+/**
+ * Companionship counters. NO real per-user source exists yet — they need the
+ * leaderboard `user_id` migration + the capture pipeline (both downstream) — so
+ * these are surfaced ONLY in seed mode and never in production. (The "在一起 X
+ * 天" stat is different: it is computed client-side from the companion's real
+ * `created_at`, so it renders in production too — it is not part of this object.)
+ */
+export interface CompanionStats {
+  games_completed: number
+  successes: number
+}
+
+/** Illustrative seed stats — round numbers consistent with the 4 seeded runs. */
+export function seedCompanionStats(): CompanionStats {
+  return { games_completed: 12, successes: 9 }
+}

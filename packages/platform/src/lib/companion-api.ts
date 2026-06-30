@@ -29,7 +29,16 @@ import type {
   ProfileCorrectionResponse,
   ProfileResponse,
 } from '@shared/companion-types'
-import { companionSeedEnabled, SEED_COMPANION, seedClaims, seedMemories } from './companion-seed'
+import {
+  companionSeedEnabled,
+  SEED_COMPANION,
+  seedClaims,
+  seedMemories,
+  seedCompanionStats,
+  type CompanionStats,
+} from './companion-seed'
+
+export type { CompanionStats } from './companion-seed'
 
 const BASE = `${API_BASE}/api/companion`
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -47,12 +56,16 @@ async function readError(res: Response): Promise<string | undefined> {
 // --- Identity read -----------------------------------------------------------
 
 export type CompanionReadResult =
-  | { kind: 'exists'; companion: CompanionIdentity }
+  | { kind: 'exists'; companion: CompanionIdentity; stats?: CompanionStats }
   | { kind: 'none' }
   | { kind: 'error' }
 
 export async function fetchCompanion(): Promise<CompanionReadResult> {
-  if (companionSeedEnabled()) return { kind: 'exists', companion: SEED_COMPANION }
+  // Seed mode carries illustrative companionship counters; real mode has none
+  // (no per-user game-stats source yet), so `stats` stays undefined there.
+  if (companionSeedEnabled()) {
+    return { kind: 'exists', companion: SEED_COMPANION, stats: seedCompanionStats() }
+  }
   try {
     const res = await fetch(BASE, { credentials: 'include' })
     if (res.status === 404) return { kind: 'none' }
