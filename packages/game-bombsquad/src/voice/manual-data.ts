@@ -14,6 +14,26 @@ import type { ManualData } from '@amiclaw/platform-ai/contract'
 import type { ModuleKind } from '@/store/game-context'
 
 /**
+ * Build the `{ symbolId: description }` map for the symbol ids referenced by a
+ * symbol-based module, drawn from the manual's top-level `symbols` block. Used
+ * to embed each symbol's visual description alongside its module so the AI can
+ * map a player's shape description (e.g. "海神叉" / "咖啡豆") back to the symbol
+ * name. Returns an empty object when the manual carries no `symbols` block.
+ */
+function symbolDescriptionsFor(
+  symbolIds: Iterable<string>,
+  symbols: Manual['symbols']
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!symbols) return out
+  for (const id of symbolIds) {
+    const entry = symbols[id]
+    if (entry?.description) out[id] = entry.description
+  }
+  return out
+}
+
+/**
  * Map a game `ModuleKind` to the manual section id(s) it grounds on. Section
  * ids match the real manual data keys under `Manual.modules`
  * (`wire_routing` / `symbol_dial` / `button` / `keypad`) and the platform-ai
@@ -46,10 +66,33 @@ export function moduleKindToRelevantSections(kind: ModuleKind): string[] {
  * dropped. The AI grounds on real module rules, and `relevantSections` only
  * ever references real modules (see `moduleKindToRelevantSections`), so decoys
  * would only be unreachable injection weight.
+ *
+ * Symbol-based modules (`symbol_dial`, `keypad`) are enriched with a
+ * `symbol_descriptions` map of the symbols they reference, pulled from the
+ * manual's top-level `symbols` block. Without this the AI only receives the
+ * lookup table of bare symbol names (psi / spiral / …) and cannot map a
+ * player's visual description ("海神叉" / "咖啡豆") to the right name — the
+ * `symbols` block lives at the manual root, outside any single module section,
+ * so per-module injection never reached it. Embedding the referenced
+ * descriptions into the module section makes them ride the existing injection.
  */
 export function bombsquadManualToManualData(manual: Manual, version: string): ManualData {
-  return {
-    version,
-    sections: Object.fromEntries(Object.entries(manual.modules)),
+  const sections: Record<string, unknown> = Object.fromEntries(Object.entries(manual.modules))
+
+  const dial = manual.modules.symbol_dial
+  if (dial?.columns) {
+    const ids = new Set(dial.columns.flat())
+    sections.symbol_dial = {
+      ...dial,
+      symbol_descriptions: symbolDescriptionsFor(ids, manual.symbols),
+    }
   }
+
+  const keypad = manual.modules.keypad
+  if (keypad?.sequences) {
+    const ids = new Set(keypad.sequences.flat())
+    sections.keypad = { ...keypad, symbol_descriptions: symbolDescriptionsFor(ids, manual.symbols) }
+  }
+
+  return { version, sections }
 }

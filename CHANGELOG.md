@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: the AI can now tell the symbols apart** - Fix. On the
+星盘 (dial) and 星符 (keypad) modules the AI kept asking the player to re-describe
+a symbol — it only received the lookup table of bare symbol names (psi / spiral /
+crescent / …) and never the visual descriptions, so it could not map a player's
+shape description ("海神叉", "咖啡豆") to the right name. Those descriptions live in
+the manual's top-level `symbols` block, which sits outside any single module
+section and so never rode the per-module injection. The two symbol modules now
+embed the visual description of each symbol they reference, so the AI receives
+both the lookup table and what each symbol looks like — including the built-in
+disambiguation for look-alike pairs (psi vs trident, hourglass vs delta).
+
 **BombSquad mode② voice: the AI gives a short closing recap when you win** - Add.
 After a successful daily defuse the results screen used to appear instantly,
 cutting the voice partner off before it could react. Now, on a daily win, the AI
