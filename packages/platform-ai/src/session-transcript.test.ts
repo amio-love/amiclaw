@@ -39,6 +39,7 @@ import {
   openSocket,
   sawDoneChunk,
   settle,
+  SPEECH_START,
   waitFor,
   waitForMessage,
 } from './session-do-test-kit'
@@ -58,8 +59,9 @@ describe('real VoiceSessionDO — player transcript wire frame', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
+    socket.send(SPEECH_START)
     socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn ran STT once')
+    await waitFor(() => kit.sttCalls() === 1, 'utterance opened STT')
     await waitFor(() => sawDoneChunk(socket), 'turn emitted its terminal done chunk')
 
     // Exactly one transcript frame — the terminal (final:true) complete utterance
@@ -100,8 +102,9 @@ describe('real VoiceSessionDO — player transcript wire frame', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
+    socket.send(SPEECH_START)
     socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn ran STT once')
+    await waitFor(() => kit.sttCalls() === 1, 'utterance opened STT')
     await waitFor(() => sawDoneChunk(socket), 'turn emitted its terminal done chunk')
 
     // The running cumulative interims stream first (final:false), then exactly one
@@ -136,8 +139,9 @@ describe('real VoiceSessionDO — player transcript wire frame', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
+    socket.send(SPEECH_START)
     socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn ran STT once')
+    await waitFor(() => kit.sttCalls() === 1, 'utterance opened STT')
     // The no-speech skip emits nothing; let any (absent) frames drain so the
     // "nothing was sent" assertion is meaningful.
     await settle()

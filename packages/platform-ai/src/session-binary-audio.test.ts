@@ -44,6 +44,7 @@ import {
   messagesOfType,
   openSocket,
   sawDoneChunk,
+  SPEECH_START,
   waitFor,
   waitForMessage,
 } from './session-do-test-kit'
@@ -66,13 +67,16 @@ describe('real VoiceSessionDO — binary audio reaches STT byte-intact (P1)', ()
     // A genuine binary audio frame: distinct non-zero bytes so an empty (the
     // Blob-conversion bug) or garbage view is unmistakable in the assertion.
     const AUDIO = new Uint8Array([0x10, 0x20, 0x30, 0x40, 0x50, 0x60])
+    // speech-start opens the live recognizer; only THEN is the audio frame
+    // forwarded to it (frames with no open utterance are dropped).
+    socket.send(SPEECH_START)
     socket.send(AUDIO.slice().buffer)
 
-    // Run the turn; STT drains the buffered bridge and captures the frames it
-    // pulled. WS delivery is ordered, so the binary frame is pushed onto the
-    // bridge before the turn closes it.
+    // Finalize the utterance; the live STT drains the bridge and captures the
+    // frames it pulled. WS delivery is ordered, so the binary frame is pushed onto
+    // the open bridge before the turn closes it.
     socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn ran STT once')
+    await waitFor(() => kit.sttCalls() === 1, 'utterance opened STT')
     await waitFor(() => sawDoneChunk(socket), 'turn emitted its terminal done chunk')
 
     // The crux: the bytes that reached STT are non-empty AND exactly the bytes
@@ -96,11 +100,12 @@ describe('real VoiceSessionDO — binary audio reaches STT byte-intact (P1)', ()
 
     const FRAME_1 = new Uint8Array([0x01, 0x02, 0x03])
     const FRAME_2 = new Uint8Array([0xfa, 0xfb, 0xfc, 0xfd])
+    socket.send(SPEECH_START)
     socket.send(FRAME_1.slice().buffer)
     socket.send(FRAME_2.slice().buffer)
 
     socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn ran STT once')
+    await waitFor(() => kit.sttCalls() === 1, 'utterance opened STT')
     await waitFor(() => sawDoneChunk(socket), 'turn emitted its terminal done chunk')
 
     // Both frames reach STT, in order, byte-for-byte — the concatenation equals

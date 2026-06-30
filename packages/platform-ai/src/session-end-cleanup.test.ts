@@ -39,6 +39,7 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
+  driveUtteranceToLlm,
   makeGatedProviders,
   makeSessionDo,
   messagesOfType,
@@ -140,8 +141,7 @@ describe('real VoiceSessionDO — end mid-turn clears, late settle does not revi
     const socket = await openSocket(session, 'user-A')
     const firstId = await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
     await session.run(() => kit.llmTurns[0].pushDelta('partial'))
     await settle()
 
@@ -176,8 +176,7 @@ describe('real VoiceSessionDO — end mid-turn clears, late settle does not revi
     const reconnect2 = await openSocket(session, 'user-A')
     const secondId = await createSessionOverWs(reconnect2)
     expect(secondId).not.toBe(firstId)
-    reconnect2.send(TURN)
-    await waitFor(() => kit.sttCalls() === 2, 'fresh turn started')
+    await driveUtteranceToLlm(reconnect2, kit, 2)
     const freshHistory = kit.llmTurns[1].request.messages.filter((m) => m.role === 'assistant')
     expect(freshHistory).toEqual([])
     await session.run(() => kit.llmTurns[1].finishStream())
@@ -196,8 +195,7 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
     const socket = await openSocket(session, 'user-A')
     const firstId = await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
     await session.run(() => kit.llmTurns[0].pushDelta('x'))
     await settle()
 
@@ -225,8 +223,7 @@ describe('real VoiceSessionDO — owner abrupt close clears the session like end
     const reconnect2 = await openSocket(session, 'user-A')
     const secondId = await createSessionOverWs(reconnect2)
     expect(secondId).not.toBe(firstId)
-    reconnect2.send(TURN)
-    await waitFor(() => kit.sttCalls() === 2, 'fresh turn started')
+    await driveUtteranceToLlm(reconnect2, kit, 2)
     await session.run(() => kit.llmTurns[1].finishStream())
     await waitFor(() => kit.llmTurns[1].settled(), 'fresh turn settled')
     expect(kit.llmTurns[1].settled()).toBe(true)
@@ -275,8 +272,7 @@ describe('real VoiceSessionDO — end teardown gate, only the owner socket ends 
     await createSessionOverWs(owner)
     const duplicate = await openSocket(session, 'user-A')
 
-    owner.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'owner turn parked')
+    await driveUtteranceToLlm(owner, kit, 1)
     await session.run(() => kit.llmTurns[0].pushDelta('partial'))
     await settle()
 

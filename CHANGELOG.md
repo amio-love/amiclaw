@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: live captions while you speak** - Change. Recognition
+now runs live as you talk instead of waiting until you stop, so your `你：…`
+caption builds up word by word while you're still speaking, and the connection no
+longer drops with an 8-second recognizer timeout. The client tells the server when
+your utterance starts; the server opens the recognizer, transcribes the live
+audio into streaming captions, and finalizes the full text when you pause —
+verified end to end against the live provider (captions arriving mid-speech, full
+final transcript, clean finish).
+
 **BombSquad daily challenge: "手册格式异常" on start** - Fix. The daily run
 always showed a parse error on load because the game engine was fetching the
 human-readable HTML manual page (`/manual/<date>`) and trying to parse it as

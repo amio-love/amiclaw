@@ -113,6 +113,19 @@ export interface TurnProviders {
 }
 
 /**
+ * The captured outcome of one utterance's STT phase ({@link runUtteranceStt}),
+ * consumed by the reply phase ({@link runReply}). In the live WS transport the
+ * DO runs the STT phase on `speech-start` (so interim captions stream WHILE the
+ * player speaks) and the reply phase on `turn`, threading this between them.
+ */
+export interface UtteranceResult {
+  /** The player's complete recognized utterance (empty string for no-speech). */
+  transcript: string
+  /** Total inbound audio bytes the STT provider pulled — the fallback metering source. */
+  audioBytes: number
+}
+
+/**
  * LLM provider instances may expose a `lastUsage` after a stream is drained
  * (the DeepSeek adapter does). We read it structurally so the pipeline does not
  * depend on the concrete adapter type.
@@ -303,6 +316,30 @@ function applyLlmTtsUsage(
 }
 
 /**
+ * Apply a settled turn's STT input-seconds to state. Prefers the adapter's
+ * structured usage report (the Volcengine adapter exposes the server's
+ * `audio_info.duration` when reported, or its own exact bytes->duration
+ * conversion when not). When the adapter exposes nothing at all, falls back to
+ * the pipeline's byte tap over the inbound frames the STT provider actually
+ * pulled — and latches the session's STT metering annotation to
+ * `derived-from-bytes` (see `SessionState.sttSource`).
+ */
+function applySttUsage(
+  providers: Pick<TurnProviders, 'stt'>,
+  state: SessionState,
+  sttAudioBytes: number
+): void {
+  const sttUsage = (providers.stt as MaybeSttUsageProvider).lastUsage
+  if (sttUsage) {
+    state.usage.sttInputSeconds += sttUsage.durationMs / 1000
+    if (sttUsage.source === 'derived-from-bytes') state.sttSource = 'derived-from-bytes'
+  } else {
+    state.usage.sttInputSeconds += audioSecondsFromBytes(sttAudioBytes)
+    state.sttSource = 'derived-from-bytes'
+  }
+}
+
+/**
  * The shared LLM->TTS half of a turn: given the fully-assembled `messages`, run
  * the LLM stream and TTS concurrently and yield the interleaved `text`/`audio`
  * chunks (NO terminal `done` — the caller emits that after its own settle). It
@@ -475,51 +512,67 @@ async function* streamLlmTts(
 }
 
 /**
- * Run one player turn end to end (player audio -> STT -> LLM -> TTS).
+ * STT phase of a turn — driven LIVE during the player's utterance.
  *
- * Yields the turn's `AiResponseChunk`s in order: incremental `text` chunks as
- * the LLM streams, `audio` chunks as TTS synthesizes the segmented sentences,
- * and exactly one terminal chunk with `done: true`. Mutates `state` (history,
- * turnCount, usage) as a side effect so the next turn sees this turn's context.
+ * Consumes the inbound audio stream, streaming each interim CUMULATIVE result to
+ * the client as a live-subtitle `transcript` chunk (final: false) AS IT ARRIVES,
+ * and returns the player's COMPLETE utterance (the terminal last-package result)
+ * plus the inbound-frame byte total (the fallback STT metering source). The
+ * generator yields ONLY interim frames; the terminal complete utterance is
+ * returned, not yielded (the reply phase emits it once as the `final: true`
+ * frame, after the no-speech gate).
  *
- * I/O-free beyond driving the injected providers (it never touches the network,
- * a clock, or a socket directly) — fully unit-testable with mocked STT/LLM/TTS.
+ * In the live WS transport the DO calls this on `speech-start` over the STILL-OPEN
+ * audio bridge, so frames pushed while the player speaks feed the recognizer
+ * immediately and the interim captions surface WHILE they talk; the DO closes the
+ * bridge on `turn` to terminate the stream and capture the final. A benign
+ * no-speech utterance surfaces as an empty/partial transcript (no throw); only a
+ * genuine ASR fault throws out of here (fail loud upstream).
  */
-export async function* runTurn(
-  providers: TurnProviders,
-  state: SessionState,
+export async function* runUtteranceStt(
+  providers: Pick<TurnProviders, 'stt'>,
   audio: AsyncIterable<AudioChunk>
-): AsyncIterable<AiResponseChunk> {
-  // 1. STT: transcribe the player's audio, streaming each interim cumulative
-  //    result to the client as a live-subtitle `transcript` chunk (final: false)
-  //    as it arrives, and capturing the complete utterance (the terminal
-  //    last-package result) as the generator's return. `audioBytes` is the
-  //    inbound-frame byte total — the fallback STT metering source at turn settle
-  //    when the adapter reports no structured usage.
-  const turnStart = Date.now()
-  traceTurn('turn', 'pipeline-start', {
-    turnCount: state.turnCount,
-  })
-  const { transcript: playerText, audioBytes: sttAudioBytes } = yield* collectFinalTranscript(
-    providers.stt,
-    audio
-  )
+): AsyncGenerator<AiResponseChunk, UtteranceResult> {
+  const sttStart = Date.now()
+  const { transcript, audioBytes } = yield* collectFinalTranscript(providers.stt, audio)
   // ASR hop boundary: the complete cumulative transcript is in hand (length only —
   // never the text). An empty transcript here explains a downstream LLM no-op.
   traceTurn('asr', 'final-transcript', {
-    transcriptChars: playerText.length,
-    elapsedMs: Date.now() - turnStart,
+    transcriptChars: transcript.length,
+    elapsedMs: Date.now() - sttStart,
   })
+  return { transcript, audioBytes }
+}
 
-  // Benign no-speech turn: the player's buffered audio held nothing
-  // transcribable (a false-positive VAD trigger — a stopwatch tick, a cough,
-  // ambient noise — surfacing as a clean ASR close with no final transcript).
-  // Skip the turn: emit NO response chunks, mutate NO state (history, turnCount,
-  // usage all untouched), and meter nothing — the player effectively spoke
-  // nothing this turn (undercount-only, consistent with the session metering
-  // stance). The session stays ready and the next `turn` runs normally. This is
-  // NOT an error: a real ASR error frame / connect failure / mid-stream stall
-  // still throws out of `collectFinalTranscript` above and fails the turn loud.
+/**
+ * Reply phase of a turn — run on `turn`, after the utterance's STT finalized.
+ *
+ * Given the captured complete utterance, emits the terminal `transcript`
+ * (final: true) frame, assembles the deterministic context, runs LLM+TTS, and
+ * settles state (history, turnCount, LLM/TTS/STT usage). Yields the ordered AI
+ * reply chunks ending in exactly one terminal `done: true` chunk.
+ *
+ * The STT stream was already drained by {@link runUtteranceStt}, so
+ * `providers.stt.lastUsage` is settled by the time this reads it. Mutates `state`;
+ * I/O-free beyond driving the injected LLM/TTS providers.
+ */
+export async function* runReply(
+  providers: TurnProviders,
+  state: SessionState,
+  utterance: UtteranceResult
+): AsyncIterable<AiResponseChunk> {
+  const turnStart = Date.now()
+  const { transcript: playerText, audioBytes: sttAudioBytes } = utterance
+
+  // Benign no-speech turn: the player's utterance held nothing transcribable (a
+  // false-positive VAD trigger — a stopwatch tick, a cough, ambient noise —
+  // surfacing as a clean ASR close with no final transcript). Skip the turn: emit
+  // NO response chunks, mutate NO state (history, turnCount, usage all untouched),
+  // and meter nothing — the player effectively spoke nothing this turn
+  // (undercount-only, consistent with the session metering stance). The session
+  // stays ready and the next `turn` runs normally. This is NOT an error: a real
+  // ASR error frame / connect failure / mid-stream stall throws out of
+  // `runUtteranceStt` (fail loud), never reaching here with a transcript.
   if (playerText.trim().length === 0) {
     traceTurn('turn', 'skip-no-speech', {
       turnCount: state.turnCount,
@@ -528,47 +581,31 @@ export async function* runTurn(
     return
   }
 
-  // 1b. The complete utterance — the TERMINAL transcript frame (final: true),
-  //     surfaced BEFORE the AI reply streams so the client can lock in the live
-  //     subtitle of what the AI heard. Interim frames (final: false) for this
-  //     utterance already streamed during STT above; this is the single final
-  //     frame. Emitted only for a NON-empty transcript — the no-speech skip above
-  //     already returned (and a skip emits no interim either, since empty /
-  //     whitespace interims are suppressed), so a skipped turn yields nothing.
-  //     This is the player's OWN speech returned to that same client — never
-  //     prompt or secret material; it carries `done: false` (the AI reply's last
-  //     text chunk is still the turn's terminal `done`).
+  // The complete utterance — the TERMINAL transcript frame (final: true), surfaced
+  // BEFORE the AI reply streams so the client can lock in the live subtitle of
+  // what the AI heard. Interim frames (final: false) for this utterance already
+  // streamed during the STT phase; this is the single final frame. This is the
+  // player's OWN speech returned to that same client — never prompt or secret
+  // material; it carries `done: false` (the AI reply's last text chunk is still
+  // the turn's terminal `done`).
   yield { kind: 'transcript', text: playerText, final: true, done: false }
 
-  // 2. Inject: deterministic system message (role + rules + manual subset),
-  //    then the rolling history, then this turn's player utterance.
+  // Inject: deterministic system message (role + rules + manual subset), then the
+  // rolling history, then this turn's player utterance.
   const userMessage: ChatMessage = { role: 'user', content: playerText }
   const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
 
-  // 3. LLM + 4. TTS run concurrently via the shared half.
+  // LLM + TTS run concurrently via the shared half.
   const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
 
-  // 5. Settle turn state: record history, count, and usage; emit the terminal
-  //    chunk so the consumer can close out the turn.
+  // Settle turn state: record history, count, and usage; emit the terminal chunk
+  // so the consumer can close out the turn.
   state.history.push(userMessage)
   state.history.push({ role: 'assistant', content: result.assistantText })
   state.turnCount += 1
 
   const { outputTokens } = applyLlmTtsUsage(providers, state, result)
-  // STT seconds: prefer the adapter's structured usage report (the Volcengine
-  // adapter exposes the server's `audio_info.duration` when reported, or its
-  // own exact bytes->duration conversion when not). When the adapter exposes
-  // nothing at all, fall back to the pipeline's byte tap over the inbound
-  // frames the STT provider actually pulled — and latch the session's STT
-  // metering annotation to `derived-from-bytes` (see `SessionState.sttSource`).
-  const sttUsage = (providers.stt as MaybeSttUsageProvider).lastUsage
-  if (sttUsage) {
-    state.usage.sttInputSeconds += sttUsage.durationMs / 1000
-    if (sttUsage.source === 'derived-from-bytes') state.sttSource = 'derived-from-bytes'
-  } else {
-    state.usage.sttInputSeconds += audioSecondsFromBytes(sttAudioBytes)
-    state.sttSource = 'derived-from-bytes'
-  }
+  applySttUsage(providers, state, sttAudioBytes)
 
   // Turn settle: the per-turn accounting boundary. The counts here are the
   // single most diagnostic line for the silent-park — e.g. llmDeltaCount:0 +
@@ -585,6 +622,35 @@ export async function* runTurn(
   })
 
   yield { kind: 'text', text: '', done: true }
+}
+
+/**
+ * Run one player turn end to end (player audio -> STT -> LLM -> TTS) as the
+ * composition of its two phases: {@link runUtteranceStt} (STT, streaming interim
+ * captions) then {@link runReply} (LLM+TTS over the captured utterance).
+ *
+ * This is the BUFFERED single-call form — the live WS transport drives the two
+ * phases separately (STT on `speech-start` over the open audio bridge so the
+ * caption builds WHILE the player speaks, reply on `turn`), but the end-to-end
+ * form keeps the whole pipeline unit-testable with mocked providers and is the
+ * canonical primitive exported by the package.
+ *
+ * Yields the turn's `AiResponseChunk`s in order: interim `transcript` chunks, the
+ * terminal `transcript` (final: true), incremental `text` chunks as the LLM
+ * streams, `audio` chunks as TTS synthesizes, and exactly one terminal `done`
+ * chunk. Mutates `state` (history, turnCount, usage). I/O-free beyond driving the
+ * injected providers.
+ */
+export async function* runTurn(
+  providers: TurnProviders,
+  state: SessionState,
+  audio: AsyncIterable<AudioChunk>
+): AsyncIterable<AiResponseChunk> {
+  traceTurn('turn', 'pipeline-start', {
+    turnCount: state.turnCount,
+  })
+  const utterance = yield* runUtteranceStt(providers, audio)
+  yield* runReply(providers, state, utterance)
 }
 
 /**

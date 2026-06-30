@@ -32,6 +32,7 @@ vi.mock('./providers/factory', async (importOriginal) => {
 })
 
 import {
+  driveUtteranceToLlm,
   makeGatedProviders,
   makeSessionDo,
   messagesOfType,
@@ -47,7 +48,6 @@ beforeEach(() => {
   providerControl.override = undefined
 })
 
-const TURN = JSON.stringify({ type: 'turn' })
 const END = JSON.stringify({ type: 'end' })
 
 // A two-module manual: each section value is an unambiguous marker so a test can
@@ -86,10 +86,9 @@ describe('real VoiceSessionDO — update-gamestate (continuous run, module advan
     const socket = await openSocket(session, 'user-A')
     await createWith(socket, ['moduleA'])
 
-    // Turn 1 (module A) parks at the gated LLM await. Its captured request injects
-    // module A's manual subset, not module B's.
-    socket.send(TURN)
-    await waitFor(() => kit.llmTurns.length === 1, 'turn 1 reached the LLM')
+    // Turn 1 (module A): speech-start opens STT, turn finalizes -> the reply parks
+    // at the gated LLM. Its captured request injects module A's subset, not B's.
+    await driveUtteranceToLlm(socket, kit, 1)
     expect(systemTextOfTurn(kit, 0)).toContain(ALPHA)
     expect(systemTextOfTurn(kit, 0)).not.toContain(BRAVO)
     // No history yet → system + the current player utterance only.
@@ -116,8 +115,7 @@ describe('real VoiceSessionDO — update-gamestate (continuous run, module advan
 
     // Turn 2 (after the update) injects module B's subset, not module A's — proving
     // the update took effect on the next turn.
-    socket.send(TURN)
-    await waitFor(() => kit.llmTurns.length === 2, 'turn 2 reached the LLM')
+    await driveUtteranceToLlm(socket, kit, 2)
     expect(systemTextOfTurn(kit, 1)).toContain(BRAVO)
     expect(systemTextOfTurn(kit, 1)).not.toContain(ALPHA)
     // History PERSISTED across the update: turn 2 carries turn 1's user+assistant
@@ -173,8 +171,7 @@ describe('real VoiceSessionDO — update-gamestate (continuous run, module advan
 
     // The owner's next turn still injects module A — neither the malformed owner
     // updates nor the non-owner update changed the live selection.
-    owner.send(TURN)
-    await waitFor(() => kit.llmTurns.length === 1, 'owner turn reached the LLM')
+    await driveUtteranceToLlm(owner, kit, 1)
     expect(systemTextOfTurn(kit, 0)).toContain(ALPHA)
     expect(systemTextOfTurn(kit, 0)).not.toContain(BRAVO)
   })
