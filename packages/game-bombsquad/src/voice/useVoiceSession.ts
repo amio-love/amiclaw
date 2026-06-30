@@ -410,7 +410,6 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
 
   /** A VAD `speech-start`: the player began an utterance (incl. barge-in). */
   const onSpeechStart = useCallback(() => {
-    setPlayerSpeaking(true)
     // Barge-in: the player is talking while the AI's audio is playing. Stop the
     // playback at once and drop the rest of the interrupted turn's streamed
     // chunks (text + audio) — the server keeps streaming them (it cancels nothing
@@ -436,6 +435,15 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       !bargeIn &&
       (awaitingResponseRef.current || (turnStreamingRef.current && !suppressTurnRef.current))
     if (aiHoldsFloor) return
+    // Only a REAL utterance (a fresh turn, or a genuine barge-in) flips the phase
+    // to `listening`. Setting this BEFORE the guard made a suppressed speech-start
+    // — a breath / room-noise tail crossing the VAD threshold for 400ms while the
+    // AI is still `thinking` (awaitingResponse) — yank the indicator straight from
+    // `thinking` back to `listening`, reading as "it heard me finish, then ignored
+    // me". The server-side send is already suppressed for this case; the UI phase
+    // must be suppressed in lockstep, so it stays `thinking` until the reply lands
+    // (or the no-response watchdog fires).
+    setPlayerSpeaking(true)
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
