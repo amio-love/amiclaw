@@ -19,11 +19,35 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { SessionResponse } from '@shared/auth-types'
 import AccountPage from './AccountPage'
 
-/** Stub GET /api/auth/session with a given session body. */
-function stubSession(body: SessionResponse) {
+/** Resolve any fetch input to its URL string. */
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.toString()
+  return (input as Request).url
+}
+
+/**
+ * Stub the two reads the page makes: GET /api/auth/session (auth) and
+ * GET /api/companion (the companion card). Companion defaults to 404 (no
+ * companion yet → the "认识你的伙伴" setup CTA); pass `companion` to override.
+ */
+function stubApi(opts: {
+  session: SessionResponse
+  companion?: { status: number; body?: unknown }
+}) {
+  const companion = opts.companion ?? { status: 404, body: { error: 'no companion set up' } }
   vi.stubGlobal(
     'fetch',
-    vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status: 200 })))
+    vi.fn((input: RequestInfo | URL) => {
+      if (urlOf(input).includes('/api/companion')) {
+        return Promise.resolve(
+          new Response(companion.body === undefined ? null : JSON.stringify(companion.body), {
+            status: companion.status,
+          })
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(opts.session), { status: 200 }))
+    })
   )
 }
 
@@ -54,7 +78,7 @@ describe('AccountPage /me', () => {
   })
 
   it('renders the login guide and no fake profile for a signed-out visitor', async () => {
-    stubSession(ANON)
+    stubApi({ session: ANON })
     renderAccount('/me')
 
     // Login-guide markers: the heading and the plain-text unlock preview.
@@ -74,7 +98,7 @@ describe('AccountPage /me', () => {
   })
 
   it('navigates to /login when the signed-out CTA is clicked', async () => {
-    stubSession(ANON)
+    stubApi({ session: ANON })
     renderAccount('/me')
 
     fireEvent.click(await screen.findByRole('link', { name: '登录' }))
@@ -83,7 +107,7 @@ describe('AccountPage /me', () => {
   })
 
   it('renders the real-identity profile with an honest empty stats state', async () => {
-    stubSession(AUTHED)
+    stubApi({ session: AUTHED })
     renderAccount('/me')
 
     // Identity is derived from the session email local-part (nova@... → nova).
@@ -100,5 +124,39 @@ describe('AccountPage /me', () => {
     expect(screen.queryByText('最近 5 局')).not.toBeInTheDocument()
     // The login-guide empty state must NOT be present.
     expect(screen.queryByText('登录后查看你的星轨')).not.toBeInTheDocument()
+  })
+
+  it('shows the companion setup CTA when the user has no companion yet', async () => {
+    stubApi({ session: AUTHED }) // companion defaults to 404 (none)
+    renderAccount('/me')
+
+    expect(await screen.findByRole('link', { name: '认识你的伙伴' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '认识你的伙伴' })).toHaveAttribute(
+      'href',
+      '/me/companion'
+    )
+  })
+
+  it('shows "你的伙伴 X" with album + profile links when a companion exists', async () => {
+    stubApi({
+      session: AUTHED,
+      companion: {
+        status: 200,
+        body: {
+          name: '小南',
+          address_style: '队长',
+          voice_id: 'companion-warm',
+          profile_enabled: true,
+          created_at: '2026-05-30T09:12:00.000Z',
+        },
+      },
+    })
+    renderAccount('/me')
+
+    expect(await screen.findByText('小南')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '回忆相册' })).toHaveAttribute('href', '/me/memories')
+    expect(screen.getByRole('link', { name: '画像控制面' })).toHaveAttribute('href', '/me/profile')
+    // The voice is represented by name, not fabricated audio playback.
+    expect(screen.getByText('暖声')).toBeInTheDocument()
   })
 })

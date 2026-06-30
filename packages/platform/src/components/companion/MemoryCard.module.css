@@ -1,0 +1,90 @@
+.card {
+  padding: 22px 24px;
+  transition:
+    border-color var(--t-base),
+    box-shadow var(--t-base);
+}
+
+/* Focused via a profile evidence link — a soft yellow ring marks the episode
+   the player clicked back to. */
+.focused {
+  border-color: var(--amio-yellow) !important;
+  box-shadow: var(--glow-yellow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.date {
+  font: 500 12px var(--amio-font-mono);
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+.game {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+  font: 500 11px var(--font-body);
+  color: var(--amio-yellow);
+  letter-spacing: 0.06em;
+}
+
+.delete {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-4);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+
+.delete:hover {
+  color: var(--amio-danger);
+  background: var(--amio-overlay-hover);
+}
+
+.title {
+  margin: 14px 0 0;
+  font: 600 17px var(--font-display);
+  color: var(--text-1);
+}
+
+.narrative {
+  margin: 8px 0 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delete {
+    transition: none;
+  }
+}

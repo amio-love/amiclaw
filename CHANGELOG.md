@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Meet your AI companion** - New. Signed-in players can now give their platform
+AI partner a name and choose its voice, so it feels like theirs from the first
+hello. The companion card counts how many days you've been together from the day
+you met. Two new places live under 我的: a memory album to look back on the runs
+you've shared, and an understanding panel where you can see — and correct,
+delete, or switch off — what your companion has come to understand about you,
+with every understanding linking back to the exact memory it came from. If you
+haven't met your companion yet, both places guide you to do that first. They
+start out empty, honestly waiting for the story you'll build together.
+
 **BombSquad mode② voice: the indicator no longer flips back to "聆听中" mid-think** -
 Fix. After you finished speaking, the indicator would show "思考中" and then snap
 straight back to "聆听中" without the AI answering. A breath or room-noise tail

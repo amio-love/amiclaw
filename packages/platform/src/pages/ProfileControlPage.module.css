@@ -1,0 +1,190 @@
+.page {
+  padding: 60px 0;
+}
+
+/* ----------  profile switch  ---------- */
+.switchCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 640px;
+  padding: 22px 26px;
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.switchTitle {
+  font: 600 16px var(--font-display);
+  color: var(--text-1);
+}
+
+.switchSub {
+  font: 400 13px var(--font-body);
+  color: var(--text-3);
+  line-height: var(--lh-normal);
+  max-width: 460px;
+}
+
+.disabledBanner {
+  max-width: 640px;
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+  font: 400 13px var(--font-body);
+  color: var(--text-2);
+}
+
+/* ----------  claims list  ---------- */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+  margin-top: 24px;
+}
+
+.deleteAll {
+  max-width: 640px;
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.deleteAllBtn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-4);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+
+.deleteAllBtn:hover {
+  color: var(--amio-danger);
+  background: var(--amio-overlay-hover);
+}
+
+.note {
+  max-width: 520px;
+  padding: 28px 32px;
+}
+
+.noteText {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+}
+
+/* ----------  modals  ---------- */
+.modalText {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+.modalError {
+  margin: 14px 0 0;
+  font: 400 13px var(--font-body);
+  color: var(--amio-danger);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* ----------  correction dialog  ---------- */
+.correctLabel {
+  margin: 0 0 8px;
+  font: 500 12px var(--font-body);
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+}
+
+.correctOriginal {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-hairline);
+  font: 400 14px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--amio-surface-dark);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font: 400 15px var(--font-body);
+  line-height: var(--lh-loose);
+  resize: vertical;
+  transition: border-color var(--t-fast);
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--amio-yellow);
+}
+
+/* ----------  destructive confirm  ---------- */
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-danger);
+  border: none;
+  color: #fff;
+  font: 600 15px var(--font-body);
+  cursor: pointer;
+  transition: opacity var(--t-fast);
+}
+
+.danger:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deleteAllBtn,
+  .textarea,
+  .danger {
+    transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .switchCard {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}

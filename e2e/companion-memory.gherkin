@@ -3,14 +3,14 @@
 # asynchronously after each session and injected deterministically into the
 # next one (architecture: docs/architecture/arch-component-companion-memory.md).
 #
-# Consumption layer: @simulation. This round ships the data plane only — the
-# D1 schema, /api/companion/* endpoints, the resolver and the consolidation
-# job — with NO UI surfaces, and the e2e harness serves a static build with no
-# Workers runtime (no Pages Functions, no D1, no Durable Objects), so none of
-# these journeys is browser-drivable yet. The journeys are pinned here (and in
-# flow-inventory.yaml) so the downstream UI tasks inherit them; the behaviour
-# itself is covered by the vitest suites against the real schema
-# (packages/companion-memory, packages/api companion handlers).
+# The companion-setup journey is now browser-drivable (@playwright): the
+# onboarding UI landed (/me/companion), and the e2e harness route-mocks the
+# /api/companion* endpoints exactly as it does the auth session (the static
+# build has no Workers runtime). The other two journeys stay @simulation: the
+# memory-capture pipeline that produces real episodes + profile claims is a
+# downstream wire task, so the album / profile surfaces have no live data to
+# drive in a browser yet — their behaviour is covered by the vitest suites
+# against the real schema (packages/companion-memory, packages/api).
 
 Feature: Companion and memory
   As a signed-in mode② player
@@ -18,13 +18,13 @@ Feature: Companion and memory
   So that every session continues a relationship instead of starting a stranger
 
   # Source: companion-setup
-  @simulation
+  @playwright
   Scenario: First-time setup creates the one and only companion
-    Given I am signed in
-    And I have not set up a companion yet
-    When I name my companion and pick its voice
-    Then my companion is created with that name and voice
-    And a second setup attempt is rejected
+    Given I am a signed-in player without a companion
+    When I open the companion onboarding page
+    And I name my companion "小光" and pick a voice
+    Then I see my companion "小光"
+    And revisiting onboarding shows my companion, not the setup form
 
   # Source: companion-memory-album
   @simulation
