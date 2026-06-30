@@ -11,9 +11,9 @@ hello. The companion card counts how many days you've been together from the day
 you met. Two new places live under 我的: a memory album to look back on the runs
 you've shared, and an understanding panel where you can see — and correct,
 delete, or switch off — what your companion has come to understand about you,
-with every understanding linking back to the exact memory it came from. The
-album and understanding panel start out empty, honestly waiting for the story
-you'll build together.
+with every understanding linking back to the exact memory it came from. If you
+haven't met your companion yet, both places guide you to do that first. They
+start out empty, honestly waiting for the story you'll build together.
 
 **BombSquad mode② voice: your first word is no longer dropped, and the AI speaks
 plain spoken words** - Fix. Two recognition/voice polish fixes. First, the very

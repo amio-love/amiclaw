@@ -34,3 +34,20 @@ export function CompanionLoginGate() {
     </GlassCard>
   )
 }
+
+/** The no-companion gate — a signed-in player who has not set up a companion
+    yet. The album and profile both depend on a companion existing (memories and
+    understandings only accrue once there is one, and the consolidator discards
+    capture events while no companion exists), so route to setup rather than to
+    play or to a misleading empty state. */
+export function CompanionSetupGate({ text }: { text: string }) {
+  return (
+    <GlassCard radius="2xl" className={styles.gate}>
+      <h3 className={styles.gateTitle}>先认识你的伙伴</h3>
+      <p className={styles.gateText}>{text}</p>
+      <Link to="/me/companion" className={styles.gateCta}>
+        认识你的伙伴
+      </Link>
+    </GlassCard>
+  )
+}

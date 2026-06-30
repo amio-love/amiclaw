@@ -41,7 +41,17 @@ const MEMORIES: MemoryView[] = [
   },
 ]
 
-function stubServer(memories: MemoryView[]) {
+const PRESENT_COMPANION = {
+  name: '小南',
+  address_style: '队长',
+  voice_id: 'companion-warm',
+  profile_enabled: true,
+  created_at: '2026-05-30T09:12:00.000Z',
+}
+
+// `hasCompanion` defaults true; pass false to model the no-companion case where
+// GET /api/companion 404s and the empty state must route to setup, not play.
+function stubServer(memories: MemoryView[], { hasCompanion = true } = {}) {
   const live = [...memories]
   vi.stubGlobal(
     'fetch',
@@ -54,6 +64,11 @@ function stubServer(memories: MemoryView[]) {
       }
       if (url.includes('/api/companion/memories')) {
         return Promise.resolve(json({ memories: live }))
+      }
+      if (url.endsWith('/api/companion')) {
+        return hasCompanion
+          ? Promise.resolve(json(PRESENT_COMPANION))
+          : Promise.resolve(json({ error: 'no companion set up' }, 404))
       }
       return Promise.resolve(json({}, 404))
     })
@@ -75,14 +90,24 @@ describe('MemoryAlbumPage /me/memories', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows an honest empty state with no「即将推出」', async () => {
-    stubServer([])
+  it('shows an honest play-CTA empty state when the companion has no episodes', async () => {
+    stubServer([], { hasCompanion: true })
     renderAlbum()
 
     expect(await screen.findByText('还没有回忆')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '开始玩' })).toBeInTheDocument()
     expect(screen.queryByText(/即将推出/)).not.toBeInTheDocument()
     expect(screen.queryByText(/coming soon/i)).not.toBeInTheDocument()
+  })
+
+  it('routes to companion setup (not /bombsquad) when there is no companion', async () => {
+    stubServer([], { hasCompanion: false })
+    renderAlbum()
+
+    const cta = await screen.findByRole('link', { name: '认识你的伙伴' })
+    expect(cta).toHaveAttribute('href', '/me/companion')
+    // The play CTA into /bombsquad/ is a dead end pre-setup, so it must NOT show.
+    expect(screen.queryByRole('link', { name: '开始玩' })).not.toBeInTheDocument()
   })
 
   it('lists episode cards', async () => {

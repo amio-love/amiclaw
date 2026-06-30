@@ -3,7 +3,12 @@ import { useSearchParams } from 'react-router-dom'
 import { Button, GlassCard, Modal } from '@amiclaw/ui'
 import type { MemoryView } from '@shared/companion-types'
 import { fetchMemories, deleteMemory } from '@/lib/companion-api'
-import { useCompanionAccess, CompanionLoginGate } from '@/components/companion/CompanionAccess'
+import { useCompanion } from '@/hooks/useCompanion'
+import {
+  useCompanionAccess,
+  CompanionLoginGate,
+  CompanionSetupGate,
+} from '@/components/companion/CompanionAccess'
 import CompanionPageHeader from '@/components/companion/CompanionPageHeader'
 import CompanionEmptyState from '@/components/companion/CompanionEmptyState'
 import MemoryCard from '@/components/companion/MemoryCard'
@@ -21,6 +26,10 @@ const MAX_FOCUS_AUTO_PAGES = 20
    「即将推出」. */
 export default function MemoryAlbumPage() {
   const access = useCompanionAccess()
+  // Whether a companion exists distinguishes the two empty states: no-companion
+  // (route to setup — capture events are discarded until a companion exists) vs
+  // has-companion-but-no-episodes (the legitimate "去玩一局" empty state).
+  const { state: companion } = useCompanion(access === 'ready')
   const [searchParams] = useSearchParams()
   const focusId = searchParams.get('focus')
   const [status, setStatus] = useState<LoadStatus>('loading')
@@ -118,12 +127,17 @@ export default function MemoryAlbumPage() {
           <p className={styles.noteText}>回忆暂时读不出来，稍后再试。</p>
         </GlassCard>
       ) : memories.length === 0 ? (
-        <CompanionEmptyState
-          title="还没有回忆"
-          text="去和伙伴一起拆一局炸弹，故事就从这里开始。"
-          ctaLabel="开始玩"
-          ctaHref="/bombsquad/"
-        />
+        // No-companion vs has-companion-no-episodes are different empty states.
+        companion.status === 'loading' ? null : companion.status === 'none' ? (
+          <CompanionSetupGate text="回忆是你和伙伴一起拆局留下的。先认识你的伙伴，回忆才会开始积累。" />
+        ) : (
+          <CompanionEmptyState
+            title="还没有回忆"
+            text="去和伙伴一起拆一局炸弹，故事就从这里开始。"
+            ctaLabel="开始玩"
+            ctaHref="/bombsquad/"
+          />
+        )
       ) : (
         <>
           <div className={styles.list}>

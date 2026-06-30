@@ -8,7 +8,11 @@ import {
   deleteAllClaims,
   setProfileEnabled,
 } from '@/lib/companion-api'
-import { useCompanionAccess, CompanionLoginGate } from '@/components/companion/CompanionAccess'
+import {
+  useCompanionAccess,
+  CompanionLoginGate,
+  CompanionSetupGate,
+} from '@/components/companion/CompanionAccess'
 import CompanionPageHeader from '@/components/companion/CompanionPageHeader'
 import CompanionEmptyState from '@/components/companion/CompanionEmptyState'
 import ClaimCard from '@/components/companion/ClaimCard'
@@ -16,7 +20,9 @@ import styles from './ProfileControlPage.module.css'
 
 const CORRECTION_MAX = 280
 
-type LoadStatus = 'loading' | 'ready' | 'error'
+// 'setup' = signed in but no companion yet: there is no profile to control, so
+// gate to companion setup rather than showing the (inert) profile switch.
+type LoadStatus = 'loading' | 'setup' | 'ready' | 'error'
 
 type ModalState =
   | { type: 'none' }
@@ -48,9 +54,9 @@ export default function ProfileControlPage() {
         setClaims(result.claims)
         setStatus('ready')
       } else if (result.kind === 'none') {
-        // No companion yet — there is no profile to control.
-        setClaims([])
-        setStatus('ready')
+        // No companion yet — there is no profile to control. Gate to setup
+        // (distinct from the has-companion-but-zero-claims empty state).
+        setStatus('setup')
       } else {
         setStatus('error')
       }
@@ -119,7 +125,9 @@ export default function ProfileControlPage() {
 
       {access === 'loading' ? null : access === 'gate' ? (
         <CompanionLoginGate />
-      ) : status === 'loading' ? null : status === 'error' ? (
+      ) : status === 'loading' ? null : status === 'setup' ? (
+        <CompanionSetupGate text="画像是伙伴在相处中对你的理解。先认识你的伙伴，才有画像可以查看和管理。" />
+      ) : status === 'error' ? (
         <GlassCard radius="2xl" className={styles.note}>
           <p className={styles.noteText}>画像暂时读不出来，稍后再试。</p>
         </GlassCard>

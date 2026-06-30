@@ -42,6 +42,8 @@ const CLAIM: ProfileClaimView = {
 interface ServerOptions {
   profileEnabled?: boolean
   claims?: ProfileClaimView[]
+  /** When true, GET /api/companion/profile returns 404 (no companion yet). */
+  noCompanion?: boolean
 }
 
 function stubServer(options: ServerOptions = {}) {
@@ -72,6 +74,9 @@ function stubServer(options: ServerOptions = {}) {
         return Promise.resolve(json({ profile_enabled: false }))
       }
       if (url.endsWith('/api/companion/profile')) {
+        if (options.noCompanion) {
+          return Promise.resolve(json({ error: 'no companion set up' }, 404))
+        }
         return Promise.resolve(json({ profile_enabled: profileEnabled, claims }))
       }
       return Promise.resolve(json({}, 404))
@@ -104,12 +109,25 @@ describe('ProfileControlPage /me/profile', () => {
     expect(evidence).toHaveAttribute('href', '/me/memories?focus=ep-1')
   })
 
-  it('shows an honest empty state with no claims', async () => {
+  it('shows an honest empty state when the companion has no claims yet', async () => {
     stubServer({ claims: [] })
     renderProfile()
 
     expect(await screen.findByText('还没有形成任何理解')).toBeInTheDocument()
     expect(screen.queryByText(/即将推出/)).not.toBeInTheDocument()
+    // This is the has-companion case, so the profile switch IS present.
+    expect(screen.getByRole('switch', { name: '画像开关' })).toBeInTheDocument()
+  })
+
+  it('gates to companion setup (not the toggle) when there is no companion', async () => {
+    stubServer({ noCompanion: true })
+    renderProfile()
+
+    const cta = await screen.findByRole('link', { name: '认识你的伙伴' })
+    expect(cta).toHaveAttribute('href', '/me/companion')
+    // No profile to control: the switch and the empty-claims state must NOT show.
+    expect(screen.queryByRole('switch', { name: '画像开关' })).not.toBeInTheDocument()
+    expect(screen.queryByText('还没有形成任何理解')).not.toBeInTheDocument()
   })
 
   it('replaces a claim with the corrected wording', async () => {
