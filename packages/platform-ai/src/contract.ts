@@ -162,6 +162,21 @@ export interface SessionSummary {
 }
 
 /**
+ * Client→server control message: request the closing-recap turn.
+ *
+ * Sent by the client on a successful daily defuse BEFORE the results screen
+ * appears. The DO runs one final LLM+TTS recap turn (1-2 sentences, spoken
+ * Chinese, no lists) and streams it back via the normal `AiResponseChunk`
+ * channel, ending with `{kind:'text', done:true}`. The client plays the audio
+ * and navigates to the results screen once it finishes (or after a hard timeout
+ * so a TTS hiccup never strands the player). The `{type:'end'}` message follows
+ * after navigation — the recap does not end the session.
+ */
+export interface ClosingMessage {
+  type: 'closing'
+}
+
+/**
  * The four-method session contract. Implemented by the Durable Object backed
  * server in a later round; defined here as the type-shape SSOT so consumers and
  * the future implementation share one contract.

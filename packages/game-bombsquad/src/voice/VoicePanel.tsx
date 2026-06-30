@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useImperativeHandle, forwardRef } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
 import { useVoiceSession } from './useVoiceSession'
 import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
@@ -11,6 +11,19 @@ interface VoicePanelProps {
   gameState: GameState
   /** Platform game id; defaults to `'bombsquad'` inside the hook. */
   gameId?: string
+}
+
+/**
+ * Imperative handle exposed by VoicePanel via `ref`. GamePage uses this to
+ * trigger the closing-recap turn and gate results-screen navigation on it.
+ */
+export interface VoicePanelHandle {
+  /**
+   * Request the closing-recap turn. Returns a promise that resolves when the
+   * recap audio has finished playing. Resolves immediately if the session is
+   * not live. See `useVoiceSession.requestClosing` for the full contract.
+   */
+  requestClosing: () => Promise<void>
 }
 
 /**
@@ -51,13 +64,25 @@ function placeholderFor(status: VoiceStatus, phase: ConversationPhase): string {
   return '正在接通 AI 语音…'
 }
 
-function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
-  const { status, conversationPhase, aiText, playerTranscript, isAiSpeaking, error } =
-    useVoiceSession({
-      manualData,
-      gameState,
-      gameId,
-    })
+function VoicePanelImpl(
+  { manualData, gameState, gameId }: VoicePanelProps,
+  ref: React.ForwardedRef<VoicePanelHandle>
+) {
+  const {
+    status,
+    conversationPhase,
+    aiText,
+    playerTranscript,
+    isAiSpeaking,
+    error,
+    requestClosing,
+  } = useVoiceSession({
+    manualData,
+    gameState,
+    gameId,
+  })
+
+  useImperativeHandle(ref, () => ({ requestClosing }), [requestClosing])
 
   const isLive = status === 'ready'
   // While live, the prominent indicator is the conversation phase; before that
@@ -118,7 +143,8 @@ function VoicePanelImpl({ manualData, gameState, gameId }: VoicePanelProps) {
 /**
  * Memoized so the ~60fps GamePage timer re-render does not re-render the panel:
  * with the stable, memoized `manualData` / `gameState` props from GamePage it
- * only re-renders on its own hook-state changes.
+ * only re-renders on its own hook-state changes. `forwardRef` wraps first so
+ * the ref flows through the memo boundary to `useImperativeHandle` inside.
  */
-const VoicePanel = memo(VoicePanelImpl)
+const VoicePanel = memo(forwardRef<VoicePanelHandle, VoicePanelProps>(VoicePanelImpl))
 export default VoicePanel

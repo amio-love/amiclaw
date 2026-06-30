@@ -89,6 +89,7 @@ import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
 import { traceTurn, traceTurnError } from './trace'
 import {
+  runClosingTurn,
   runOpeningTurn,
   runReply,
   runUtteranceStt,
@@ -186,12 +187,24 @@ interface UpdateGameStateMessage {
   gameState: GameState
 }
 
+/**
+ * Request the closing-recap turn. Sent by the client on a successful daily
+ * defuse BEFORE the results screen appears. The DO runs one final LLM+TTS recap
+ * turn (1-2 sentences, spoken Chinese, warm) and streams it back via the normal
+ * `AiResponseChunk` channel. The `{type:'end'}` message follows after the client
+ * navigates away — this message does NOT end the session.
+ */
+interface ClosingSessionMessage {
+  type: 'closing'
+}
+
 type ControlMessage =
   | CreateSessionMessage
   | SpeechStartMessage
   | TurnMessage
   | EndSessionMessage
   | UpdateGameStateMessage
+  | ClosingSessionMessage
 
 /**
  * Base64-encode raw bytes for JSON transport of an audio frame. Uses the
@@ -1116,6 +1129,37 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   }
 
   /**
+   * Fire the closing-recap turn: an LLM+TTS-only turn from the server-side
+   * `CLOSING_DIRECTIVE`, streamed to the socket with NO player audio. Mirrors
+   * `runOpeningGreeting` in structure: background-launched on `closing`
+   * (fire-and-forget), self-fencing via the epoch guard, fail-loud on a provider
+   * error. The closing recap does NOT end the session — `end` follows later when
+   * the client navigates away (the VoicePanel unmount sends `end`).
+   */
+  private async runClosingRecap(ws: Connection): Promise<void> {
+    const myEpoch = this.turnEpoch
+    try {
+      if (!this.sessionState || !this.providers || this.sessionId === undefined) return
+      traceTurn('turn', 'closing-start', { sessionId: this.sessionId })
+      const turn = runClosingTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
+      await this.streamTurn(ws, turn)
+    } catch (err: unknown) {
+      // Skip the fail-loud close once a teardown has advanced the generation
+      // (the session this recap belonged to is gone; a newer session may own
+      // the socket now). Mirrors the opening-greeting error path exactly.
+      if (this.turnEpoch === myEpoch) {
+        const reason = err instanceof Error ? err.message : 'closing recap failed'
+        traceTurnError('turn', 'closing-error', { messageChars: reason.length })
+        try {
+          ws.close(1008, safeCloseReason(reason))
+        } catch {
+          // socket already gone — nothing to fail loud on.
+        }
+      }
+    }
+  }
+
+  /**
    * Reject cross-session / cross-user access. Delegates to the pure
    * `assertSessionOwnership` predicate (the L2 ownership invariant — the `turn`
    * and `end` paths verify ownership against the bound session).
@@ -1353,6 +1397,32 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, safeCloseReason('session ended'))
+        return
+      }
+      case 'closing': {
+        // Closing-recap trigger: run one final LLM+TTS turn (the post-win
+        // recap) and stream it back. Must have a live session + the owner
+        // socket; a non-owner or pre-create signal is a silent no-op (NOT a
+        // 1008 close — the session remains alive; `end` follows when the client
+        // navigates away). A turn in flight is rejected with `turn_in_flight` so
+        // the serial-turn guard is not violated; the client falls back to its
+        // hard timeout and navigates without waiting for the recap.
+        if (
+          !this.sessionState ||
+          !socketUserId ||
+          this.sessionId === undefined ||
+          !this.providers
+        ) {
+          return
+        }
+        if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) {
+          return
+        }
+        if (this.turnInFlight) {
+          this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
+          return
+        }
+        void this.runClosingRecap(ws)
         return
       }
       case 'update-gamestate': {

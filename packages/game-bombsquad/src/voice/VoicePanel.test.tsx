@@ -11,6 +11,7 @@ import { useVoiceSession } from './useVoiceSession'
 const mockHook = vi.mocked(useVoiceSession)
 
 const endSession = vi.fn()
+const requestClosing = vi.fn().mockResolvedValue(undefined)
 
 function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessionResult {
   return {
@@ -23,6 +24,7 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
     error: null,
     summary: null,
     endSession,
+    requestClosing,
     ...partial,
   }
 }

@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice: the AI gives a short closing recap when you win** - Add.
+After a successful daily defuse the results screen used to appear instantly,
+cutting the voice partner off before it could react. Now, on a daily win, the AI
+plays one short spoken recap — a warm one-to-two-sentence congratulation — and the
+results screen waits until that finishes (with an 8-second hard cap so a TTS hiccup
+never strands you on the win screen). The "拆除成功" burst stays on screen during
+the recap as the celebration beat. Only a successful daily defuse triggers it; a
+loss, a timeout, or practice mode navigates straight to results as before.
+
 **BombSquad leaderboard: a single run can no longer appear twice** - Fix. One
 finished daily run was sometimes posted to the leaderboard more than once
 (showing two identical rows), because the result page had several submit paths
