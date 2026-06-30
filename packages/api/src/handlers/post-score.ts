@@ -3,6 +3,10 @@ import type {
   LeaderboardEntry,
   ScoreSubmissionResponse,
 } from '../../../../shared/leaderboard-types'
+
+// Internal KV shape: LeaderboardEntry plus the dedup key, which is never
+// exposed through the public GET response (stripped in get-leaderboard.ts).
+type StoredEntry = LeaderboardEntry & { run_id?: string }
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
 import {
   MAX_AI_MODEL_LEN,
@@ -52,21 +56,27 @@ export async function handlePostScore(request: Request, kv: KVNamespace): Promis
 
   // Read-modify-write leaderboard
   const leaderboardKey = `leaderboard:${body.date}`
-  const existing = ((await kv.get(leaderboardKey, 'json')) as LeaderboardEntry[] | null) ?? []
+  const existing = ((await kv.get(leaderboardKey, 'json')) as StoredEntry[] | null) ?? []
 
-  const newEntry: LeaderboardEntry = {
+  const newEntry: StoredEntry = {
     rank: 0, // assigned below after sort
     nickname: sanitizeNickname(body.nickname),
     time_ms: body.time_ms,
     attempt_number: body.attempt_number,
     ai_tool: sanitizeLeaderboardText(body.ai_tool, MAX_AI_TOOL_LEN),
+    ...(body.run_id ? { run_id: body.run_id } : {}),
   }
   const aiModel = body.ai_model
     ? sanitizeLeaderboardText(body.ai_model, MAX_AI_MODEL_LEN)
     : undefined
   if (aiModel) newEntry.ai_model = aiModel
 
-  const updated = [...existing, newEntry]
+  // Idempotency: when the submission carries a run_id, remove any existing
+  // entry with the same run_id before appending. This makes a double-POST of
+  // the same run (e.g. page refresh or KV race) produce exactly one row.
+  const base = body.run_id ? existing.filter((e) => e.run_id !== body.run_id) : existing
+
+  const updated = [...base, newEntry]
     .sort((a, b) => a.time_ms - b.time_ms)
     .slice(0, MAX_ENTRIES)
     .map((entry, idx) => ({ ...entry, rank: idx + 1 }))
