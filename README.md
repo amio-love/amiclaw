@@ -1,15 +1,18 @@
-# AmiClaw
+# AMIO Arcade
 
-**AmiClaw** (`claw.amio.fans`) is a platform for human-AI collaborative games,
-where you and your AI work together in real time to solve challenges.
+**AMIO Arcade** (`claw.amio.fans`, formerly AmiClaw) is a platform for
+human-AI collaborative games, where you and your AI work together in real time
+to solve challenges. The repository, workspace package scope, Cloudflare Pages
+project, and current production host still use the `amiclaw` / `claw.amio.fans`
+compatibility identifiers.
 
 > **"Keep Us Human"** — The fun is not in the AI solving problems alone. It is
 > in the two of you figuring them out together.
 
 ## BombSquad
 
-**BombSquad** (`claw.amio.fans/bombsquad`) is the first AmiClaw game, inspired by
-_Keep Talking and Nobody Explodes_.
+**BombSquad** (`claw.amio.fans/bombsquad`) is the first AMIO Arcade game,
+inspired by _Keep Talking and Nobody Explodes_.
 
 You are the bomb defuser. Your AI is the manual expert.
 
@@ -66,7 +69,10 @@ amiclaw/
 ├── docs/                    # Design documents and plans
 ├── packages/
 │   ├── api/                 # Leaderboard handler module (Pages Functions)
-│   ├── game/                # BombSquad React SPA
+│   ├── platform/            # Platform shell and deploy root
+│   ├── game-bombsquad/      # BombSquad React SPA
+│   ├── game-yijing/         # Yijing Oracle React SPA
+│   ├── ui/                  # Shared Atlas UI primitives
 │   └── manual/              # Manual static pages and YAML data
 ├── prompts/                 # Prompt and skill templates
 ├── scripts/                 # Release and maintenance scripts
@@ -98,7 +104,7 @@ pnpm dev
 Operational notes:
 
 - Manual sources live in `packages/manual/data/`
-- `pnpm build` assembles the manual assets into `packages/game/dist/manual/`
+- `pnpm build` assembles all game and manual assets into `packages/platform/dist/`
   for Cloudflare Pages
 - The current UI keeps leaderboard nickname anonymous by default
 - `ai_tool` is supported by the schema but not collected by the current UI yet
@@ -117,7 +123,9 @@ pnpm build
 
 Workspace notes:
 
-- `packages/game` contains the React + Vite game client
+- `packages/platform` contains the React + Vite platform shell and deploy root
+- `packages/game-bombsquad` contains the BombSquad React + Vite game client
+- `packages/game-yijing` contains the Yijing Oracle React + Vite game client
 - `packages/manual` builds the static manual pages and YAML data
 - `packages/api` contains the leaderboard handler module imported by Pages Functions
 
@@ -126,6 +134,6 @@ See [`docs/plans/`](./docs/plans/) for implementation plans and
 
 ## Links
 
-- Platform: [claw.amio.fans](https://claw.amio.fans)
+- AMIO Arcade: [claw.amio.fans](https://claw.amio.fans)
 - BombSquad: [claw.amio.fans/bombsquad](https://claw.amio.fans/bombsquad)
 - Part of the [AMIO](https://amio.fans) ecosystem

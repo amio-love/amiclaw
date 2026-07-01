@@ -6,7 +6,9 @@ project instructions.
 
 ## Project Overview
 
-**AmiClaw** (`claw.amio.fans`) is a human-AI collaborative gaming platform.
+**AMIO Arcade** (`claw.amio.fans`, formerly AmiClaw) is a human-AI
+collaborative gaming platform. The repository/package namespace and Cloudflare
+Pages project remain `amiclaw` for compatibility.
 **BombSquad** (`claw.amio.fans/bombsquad`) is the first game: a voice-based
 bomb-defusal challenge inspired by _Keep Talking and Nobody Explodes_, where the
 human player and an AI expert communicate only through voice.
@@ -15,7 +17,7 @@ Key docs:
 
 - System architecture (C4 model): `docs/architecture/architecture.md`
 - BombSquad gameplay, player guide: `docs/bombsquad-player-guide.md`
-- AmiClaw platform overview, player guide: `docs/amiclaw-platform-guide.md`
+- AMIO Arcade platform overview, player guide: `docs/amiclaw-platform-guide.md`
 - Design system: `docs/DesignSystem.md`
 - Changelog authoring guide: `docs/changelog-style-guide.md`
 

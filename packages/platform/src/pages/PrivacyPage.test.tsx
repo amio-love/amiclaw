@@ -25,7 +25,7 @@ describe('PrivacyPage', () => {
   it('renders the policy with its title and lead', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: /我们如何对待你的数据/ })).toBeInTheDocument()
-    expect(screen.getByText(/本政策说明 AmiClaw 收集哪些信息/)).toBeInTheDocument()
+    expect(screen.getByText(/本政策说明 AMIO 游乐场收集哪些信息/)).toBeInTheDocument()
   })
 
   it('states the 48-hour leaderboard and 30-day telemetry retention windows', () => {

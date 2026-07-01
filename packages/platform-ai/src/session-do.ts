@@ -4,14 +4,26 @@
  * It is a thin shell over the testable orchestration in `turn-pipeline.ts`:
  *   - It holds the session state (gameId/userId binding, conversation history,
  *     game state, usage counters) created in `createSession`.
- *   - It implements the four-method contract semantics
- *     (`createSession` / `onPlayerAudio` / `onAiResponse` / `endSession`),
+ *   - It binds and tears down the session (`createSession` / `endSession`),
  *     enforcing `sessionId <-> userId` ownership on every operation.
- *   - It drives `runTurn` over the WebSocket: inbound binary frames are player
- *     audio; outbound `AiResponseChunk`s are serialized back to the player.
+ *   - It drives LIVE, per-utterance ASR over the WebSocket. The client owns turn
+ *     detection (its VAD): on `speech-start` the DO opens a 火山 recognizer and
+ *     feeds the live incoming audio frames to it immediately, streaming interim
+ *     `{type:'transcript', final:false}` frames back so the caption builds WHILE
+ *     the player speaks; on `turn` it finalizes (negative-sequence end packet ->
+ *     last-package final), emits the terminal `{type:'transcript', final:true}`,
+ *     then runs the LLM+TTS reply, serializing outbound `AiResponseChunk`s back to
+ *     the player. The two phases are `runUtteranceStt` (speech-start) and
+ *     `runReply` (turn); their end-to-end composition `runTurn` backs the
+ *     unit-tested pipeline. Audio is streamed to 火山 continuously DURING the
+ *     utterance and end-of-audio is signaled promptly on `turn`, so 火山's 8s
+ *     inter-packet timeout cannot fire on a normal utterance.
+ *   - On `create` it also fires an AI-first opening greeting (`runOpeningTurn`,
+ *     LLM->TTS, no player audio) so the AI speaks first, when enabled (default).
  *
- * The orchestration logic itself lives in `runTurn` (pure, provider-mocked
- * unit tests); this class is the DO/WS adapter around it.
+ * The orchestration logic itself lives in `runUtteranceStt` / `runReply` (and
+ * their composition `runTurn`) / `runOpeningTurn` (pure, provider-mocked unit
+ * tests); this class is the DO/WS adapter that drives the two phases live.
  *
  * The class extends the Cloudflare Agents SDK `Agent` base (over `partyserver`),
  * with hibernation deliberately OFF (`static options = { hibernate: false }`).
@@ -47,9 +59,10 @@
  * frame, not just control messages.
  *
  * Two ownership grains coexist, split by what the operation does:
- *  - DRIVE operations (`turn`, binary audio) are gated on the owner USER id: the
- *    operating socket's authenticated user must equal the bound owner. They run a
- *    turn / feed audio; they never clear the session.
+ *  - DRIVE operations (`speech-start`, `turn`, binary audio) are gated on the
+ *    owner USER id: the operating socket's authenticated user must equal the bound
+ *    owner. They open / finalize an utterance and feed audio; they never clear the
+ *    session.
  *  - TEARDOWN operations (`end`, owner socket close) are gated on the owner
  *    SOCKET reference — the exact socket recorded at `createSession`
  *    (`ownerSocket` / `socketIsBoundSessionOwner`). A user-id grain is too coarse
@@ -74,8 +87,16 @@ import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './
 import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
-import { traceTurn } from './trace'
-import { runTurn, type SessionState, type TurnProviders } from './turn-pipeline'
+import { traceTurn, traceTurnError } from './trace'
+import {
+  runClosingTurn,
+  runOpeningTurn,
+  runReply,
+  runUtteranceStt,
+  type SessionState,
+  type TurnProviders,
+  type UtteranceResult,
+} from './turn-pipeline'
 import { flushSessionUsage, type UsageKvWriter } from './usage-flush'
 import {
   assertSessionOwnership,
@@ -111,13 +132,37 @@ interface CreateSessionMessage {
    * metadata only — it never affects session behaviour.
    */
   gameRunId?: string
+  /**
+   * Whether the AI opens the conversation with an unprompted greeting turn
+   * (LLM->TTS, no player audio) right after the session is established. Defaults
+   * to `true` — AI-first is the product behaviour. A consumer (or a test) sets
+   * `false` to suppress the greeting.
+   */
+  opening?: boolean
 }
 
 /**
- * Run one turn: close the current audio bridge so STT terminates, drive
- * `runTurn`, and stream the resulting `AiResponseChunk`s back to the client.
- * The player pushes binary audio frames, then sends this control message to
- * signal "that's my utterance, respond now".
+ * The player began an utterance (the client VAD detected speech start). The DO
+ * OPENS a per-utterance 火山 ASR connection and starts feeding the live incoming
+ * audio frames to it immediately, streaming interim `{type:'transcript',
+ * final:false}` frames back as the recognizer stabilizes more text — so the
+ * caption builds WHILE the player speaks. Paired with exactly one later `turn`.
+ * A second `speech-start` (or one while the AI is replying — a barge-in)
+ * supersedes the prior utterance / cancels the in-flight reply and opens a fresh
+ * recognizer.
+ */
+interface SpeechStartMessage {
+  type: 'speech-start'
+}
+
+/**
+ * The player stopped (the client VAD detected utterance end). The DO finalizes
+ * the open utterance — closing the audio bridge so the ASR pump sends the
+ * negative-sequence end-of-audio packet and 火山 returns the last-package final —
+ * emits the terminal `{type:'transcript', final:true}` frame, then runs the
+ * existing LLM+TTS reply over the complete transcript. A `turn` with no open
+ * utterance (no prior `speech-start`, or it was already finalized / barged-in
+ * away) is a benign no-op.
  */
 interface TurnMessage {
   type: 'turn'
@@ -127,7 +172,39 @@ interface EndSessionMessage {
   type: 'end'
 }
 
-type ControlMessage = CreateSessionMessage | TurnMessage | EndSessionMessage
+/**
+ * Steer the live session's manual injection mid-conversation. Sent by the client
+ * when the player advances modules within ONE continuous run: the whole-run
+ * voice session stays a single conversation (history + the AI-first greeting
+ * persist), and only WHICH manual subset is injected changes. The DO updates the
+ * stored session `gameState.relevantSections` so the NEXT turn injects the new
+ * module's manual; it does NOT create a new session, reset history, re-run the
+ * greeting, or disturb an in-flight turn. `manualData` (the whole manual) was
+ * already provided at `create` — this only re-selects sections from it.
+ */
+interface UpdateGameStateMessage {
+  type: 'update-gamestate'
+  gameState: GameState
+}
+
+/**
+ * Request the closing-recap turn. Sent by the client on a successful daily
+ * defuse BEFORE the results screen appears. The DO runs one final LLM+TTS recap
+ * turn (1-2 sentences, spoken Chinese, warm) and streams it back via the normal
+ * `AiResponseChunk` channel. The `{type:'end'}` message follows after the client
+ * navigates away — this message does NOT end the session.
+ */
+interface ClosingSessionMessage {
+  type: 'closing'
+}
+
+type ControlMessage =
+  | CreateSessionMessage
+  | SpeechStartMessage
+  | TurnMessage
+  | EndSessionMessage
+  | UpdateGameStateMessage
+  | ClosingSessionMessage
 
 /**
  * Base64-encode raw bytes for JSON transport of an audio frame. Uses the
@@ -208,9 +285,20 @@ const textEncoderForReason = new TextEncoder()
 const textDecoderForReason = new TextDecoder()
 
 /**
- * Async audio bridge: binary WS frames are pushed in; `runTurn`'s STT step
- * pulls them via `for await`. One bridge backs one in-flight turn; `end` closes
- * it so the STT stream terminates.
+ * Capacity of the rolling pre-roll audio buffer, in bytes of PCM16 16 kHz audio.
+ * 16 000 samples/s × 0.7 s × 2 bytes/sample = 22 400 bytes (≈700 ms).
+ * This covers the client VAD's `minSpeechMs: 400 ms` qualification window plus
+ * margin for the leading consonant / onset that fires before VAD qualifies.
+ */
+export const PREROLL_MAX_BYTES = 22_400
+
+/**
+ * Async audio bridge: binary WS frames are pushed in; the STT step pulls them via
+ * `for await`. One bridge backs one live utterance: it is created on
+ * `speech-start` (the recognizer opens and starts pulling LIVE while the player
+ * speaks) and `close()`d on `turn` (so the ASR pump sends the negative-sequence
+ * end-of-audio packet and the stream terminates). A teardown / barge-in also
+ * closes it.
  */
 class AudioBridge {
   private buffer: AudioChunk[] = []
@@ -248,6 +336,26 @@ class AudioBridge {
       yield next.value
     }
   }
+}
+
+/**
+ * One live, per-utterance ASR session: the bridge audio frames are pushed into,
+ * the background STT driver's completion promise, and the captured outcome / a
+ * genuine ASR fault. Opened on `speech-start`, consumed on `turn`, fenced by its
+ * own `epoch` so a barge-in / teardown that advanced the session generation
+ * stops its late interim frames and swallows its late faults.
+ */
+interface LiveUtterance {
+  /** The audio bridge live frames are pushed into; closed on `turn` to finalize. */
+  bridge: AudioBridge
+  /** The session generation this utterance belongs to (epoch-fencing). */
+  epoch: number
+  /** Resolves when the background STT driver settled (populating `outcome`/`error`). */
+  done: Promise<void>
+  /** The captured complete utterance + audio byte total, once STT finalized cleanly. */
+  outcome?: UtteranceResult
+  /** A genuine ASR fault (error frame / connect failure / idle stall), if STT failed. */
+  error?: unknown
 }
 
 export class VoiceSessionDO extends Agent<SessionDoEnv> {
@@ -289,26 +397,32 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   private usageFlushed = false
   /** Wired providers for the session. */
   private providers: TurnProviders | undefined
-  /** Audio bridge for the in-flight turn, if any. */
-  private audio: AudioBridge | undefined
   /**
-   * Turn in-flight guard. A voice turn is a single serial round; a DO event can
-   * interleave across the many `await`s inside one turn (STT/LLM/TTS all await),
-   * so a second `turn` message arriving mid-flight would start a second
-   * `onAiResponse`/`runTurn` over the SAME `state`/`providers`/socket — racing
-   * the shared `history`/`usage` and interleaving two response streams on one
-   * socket. This flag is `true` for exactly the window one turn is running; a
-   * second `turn` while set is rejected (fail-loud), and it is cleared in the
-   * turn loop's `finally` so success / failure / cancel all release it (an
-   * exception can never wedge the guard shut).
+   * The live, in-progress utterance, if any: set on `speech-start` (the
+   * recognizer opens and starts feeding on live audio), consumed + cleared on
+   * `turn` (finalize), and discarded on barge-in / teardown. `undefined` between
+   * utterances. Incoming binary audio frames are forwarded to its bridge ONLY
+   * while it is set; frames arriving with no live utterance (between utterances,
+   * during the AI-first greeting) are dropped.
+   */
+  private liveUtterance: LiveUtterance | undefined
+  /**
+   * Reply in-flight guard. A voice reply is a single serial round; a DO event can
+   * interleave across the many `await`s inside one reply (LLM/TTS all await), so a
+   * second `turn` message arriving mid-reply would start a second `runReply` over
+   * the SAME `state`/`providers`/socket — racing the shared `history`/`usage` and
+   * interleaving two response streams on one socket. This flag is `true` for
+   * exactly the window one reply is running; a second `turn` while set is rejected
+   * (fail-loud), and it is cleared in the reply loop's `finally` so success /
+   * failure / cancel all release it (an exception can never wedge the guard shut).
    */
   private turnInFlight = false
   /**
-   * The in-flight turn's async iterator, held so a mid-turn `end` (or the
-   * owner's socket close) can cancel it cleanly: closing the audio bridge
-   * terminates STT, and `return()` on this iterator runs `runTurn`'s `finally`
-   * (closes the sentence queue, returns the live LLM/TTS iterators) so no
-   * provider stream is left dangling. `undefined` when no turn is running.
+   * The in-flight reply's async iterator, held so a mid-reply `end` (or the
+   * owner's socket close, or a barge-in `speech-start`) can cancel it cleanly:
+   * `return()` on this iterator runs `runReply`'s `finally` (closes the sentence
+   * queue, returns the live LLM/TTS iterators) so no provider stream is left
+   * dangling. `undefined` when no reply is running.
    */
   private activeTurn: AsyncIterator<AiResponseChunk> | undefined
   /**
@@ -362,6 +476,19 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * `clearSession` so a torn-down session leaves no stale owner reference.
    */
   private ownerSocket: Connection | undefined
+  /**
+   * Rolling ring-buffer of audio frames received while no live utterance is open
+   * (between utterances, during the AI-first greeting). Frames are appended on
+   * every binary WS message when `liveUtterance` is undefined and evicted (oldest
+   * first) to keep the retained total within `PREROLL_MAX_BYTES`. On
+   * `speech-start`, the buffered frames are prepended to the new `AudioBridge`
+   * before live frames begin flowing, so the onset audio (leading consonant +
+   * first syllable) that arrived before the client VAD qualified is captured by
+   * the recognizer.
+   */
+  private prerollFrames: Uint8Array[] = []
+  /** Running byte total of `prerollFrames` (avoids a per-frame reduce scan). */
+  private prerollBytes = 0
 
   /**
    * Suppress the SDK's own protocol/text frames (identity, `cf_agent_state`, MCP
@@ -409,17 +536,39 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // Binary frame: player audio. Gate it through the SAME per-socket ownership
       // predicate the control path uses — a binary frame must come from the
       // connection whose user owns the bound session. Without this, a second
-      // authenticated connection on the same DO could push frames the owner's
-      // next `turn` transcribes, forging the owner's utterance. The throw on a
-      // non-owner frame is caught below and closes THAT connection with 1008
-      // (fail loud, control-path-consistent) — the owner's bridge is never
-      // touched. The frame's bytes are recovered defensively for whatever shape
-      // the runtime delivers (`ArrayBuffer` / `ArrayBufferView` / `Blob`), so
-      // audio fidelity never depends on partyserver's post-accept
-      // `binaryType = 'arraybuffer'` assignment (see `audioFrameToBytes`).
+      // authenticated connection on the same DO could push frames into the owner's
+      // live recognizer, forging the owner's utterance. The throw on a non-owner
+      // frame is caught below and closes THAT connection with 1008 (fail loud,
+      // control-path-consistent) — the owner's utterance is never touched. The
+      // frame's bytes are recovered defensively for whatever shape the runtime
+      // delivers (`ArrayBuffer` / `ArrayBufferView` / `Blob`), so audio fidelity
+      // never depends on partyserver's post-accept `binaryType = 'arraybuffer'`
+      // assignment (see `audioFrameToBytes`).
+      //
+      // The mic streams continuously, so frames arrive between utterances and
+      // during the AI-first greeting too; they are forwarded to the recognizer
+      // ONLY while a live utterance is open (between `speech-start` and `turn`)
+      // and otherwise dropped. Feeding the open recognizer live — rather than
+      // buffering for a transcribe-at-`turn` — is what keeps 火山's 8s
+      // inter-packet timeout from firing and surfaces the caption WHILE the player
+      // speaks.
       this.assertSocketOwner(connection)
-      const bridge = this.ensureAudioBridge()
-      bridge.push(await audioFrameToBytes(message))
+      const bytes = await audioFrameToBytes(message)
+      if (this.liveUtterance !== undefined) {
+        // Utterance open: forward directly to the live recognizer bridge.
+        this.liveUtterance.bridge.push(bytes)
+      } else {
+        // No utterance open: accumulate into the rolling pre-roll ring buffer.
+        // On the next `speech-start`, these frames are prepended to the new
+        // bridge so the recognizer captures the onset audio that arrived before
+        // the client VAD qualified (≈400 ms qualification window).
+        this.prerollFrames.push(bytes)
+        this.prerollBytes += bytes.byteLength
+        // Evict oldest frames until the retained total is within cap.
+        while (this.prerollBytes > PREROLL_MAX_BYTES && this.prerollFrames.length > 0) {
+          this.prerollBytes -= this.prerollFrames.shift()!.byteLength
+        }
+      }
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'message handling failed'
       // Byte-safe truncation: `reason` is a provider error string of unbounded
@@ -511,10 +660,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * published fields, so observers only ever see a session that is fully
    * constructed or entirely absent — never half-bound. The prior interleaving
    * (`this.userId = userId` BEFORE `createProviders`) let a failed create leave
-   * the DO bound to a user with NO `state`/`providers`: that user's binary
-   * frames then passed the ownership gate, lazily created an audio bridge, and
-   * the leaked pre-create frames survived into the next SUCCESSFUL session's
-   * first turn (create does not reset `this.audio`).
+   * the DO bound to a user with NO `state`/`providers`: that user's frames then
+   * passed the ownership gate. In the live model frames are only ever forwarded
+   * to an OPEN utterance (set on `speech-start`, never on a bare `create`), so
+   * the publish-after-success ordering still matters for the gate but no longer
+   * risks a leaked-frame carry-over.
    */
   createSession(
     gameId: string,
@@ -534,42 +684,16 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   }
 
   /**
-   * Feed one player audio frame. Validates `sessionId <-> userId` ownership,
-   * then pushes the frame onto the in-flight turn's audio bridge.
-   */
-  onPlayerAudio(sessionId: string, userId: string, audioChunk: AudioChunk): void {
-    this.assertOwner(sessionId, userId)
-    this.ensureAudioBridge().push(audioChunk)
-  }
-
-  /**
-   * Run a turn over the current audio and yield the AI response stream.
-   * Validates ownership, then delegates to `runTurn`. The caller is expected to
-   * have finished pushing the turn's audio (or to close the bridge) so STT can
-   * terminate.
-   */
-  async *onAiResponse(sessionId: string, userId: string): AsyncIterable<AiResponseChunk> {
-    this.assertOwner(sessionId, userId)
-    if (!this.sessionState || !this.providers) {
-      throw new Error('session-do: onAiResponse before createSession')
-    }
-    const bridge = this.ensureAudioBridge()
-    bridge.close()
-    this.audio = undefined
-    yield* runTurn(this.providers, this.sessionState, bridge)
-  }
-
-  /**
    * End the session: validate ownership, settle, flush the session's usage to
    * the USAGE KV, and return the summary with the turn count and usage mount
    * point.
    *
-   * The flush lives HERE — in the contract method — because `endSession` is
-   * the single implementation boundary every `end`-shaped termination goes
-   * through: the WS `end` branch calls this method, and a direct consumer
-   * driving the four-method contract over the DO stub reaches it without any
-   * WS framing. Hanging the flush on the WS branch instead would let a direct
-   * contract call end a session unmetered. The owner-socket close path keeps
+   * The flush lives HERE — in the session-teardown method — because `endSession`
+   * is the single implementation boundary every `end`-shaped termination goes
+   * through: the WS `end` branch calls this method, and a direct consumer driving
+   * the session contract over the DO stub reaches it without any WS framing.
+   * Hanging the flush on the WS branch instead would let a direct teardown call
+   * end a session unmetered. The owner-socket close path keeps
    * its own `flushUsage()` — an abrupt drop never reaches `endSession` (see
    * `onSocketClose`). State is still live at this point, so the flush
    * naturally precedes any `clearSession` the caller performs. A mid-flight
@@ -583,8 +707,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     if (!this.sessionState) {
       throw new Error('session-do: endSession before createSession')
     }
-    this.audio?.close()
-    this.audio = undefined
+    // Terminate any open live utterance's recognizer (closing its bridge ends the
+    // STT stream); `clearSession` discards the handle. A reply in flight is
+    // canceled separately by the `end` path's `cancelActiveTurn`.
+    this.discardLiveUtterance()
     const summary: SessionSummary = {
       sessionId,
       gameId: this.sessionState.config.gameId,
@@ -631,9 +757,136 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     }
   }
 
-  private ensureAudioBridge(): AudioBridge {
-    if (this.audio === undefined) this.audio = new AudioBridge()
-    return this.audio
+  /**
+   * Open a fresh live utterance on `speech-start`: discard any prior live
+   * utterance (a second `speech-start` without an intervening `turn`), cancel an
+   * in-flight AI reply and free the serial-turn guard (barge-in — the player took
+   * the floor while the AI was replying / greeting), then start the per-utterance
+   * STT driver over a new bridge. Incoming audio frames feed this bridge LIVE, so
+   * 火山 transcribes WHILE the player speaks and the DO streams interim caption
+   * frames; `turn` closes the bridge to finalize.
+   *
+   * The new utterance captures the CURRENT generation (post-`supersedeActiveTurn`
+   * bump) as its epoch, so a later barge-in / teardown that advances the epoch
+   * fences this utterance's late interim frames and swallows its late faults
+   * (see `runLiveStt` / the `turn` finalize guard).
+   */
+  private beginUtterance(ws: Connection): void {
+    this.discardLiveUtterance()
+    this.supersedeActiveTurn()
+    const bridge = new AudioBridge()
+    // Flush buffered pre-roll frames (onset audio that arrived before the client
+    // VAD qualified) into the new bridge so the recognizer captures the full
+    // utterance from its actual start. Clear after flush: these frames are
+    // consumed once and must not carry over to a subsequent utterance.
+    for (const frame of this.prerollFrames) {
+      bridge.push(frame)
+    }
+    this.prerollFrames = []
+    this.prerollBytes = 0
+    const myEpoch = this.turnEpoch
+    const utterance: LiveUtterance = {
+      bridge,
+      epoch: myEpoch,
+      // Replaced synchronously below; the placeholder keeps `done` non-optional.
+      done: Promise.resolve(),
+    }
+    utterance.done = this.runLiveStt(ws, bridge, myEpoch).then(
+      (outcome) => {
+        utterance.outcome = outcome
+      },
+      (err) => {
+        utterance.error = err
+        // Fail loud on a GENUINE ASR fault that surfaced mid-utterance (before
+        // `turn`) — but only while this utterance is still the live generation. A
+        // barge-in / teardown that advanced the epoch already moved on; its late
+        // ASR fault must not 1008-close a socket the new generation owns. A
+        // benign no-speech close is NOT a fault (it resolves with an empty
+        // transcript, not a rejection), so it never reaches here.
+        if (this.turnEpoch === myEpoch) {
+          const reason = err instanceof Error ? err.message : 'live ASR failed'
+          traceTurnError('asr', 'live-error', { messageChars: reason.length })
+          try {
+            ws.close(1008, safeCloseReason(reason))
+          } catch {
+            // socket already gone — nothing to fail loud on.
+          }
+        }
+      }
+    )
+    this.liveUtterance = utterance
+  }
+
+  /**
+   * Drive the per-utterance STT phase: pull the player's audio off `bridge`,
+   * stream each interim cumulative transcript to the client as a live caption
+   * frame (`{type:'transcript', final:false}`) AS IT ARRIVES, and resolve to the
+   * complete utterance + audio byte total once the stream ends (bridge close on
+   * `turn`, or a benign no-speech close). A genuine ASR fault throws out (handled
+   * fail-loud by `beginUtterance` / the `turn` finalize). Interim frames are
+   * suppressed once the epoch advances (barge-in / teardown), so a superseded
+   * utterance never paints stale caption text onto the new generation's socket.
+   */
+  private async runLiveStt(
+    ws: Connection,
+    bridge: AudioBridge,
+    myEpoch: number
+  ): Promise<UtteranceResult> {
+    if (!this.providers) throw new Error('session-do: speech-start before createSession')
+    const gen = runUtteranceStt(this.providers, bridge)[Symbol.asyncIterator]()
+    try {
+      for (;;) {
+        const next = await gen.next()
+        if (next.done) return next.value
+        const chunk = next.value
+        if (this.turnEpoch === myEpoch && chunk.kind === 'transcript') {
+          ws.send(
+            JSON.stringify({
+              type: 'transcript',
+              text: chunk.text ?? '',
+              final: chunk.final ?? false,
+            })
+          )
+        }
+      }
+    } finally {
+      // Defensive cleanup on an early (throwing) exit: terminate the STT
+      // generator so its upstream is returned. A no-op on the normal done path
+      // (the generator already completed). The return value is discarded — the
+      // cast satisfies the generator's typed `TReturn`.
+      await gen.return(undefined as unknown as UtteranceResult)
+    }
+  }
+
+  /**
+   * Discard the live utterance, if any: close its bridge so its STT stream
+   * terminates (a benign no-speech close — the captured outcome / late frames are
+   * fenced by the epoch). Idempotent; a no-op when no utterance is open.
+   */
+  private discardLiveUtterance(): void {
+    const utterance = this.liveUtterance
+    if (utterance === undefined) return
+    this.liveUtterance = undefined
+    utterance.bridge.close()
+  }
+
+  /**
+   * Free the serial-turn guard for a NEW turn in the SAME session — the barge-in
+   * case (the player speaks while the AI is replying / greeting). Mirrors
+   * `clearSession`'s epoch mechanism WITHOUT clearing the session: capture the
+   * in-flight turn, bump `turnEpoch` (so the superseded turn's late `finally` is a
+   * no-op against the new generation — it cannot reopen the guard or null the new
+   * `activeTurn`), reset the guard synchronously, then `return()` the captured
+   * iterator (fire-and-forget — `return()` cannot interrupt a pending provider
+   * `await`, so it must not block). A no-op (beyond a harmless epoch bump) when no
+   * turn is in flight.
+   */
+  private supersedeActiveTurn(): void {
+    const turn = this.activeTurn
+    this.turnEpoch += 1
+    this.turnInFlight = false
+    this.activeTurn = undefined
+    if (turn !== undefined) void turn.return?.(undefined)
   }
 
   /**
@@ -679,11 +932,16 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.userId = undefined
     this.sessionId = undefined
     this.providers = undefined
-    this.audio = undefined
+    // Discard any open live utterance (closes its bridge -> STT terminates). The
+    // epoch bump above fences its late interim frames / faults from this just-torn
+    // generation, exactly as it fences a stale turn `finally`.
+    this.discardLiveUtterance()
     this.turnInFlight = false
     this.activeTurn = undefined
     this.ownerSocket = undefined
     this.usageFlushed = false
+    this.prerollFrames = []
+    this.prerollBytes = 0
   }
 
   /**
@@ -767,9 +1025,144 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   }
 
   /**
+   * Stream one reply's `AiResponseChunk`s to the socket under the serial-turn
+   * guard, shared by the client-`turn` reply path (the terminal transcript frame +
+   * LLM->TTS via `runReply`) and the AI-first opening greeting (LLM->TTS via
+   * `runOpeningTurn`). The live INTERIM transcript frames are NOT streamed here —
+   * they stream from `runLiveStt` during the utterance (between `speech-start` and
+   * `turn`); `runReply` yields only the single terminal `final: true` transcript
+   * frame, which this relays before the AI reply chunks.
+   *
+   * Holds the iterator explicitly (so a mid-reply `end` / owner close / barge-in
+   * can cancel it via `return()`) and captures this reply's generation (`myEpoch`)
+   * at the same synchronous point the shared `turnInFlight`/`activeTurn` fields are
+   * set, so the `finally` clears the guard on every exit (normal end, provider
+   * error, cancellation) — but ONLY while this reply is still the live generation:
+   * a stale `finally` whose session was already ended/dropped/superseded must not
+   * null out a newer generation's `turnInFlight`/`activeTurn` (see `turnEpoch`).
+   */
+  private async streamTurn(ws: Connection, turn: AsyncIterator<AiResponseChunk>): Promise<void> {
+    const myEpoch = this.turnEpoch
+    this.activeTurn = turn
+    this.turnInFlight = true
+    try {
+      for (;;) {
+        const next = await turn.next()
+        if (next.done) break
+        const chunk = next.value
+        if (chunk.kind === 'transcript') {
+          // The player's recognized utterance — its OWN wire frame, NOT a
+          // `chunk`: `{type:'transcript', text, final}`. Here this is the single
+          // terminal frame (`final:true`, the complete utterance) `runReply`
+          // yields before the AI reply chunks; the interim frames (`final:false`,
+          // running cumulative text) already streamed live from `runLiveStt` while
+          // the player spoke. `runReply` yields the terminal frame only for a
+          // non-empty transcript (a no-speech turn sends none). It carries no
+          // `done` — the AI reply's terminal `chunk` still closes the turn.
+          ws.send(
+            JSON.stringify({
+              type: 'transcript',
+              text: chunk.text ?? '',
+              final: chunk.final ?? false,
+            })
+          )
+        } else if (chunk.kind === 'audio' && chunk.audio) {
+          ws.send(
+            JSON.stringify({
+              type: 'chunk',
+              kind: 'audio',
+              audio: base64FromBytes(chunk.audio),
+              done: chunk.done,
+            })
+          )
+        } else {
+          ws.send(
+            JSON.stringify({
+              type: 'chunk',
+              kind: 'text',
+              text: chunk.text ?? '',
+              done: chunk.done,
+            })
+          )
+        }
+      }
+    } finally {
+      if (this.turnEpoch === myEpoch) {
+        this.turnInFlight = false
+        this.activeTurn = undefined
+      }
+    }
+  }
+
+  /**
+   * Fire the AI-first opening greeting: an LLM->TTS-only turn from the
+   * server-side `OPENING_DIRECTIVE`, streamed to the socket with NO player audio.
+   * Background-launched on `create` (when enabled), so it owns its own errors:
+   * fail-loud (a provider error closes the OWNER socket with a 1008 policy close,
+   * exactly as the synchronous control path does) and self-fencing (the epoch
+   * guard inside `streamTurn` makes a stale `finally` a no-op, and the catch
+   * skips the close once a teardown has advanced the generation). The synthetic
+   * directive is never persisted and the greeting does not count as a player turn
+   * (see `runOpeningTurn`).
+   */
+  private async runOpeningGreeting(ws: Connection): Promise<void> {
+    const myEpoch = this.turnEpoch
+    try {
+      if (!this.sessionState || !this.providers || this.sessionId === undefined) return
+      traceTurn('turn', 'opening-start', { sessionId: this.sessionId })
+      const turn = runOpeningTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
+      await this.streamTurn(ws, turn)
+    } catch (err: unknown) {
+      // Skip the fail-loud close once a teardown has advanced the generation
+      // (the session this greeting belonged to is gone; a newer session may own
+      // the socket now).
+      if (this.turnEpoch === myEpoch) {
+        const reason = err instanceof Error ? err.message : 'opening greeting failed'
+        traceTurnError('turn', 'opening-error', { messageChars: reason.length })
+        try {
+          ws.close(1008, safeCloseReason(reason))
+        } catch {
+          // socket already gone — nothing to fail loud on.
+        }
+      }
+    }
+  }
+
+  /**
+   * Fire the closing-recap turn: an LLM+TTS-only turn from the server-side
+   * `CLOSING_DIRECTIVE`, streamed to the socket with NO player audio. Mirrors
+   * `runOpeningGreeting` in structure: background-launched on `closing`
+   * (fire-and-forget), self-fencing via the epoch guard, fail-loud on a provider
+   * error. The closing recap does NOT end the session — `end` follows later when
+   * the client navigates away (the VoicePanel unmount sends `end`).
+   */
+  private async runClosingRecap(ws: Connection): Promise<void> {
+    const myEpoch = this.turnEpoch
+    try {
+      if (!this.sessionState || !this.providers || this.sessionId === undefined) return
+      traceTurn('turn', 'closing-start', { sessionId: this.sessionId })
+      const turn = runClosingTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
+      await this.streamTurn(ws, turn)
+    } catch (err: unknown) {
+      // Skip the fail-loud close once a teardown has advanced the generation
+      // (the session this recap belonged to is gone; a newer session may own
+      // the socket now). Mirrors the opening-greeting error path exactly.
+      if (this.turnEpoch === myEpoch) {
+        const reason = err instanceof Error ? err.message : 'closing recap failed'
+        traceTurnError('turn', 'closing-error', { messageChars: reason.length })
+        try {
+          ws.close(1008, safeCloseReason(reason))
+        } catch {
+          // socket already gone — nothing to fail loud on.
+        }
+      }
+    }
+  }
+
+  /**
    * Reject cross-session / cross-user access. Delegates to the pure
-   * `assertSessionOwnership` predicate (the L2 ownership invariant —
-   * `onPlayerAudio` / `onAiResponse` / `endSession` verify ownership).
+   * `assertSessionOwnership` predicate (the L2 ownership invariant — the `turn`
+   * and `end` paths verify ownership against the bound session).
    */
   private assertOwner(sessionId: string, userId: string): void {
     assertSessionOwnership(this.boundIdentity(), sessionId, userId)
@@ -798,7 +1191,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     }
   }
 
-  /** WS control-message dispatch driving the four-method semantics. */
+  /** WS control-message dispatch: create / speech-start / turn / end / update-gamestate. */
   private async handleControl(ws: Connection, msg: ControlMessage): Promise<void> {
     // The operating user is THIS socket's authenticated identity, resolved per
     // message — never a shared field a later upgrade could have overwritten.
@@ -852,90 +1245,84 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // (`already_created`) never repoints the owner.
         this.ownerSocket = ws
         ws.send(JSON.stringify({ type: 'created', sessionId }))
+        // AI speaks first: fire the opening greeting (LLM->TTS, no player audio)
+        // in the background, when enabled (default on — AI-first is the product
+        // behaviour). `runOpeningGreeting` owns its own errors (fail-loud 1008 on
+        // a provider error) and is epoch-fenced, so it is fire-and-forget; a
+        // mid-greeting `end`/owner close cancels it through the same
+        // `activeTurn`/`turnEpoch` machinery as a client turn.
+        if (msg.opening ?? true) void this.runOpeningGreeting(ws)
+        return
+      }
+      case 'speech-start': {
+        // The player began an utterance: OPEN a live recognizer and start feeding
+        // audio. A DRIVE op (owner-USER grain, same as binary audio): the
+        // operating socket's authenticated user must own the bound session. A
+        // non-owner / unauthenticated / pre-create signal throws -> the listener
+        // fail-louds with 1008, exactly as the binary-audio gate does. (The mic
+        // only opens on `created`, so a pre-create signal is defense-in-depth.)
+        this.assertSocketOwner(ws)
+        this.beginUtterance(ws)
         return
       }
       case 'turn': {
         const sessionId = this.sessionId
-        if (!this.sessionState || !socketUserId || sessionId === undefined) {
+        if (!this.sessionState || !socketUserId || sessionId === undefined || !this.providers) {
           ws.close(1008, safeCloseReason('turn before create'))
           return
         }
-        // Turn in-flight guard: voice turns are serial. A second `turn` while
-        // one is running (owner double-click / retry) would start a second
-        // `runTurn` over the shared `state`/`providers` and interleave two
-        // response streams on this one socket — DO events interleave across the
-        // turn's STT/LLM/TTS `await`s. Reject the overlap with an explicit
-        // signal on THIS socket (NOT a 1008 close — the first turn is streaming
-        // on the same socket and a close would truncate it). No second
-        // `onAiResponse`/`runTurn` is started; the live turn is untouched.
+        // Cross-user / cross-session turn -> fail loud (1008 via the listener).
+        // Preserves the prior `onAiResponse` ownership assertion (DRIVE op, owner-
+        // USER grain), so a second authenticated user on this DO cannot finalize
+        // the owner's utterance.
+        this.assertOwner(sessionId, socketUserId)
+        // Turn in-flight guard: voice turns are serial. A second `turn` while a
+        // reply is running (owner double-click / retry) would start a second reply
+        // over the shared `state`/`providers` and interleave two response streams
+        // on this one socket — DO events interleave across the reply's LLM/TTS
+        // `await`s. Reject the overlap with an explicit signal on THIS socket (NOT
+        // a 1008 close — the first reply is streaming on the same socket and a
+        // close would truncate it). The live reply is untouched.
         if (this.turnInFlight) {
           this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
           return
         }
-        // Turn-trace: the first hop boundary — a turn was accepted and is about
-        // to drive STT->LLM->TTS. Greppable park-point anchor (see `trace.ts`).
-        traceTurn('turn', 'start', {
-          sessionId,
-        })
-        // Stream the AI response chunks back. Text rides as JSON; audio is
-        // base64-encoded so the whole turn stays on the JSON text channel and
-        // the binary frame direction remains player-audio-only. Ownership is
-        // checked against THIS socket's user, so a second client on the same DO
-        // cannot drive the first user's session.
-        //
-        // Hold the iterator explicitly so a mid-turn `end` / owner close can
-        // cancel it via `return()`. Mark in-flight BEFORE the first `await`
-        // (synchronous up to here) so an interleaved second `turn` sees the
-        // guard set. Capture THIS turn's generation (`myEpoch`) at the same
-        // synchronous point the shared fields are set, so the `finally` can tell
-        // "still my session" from "a newer session reused this DO after my
-        // session was torn down". The `finally` clears the guard + iterator on
-        // every exit (normal end, provider error, or cancellation) so the next
-        // turn can run — but ONLY while this turn is still the live generation
-        // (see `turnEpoch`): a stale `finally` whose session was already ended/
-        // dropped must not null out a newer session's `turnInFlight`/`activeTurn`.
-        const turn = this.onAiResponse(sessionId, socketUserId)[Symbol.asyncIterator]()
-        const myEpoch = this.turnEpoch
-        this.activeTurn = turn
-        this.turnInFlight = true
-        try {
-          for (;;) {
-            const next = await turn.next()
-            if (next.done) break
-            const chunk = next.value
-            if (chunk.kind === 'audio' && chunk.audio) {
-              ws.send(
-                JSON.stringify({
-                  type: 'chunk',
-                  kind: 'audio',
-                  audio: base64FromBytes(chunk.audio),
-                  done: chunk.done,
-                })
-              )
-            } else {
-              ws.send(
-                JSON.stringify({
-                  type: 'chunk',
-                  kind: 'text',
-                  text: chunk.text ?? '',
-                  done: chunk.done,
-                })
-              )
-            }
-          }
-        } finally {
-          // Epoch guard: only release the guard + iterator if THIS turn is still
-          // the live generation. If `clearSession` (end / owner-close) already
-          // bumped the epoch and a newer session is running on this resident DO,
-          // `this.turnEpoch !== myEpoch` and we leave the new session's
-          // `turnInFlight`/`activeTurn` untouched — the stale `finally` is a
-          // no-op. In the normal single-session path the epoch is unchanged, so
-          // this clears exactly as before.
-          if (this.turnEpoch === myEpoch) {
-            this.turnInFlight = false
-            this.activeTurn = undefined
-          }
+        const utterance = this.liveUtterance
+        if (utterance === undefined) {
+          // A `turn` with no open utterance: no prior `speech-start`, or it was
+          // already finalized / barged-in away. Benign no-op — nothing to
+          // finalize, no reply (the player effectively said nothing this turn).
+          return
         }
+        // Finalize THIS utterance: detach it so a stray later `turn` is benign,
+        // then close its bridge so the ASR pump sends the negative-sequence
+        // end-of-audio packet and 火山 returns the last-package final.
+        this.liveUtterance = undefined
+        const myEpoch = this.turnEpoch
+        utterance.bridge.close()
+        // Turn-trace: the finalize boundary — the utterance is closing and the
+        // reply is about to drive LLM->TTS. Greppable park-point anchor.
+        traceTurn('turn', 'start', { sessionId })
+        // Await the live STT finalization (it drains on the bridge close above).
+        await utterance.done
+        // A barge-in / teardown during the finalize await advanced the generation:
+        // abandon this reply (a newer utterance owns the floor, or the session is
+        // gone). Also re-check the session is still bound (teardown nulls it).
+        if (this.turnEpoch !== myEpoch || !this.sessionState || !this.providers) return
+        if (utterance.error !== undefined) {
+          // A genuine ASR fault already fail-loud-closed the socket in
+          // `beginUtterance` (epoch-fenced) — nothing more to do here.
+          return
+        }
+        const result: UtteranceResult = utterance.outcome ?? { transcript: '', audioBytes: 0 }
+        // Run the reply (terminal transcript frame + LLM+TTS over the complete
+        // utterance) under the serial-turn guard. A no-speech utterance (empty
+        // transcript) is skipped inside `runReply` — no chunks, no state, benign.
+        // `streamTurn` owns the `turnInFlight`/`activeTurn`/`turnEpoch` machinery
+        // (see its docstring), so a mid-reply `end`/owner close cancels cleanly and
+        // a stale `finally` cannot clobber a newer session's guard.
+        const turn = runReply(this.providers, this.sessionState, result)[Symbol.asyncIterator]()
+        await this.streamTurn(ws, turn)
         return
       }
       case 'end': {
@@ -959,11 +1346,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           // `endSession` re-validates ownership (a cross-user `end` throws before
           // any teardown — the throw closes THAT socket with 1008 via the
           // listener, so a non-owner cannot end / cancel the owner's turn),
-          // closes the audio bridge (the NEXT turn's bridge, which buffered any
-          // frames that arrived during this turn — the in-flight turn already
-          // detached + closed its own bridge at `onAiResponse` start, so its STT
-          // has already terminated), flushes the session's usage to the USAGE
-          // KV (exactly once — the flush boundary lives in the contract method,
+          // terminates any open live utterance's recognizer (`discardLiveUtterance`
+          // closes its bridge so its STT stream ends; a reply in flight already
+          // detached + closed its own utterance bridge at `turn` finalize),
+          // flushes the session's usage to the USAGE KV (exactly once — the flush
+          // boundary lives in the teardown method,
           // not in this branch; see `endSession` / `flushUsage`), and returns
           // the summary.
           const summary = this.endSession(sessionId, socketUserId)
@@ -1010,6 +1397,68 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           ws.send(JSON.stringify({ type: 'summary', summary }))
         }
         ws.close(1000, safeCloseReason('session ended'))
+        return
+      }
+      case 'closing': {
+        // Closing-recap trigger: run one final LLM+TTS turn (the post-win
+        // recap) and stream it back. Must have a live session + the owner
+        // socket; a non-owner or pre-create signal is a silent no-op (NOT a
+        // 1008 close — the session remains alive; `end` follows when the client
+        // navigates away). A turn in flight is rejected with `turn_in_flight` so
+        // the serial-turn guard is not violated; the client falls back to its
+        // hard timeout and navigates without waiting for the recap.
+        if (
+          !this.sessionState ||
+          !socketUserId ||
+          this.sessionId === undefined ||
+          !this.providers
+        ) {
+          return
+        }
+        if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) {
+          return
+        }
+        if (this.turnInFlight) {
+          this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
+          return
+        }
+        void this.runClosingRecap(ws)
+        return
+      }
+      case 'update-gamestate': {
+        // Steer the live session's manual injection for SUBSEQUENT turns. This
+        // is fire-and-forget session metadata: it adjusts which manual subset
+        // the next turn injects, and must NEVER tear down or interrupt the
+        // running conversation (the whole point of one continuous session across
+        // modules is that history + the AI-first greeting persist). So every
+        // rejection path here is a benign no-op, NOT a 1008 close: no live
+        // session, a non-owner socket, or a malformed payload all just return
+        // without mutating anything.
+        //
+        // Owner-socket gated, mirroring `end`'s teardown gate (only the creator
+        // socket may steer its own session — a same-user duplicate tab / a
+        // second authenticated socket on this DO must not redirect the owner's
+        // injected manual). The non-owner consequence is downgraded from `end`'s
+        // 1008 close to a silent no-op: this message only re-selects sections,
+        // so ignoring a stray one is strictly safer than killing a socket.
+        if (!this.sessionState) return
+        if (!socketIsBoundSessionOwner(ws, this.ownerSocket, this.boundIdentity())) return
+        // Validate the untrusted payload defensively (the `JSON.parse` cast is
+        // unchecked): a missing `gameState`, a non-array `relevantSections`, or a
+        // non-string element is a benign no-op rather than a throw — a throw would
+        // be caught by `onMessage` and 1008-close the owner's socket, losing the
+        // whole conversation.
+        const incoming = (msg.gameState as { relevantSections?: unknown } | undefined)
+          ?.relevantSections
+        if (!Array.isArray(incoming) || !incoming.every((id) => typeof id === 'string')) return
+        // Reassign the FIELD (not the whole `sessionState` object) so history,
+        // turnCount, usage, and any in-flight turn's already-captured `messages`
+        // are untouched; only `assembleSystem`'s NEXT read (at the next turn's
+        // start) picks up the new sections. Copy the array so a later client-side
+        // mutation of the payload can never reach into session state. An in-flight
+        // turn snapshotted its `messages` at its own start, so this update applies
+        // strictly to the next turn — the running turn is never disturbed.
+        this.sessionState.gameState = { relevantSections: [...incoming] }
         return
       }
     }

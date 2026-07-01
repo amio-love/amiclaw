@@ -26,7 +26,7 @@ const VALUE_PROPS: ValueProp[] = [
   },
 ]
 
-/* What-is-Amiclaw section — handoff §6.5. Anonymous-only; a three-up
+/* What-is-AMIO-Arcade section — handoff §6.5. Anonymous-only; a three-up
    grid of interactive glass value-prop cards. Platform chrome — no
    cyan; the giant italic numbers are Latin, so ABeeZee italic is fine. */
 export default function WhatIsAmiclaw() {

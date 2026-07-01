@@ -1,18 +1,21 @@
-/* lockup — the AMIO·claw brand mark, lifted verbatim from the canonical
-   TopNav brand mark. Size is set by the consumer via font-size / className
-   (the nav uses 22px desktop / 19px mobile); the recipe scales with it. The
-   two raw rgba literals (the 0.35 yellow glow and the 0.45 white middot) carry
-   over from the TopNav mark — no exact token exists and they add no new hue. */
+/* Lockup — the AMIO Arcade brand mark. Size is set by the consumer via
+   font-size / className (the nav uses 22px desktop / 19px mobile); the recipe
+   scales with it. The raw yellow glow carries over from the previous TopNav
+   mark; no exact token exists and it adds no new hue. */
 .lockup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28em;
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: var(--amio-yellow);
   text-shadow: 0 0 18px rgba(255, 229, 62, 0.35);
 }
 
-.dot {
-  color: rgba(255, 255, 255, 0.45);
-  margin: 0 2px;
-  font-weight: 300;
+.arcade {
+  color: var(--text-1);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-shadow: none;
 }

@@ -104,3 +104,53 @@ describe('handlePostScore — leaderboard AI metadata', () => {
     ])
   })
 })
+
+describe('handlePostScore — run_id idempotency', () => {
+  // A run carries a stable client-generated run_id. Re-submitting the same run
+  // (page refresh, retry, or a KV-race double-POST) must REPLACE the existing
+  // row, not append a second one — otherwise the leaderboard shows duplicates.
+  it('replaces an existing entry with the same run_id instead of appending', async () => {
+    const kv = new FakeKV()
+    const date = new Date().toISOString().slice(0, 10)
+    // Pre-seed the same run already on the board (its first, slower submit).
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        { rank: 1, nickname: '小明', time_ms: 150_000, attempt_number: 1, run_id: 'run-x' },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(submission({ time_ms: 130_000, run_id: 'run-x' })),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const entries = (await kv.get(`leaderboard:${date}`, 'json')) as Array<
+      LeaderboardEntry & { run_id?: string }
+    > | null
+    // Exactly one row for the run — the resubmission replaced the prior one.
+    expect(entries).toHaveLength(1)
+    expect(entries?.[0]).toMatchObject({ rank: 1, time_ms: 130_000, run_id: 'run-x' })
+  })
+
+  it('appends runs that carry distinct run_ids', async () => {
+    const kv = new FakeKV()
+    const date = new Date().toISOString().slice(0, 10)
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        { rank: 1, nickname: '小红', time_ms: 120_000, attempt_number: 1, run_id: 'run-x' },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(submission({ time_ms: 130_000, run_id: 'run-y' })),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const entries = (await kv.get(`leaderboard:${date}`, 'json')) as LeaderboardEntry[] | null
+    expect(entries).toHaveLength(2)
+  })
+})

@@ -101,8 +101,8 @@ Then('I see the featured BombSquad overview', async ({ page }) => {
   await expect(featured.getByText('每日挑战 · DAILY DROP')).toHaveCount(0)
 })
 
-Then('I see the "什么是 Amiclaw" section', async ({ page }) => {
-  await expect(page.getByText('关于 · What is AmiClaw')).toBeVisible()
+Then('I see the "什么是 AMIO Arcade" section', async ({ page }) => {
+  await expect(page.getByText('关于 · What is AMIO Arcade')).toBeVisible()
 })
 
 Then('I see the upcoming-games section', async ({ page }) => {
@@ -226,8 +226,8 @@ Then('the anonymous hero is not shown', async ({ page }) => {
   await expect(page.getByRole('button', { name: '开始玩 →' })).toHaveCount(0)
 })
 
-Then('the "什么是 Amiclaw" section and the footer pitch are not shown', async ({ page }) => {
-  await expect(page.getByText('关于 · What is AmiClaw')).toHaveCount(0)
+Then('the "什么是 AMIO Arcade" section and the footer pitch are not shown', async ({ page }) => {
+  await expect(page.getByText('关于 · What is AMIO Arcade')).toHaveCount(0)
   await expect(page.getByText('永久免费，不存档也不出售你的对话。')).toHaveCount(0)
 })
 

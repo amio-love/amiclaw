@@ -105,16 +105,18 @@ const LEADERBOARD_DEFAULT = readJson<{ get: LeaderboardGetResponse; post: Submit
 // The mode② voice panel connects to the platform-ai bridge over the same-origin
 // `/ai-ws/*` WebSocket. The harness mocks that socket (page.routeWebSocket) so
 // the panel is driven deterministically with no live Worker / provider. The
-// stubbed turn streams one text chunk then one audio chunk; the audio is a few
-// seconds of PCM16 16 kHz mono silence — long enough that the "AI is speaking"
-// indicator (which the hook drives off Web Audio playback) is observable.
+// AI-first opening greeting streams one text chunk then one audio chunk; the
+// audio is a few seconds of PCM16 16 kHz mono silence — long enough that the
+// "说话中" (speaking) indicator (which the hook drives off Web Audio playback) is
+// observable, then short enough that its `onended` lets the panel settle back to
+// "聆听中" (listening) well within the assertion window.
 const VOICE_REPLY_TEXT = '把红色的线接到第三个接线柱，先别动其它线。'
 /** PCM16 mono @16 kHz; the hook plays it back to set the "speaking" indicator. */
-const VOICE_AUDIO_SECONDS = 4
+const VOICE_AUDIO_SECONDS = 3
 const VOICE_AUDIO_BASE64 = Buffer.alloc(16_000 * VOICE_AUDIO_SECONDS * 2).toString('base64')
 
 interface VoiceMockState {
-  /** The AI's stubbed text reply rendered by the panel for the push-to-talk turn. */
+  /** The AI's stubbed text reply rendered by the panel for the opening greeting. */
   reply: string
   /** Base64 PCM16 16 kHz mono TTS payload streamed as the turn's audio. */
   audioBase64: string
@@ -152,6 +154,15 @@ export class World {
   authIdentity: { user_id: string; email: string } | null = null
   /** Captured POST /api/auth/magic-link/request bodies for assertions. */
   readonly magicLinkRequests: Record<string, unknown>[] = []
+  /** The route-mocked companion identity, or null for "not set up yet". POST
+   *  /api/companion/setup creates it; GET /api/companion reflects it. */
+  companion: {
+    name: string
+    address_style: string
+    voice_id: string
+    profile_enabled: boolean
+    created_at: string
+  } | null = null
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
@@ -451,20 +462,82 @@ export const test = base.extend<{ world: World }>({
         })
       })
 
+      // Companion identity read (GET /api/companion). 404 until setup, then the
+      // created identity. The static build has no Workers runtime, so the
+      // companion control plane is route-mocked exactly like the auth session.
+      await page.route('**/api/companion', async (route) => {
+        if (world.companion === null) {
+          await route.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'no companion set up' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(world.companion),
+        })
+      })
+
+      // Companion setup (POST /api/companion/setup). Creates the one companion
+      // (or 409 if one already exists — one companion per account).
+      await page.route('**/api/companion/setup', async (route) => {
+        const request = route.request()
+        if (request.method() !== 'POST') {
+          await route.fulfill({ status: 405, body: 'Method Not Allowed' })
+          return
+        }
+        if (world.companion !== null) {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'companion already exists' }),
+          })
+          return
+        }
+        const body = request.postDataJSON() as {
+          name: string
+          voice_id: string
+          address_style?: string
+        }
+        world.companion = {
+          name: body.name,
+          address_style: body.address_style ?? '',
+          voice_id: body.voice_id,
+          profile_enabled: true,
+          created_at: '2026-06-30T00:00:00.000Z',
+        }
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ companion: world.companion }),
+        })
+      })
+
       // Daily/practice manual fetch -> fixture YAML.
       await page.route('**/manual/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'text/yaml', body: MANUAL_YAML })
       })
 
       // mode② voice bridge — mock the same-origin `/ai-ws/*` WebSocket the
-      // VoicePanel hook opens. Inert for every non-voice scenario (none opens
-      // that socket). Mock mode (no connectToServer) means Playwright opens the
-      // page socket automatically, so the hook's `onopen` create handshake runs.
-      // The stub mirrors the real session-do.ts envelope: `created` on create,
-      // then a text chunk + an audio chunk on each turn. Binary mic PCM frames
-      // (sent while the player holds to talk) arrive here as Buffers and are
-      // ignored — no STT runs. No `end`/`summary` is sent because the panel has
-      // no end control; the session ends by panel teardown on run exit.
+      // hands-free VoicePanel hook opens. Inert for every non-voice scenario
+      // (none opens that socket). Mock mode (no connectToServer) means Playwright
+      // opens the page socket automatically, so the hook's `onopen` create
+      // handshake runs. The stub mirrors the real session-do.ts envelope and its
+      // AI-first turn model: on `create` it replies `created` and then immediately
+      // streams the AI's opening greeting (one text chunk then one audio chunk,
+      // `done` on the last) with NO client `turn` required — the deployed server
+      // fires that opening turn itself via server-side VAD. Binary mic PCM frames
+      // (the continuous hands-free capture) arrive here as Buffers and are ignored
+      // — no STT runs. A client `turn` (the legacy no-op the hook still sends on a
+      // VAD utterance-end) is captured for assertions and otherwise ignored; the
+      // silent fake mic means it never actually fires. No `end`/`summary` is sent
+      // because the panel has no end control; the session ends by panel teardown
+      // on run exit.
       await page.routeWebSocket(/\/ai-ws\//, (ws) => {
         ws.onMessage((message) => {
           if (typeof message !== 'string') return // binary mic audio — ignore
@@ -476,8 +549,9 @@ export const test = base.extend<{ world: World }>({
           }
           world.voice.clientFrames.push(frame as Record<string, unknown>)
           if (frame.type === 'create') {
+            // AI-first: `created`, then the opening greeting (text then audio,
+            // `done` on the audio) with no client turn.
             ws.send(JSON.stringify({ type: 'created', sessionId: 'e2e-voice-session' }))
-          } else if (frame.type === 'turn') {
             ws.send(
               JSON.stringify({ type: 'chunk', kind: 'text', text: world.voice.reply, done: false })
             )

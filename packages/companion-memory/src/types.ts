@@ -21,20 +21,35 @@
  *     so switching TTS vendors never touches companion data.
  */
 
-// --- Platform-neutral voice catalog -----------------------------------------
+// --- Cross-container wire shapes (SSOT in shared/) ----------------------------
+//
+// The platform-neutral voice catalog and every `/api/companion/*` wire DTO live
+// in `shared/companion-types.ts` (the wire SSOT, mirroring the `shared/auth-
+// types.ts` precedent) so the Workers handlers and the frontend import ONE
+// definition. They are re-exported here so existing intra-package and
+// `packages/api` imports of `companion-memory/src/types` keep resolving
+// unchanged. This package keeps its D1 *record* types (below) local.
 
-/**
- * The platform's own voice id space. Companion rows store one of these ids;
- * the vendor mapping (platform-ai side) must cover every entry. Adding a
- * voice = adding an id here + a vendor mapping there.
- */
-export const PLATFORM_VOICE_IDS = ['companion-warm', 'companion-bright', 'companion-calm'] as const
+export {
+  PLATFORM_VOICE_IDS,
+  isPlatformVoiceId,
+  type PlatformVoiceId,
+  type CompanionIdentity,
+  type CompanionResponse,
+  type CompanionSetupBody,
+  type CompanionSetupResponse,
+  type ProfileClaimStatus,
+  type ProfileClaimEvidenceView,
+  type ProfileClaimView,
+  type ProfileResponse,
+  type ProfileSettingsBody,
+  type ProfileCorrectionBody,
+  type ProfileCorrectionResponse,
+  type MemoryView,
+  type MemoriesResponse,
+} from '../../../shared/companion-types'
 
-export type PlatformVoiceId = (typeof PLATFORM_VOICE_IDS)[number]
-
-export function isPlatformVoiceId(value: unknown): value is PlatformVoiceId {
-  return typeof value === 'string' && (PLATFORM_VOICE_IDS as readonly string[]).includes(value)
-}
+import type { ProfileClaimStatus } from '../../../shared/companion-types'
 
 // --- Entity records (D1 row shapes) ------------------------------------------
 
@@ -69,8 +84,6 @@ export interface EpisodeRecord {
   status: EpisodeStatus
   created_at: string
 }
-
-export type ProfileClaimStatus = 'active' | 'corrected' | 'deleted'
 
 export interface ProfileClaimRecord {
   id: string
@@ -186,76 +199,4 @@ export interface CompanionContext {
   }
   claims: CompanionContextClaim[]
   episodes: CompanionContextEpisode[]
-}
-
-// --- Control-plane wire shapes (/api/companion/*) -----------------------------
-
-/** Body of `POST /api/companion/setup`. Owner user_id comes from the session. */
-export interface CompanionSetupBody {
-  name: string
-  voice_id: string
-  address_style?: string
-}
-
-export interface CompanionSetupResponse {
-  companion: {
-    name: string
-    address_style: string
-    voice_id: string
-    profile_enabled: boolean
-    created_at: string
-  }
-}
-
-/** One evidence link in a profile-claim view. */
-export interface ProfileClaimEvidenceView {
-  episode_id: string
-  title: string
-  occurred_at: string
-  game_id: string
-}
-
-/** One claim + its evidence chain, as returned by `GET /api/companion/profile`. */
-export interface ProfileClaimView {
-  id: string
-  dimension: string
-  claim: string
-  status: ProfileClaimStatus
-  updated_at: string
-  evidence: ProfileClaimEvidenceView[]
-}
-
-export interface ProfileResponse {
-  profile_enabled: boolean
-  claims: ProfileClaimView[]
-}
-
-/** Body of `PUT /api/companion/profile` (the profile switch). */
-export interface ProfileSettingsBody {
-  profile_enabled: boolean
-}
-
-/** Body of `POST /api/companion/profile/<id>/correction`. */
-export interface ProfileCorrectionBody {
-  correction: string
-}
-
-export interface ProfileCorrectionResponse {
-  corrected_claim_id: string
-  new_claim: ProfileClaimView
-}
-
-/** One memory-album row, as returned by `GET /api/companion/memories`. */
-export interface MemoryView {
-  id: string
-  occurred_at: string
-  game_id: string
-  title: string
-  narrative: string
-}
-
-export interface MemoriesResponse {
-  memories: MemoryView[]
-  /** Opaque keyset cursor for the next page; absent on the last page. */
-  next_cursor?: string
 }

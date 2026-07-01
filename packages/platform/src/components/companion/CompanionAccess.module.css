@@ -1,0 +1,50 @@
+/* Anonymous login gate for the companion surfaces — a single centered card,
+   brand-yellow CTA, no fake companion data. Mirrors the AccountPage
+   login-guide affordance. */
+.gate {
+  max-width: 480px;
+  padding: 40px 36px;
+  text-align: center;
+}
+
+.gateTitle {
+  margin: 0;
+  font: 400 24px var(--font-display);
+  color: var(--text-1);
+}
+
+.gateText {
+  margin: 14px 0 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+}
+
+.gateCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 28px;
+  padding: 14px 28px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-yellow);
+  color: #000;
+  font: 600 15px var(--font-body);
+  text-decoration: none;
+  transition:
+    box-shadow var(--t-base),
+    transform var(--t-base);
+}
+
+.gateCta:hover {
+  box-shadow: var(--glow-yellow-strong);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gateCta {
+    transition: none;
+  }
+  .gateCta:hover {
+    transform: none;
+  }
+}

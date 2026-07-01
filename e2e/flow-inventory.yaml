@@ -1,4 +1,4 @@
-# e2e/flow-inventory.yaml — BombSquad + Amiclaw platform user-flow SSOT
+# e2e/flow-inventory.yaml — BombSquad + AMIO Arcade platform user-flow SSOT
 #
 # This file is the single source of truth for all user-facing flows the e2e
 # journey scenarios cover. Every journey Gherkin scenario in e2e/*.gherkin MUST
@@ -247,20 +247,24 @@ flows:
 
   # === mode② companion & memory flows =========================================
   # The account-anchored companion with two-layer memory (episodes + profile
-  # claims). Data plane only this round — no UI surfaces, and the e2e harness
-  # serves a static build with no Workers runtime — so all three flows are
-  # claimed by @simulation scenarios until downstream UI tasks land
-  # browser-drivable surfaces. Behaviour coverage lives in the vitest suites
+  # claims). The companion-setup flow is now browser-drivable (@playwright): the
+  # onboarding UI (/me/companion) landed and the harness route-mocks
+  # /api/companion* like the auth session. The other two flows stay @simulation:
+  # the memory-capture pipeline that produces real episodes + claims is a
+  # downstream wire task, so the album / profile surfaces have no live data to
+  # drive in a browser yet — their behaviour is covered by the vitest suites
   # against the real schema (packages/companion-memory, packages/api).
 
   - id: companion-setup
     name: Companion first-time setup
     description: >-
-      A signed-in mode② player names their companion and picks its voice via
-      POST /api/companion/setup. The companion is 1:1 with the account (the
-      user_id primary key); a second setup attempt is rejected with 409 — no
-      second-companion path exists anywhere on the platform.
-    steps: [signed-in, companion-setup, one-companion-invariant]
+      A signed-in mode② player opens /me/companion, names their companion and
+      picks one of three platform voices; on success the identity is read back
+      (GET /api/companion) and shown as "你的伙伴 X". The companion is 1:1 with
+      the account (the user_id primary key), so revisiting onboarding shows the
+      existing companion instead of the setup form — no second-companion path
+      exists anywhere on the platform (a second POST is rejected with 409).
+    steps: [signed-in, companion-onboarding, companion-readback, one-companion-invariant]
     status: active
 
   - id: companion-memory-album
@@ -295,23 +299,26 @@ flows:
   # UI states only — never real audio or provider output.
 
   - id: mode2-voice-session-turn
-    name: mode② in-game voice turn
+    name: mode② in-game hands-free voice greeting
     description: >-
       An opted-in daily run (`?mode=daily&partner=platform`) mounts the in-game
-      platform voice panel: it connects to the platform-ai bridge and reaches the
-      ready/connected state, the player runs one push-to-talk turn, the AI's
-      streamed text reply renders, the "AI is speaking" indicator shows while the
-      stubbed TTS audio plays, and exiting the run tears the voice session down.
-      The `/ai-ws/*` WebSocket and the microphone are stubbed deterministically
-      (no live provider, no real audio); the real-provider turn is verified by a
-      human play-green and the standalone live-turn harness.
+      platform voice panel, hands-free full-duplex: it connects to the platform-ai
+      bridge and the AI greets first with no player input, the AI's streamed text
+      reply renders, the "说话中" (speaking) indicator shows while the stubbed TTS
+      audio plays, the panel settles back to "聆听中" (listening) when the greeting
+      ends, and exiting the run tears the voice session down. The `/ai-ws/*`
+      WebSocket and the microphone are stubbed deterministically (no live provider,
+      no real audio; the fake mic is fed a silent capture file so the client VAD
+      never fires a player turn); the real-provider turn and the VAD-triggered
+      player turn are verified by a human play-green and the standalone live-turn
+      harness.
     steps:
       [
         daily-platform-partner,
         voice-connected,
-        push-to-talk-turn,
-        ai-text-reply,
+        ai-greets-first,
         ai-speaking,
+        settle-listening,
         session-teardown,
       ]
     status: active

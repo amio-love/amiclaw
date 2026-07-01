@@ -3,6 +3,7 @@ import type { SessionSummary } from '@amiclaw/platform-ai/contract'
 import {
   boundError,
   buildSessionUrl,
+  deriveConversationPhase,
   initialVoiceState,
   voiceReducer,
   type ServerFrame,
@@ -66,61 +67,137 @@ describe('voiceReducer', () => {
     expect(next.sessionId).toBe('sess-7')
   })
 
-  it('talk-start moves ready -> in-turn and clears prior text/error', () => {
+  it('keeps status ready for the whole live session (no in-turn flips)', () => {
     const next = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
-      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'old reply', done: true } },
-      { type: 'talk-start' }
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'Hold ', done: false } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'on.', done: true } }
     )
-    expect(next.status).toBe('in-turn')
-    expect(next.aiText).toBe('')
+    expect(next.status).toBe('ready')
   })
 
-  it('talk-start is a no-op when not ready (no double-turn from in-turn)', () => {
-    const inTurn = run(
-      { type: 'connecting' },
-      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
-      { type: 'talk-start' }
-    )
-    expect(inTurn.status).toBe('in-turn')
-    expect(voiceReducer(inTurn, { type: 'talk-start' })).toBe(inTurn)
-  })
-
-  it('accumulates streamed text chunks across a turn', () => {
+  it('accumulates streamed text chunks within one turn', () => {
     const next = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
-      { type: 'talk-start' },
       { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'Hold ', done: false } },
       { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'the ', done: false } },
       { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'button.', done: false } }
     )
     expect(next.aiText).toBe('Hold the button.')
-    expect(next.status).toBe('in-turn')
+  })
+
+  it('resets aiText when the next turn begins (first chunk after a done)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'first reply', done: true } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'second ', done: false } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'reply', done: false } }
+    )
+    // The done of turn 1 closes it; turn 2's first chunk starts fresh.
+    expect(next.aiText).toBe('second reply')
+  })
+
+  it('stores the player transcript without disturbing aiText, turn boundary, or status', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'prior reply', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色还是蓝色的线' } }
+    )
+    expect(next.playerTranscript).toBe('红色还是蓝色的线')
+    // The AI's previous reply text, turn boundary, and status are untouched.
+    expect(next.aiText).toBe('prior reply')
+    expect(next.turnDone).toBe(true)
+    expect(next.status).toBe('ready')
+  })
+
+  it('keeps the latest transcript across turns (most recent utterance wins)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: 'first utterance' } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'reply one', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: 'second utterance' } }
+    )
+    expect(next.playerTranscript).toBe('second utterance')
+  })
+
+  it('builds the live subtitle up across interim transcript frames (cumulative text)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '红', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色的线', final: false } }
+    )
+    expect(next.playerTranscript).toBe('红色的线')
+  })
+
+  it('settles the full utterance on the final transcript frame', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色', final: false } },
+      { type: 'frame', frame: { type: 'transcript', text: '红色的线', final: true } }
+    )
+    expect(next.playerTranscript).toBe('红色的线')
+  })
+
+  it("replaces the prior subtitle on the next utterance's first interim (no append across utterances)", () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: '第一句话', final: true } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'reply', done: true } },
+      { type: 'frame', frame: { type: 'transcript', text: '第', final: false } }
+    )
+    // The next utterance's first interim ('第') replaces the prior final — never appends.
+    expect(next.playerTranscript).toBe('第')
+  })
+
+  it('treats a transcript with no `final` flag as a non-terminal interim (stores the latest text)', () => {
+    const next = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
+      { type: 'frame', frame: { type: 'transcript', text: 'no final flag here' } }
+    )
+    expect(next.playerTranscript).toBe('no final flag here')
   })
 
   it('audio chunks do not change aiText but their done flag closes the turn', () => {
     const next = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
-      { type: 'talk-start' },
       { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'ok', done: false } },
       { type: 'frame', frame: { type: 'chunk', kind: 'audio', audio: 'AAAA', done: true } }
     )
     expect(next.aiText).toBe('ok')
-    expect(next.status).toBe('ready')
+    expect(next.turnDone).toBe(true)
   })
 
-  it('a done text chunk returns the turn to ready', () => {
-    const next = run(
+  it('barge-in clears the interrupted turn text and closes the turn boundary', () => {
+    const interrupted = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
-      { type: 'talk-start' },
-      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'done now', done: true } }
+      {
+        type: 'frame',
+        frame: { type: 'chunk', kind: 'text', text: 'long answer so f', done: false },
+      },
+      { type: 'barge-in' }
     )
-    expect(next.status).toBe('ready')
-    expect(next.aiText).toBe('done now')
+    expect(interrupted.aiText).toBe('')
+    expect(interrupted.turnDone).toBe(true)
+    expect(interrupted.status).toBe('ready')
+
+    // The AI's NEXT turn (answer to the interruption) renders fresh.
+    const answered = voiceReducer(interrupted, {
+      type: 'frame',
+      frame: { type: 'chunk', kind: 'text', text: 'new answer', done: false },
+    })
+    expect(answered.aiText).toBe('new answer')
   })
 
   it('summary moves to closed and exposes the summary', () => {
@@ -134,17 +211,32 @@ describe('voiceReducer', () => {
     expect(next.summary).toBe(s)
   })
 
-  it('an in-band error frame surfaces a bounded message without changing status', () => {
+  it('an unexpected in-band error frame surfaces a bounded message without changing status', () => {
     const ready = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } }
     )
     const next = voiceReducer(ready, {
       type: 'frame',
-      frame: { type: 'error', code: 'turn_in_flight', message: 'a turn is already in progress' },
+      frame: { type: 'error', code: 'provider_unavailable', message: 'speech provider down' },
     })
     expect(next.status).toBe('ready')
-    expect(next.error).toBe('a turn is already in progress')
+    expect(next.error).toBe('speech provider down')
+  })
+
+  it('drops benign in-band rejections (turn_in_flight / already_created) with no visible error', () => {
+    const ready = run(
+      { type: 'connecting' },
+      { type: 'frame', frame: { type: 'created', sessionId: 's1' } }
+    )
+    for (const code of ['turn_in_flight', 'already_created'] as const) {
+      const next = voiceReducer(ready, {
+        type: 'frame',
+        frame: { type: 'error', code, message: 'a turn is already in progress' },
+      })
+      expect(next.status).toBe('ready')
+      expect(next.error).toBeNull()
+    }
   })
 
   it('mic-error surfaces a bounded message but keeps the session usable', () => {
@@ -184,5 +276,52 @@ describe('voiceReducer', () => {
       frame: { type: 'mystery' } as unknown as ServerFrame,
     })
     expect(next).toEqual(ready)
+  })
+})
+
+describe('deriveConversationPhase', () => {
+  it('is speaking whenever the AI audio is playing (highest priority)', () => {
+    expect(
+      deriveConversationPhase({
+        isAiSpeaking: true,
+        playerSpeaking: false,
+        awaitingResponse: false,
+      })
+    ).toBe('speaking')
+    // AI audio wins even if the player just started talking over it (barge-in is
+    // resolved by the hook stopping playback, which clears isAiSpeaking).
+    expect(
+      deriveConversationPhase({ isAiSpeaking: true, playerSpeaking: true, awaitingResponse: true })
+    ).toBe('speaking')
+  })
+
+  it('is listening while the player is speaking (and the AI is not)', () => {
+    expect(
+      deriveConversationPhase({
+        isAiSpeaking: false,
+        playerSpeaking: true,
+        awaitingResponse: false,
+      })
+    ).toBe('listening')
+  })
+
+  it('is thinking once the player stopped and the AI has not started', () => {
+    expect(
+      deriveConversationPhase({
+        isAiSpeaking: false,
+        playerSpeaking: false,
+        awaitingResponse: true,
+      })
+    ).toBe('thinking')
+  })
+
+  it('is listening when idle (mic open, no one talking, nothing pending)', () => {
+    expect(
+      deriveConversationPhase({
+        isAiSpeaking: false,
+        playerSpeaking: false,
+        awaitingResponse: false,
+      })
+    ).toBe('listening')
   })
 })

@@ -81,9 +81,13 @@ export interface LlmProvider {
 // --- STT layer (streaming speech-to-text) ---
 
 /**
- * One streamed transcription result. `text` is the cumulative-or-incremental
- * transcript for this chunk (the adapter owns which); `isFinal` marks a
- * stabilized segment the turn pipeline may forward to the LLM.
+ * One streamed transcription result. `text` is the CUMULATIVE transcript so far
+ * (full text recognized to this point, not a per-segment delta — the Volcengine
+ * big-model ASR returns it cumulatively). `isFinal` marks the TERMINAL result —
+ * the whole utterance is complete (the ASR processed all audio and returned its
+ * final cumulative result). It does NOT mark a mid-utterance stabilized segment:
+ * the turn pipeline streams every chunk as a live interim subtitle and takes the
+ * last `isFinal` chunk's text as the complete utterance forwarded to the LLM.
  */
 export interface SttTranscriptChunk {
   text: string

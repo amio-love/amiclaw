@@ -35,9 +35,10 @@ export default function AnonHero({ onStart, board }: AnonHeroProps) {
         </h1>
         <p className={styles.sub}>
           <span className={styles.subLine}>
-            <Wordmark /> 是 AMIO 的人机协作游戏平台。
+            <Wordmark language="zh" />
+            是你和 AI 伙伴的轻量体验入口。
           </span>
-          <span className={styles.subLine}>带上你的 AI，一起进入不同小游戏。</span>
+          <span className={styles.subLine}>带上你的 AI 伙伴，来玩一局。</span>
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>

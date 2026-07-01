@@ -1,4 +1,4 @@
-# Amiclaw platform homepage — the `/` route is a 4-tab platform shell
+# AMIO Arcade platform homepage — the `/` route is a 4-tab platform shell
 # (游戏 / 排行榜 / 社区 / 我的). It shows an anonymous hero or a signed-in welcome
 # strip per login state, and a featured BombSquad overview with the live
 # daily challenge countdown.
@@ -10,9 +10,9 @@
 # landing-overflow scenario; the mobile no-horizontal-overflow check is merged
 # into the hero scenario below.
 
-Feature: Amiclaw platform homepage
+Feature: AMIO Arcade platform homepage
   As a visitor to claw.amio.fans
-  I want the homepage to present Amiclaw as a multi-game platform
+  I want the homepage to present AMIO Arcade as a multi-game platform
   And let me reach the BombSquad game and the other platform tabs
   So that I understand the platform vision and can start playing
 
@@ -26,7 +26,7 @@ Feature: Amiclaw platform homepage
     When the `/` route renders
     Then I see the anonymous hero with a single「开始玩 →」CTA
     And I see the featured BombSquad overview
-    And I see the "什么是 Amiclaw" section
+    And I see the "什么是 AMIO Arcade" section
     And I see the upcoming-games section
     And I see the footer pitch
     And the page is dark-only with no light-mode variant
@@ -70,7 +70,7 @@ Feature: Amiclaw platform homepage
     Then I see the welcome strip greeting me by name
     And the welcome strip shows an honest no-scores prompt and a play CTA
     And the anonymous hero is not shown
-    And the "什么是 Amiclaw" section and the footer pitch are not shown
+    And the "什么是 AMIO Arcade" section and the footer pitch are not shown
     And I can still reach the featured BombSquad overview
 
   # Source: bombsquad-zone-styling

@@ -73,18 +73,38 @@ export interface GameState {
 
 /**
  * One chunk of the AI's streamed response. A turn produces an ordered stream of
- * these: incremental assistant text plus the synthesized audio frames pushed
- * back over the same WebSocket. `kind` discriminates the two; `done` marks the
- * final chunk of a turn so the consumer can close out the turn without a
- * separate end signal.
+ * these: a leading STREAMING series of `transcript` chunks carrying the player's
+ * recognized utterance as it is recognized, then the incremental assistant text
+ * plus the synthesized audio frames pushed back over the same WebSocket. `kind`
+ * discriminates them; `done` marks the final chunk of a turn so the consumer can
+ * close out the turn without a separate end signal.
+ *
+ * The `transcript` variant is the PLAYER's own recognized speech (the STT
+ * result), surfaced BEFORE the AI reply streams so the client can build a live
+ * subtitle of what the AI heard. It arrives as a series: zero or more interim
+ * chunks (`final: false`) each carrying the running CUMULATIVE recognized text
+ * (not a delta) as the ASR stabilizes more of the utterance, then exactly one
+ * terminal chunk (`final: true`) carrying the COMPLETE utterance once STT
+ * finishes. A benign no-speech turn streams none. Transcript chunks never carry
+ * AI text and never set `done` (the turn's terminal `done` is always the AI
+ * reply's last `text` chunk).
  */
 export interface AiResponseChunk {
   /** Which modality this chunk carries. */
-  kind: 'text' | 'audio'
-  /** Incremental assistant text (present when `kind === 'text'`). */
+  kind: 'text' | 'audio' | 'transcript'
+  /**
+   * Incremental assistant text (present when `kind === 'text'`), or the player's
+   * running/complete recognized utterance (present when `kind === 'transcript'`).
+   */
   text?: string
   /** Synthesized TTS audio frame (present when `kind === 'audio'`). */
   audio?: Uint8Array
+  /**
+   * For a `transcript` chunk: `false` on an interim running-text update, `true`
+   * on the terminal complete-utterance chunk. Absent for `text` / `audio` chunks
+   * (those use `done` for turn termination, not `final`).
+   */
+  final?: boolean
   /** True on the last chunk of the current turn. */
   done: boolean
 }
@@ -139,6 +159,21 @@ export interface SessionSummary {
   gameRunId?: string
   /** ISO 8601 session-end timestamp (capture provenance metadata). */
   occurredAt?: string
+}
+
+/**
+ * Client→server control message: request the closing-recap turn.
+ *
+ * Sent by the client on a successful daily defuse BEFORE the results screen
+ * appears. The DO runs one final LLM+TTS recap turn (1-2 sentences, spoken
+ * Chinese, no lists) and streams it back via the normal `AiResponseChunk`
+ * channel, ending with `{kind:'text', done:true}`. The client plays the audio
+ * and navigates to the results screen once it finishes (or after a hard timeout
+ * so a TTS hiccup never strands the player). The `{type:'end'}` message follows
+ * after navigation — the recap does not end the session.
+ */
+export interface ClosingMessage {
+  type: 'closing'
 }
 
 /**

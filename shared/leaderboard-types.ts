@@ -8,6 +8,7 @@ export interface ScoreSubmission {
   ai_tool: string // required: 'claude' | 'chatgpt' | 'gemini' | string
   ai_model?: string // optional concrete model/version, omitted when blank
   device_id: string // UUID from localStorage
+  run_id?: string // client-generated UUID stable per run; used for backend dedup
 }
 
 export interface ScoreSubmissionResponse {

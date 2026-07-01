@@ -1,24 +1,27 @@
-# In-game voice partner panel (mode②) — the platform voice session wired into a
-# daily run. An opted-in daily run (`?mode=daily&partner=platform`) mounts the
-# VoicePanel, which connects to the platform-ai `/ai-ws/*` bridge, runs one
-# push-to-talk turn, renders the AI's streamed text reply, shows the "AI is
-# speaking" cue while the TTS audio plays, and tears the session down when the
-# run is exited.
+# In-game voice partner panel (mode②) — the platform voice partner wired into a
+# daily run, hands-free full-duplex. An opted-in daily run
+# (`?mode=daily&partner=platform`) mounts the VoicePanel, which connects to the
+# platform-ai `/ai-ws/*` bridge. There is no push-to-talk: the AI greets first
+# the instant the session is created, the panel renders its streamed text reply
+# and shows the "说话中" (speaking) indicator while the TTS audio plays, then
+# settles to "聆听中" (listening); exiting the run tears the session down.
 #
 # Deterministic + hermetic: the `/ai-ws/*` WebSocket is stubbed at the harness
-# boundary (e2e/steps/fixtures.ts `routeWebSocket`) so the panel is driven
-# through created -> chunk(text) -> chunk(audio) frames with no live Worker, no
-# DeepSeek/Volcengine, and no real network. The mic is the Chromium fake media
-# device (playwright.config.ts launch flags), so `getUserMedia` resolves without
-# a real microphone or a permission prompt. The real-provider voice turn is
-# verified separately by a human play-green plus the standalone live-turn
-# harness — this scenario asserts the panel's UI states only, never real audio
-# or provider output.
+# boundary (e2e/steps/fixtures.ts `routeWebSocket`) so the panel is driven through
+# created -> chunk(text) -> chunk(audio) frames with no live Worker, no
+# DeepSeek/Volcengine, and no real network — the stub emits the opening greeting
+# on session-create with no client turn. The mic is the Chromium fake media
+# device fed a SILENT capture file (playwright.config.ts launch flags), so the
+# continuous hands-free mic never crosses the client VAD threshold: no spurious
+# player turn, no barge-in. The real-provider voice turn (and the VAD-triggered
+# player turn) is verified separately by a human play-green plus the standalone
+# live-turn harness — this scenario asserts the panel's UI states only, never
+# real audio or provider output.
 
 Feature: In-game voice partner panel (mode②)
   As a daily-challenge player who opted into the platform voice partner
-  I want an in-game voice panel that connects, takes a push-to-talk turn, and
-  shows the AI replying
+  I want a hands-free in-game voice panel that connects, lets the AI greet
+  first, and shows the AI replying
   So that I can talk to my AI partner without leaving the run
 
   Background:
@@ -26,13 +29,11 @@ Feature: In-game voice partner panel (mode②)
 
   # Source: mode2-voice-session-turn
   @playwright
-  Scenario: A mode② daily run drives one voice turn through the panel
+  Scenario: A mode② daily run runs the hands-free voice partner's opening greeting
     When I enter a mode② daily run with the platform voice partner
-    Then the voice panel shows the AI partner is connected
-
-    When I push and hold the talk button, then release
-    Then the panel renders the AI's stubbed voice reply
-    And the panel shows the "AI is speaking" indicator while the reply audio plays
+    Then the voice panel connects and the AI partner greets first
+    And the panel shows the AI is speaking while the greeting audio plays
+    And the panel settles to the listening state when the greeting ends
 
     When I exit the run
     Then the voice session ends and the panel is gone

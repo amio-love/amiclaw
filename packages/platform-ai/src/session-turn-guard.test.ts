@@ -34,6 +34,7 @@ vi.mock('./providers/factory', async (importOriginal) => {
 
 import {
   createSessionOverWs,
+  driveUtteranceToLlm,
   makeGatedProviders,
   makeSessionDo,
   makeStuckLlm,
@@ -43,6 +44,7 @@ import {
   openSocket,
   sawDoneChunk,
   settle,
+  SPEECH_START,
   waitFor,
   waitForMessage,
 } from './session-do-test-kit'
@@ -64,13 +66,13 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    // First turn starts and parks at the gated LLM await (a real turn mid-flight).
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'first turn parked at provider await')
+    // First utterance: speech-start opens STT, turn finalizes -> the reply parks
+    // at the gated LLM await (a real reply mid-flight).
+    await driveUtteranceToLlm(socket, kit, 1)
     expect(kit.sttCalls()).toBe(1)
     expect(kit.llmTurns).toHaveLength(1)
 
-    // Owner double-clicks: a second `turn` arrives while the first is parked.
+    // Owner double-clicks: a second `turn` arrives while the first reply is parked.
     socket.send(TURN)
     await waitForMessage(socket, 'error')
 
@@ -105,15 +107,13 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'first turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
     await session.run(() => kit.llmTurns[0].finishStream())
-    await waitFor(() => kit.llmTurns[0].settled(), 'first turn settled')
+    await waitFor(() => kit.llmTurns[0].settled(), 'first reply settled')
     expect(kit.llmTurns[0].settled()).toBe(true)
 
-    // A fresh turn after the first completes is accepted (a real second runTurn).
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 2, 'second turn started')
+    // A fresh utterance after the first completes is accepted (a real second reply).
+    await driveUtteranceToLlm(socket, kit, 2)
     expect(kit.sttCalls()).toBe(2)
     expect(kit.llmTurns).toHaveLength(2)
     await session.run(() => kit.llmTurns[1].finishStream())
@@ -139,6 +139,7 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     // Under the real runtime that 1008 close of the OWNER socket also tears the
     // session down (`onSocketClose`) — so proving the guard is not wedged uses a
     // fresh session, exactly as a reconnecting client would.
+    socket.send(SPEECH_START)
     socket.send(TURN)
     await waitFor(() => throwing.calls() === 1, 'provider reached once')
     await waitFor(() => socket.closeEvents.some((c) => c.code === 1008), '1008 fail-loud close')
@@ -149,6 +150,7 @@ describe('real VoiceSessionDO — turn in-flight guard (P1)', () => {
     // provider again instead of bouncing off a wedged turn_in_flight guard.
     const reconnect = await openSocket(session, 'user-A')
     await createSessionOverWs(reconnect)
+    reconnect.send(SPEECH_START)
     reconnect.send(TURN)
     await waitFor(() => throwing.calls() === 2, 'provider reached again (guard released)')
     expect(throwing.calls()).toBe(2)
@@ -168,8 +170,7 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
     // Let one chunk through so the turn is genuinely mid-stream.
     await session.run(() => kit.llmTurns[0].pushDelta('partial'))
     await settle()
@@ -226,10 +227,13 @@ describe('real VoiceSessionDO — end during a turn (matrix: end)', () => {
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
+    socket.send(SPEECH_START)
     socket.send(TURN)
-    await waitFor(() => bundle.sttCalls() === 1, 'turn parked at stuck provider')
+    await waitFor(() => bundle.sttCalls() === 1, 'utterance opened STT')
+    // Let the reply reach (and park at) the never-settling stuck LLM.
+    await settle()
 
-    // `end` lands even though the turn's cancel can never settle.
+    // `end` lands even though the reply's cancel can never settle.
     socket.send(END)
     await waitForMessage(socket, 'summary')
     expect(messagesOfType(socket, 'summary')).toHaveLength(1)
@@ -253,8 +257,7 @@ describe('real VoiceSessionDO — create during a turn (matrix: create)', () => 
     const socket = await openSocket(session, 'user-A')
     const sessionId = await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
 
     // A second `create` arrives mid-turn: explicit reject, no socket close (a
     // close would truncate the turn streaming on this same socket).
@@ -295,8 +298,7 @@ describe('real VoiceSessionDO — owner close during a turn (matrix: close)', ()
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket)
 
-    socket.send(TURN)
-    await waitFor(() => kit.sttCalls() === 1, 'turn parked')
+    await driveUtteranceToLlm(socket, kit, 1)
     await session.run(() => kit.llmTurns[0].pushDelta('x'))
     await settle()
 

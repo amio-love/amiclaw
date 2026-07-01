@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runTurn, splitSentences, type SessionState, type TurnProviders } from './turn-pipeline'
+import {
+  OPENING_DIRECTIVE,
+  runOpeningTurn,
+  runTurn,
+  splitSentences,
+  type SessionState,
+  type TurnProviders,
+} from './turn-pipeline'
 import { createDeepSeekLlmProvider } from './providers/deepseek'
 import type { AiResponseChunk, AudioChunk, ManualData } from './contract'
 import type {
@@ -179,6 +186,101 @@ describe('runTurn', () => {
     expect(chunks.at(-1)?.done).toBe(true)
   })
 
+  it('emits the player transcript as a leading chunk, before the AI reply chunks', async () => {
+    const turn = runTurn(
+      providers(
+        // A single terminal (isFinal) STT chunk: no interim updates, just the
+        // complete utterance — emitted once as the terminal `final: true` frame.
+        mockStt([{ text: 'I see a red wire.', isFinal: true }]),
+        mockLlm(['Cut the ', 'blue wire.']),
+        mockTts([])
+      ),
+      freshState(),
+      fromArray<AudioChunk>([new Uint8Array([1])])
+    )
+    const chunks = await collect(turn)
+
+    // Exactly one transcript chunk — the terminal complete utterance (final:true)
+    // carrying the PLAYER's recognized utterance (not AI text), not the turn's
+    // terminal `done`.
+    const transcriptChunks = chunks.filter((c) => c.kind === 'transcript')
+    expect(transcriptChunks).toEqual([
+      { kind: 'transcript', text: 'I see a red wire.', final: true, done: false },
+    ])
+
+    // It precedes every AI text/audio chunk: the first emitted chunk IS the
+    // transcript, and no AI chunk appears before it.
+    expect(chunks[0]).toEqual({
+      kind: 'transcript',
+      text: 'I see a red wire.',
+      final: true,
+      done: false,
+    })
+    const firstAiIndex = chunks.findIndex((c) => c.kind === 'text' || c.kind === 'audio')
+    expect(chunks.findIndex((c) => c.kind === 'transcript')).toBeLessThan(firstAiIndex)
+
+    // The AI reply chunks are unchanged: same text deltas, audio present, one
+    // terminal done — the transcript chunk (kind 'transcript', done false) is not
+    // counted among them.
+    const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
+    expect(textChunks.map((c) => c.text)).toEqual(['Cut the ', 'blue wire.'])
+    expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+    expect(chunks.at(-1)?.done).toBe(true)
+  })
+
+  it('streams interim transcript frames (final:false) then one terminal final:true', async () => {
+    // The live-subtitle contract: as the cumulative ASR result grows, each interim
+    // result streams as a `transcript` chunk with `final: false` (the running
+    // cumulative text, not a delta); the terminal (isFinal) result is emitted ONCE
+    // as `final: true` carrying the complete utterance — never as a duplicate
+    // interim. This is the full-transcript fix's client-facing half.
+    const turn = runTurn(
+      providers(
+        mockStt([
+          { text: 'I', isFinal: false },
+          { text: 'I see', isFinal: false },
+          { text: 'I see a red wire', isFinal: true },
+        ]),
+        mockLlm(['ok.']),
+        mockTts([])
+      ),
+      freshState(),
+      fromArray<AudioChunk>([new Uint8Array([1])])
+    )
+    const chunks = await collect(turn)
+
+    const transcriptChunks = chunks.filter((c) => c.kind === 'transcript')
+    expect(transcriptChunks).toEqual([
+      { kind: 'transcript', text: 'I', final: false, done: false },
+      { kind: 'transcript', text: 'I see', final: false, done: false },
+      { kind: 'transcript', text: 'I see a red wire', final: true, done: false },
+    ])
+    // Exactly one terminal (final:true) transcript frame, carrying the complete
+    // utterance; it is the last transcript frame and precedes all AI chunks.
+    const finals = transcriptChunks.filter((c) => c.final === true)
+    expect(finals).toHaveLength(1)
+    expect(transcriptChunks.at(-1)?.final).toBe(true)
+    const firstAiIndex = chunks.findIndex((c) => c.kind === 'text' || c.kind === 'audio')
+    const lastTranscriptIndex =
+      chunks.length - 1 - [...chunks].reverse().findIndex((c) => c.kind === 'transcript')
+    expect(lastTranscriptIndex).toBeLessThan(firstAiIndex)
+  })
+
+  it('emits NO transcript chunk on a skipped no-speech turn', async () => {
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([]), mockLlm(['ignored.']), mockTts([])),
+        freshState(),
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The benign no-speech skip returns before yielding anything — no transcript
+    // chunk, no AI chunks at all.
+    expect(chunks.filter((c) => c.kind === 'transcript')).toEqual([])
+    expect(chunks).toEqual([])
+  })
+
   it('takes the last isFinal transcript (cumulative ASR semantics)', async () => {
     let capturedRequest: LlmCompletionRequest | undefined
     const turn = runTurn(
@@ -197,6 +299,129 @@ describe('runTurn', () => {
     )
     await collect(turn)
     expect(capturedRequest?.messages.at(-1)).toEqual({ role: 'user', content: 'I see a red wire' })
+  })
+
+  // --- benign no-speech turn (hands-free false-positive VAD) -------------
+  // A `turn` whose STT closes with no final transcript (no speech, no error) is
+  // skipped: no AI response, no state change, no throw — the session stays alive.
+
+  it('skips a no-speech turn: zero chunks, never drives LLM/TTS, no state mutation, no throw', async () => {
+    const state = freshState()
+    let llmCalled = false
+    const ttsReceived: string[] = []
+    const llm: LlmProvider = {
+      async *streamCompletion(): AsyncIterable<LlmCompletionChunk> {
+        llmCalled = true
+        yield { content: '', done: true }
+      },
+    }
+
+    // Empty STT stream — the adapter's benign no-final close surfaces here as an
+    // empty transcript (see collectFinalTranscript / the volcengine close path).
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([]), llm, mockTts(ttsReceived)),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+
+    // No AI response chunks at all (not even a terminal done) and no downstream work.
+    expect(chunks).toEqual([])
+    expect(llmCalled).toBe(false)
+    expect(ttsReceived).toEqual([])
+    // State is byte-for-byte untouched: no history, no turn count, no usage.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
+    expect(state.usage).toEqual({
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      sttInputSeconds: 0,
+      ttsOutputSeconds: 0,
+    })
+    expect(state.sttSource).toBe('provider-reported')
+  })
+
+  it('treats a whitespace-only final transcript as no-speech and skips it', async () => {
+    const state = freshState()
+    let llmCalled = false
+    const llm: LlmProvider = {
+      async *streamCompletion(): AsyncIterable<LlmCompletionChunk> {
+        llmCalled = true
+        yield { content: '', done: true }
+      },
+    }
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([{ text: '   ', isFinal: true }]), llm, mockTts([])),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    expect(chunks).toEqual([])
+    expect(llmCalled).toBe(false)
+    expect(state.turnCount).toBe(0)
+  })
+
+  it('leaves the session usable: a normal turn runs right after a skipped no-speech turn', async () => {
+    const state = freshState()
+    await collect(
+      runTurn(
+        providers(mockStt([]), mockLlm(['ignored.']), mockTts([])),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The skip left no residue.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
+
+    const ttsReceived: string[] = []
+    const chunks = await collect(
+      runTurn(
+        providers(
+          mockStt([{ text: 'I see a red wire.', isFinal: true }]),
+          mockLlm(['Cut it.']),
+          mockTts(ttsReceived)
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    // The next real turn runs normally end to end.
+    expect(state.turnCount).toBe(1)
+    expect(state.history).toEqual([
+      { role: 'user', content: 'I see a red wire.' },
+      { role: 'assistant', content: 'Cut it.' },
+    ])
+    expect(ttsReceived).toEqual(['Cut it.'])
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+  })
+
+  it('still fails loud when STT throws a real ASR error (NOT a benign no-speech close)', async () => {
+    // A genuine ASR error frame surfaces as a throw out of transcribe. That is a
+    // real fault, not a benign no-speech close: the turn must propagate it (the
+    // DO turns it into a 1008), never silently skip.
+    const state = freshState()
+    const throwingStt: SttProvider = {
+      async *transcribe(audio: AsyncIterable<AudioChunk>): AsyncIterable<SttTranscriptChunk> {
+        for await (const _ of audio) void _
+        yield { text: '部分', isFinal: false }
+        throw new Error('Volcengine ASR error: auth failed')
+      },
+    }
+    await expect(
+      collect(
+        runTurn(
+          providers(throwingStt, mockLlm(['nope.']), mockTts([])),
+          state,
+          fromArray<AudioChunk>([new Uint8Array([1])])
+        )
+      )
+    ).rejects.toThrow(/Volcengine ASR error/)
+    // A failed turn never settles, so it never mutates session state.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toEqual([])
   })
 
   it('accumulates usage and history across a turn', async () => {
@@ -516,5 +741,77 @@ describe('runTurn', () => {
       // The turn's cleanup ran: the TTS iterator was returned, nothing leaked.
       expect(ttsClosed).toBe(true)
     })
+  })
+})
+
+// --- runOpeningTurn: the AI-first greeting (LLM->TTS, no player audio) --------
+
+describe('runOpeningTurn', () => {
+  it('runs LLM+TTS with NO player audio, greeting from the server directive', async () => {
+    const ttsReceived: string[] = []
+    let captured: LlmCompletionRequest | undefined
+    const state = freshState()
+    const chunks = await collect(
+      runOpeningTurn(
+        {
+          llm: mockLlm(['你好！', '请描述你看到的。'], { capture: (r) => (captured = r) }),
+          tts: mockTts(ttsReceived),
+        },
+        state
+      )
+    )
+
+    // No STT step: the synthetic, server-side opening directive stands in for the
+    // (absent) player utterance — it is NEVER client-provided.
+    expect(captured?.messages[0].role).toBe('system')
+    expect(captured?.messages.at(-1)).toEqual({ role: 'user', content: OPENING_DIRECTIVE })
+
+    // The greeting streams as text + audio chunks plus exactly one terminal done.
+    const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
+    expect(textChunks.map((c) => c.text)).toEqual(['你好！', '请描述你看到的。'])
+    expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
+    expect(chunks.filter((c) => c.done)).toHaveLength(1)
+    expect(ttsReceived).toEqual(['你好！', '请描述你看到的。'])
+
+    // History remembers ONLY the greeting (never the synthetic directive), and the
+    // opening turn does not count as a player turn.
+    expect(state.history).toEqual([{ role: 'assistant', content: '你好！请描述你看到的。' }])
+    expect(state.turnCount).toBe(0)
+  })
+
+  it('AI-speaks-first ordering: the greeting precedes the first player turn in context', async () => {
+    const state = freshState()
+    await collect(runOpeningTurn({ llm: mockLlm(['你好。']), tts: mockTts([]) }, state))
+
+    let captured: LlmCompletionRequest | undefined
+    await collect(
+      runTurn(
+        providers(
+          mockStt([{ text: '红色按钮。', isFinal: true }]),
+          mockLlm(['好的。'], { capture: (r) => (captured = r) }),
+          mockTts([])
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+
+    // The first player turn sees the AI's own greeting as prior context, then the
+    // player's transcribed utterance — exactly: system, assistant greeting, user.
+    expect(captured?.messages).toEqual([
+      { role: 'system', content: captured?.messages[0].content },
+      { role: 'assistant', content: '你好。' },
+      { role: 'user', content: '红色按钮。' },
+    ])
+    expect(state.turnCount).toBe(1)
+  })
+
+  it('does not meter STT for the opening turn (no audio consumed)', async () => {
+    const state = freshState()
+    await collect(runOpeningTurn({ llm: mockLlm(['hi.']), tts: mockTts([]) }, state))
+    // The opening turn consumes no player audio, so STT seconds stay zero and the
+    // session's STT annotation is untouched (still its initial provider-reported).
+    expect(state.usage.sttInputSeconds).toBe(0)
+    expect(state.sttSource).toBe('provider-reported')
   })
 })

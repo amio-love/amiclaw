@@ -3,7 +3,10 @@
  * hook inputs. Side-effect-free (no React, no I/O) so the mode②-gating and the
  * current-module -> `relevantSections` derivation are unit-testable without a
  * browser. `GamePage` consumes these to mount `VoicePanel` only for an opted-in
- * daily run, and to remount it (fresh session) on every module advance.
+ * daily run. The panel is keyed on the RUN (`sessionKey`), not the module, so it
+ * mounts once and stays mounted across module advances — one continuous voice
+ * session per run. Only `gameState.relevantSections` changes per module, which
+ * the hook steers on the live socket; advancing modules never remounts.
  */
 
 import type { GameState as BombSquadGameState, GameMode, ModuleKind } from '@/store/game-context'
@@ -30,12 +33,13 @@ export interface VoicePanelInputs {
   /** Drives the platform's manual-subset selection for the current module. */
   gameState: VoiceGameState
   /**
-   * Stable per-module identity. Used as the `VoicePanel` React `key`, so when
-   * the player advances modules the panel tears down (WS/mic/AudioContext) and
-   * reconnects with the new module's `relevantSections` — the locked
-   * per-module-session model.
+   * Stable per-RUN identity. Used as the `VoicePanel` React `key`. It is keyed on
+   * the run (the run's `rngSeed`), NOT the module, so it stays constant as the
+   * player advances modules — the panel mounts ONCE and keeps one continuous WS /
+   * mic / conversation for the whole run (the AI greets once and remembers it).
+   * A genuinely new run gets a new seed and therefore a fresh session.
    */
-  moduleKey: string
+  sessionKey: string
   /** The current module kind (surfaced for labelling / callers). */
   moduleKind: ModuleKind
 }
@@ -52,7 +56,7 @@ export function deriveVoicePanelInputs(state: BombSquadGameState): VoicePanelInp
   return {
     manualData: bombsquadManualToManualData(state.manual, state.manual.meta.version),
     gameState: { relevantSections: moduleKindToRelevantSections(moduleKind) },
-    moduleKey: `${state.currentModuleIndex}-${moduleKind}`,
+    sessionKey: `run-${state.rngSeed}`,
     moduleKind,
   }
 }

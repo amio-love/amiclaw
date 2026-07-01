@@ -131,3 +131,23 @@ export function setMasterMuted(muted: boolean): void {
     masterGain.gain.value = muted ? 0 : 1
   }
 }
+
+let sfxSuppressed = false
+
+/**
+ * Suppress ALL game SFX regardless of the user's mute preference. Orthogonal to
+ * `setMasterMuted`: that is the player's persistent mute toggle, this is a
+ * transient gate the app raises while the mode② voice partner is active, so the
+ * stopwatch tick (and every other cue) neither disturbs the conversation nor
+ * bleeds into the always-on mic. `playSfx` reads it at the top and short-circuits
+ * — no audio graph is touched, so the user's mute state is left untouched and
+ * restored verbatim when the gate drops. GamePage is the sole caller.
+ */
+export function setSfxSuppressed(suppressed: boolean): void {
+  sfxSuppressed = suppressed
+}
+
+/** Whether SFX are currently suppressed by the voice-active gate. */
+export function isSfxSuppressed(): boolean {
+  return sfxSuppressed
+}

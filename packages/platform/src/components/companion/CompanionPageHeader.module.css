@@ -1,0 +1,45 @@
+.header {
+  margin-bottom: 28px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-bottom: 8px;
+  color: var(--text-3);
+  font: 500 13px var(--font-body);
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  transition: color var(--t-fast);
+}
+
+.back:hover {
+  color: var(--text-1);
+}
+
+.title {
+  margin: 12px 0 0;
+  font: 400 36px var(--font-display);
+  color: var(--text-1);
+}
+
+.lead {
+  margin: 10px 0 0;
+  max-width: 560px;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back {
+    transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .title {
+    font-size: 30px;
+  }
+}

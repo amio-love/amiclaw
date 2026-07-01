@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
@@ -7,6 +7,7 @@ import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
 import {
   loadManual,
+  toManualDataUrl,
   ManualNetworkError,
   ManualNotFoundError,
   ManualParseError,
@@ -33,8 +34,8 @@ import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { generateSceneInfo } from '@/engine/scene-info'
 import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
-import { getAudioContext } from '@/audio/audio-context'
-import VoicePanel from '@/voice/VoicePanel'
+import { getAudioContext, setSfxSuppressed } from '@/audio/audio-context'
+import VoicePanel, { type VoicePanelHandle } from '@/voice/VoicePanel'
 import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
 import styles from './GamePage.module.css'
 
@@ -52,6 +53,12 @@ const MODULE_LABEL: Record<ModuleKind, string> = {
 // How long the CSS explosion plays before routing to the failure result
 // page — kept in step with the ExplosionOverlay keyframe durations.
 const EXPLOSION_DURATION_MS = 1400
+
+// Hard-max timeout for the closing-recap audio on a successful daily defuse.
+// If the TTS provider does not deliver audio within this window (network hiccup,
+// provider timeout, silent LLM response) we navigate anyway so the player is
+// never stranded on the win screen.
+const CLOSING_RECAP_TIMEOUT_MS = 8000
 
 // Two-line diagnostic copy: line 1 names what just happened locally, line 2
 // names the AI partner's now-stale view. Kept as an array so the two lines
@@ -203,15 +210,46 @@ export default function GamePage() {
   // game state only, never alters game logic.
   const usePlatformVoice = isPlatformVoicePartner(mode, searchParams.get('partner'))
 
+  // Ref to the mounted VoicePanel — used to call requestClosing() imperatively
+  // on a successful daily defuse before navigating to the results screen.
+  const voicePanelRef = useRef<VoicePanelHandle>(null)
+  // Guard: the closing recap fires exactly once per RESULT entry — even if the
+  // effect re-runs (StrictMode double-invoke, unlikely state oscillation).
+  const closingFiredRef = useRef(false)
+
   // Voice-session inputs for the current module, recomputed only when the loaded
   // manual or the current module changes (NOT on every timer-frame re-render).
-  // `moduleKey` keys the panel's remount so advancing modules tears down the old
-  // session and reconnects with the new module's `relevantSections`.
+  // Advancing modules changes `gameState.relevantSections` but keeps the same
+  // run-stable `sessionKey`, so the panel does NOT remount — the hook steers the
+  // live session with one `update-gamestate` instead of reconnecting (one
+  // continuous conversation per run; the AI greets once and remembers it).
+  //
+  // When all modules complete, `currentModuleIndex` advances to moduleSequence.length
+  // (out of bounds) on the ALL_COMPLETE/RESULT transition. We clamp to the last
+  // valid index so VoicePanel stays mounted during RESULT state, allowing the
+  // closing-recap turn to play before navigation.
   const voiceInputs = useMemo(
-    () => (usePlatformVoice ? deriveVoicePanelInputs(state) : null),
+    () => {
+      if (!usePlatformVoice) return null
+      const clampedIdx = Math.min(state.currentModuleIndex, state.moduleSequence.length - 1)
+      return deriveVoicePanelInputs({ ...state, currentModuleIndex: clampedIdx })
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [usePlatformVoice, state.manual, state.currentModuleIndex]
+    [usePlatformVoice, state.manual, state.currentModuleIndex, state.moduleSequence.length]
   )
+
+  // Mute every game SFX while the mode② voice partner is mounted. The stopwatch
+  // tick fires twice a second and the mic is always open, so an unmuted cue both
+  // disturbs the conversation and bleeds back in as false speech. Only the SOUND
+  // is gated — the stopwatch keeps counting (the elapsed time IS the score). A
+  // mode① run never mounts the panel (`voiceInputs === null`), so it keeps all
+  // SFX. `voiceActive` stays true for the whole mode② run (the panel no longer
+  // remounts per module), so cleanup restores audio on exit / unmount.
+  const voiceActive = voiceInputs !== null
+  useEffect(() => {
+    setSfxSuppressed(voiceActive)
+    return () => setSfxSuppressed(false)
+  }, [voiceActive])
 
   // A wrong answer pulses a red border around the whole module panel so the
   // mistake is obvious at a glance in both modes. Incrementing this key
@@ -325,10 +363,16 @@ export default function GamePage() {
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
         : 'https://claw.amio.fans'
+    // Daily: the engine fetches the machine-readable YAML data file
+    // (`/manual/data/<date>.yaml`), NOT the HTML share page (`/manual/<date>`).
+    // The player→AI share URL stays at `/manual/<date>` (ConnectPage sources it
+    // independently from useDailyChallenge — it never reads state.manualUrl).
+    // `customUrl` arrives as the HTML share URL from the `?url=` param; convert
+    // it to its YAML equivalent so the engine always fetches parseable YAML.
     const manualUrl =
       mode === 'practice'
         ? `${origin}/manual/practice`
-        : (customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
+        : toManualDataUrl(customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
     const attemptNumber = getAttemptNumberForMode(mode)
 
     dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })
@@ -424,10 +468,47 @@ export default function GamePage() {
   }, [state.status, dispatch])
 
   useEffect(() => {
-    if (state.status === 'RESULT') {
+    if (state.status !== 'RESULT') return
+
+    // Closing recap only for a successful daily defuse with the voice partner
+    // active. All other outcomes (loss, timeout, practice) navigate immediately.
+    const isDefusedDailyVoice = state.outcome === 'defused' && mode === 'daily' && usePlatformVoice
+
+    if (!isDefusedDailyVoice || closingFiredRef.current) {
       navigate('/bombsquad/result')
+      return
     }
-  }, [state.status, navigate])
+
+    closingFiredRef.current = true
+
+    let settled = false
+    const doNavigate = () => {
+      if (!settled) {
+        settled = true
+        navigate('/bombsquad/result')
+      }
+    }
+
+    // Hard-max timeout: if TTS never delivers (provider hiccup / silence), do
+    // not leave the player waiting. The "拆除成功" burst stays on screen during
+    // the wait — a natural celebration beat.
+    const timeout = setTimeout(doNavigate, CLOSING_RECAP_TIMEOUT_MS)
+
+    const panel = voicePanelRef.current
+    if (!panel) {
+      clearTimeout(timeout)
+      doNavigate()
+      return
+    }
+
+    panel.requestClosing().then(doNavigate, doNavigate)
+
+    return () => {
+      settled = true
+      clearTimeout(timeout)
+    }
+    // voicePanelRef is a stable ref — not a dependency.
+  }, [state.status, state.outcome, mode, usePlatformVoice, navigate])
 
   // Auto-advance from MODULE_COMPLETE after the inter-module transition delay.
   // The constant is shared with the score validator (@shared/game-timing) so
@@ -656,7 +737,8 @@ export default function GamePage() {
 
       {voiceInputs && (
         <VoicePanel
-          key={voiceInputs.moduleKey}
+          ref={voicePanelRef}
+          key={voiceInputs.sessionKey}
           manualData={voiceInputs.manualData}
           gameState={voiceInputs.gameState}
         />
