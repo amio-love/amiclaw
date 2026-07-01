@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, type CSSProperties, type KeyboardEvent } from 'react'
 import type { ButtonConfig, ButtonAnswer } from '@shared/manual-schema'
 import type { ModuleProps } from '../types'
 import { playSfx } from '@/audio/useSfx'
@@ -115,15 +115,19 @@ export default function ButtonModule({
     handlePointerUp()
   }
 
-  const indicatorColor = CSS_COLORS[INDICATOR_COLORS[indicatorColorIdx]] ?? '#888'
+  const releaseColorName = INDICATOR_COLORS[indicatorColorIdx]
+  const releaseColor = CSS_COLORS[releaseColorName] ?? '#888'
+  const previewColor = CSS_COLORS[config.indicatorColor] ?? '#888'
   const buttonBg = CSS_COLORS[config.color] ?? '#444'
   const isPressed = buttonState === 'pressed' || buttonState === 'holding'
   const isHolding = buttonState === 'holding'
-  const litColor = isHolding ? indicatorColor : (CSS_COLORS[config.indicatorColor] ?? '#888')
   const buttonAccessibleName = `${config.color} ${config.label} button, display ${config.displayNumber}`
   const lightAccessibleState = isHolding
-    ? `Hold light is ${INDICATOR_COLORS[indicatorColorIdx]}.`
+    ? `Release strip is ${releaseColorName}. Preview light is ${config.indicatorColor}.`
     : `Preview light is ${config.indicatorColor}.`
+  const releaseStripStyle = {
+    '--release-color': releaseColor,
+  } as CSSProperties
 
   return (
     <div
@@ -131,24 +135,34 @@ export default function ButtonModule({
       data-testid="button-module"
     >
       <div className={styles.stage}>
-        {/* The sweep ring runs continuously while holding — one revolution per
-            full 4-color cycle — so a held color reads as "still cycling" rather
-            than "settled". The ring is target-agnostic: its motion and color are
-            identical for every indicator color and never reference the answer. */}
-        <div className={`${styles.indicatorWell} ${isHolding ? styles.cycling : ''}`}>
-          {/* Keyed on the color index so every color change remounts and replays
-              the same brief pulse — a uniform "the light just advanced" tick.
-              The key only changes while holding, so the pulse fires per cycle
-              step and the cue is the same for white/yellow/blue/red. */}
+        <div className={styles.lightPanel}>
           <div
-            key={isHolding ? indicatorColorIdx : 'idle'}
-            className={`${styles.indicator} ${isHolding ? styles.advancePulse : ''}`}
+            className={styles.previewLight}
             style={{
-              backgroundColor: litColor,
-              boxShadow: `0 0 14px ${litColor}`,
+              backgroundColor: previewColor,
+              boxShadow: `0 0 10px ${previewColor}`,
             }}
-            data-testid="button-indicator"
+            data-color={config.indicatorColor}
+            data-testid="button-preview-light"
+            aria-hidden="true"
           />
+          {/* The release strip is a separate surface from the static preview
+              light. It activates only after the hold threshold and cycles the
+              same four colors for every answer target, so it does not encode
+              answer.releaseOnColor. */}
+          <div
+            className={`${styles.releaseStrip} ${isHolding ? styles.releaseStripActive : ''}`}
+            style={releaseStripStyle}
+            data-active={isHolding ? 'true' : 'false'}
+            data-color={isHolding ? releaseColorName : 'inactive'}
+            data-testid="button-release-strip"
+            aria-hidden="true"
+          >
+            <div
+              key={isHolding ? indicatorColorIdx : 'idle'}
+              className={`${styles.releaseStripFill} ${isHolding ? styles.advancePulse : ''}`}
+            />
+          </div>
         </div>
         <div className={styles.buttonOrbit}>
           <span id="button-module-state" className={styles.srOnly} aria-live="polite">

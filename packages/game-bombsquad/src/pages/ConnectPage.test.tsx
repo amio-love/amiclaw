@@ -182,13 +182,14 @@ describe('ConnectPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '复制手册' }))
 
     await waitFor(() => {
-      expect(screen.getByText('复制失败，可手动发送')).toBeInTheDocument()
+      expect(screen.getByText('复制失败，链接仍可用')).toBeInTheDocument()
     })
-    expect(screen.getByText(/你可以重试复制/)).toBeInTheDocument()
+    expect(screen.getByText(/上面的链接就是同一份手册/)).toBeInTheDocument()
+    expect(screen.getByText(/和复制后粘贴完全一样/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试复制' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试复制手册链接' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /我已发给 AI/ }))
+    fireEvent.click(screen.getByRole('button', { name: /我已手动发给 AI/ }))
 
     expect(screen.getByText('第 2/2 步')).toBeInTheDocument()
     expect(screen.getByText(SYNC_PROMPT)).toBeInTheDocument()

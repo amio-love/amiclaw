@@ -393,14 +393,17 @@ export default function ResultPage() {
         <Scenery accent="yellow" />
         <div className={styles.stage}>
           <div className={styles.noData}>
-            <p className={styles.noDataText}>这一局没有数据，可能是刷新或直接打开了结算页。</p>
+            <h1 className={styles.noDataTitle}>重新开始一局</h1>
+            <p className={styles.noDataText}>
+              这里没有正在结算的关卡。先把手册交给 AI，等它读完，再进入每日挑战。
+            </p>
             <div className={styles.cta}>
               <Button
                 variant="primary"
                 full
                 onClick={() => navigate('/bombsquad/connect?mode=daily')}
               >
-                开始今日挑战<span aria-hidden="true"> →</span>
+                先交手册，再开始每日挑战<span aria-hidden="true"> →</span>
               </Button>
               <Button
                 variant="ghost"

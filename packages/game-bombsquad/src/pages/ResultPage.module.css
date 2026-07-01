@@ -347,6 +347,14 @@
   text-align: center;
 }
 
+.noDataTitle {
+  margin: 0;
+  font: 400 32px/1.1 var(--font-display);
+  font-style: italic;
+  color: #fff;
+  text-shadow: 0 0 20px var(--y-glow-25);
+}
+
 .noDataText {
   margin: 0;
   font: 400 15px/1.6 var(--font-body);

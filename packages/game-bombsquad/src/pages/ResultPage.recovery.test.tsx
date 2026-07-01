@@ -3,9 +3,9 @@
  *
  * When the result page is opened with no live run in memory (a direct link to
  * /bombsquad/result, a refresh that cleared the run context, or an odd
- * back-navigation), the `noRunData` branch used to render a dead-end
- * "暂无数据。返回主页" link that forced the player out of the game. It now
- * renders a recoverable empty state with three landing-page entry points.
+ * back-navigation), the `noRunData` branch used to render a broken-sounding
+ * no-data message. It now renders an explicit restart surface that sends daily
+ * players back through the manual handoff before the run starts.
  *
  * These tests assert the three recovery actions are present with the correct
  * destinations, and that clicking the primary CTA navigates to the daily
@@ -81,25 +81,27 @@ describe('ResultPage no-run-data recovery', () => {
     sessionStorage.clear()
   })
 
-  it('renders the recovery empty state, not the dead "暂无数据" link', () => {
+  it('renders an explicit restart surface, not a scary no-data message', () => {
     renderRecovery()
 
     expect(screen.queryByText(/暂无数据/)).not.toBeInTheDocument()
-    expect(screen.getByText(/这一局没有数据/)).toBeInTheDocument()
+    expect(screen.queryByText(/这一局没有数据/)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '重新开始一局' })).toBeInTheDocument()
+    expect(screen.getByText(/先把手册交给 AI/)).toBeInTheDocument()
   })
 
   it('shows the three recovery actions', () => {
     renderRecovery()
 
-    expect(screen.getByRole('button', { name: /开始今日挑战/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /先交手册，再开始每日挑战/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '练习一局' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '返回主页' })).toBeInTheDocument()
   })
 
-  it('「开始今日挑战」navigates to the daily connect funnel', () => {
+  it('the primary daily CTA navigates to the daily connect funnel', () => {
     renderRecovery()
 
-    fireEvent.click(screen.getByRole('button', { name: /开始今日挑战/ }))
+    fireEvent.click(screen.getByRole('button', { name: /先交手册，再开始每日挑战/ }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/bombsquad/connect?mode=daily')
   })
@@ -125,7 +127,7 @@ describe('ResultPage no-run-data recovery', () => {
   it('the connect CTAs do not deep-link into /bombsquad/run', () => {
     renderRecovery()
 
-    fireEvent.click(screen.getByRole('button', { name: /开始今日挑战/ }))
+    fireEvent.click(screen.getByRole('button', { name: /先交手册，再开始每日挑战/ }))
 
     expect(screen.getByTestId('location')).not.toHaveTextContent('/bombsquad/run')
   })
