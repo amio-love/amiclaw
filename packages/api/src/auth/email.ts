@@ -28,13 +28,13 @@ export interface SendResult {
 export type EmailSender = (email: MagicLinkEmail) => Promise<SendResult>
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
-const EMAIL_SUBJECT = 'Your AmiClaw sign-in link'
+const EMAIL_SUBJECT = 'Your AMIO Arcade sign-in link'
 
 function renderHtml(verifyUrl: string): string {
   // Minimal, plain HTML. The link is the only actionable element.
   return [
-    '<p>Click the link below to sign in to AmiClaw. It expires in 15 minutes and can be used once.</p>',
-    `<p><a href="${verifyUrl}">Sign in to AmiClaw</a></p>`,
+    '<p>Click the link below to sign in to AMIO Arcade. It expires in 15 minutes and can be used once.</p>',
+    `<p><a href="${verifyUrl}">Sign in to AMIO Arcade</a></p>`,
     `<p>If the link does not work, paste this URL into your browser:</p>`,
     `<p>${verifyUrl}</p>`,
     '<p>If you did not request this, you can ignore this email.</p>',
@@ -43,7 +43,7 @@ function renderHtml(verifyUrl: string): string {
 
 function renderText(verifyUrl: string): string {
   return [
-    'Click the link below to sign in to AmiClaw. It expires in 15 minutes and can be used once.',
+    'Click the link below to sign in to AMIO Arcade. It expires in 15 minutes and can be used once.',
     '',
     verifyUrl,
     '',

@@ -1,4 +1,4 @@
-# Contributing to AmiClaw
+# Contributing to AMIO Arcade
 
 Thank you for your interest in contributing!
 

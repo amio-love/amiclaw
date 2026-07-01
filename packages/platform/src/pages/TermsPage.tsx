@@ -4,8 +4,8 @@ import styles from './TermsPage.module.css'
 const CONTACT_EMAIL = 'hi@amio.love'
 const EFFECTIVE_DATE = '2026-06-07'
 
-/* Terms-of-service page — a production-grade Chinese user agreement for the
-   AmiClaw platform (claw.amio.fans). Mirrors the real service shape: no
+/* Terms-of-service page — a production-grade Chinese user agreement for
+   AMIO Arcade (claw.amio.fans). Mirrors the real service shape: no
    accounts (device-id identity), the player-supplied AI tool is an
    uncontrolled third party, nicknames + AI tool are publicly displayed.
    Platform chrome — every accent is brand yellow; no BombSquad cyan here. */
@@ -17,7 +17,7 @@ export default function TermsPage() {
         使用本服务的<span className={styles.accent}>约定</span>。
       </h2>
       <p className={styles.lead}>
-        本条款是你与运营方就使用 AmiClaw 平台达成的协议。请在使用本服务前阅读并接受。
+        本条款是你与运营方就使用 AMIO 游乐场达成的协议。请在使用本服务前阅读并接受。
       </p>
 
       <GlassCard radius="2xl" className={styles.card}>
@@ -25,9 +25,9 @@ export default function TermsPage() {
           <section className={styles.section}>
             <h3 className={styles.heading}>一、接受条款</h3>
             <p>
-              当你访问或使用 AmiClaw 平台（claw.amio.fans，含 BombSquad
-              等其上的游戏，下称「本服务」）时，即表示你已阅读、理解并同意受本条款约束。
-              如你不同意本条款，请勿使用本服务。本服务的运营方为 AMIO 团队。
+              {
+                '当你访问或使用 AMIO 游乐场（AMIO Arcade，原 AmiClaw，claw.amio.fans，含 BombSquad 等其上的游戏，下称「本服务」）时，即表示你已阅读、理解并同意受本条款约束。如你不同意本条款，请勿使用本服务。本服务的运营方为 AMIO 团队。'
+              }
             </p>
           </section>
 

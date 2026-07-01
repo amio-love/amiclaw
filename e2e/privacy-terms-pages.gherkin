@@ -22,7 +22,7 @@ Feature: Platform privacy and terms pages
     When I click "隐私"
     Then the URL path is /privacy
     And I see the heading "隐私政策 · PRIVACY"
-    And I see the subtitle "本政策说明 AmiClaw 收集哪些信息、为什么收集、如何使用与保存，以及你对这些信息拥有的权利。"
+    And I see the subtitle "本政策说明 AMIO 游乐场收集哪些信息、为什么收集、如何使用与保存，以及你对这些信息拥有的权利。"
 
   # Source: footer-to-terms
   @playwright
@@ -30,4 +30,4 @@ Feature: Platform privacy and terms pages
     When I click "条款"
     Then the URL path is /terms
     And I see the heading "用户条款 · TERMS"
-    And I see the subtitle "本条款是你与运营方就使用 AmiClaw 平台达成的协议。请在使用本服务前阅读并接受。"
+    And I see the subtitle "本条款是你与运营方就使用 AMIO 游乐场达成的协议。请在使用本服务前阅读并接受。"
