@@ -43,7 +43,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 26px;
+  gap: 24px;
   padding: 32px 28px;
   border-radius: var(--radius-2xl);
   border: 1px solid var(--hairline);
@@ -54,75 +54,104 @@
   backdrop-filter: blur(20px);
 }
 
-/* Indicator well — hosts the status pip and, while holding, a continuous
-   sweep ring. The ring gives the player a target-agnostic "still cycling"
-   signal so a held color is never misread as a settled answer. The well is
-   slightly larger than the pip to leave room for the surrounding ring. */
-.indicatorWell {
-  position: relative;
-  display: flex;
+/* Light panel — keeps the static preview pip and hold-time release strip on
+   separate surfaces. The preview light is deliberately small and stable; the
+   release strip is dark until the player has held long enough for cycling. */
+.lightPanel {
+  display: grid;
+  grid-template-columns: 26px minmax(160px, 1fr);
+  gap: 12px;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: min(100%, 230px);
+  padding: 10px 12px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
 }
 
-/* Sweep ring — a thin yellow-brand arc that orbits the pip, completing one
-   revolution per full 4-color cycle (4 x 800ms = 3.2s). It is rendered as a
-   masked conic-gradient annulus on a pseudo element so the pip itself never
-   rotates. Motion, color, and geometry are identical for every indicator
-   color — it never reads answer.releaseOnColor, so it leaks no target. */
-.indicatorWell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
+.previewLight {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--y-glow-50) 300deg, var(--y) 360deg);
-  /* Mask to a thin ring: opaque outside the inner radius, transparent inside. */
-  -webkit-mask: radial-gradient(circle, transparent 13px, #000 14px);
-  mask: radial-gradient(circle, transparent 13px, #000 14px);
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.indicatorWell.cycling::before {
-  opacity: 1;
-  animation: button-cycle-sweep 3200ms linear infinite;
-}
-
-/* Status indicator pip — color + glow are supplied inline. */
-.indicator {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+.releaseStrip {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.45);
   transition:
-    background-color 0.2s ease,
+    border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
-/* Per-color-change tick — a brief uniform scale pulse replayed on every cycle
-   step (the pip is keyed on the color index, so it remounts each change). The
-   pulse is identical for white/yellow/blue/red and reveals no target. */
-.indicator.advancePulse {
-  animation: button-cycle-tick 320ms ease-out;
+.releaseStrip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.16) 0,
+    rgba(255, 255, 255, 0.16) 1px,
+    transparent 1px,
+    transparent 22px
+  );
+  opacity: 0.35;
 }
 
-@keyframes button-cycle-sweep {
-  to {
-    transform: rotate(360deg);
-  }
+.releaseStripFill {
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  background: var(--release-color);
+  box-shadow: 0 0 18px var(--release-color);
+  opacity: 0;
+  transform: scaleX(0.12);
+  transform-origin: left center;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
-@keyframes button-cycle-tick {
+.releaseStripActive {
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 0 10px rgba(0, 0, 0, 0.35),
+    0 0 18px var(--release-color);
+}
+
+.releaseStripActive .releaseStripFill {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* Per-color-change tick — a brief uniform pulse replayed on every cycle step.
+   The fill is keyed on the color index, so the cue is identical for each
+   release target and reveals no answer. */
+.releaseStripFill.advancePulse {
+  animation: button-strip-tick 320ms ease-out;
+}
+
+@keyframes button-strip-tick {
   0% {
-    transform: scale(1);
+    transform: scaleX(0.9);
   }
-  40% {
-    transform: scale(1.22);
+  45% {
+    transform: scaleX(1);
+    filter: brightness(1.25);
   }
   100% {
-    transform: scale(1);
+    transform: scaleX(1);
+    filter: brightness(1);
   }
 }
 
@@ -214,12 +243,9 @@
   .buttonOrbit::before {
     animation: none;
   }
-  /* Drop the per-change pulse and the sweep rotation, but keep the ring
-     visible while holding so the "cycling" affordance survives motion-off. */
-  .indicator.advancePulse {
-    animation: none;
-  }
-  .indicatorWell.cycling::before {
+  /* Drop the per-change pulse, but keep the release strip visible while
+     holding so the affordance survives motion-off. */
+  .releaseStripFill.advancePulse {
     animation: none;
   }
 }

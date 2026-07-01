@@ -11,6 +11,15 @@ homepage copy, legal pages, auth emails, README, and canonical docs. Existing
 `claw.amio.fans` URLs and `amiclaw` internal identifiers stay in place as
 compatibility infrastructure.
 
+**BombSquad daily entry no longer looks broken when you need to restart** - Fix.
+The result recovery surface no longer says the run has "no data"; it now presents
+itself as a restart path, with the daily action clearly saying it will hand the
+manual to the AI before starting the challenge. If clipboard copy fails on the
+connect screen, the page now says the visible manual URL is the same supported
+handoff path as copy-and-paste. The button module also separates the small static
+preview light from the hold-time release strip, so the strip only comes alive
+while holding and still gives away nothing about the correct release color.
+
 **Meet your AI companion** - New. Signed-in players can now give their platform
 AI partner a name and choose its voice, so it feels like theirs from the first
 hello. The companion card counts how many days you've been together from the day

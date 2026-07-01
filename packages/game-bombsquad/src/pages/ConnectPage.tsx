@@ -181,7 +181,7 @@ export default function ConnectPage() {
               >
                 <div className={styles.copyCardText}>
                   <div className={styles.copyCardLabel}>
-                    {copied ? '已复制到剪贴板' : copyFailed ? '复制失败，可手动发送' : '手册链接'}
+                    {copied ? '已复制到剪贴板' : copyFailed ? '复制失败，链接仍可用' : '手册链接'}
                   </div>
                   <div className={styles.copyCardUrl}>{manualUrl}</div>
                 </div>
@@ -217,7 +217,7 @@ export default function ConnectPage() {
 
               <p className={styles.hint}>
                 {copyFailed
-                  ? '浏览器没有允许自动复制。你可以重试复制，或手动选择上面的链接发给 AI，等它读完手册后继续。'
+                  ? '浏览器没有允许自动复制，但上面的链接就是同一份手册。手动把它发给 AI，和复制后粘贴完全一样；等它读完后继续。'
                   : '粘贴到你常用的 AI，让它读完手册后说「好了」。'}
               </p>
               {/* /compatibility discovery link — re-homed here from the
@@ -285,7 +285,7 @@ export default function ConnectPage() {
                 </Button>
                 {copyFailed && !copied && (
                   <Button variant="ghost" full onClick={continueAfterManualHandoff}>
-                    我已发给 AI，继续 →
+                    我已手动发给 AI，继续 →
                   </Button>
                 )}
               </>

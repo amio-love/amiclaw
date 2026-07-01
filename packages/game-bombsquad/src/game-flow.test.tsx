@@ -58,6 +58,19 @@ vi.mock('@shared/leaderboard-api', () => ({
   fetchLeaderboard: vi.fn().mockResolvedValue({ date: '2026-03-16', entries: [] }),
 }))
 
+vi.mock('./utils/clipboard', () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(true),
+}))
+
+vi.mock('./audio/audio-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./audio/audio-context')>()
+  return {
+    ...actual,
+    getAudioContext: vi.fn().mockReturnValue(null),
+    setSfxSuppressed: vi.fn(),
+  }
+})
+
 // Daily mode loads its manual over the network. Mock the loader to resolve
 // the practice manual (it carries all four module rule sections), so a daily
 // run can be exercised end to end without a real fetch. Keep the typed error
@@ -141,5 +154,28 @@ describe('full game flow', () => {
       () => expect(screen.getByRole('heading', { name: /拆弹成功/ })).toBeInTheDocument(),
       { timeout: 5000 }
     )
+  }, 12000)
+
+  it('daily connect entry: 进入游戏 reaches the first module, not result recovery', async () => {
+    vi.mocked(loadManual).mockResolvedValue(yaml.load(practiceYamlRaw) as Manual)
+
+    render(
+      <MemoryRouter initialEntries={['/bombsquad/connect?mode=daily']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '复制手册' }))
+    await waitFor(() => expect(screen.getByText('切到语音模式')).toBeInTheDocument(), {
+      timeout: 3000,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
+
+    await waitFor(() => expect(screen.getByTestId('mock-wire-complete')).toBeInTheDocument(), {
+      timeout: 3000,
+    })
+    expect(screen.queryByRole('heading', { name: '重新开始一局' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/这一局没有数据/)).not.toBeInTheDocument()
   }, 12000)
 })
