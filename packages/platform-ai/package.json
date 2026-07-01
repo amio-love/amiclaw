@@ -15,11 +15,11 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "agents": "^0.17.0"
+    "agents": "^0.17.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.20",
-    "@cloudflare/workers-types": "^4.20260621.1",
+    "@cloudflare/vitest-pool-workers": "^0.17.0",
+    "@cloudflare/workers-types": "^4.20260701.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
