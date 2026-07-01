@@ -1,0 +1,115 @@
+.card {
+  padding: 22px 24px;
+}
+
+.dimension {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-soft);
+  font: 500 11px var(--font-body);
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+}
+
+.claim {
+  margin: 14px 0 0;
+  font: 400 16px var(--font-body);
+  color: var(--text-1);
+  line-height: var(--lh-loose);
+}
+
+/* ----------  evidence chain  ---------- */
+.evidence {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.evidenceLabel {
+  font: 500 11px var(--font-body);
+  color: var(--text-4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.evidenceList {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evidenceLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-hairline);
+  text-decoration: none;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast);
+}
+
+.evidenceLink:hover {
+  background: var(--amio-overlay-press);
+  border-color: var(--border-yellow-soft);
+}
+
+.evidenceTitle {
+  font: 500 14px var(--font-body);
+  color: var(--text-1);
+}
+
+.evidenceDate {
+  flex-shrink: 0;
+  font: 500 12px var(--amio-font-mono);
+  color: var(--text-4);
+}
+
+/* ----------  actions  ---------- */
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.action {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-overlay-hover);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font: 500 14px var(--font-body);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    color var(--t-fast);
+}
+
+.action:hover {
+  background: var(--amio-overlay-press);
+}
+
+.delete:hover {
+  color: var(--amio-danger);
+  border-color: var(--amio-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evidenceLink,
+  .action {
+    transition: none;
+  }
+}

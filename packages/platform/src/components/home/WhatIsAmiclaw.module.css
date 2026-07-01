@@ -1,4 +1,4 @@
-/* What-is-Amiclaw value props — handoff §6.5; pixel values mirror
+/* What-is-AMIO-Arcade value props — handoff §6.5; pixel values mirror
    prototype/atlas/atlas.html (.pitch-*). The cards consume the
    GlassCard primitive — its base + `interactive` hover match the
    prototype's .pitch-card exactly. The responsive @media tier (≤768px)
@@ -9,8 +9,8 @@
   padding: 24px 0 0;
 }
 
-/* The brand name in the eyebrow keeps its prose case (`AmiClaw`) instead of
-   inheriting the eyebrow's `text-transform: uppercase` — never `AMICLAW`
+/* The brand name in the eyebrow keeps its prose case instead of
+   inheriting the eyebrow's `text-transform: uppercase`
    (DesignSystem.md §Brand → Product Name). */
 .brandToken {
   text-transform: none;

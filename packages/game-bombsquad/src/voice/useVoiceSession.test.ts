@@ -378,6 +378,87 @@ describe('useVoiceSession — client VAD', () => {
     expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(true)
   })
 
+  it('stays thinking when noise crosses the VAD threshold while awaiting the reply', async () => {
+    const { result, ws } = await ready()
+    finishGreeting(ws)
+    // A real player utterance: speech then silence -> turn sent -> thinking.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    act(() => {
+      for (let i = 0; i < 10; i += 1) fireFrame(0.0)
+    })
+    expect(result.current.conversationPhase).toBe('thinking')
+    const speechStartsBefore = ws.controlMessages().filter((m) => m.type === 'speech-start').length
+
+    // Still awaiting the reply (no chunk yet). The open mic picks up a breath /
+    // room-noise tail crossing the threshold for >= minSpeechMs. This must NOT
+    // yank the indicator from `thinking` back to `listening`, nor open a spurious
+    // server utterance — the AI still holds the floor.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    expect(result.current.playerSpeaking).toBe(false)
+    expect(result.current.conversationPhase).toBe('thinking')
+    expect(ws.controlMessages().filter((m) => m.type === 'speech-start').length).toBe(
+      speechStartsBefore
+    )
+  })
+
+  it('sends speech-start then turn, in order, for a real player utterance', async () => {
+    const { ws } = await ready()
+    finishGreeting(ws)
+
+    // Two 256ms speech frames (>= 400ms minSpeechMs) start the utterance.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    // The utterance START is signaled once; the turn waits for utterance-end.
+    expect(ws.controlMessages().filter((m) => m.type === 'speech-start')).toHaveLength(1)
+    expect(ws.controlMessages().some((m) => m.type === 'turn')).toBe(false)
+
+    // Ten 256ms silence frames (2560ms >= 2500ms hangover) end it -> the turn.
+    act(() => {
+      for (let i = 0; i < 10; i += 1) fireFrame(0.0)
+    })
+    const types = ws.controlMessages().map((m) => m.type)
+    // Exactly one speech-start, exactly one turn, speech-start BEFORE the turn.
+    expect(types.filter((t) => t === 'speech-start')).toHaveLength(1)
+    expect(types.filter((t) => t === 'turn')).toHaveLength(1)
+    expect(types.indexOf('turn')).toBeGreaterThan(types.indexOf('speech-start'))
+  })
+
+  it('does not send speech-start while the AI-first opening greeting is in flight', async () => {
+    const { ws } = await ready()
+    // No greeting chunk yet: the hook is awaiting the opening reply. Noise the open
+    // mic picks up (the greeting's own voice / the stopwatch tick) must NOT open an
+    // utterance on the server — that would race the in-flight greeting.
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+      fireFrame(0.0)
+      fireFrame(0.0)
+    })
+    expect(ws.controlMessages().some((m) => m.type === 'speech-start')).toBe(false)
+  })
+
+  it('does not send speech-start while a (non-barged-in) AI turn is still streaming', async () => {
+    const { ws } = await ready()
+    finishGreeting(ws)
+    // A reply turn is streaming text (done:false) with no audio playing yet — the
+    // AI holds the floor, and this is NOT a barge-in.
+    act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: 'still talking', done: false }))
+    const before = ws.controlMessages().filter((m) => m.type === 'speech-start').length
+    act(() => {
+      fireFrame(0.5)
+      fireFrame(0.5)
+    })
+    expect(ws.controlMessages().filter((m) => m.type === 'speech-start').length).toBe(before)
+  })
+
   it('does not send a turn while the AI-first opening greeting is in flight', async () => {
     const { result, ws } = await ready()
     // No greeting chunk yet: the hook is awaiting the opening reply. Noise the
@@ -513,6 +594,7 @@ describe('useVoiceSession — barge-in', () => {
     })
     expect(result.current.isAiSpeaking).toBe(true)
     const playing = playbackSources().at(-1)
+    const speechStartsBefore = ws.controlMessages().filter((m) => m.type === 'speech-start').length
 
     // Player barges in (2 frames >= the 400ms minSpeechMs).
     act(() => {
@@ -523,6 +605,11 @@ describe('useVoiceSession — barge-in', () => {
     expect(result.current.isAiSpeaking).toBe(false)
     expect(result.current.playerSpeaking).toBe(true)
     expect(result.current.aiText).toBe('') // interrupted turn's text dropped
+    // A genuine barge-in IS a real utterance start: it stops playback AND signals
+    // speech-start so the server transcribes the interrupting utterance live.
+    expect(ws.controlMessages().filter((m) => m.type === 'speech-start').length).toBe(
+      speechStartsBefore + 1
+    )
 
     // The interrupted turn's tail keeps streaming from the server — drop it.
     act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: ' on and on', done: true }))

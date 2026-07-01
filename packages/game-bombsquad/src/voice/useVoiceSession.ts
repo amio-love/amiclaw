@@ -10,15 +10,20 @@
  *
  * Turn model (important): the CLIENT runs the VAD. On `create` the server fires
  * the AI-first opening greeting (no client input). Thereafter the hook streams the
- * mic continuously and the client-side VAD detects end-of-utterance (the player
- * went silent after speaking) and sends `{type:'turn'}`, which the server runs as
- * a normal STT->LLM->TTS turn over the audio buffered since the last turn. Turns
- * are SERIAL server-side: a `turn` sent while one is in flight is rejected with a
- * benign `turn_in_flight`, so the hook only sends when the AI is idle (not
- * speaking, not awaiting, not mid-stream) — otherwise the open mic picking up the
- * AI's own greeting / the stopwatch tick would fire spurious, rejected turns. The
- * VAD additionally drives the 3-state conversation phase (listening / thinking /
- * speaking) and barge-in (stop local playback when the player talks over the AI).
+ * mic continuously; the client-side VAD detects utterance START (the player began
+ * speaking) and sends `{type:'speech-start'}`, which opens the server recognizer
+ * so it transcribes LIVE while the player talks, then detects end-of-utterance
+ * (the player went silent) and sends `{type:'turn'}`, which finalizes that turn as
+ * a normal STT->LLM->TTS turn over the audio buffered since the last turn. One
+ * speech-start per utterance, paired with the one turn. Turns are SERIAL
+ * server-side: a `turn` sent while one is in flight is rejected with a benign
+ * `turn_in_flight`, so BOTH sends fire only when the AI is idle (not speaking, not
+ * awaiting, not mid-stream) — otherwise the open mic picking up the AI's own
+ * greeting / the stopwatch tick would open a spurious utterance / fire a rejected
+ * turn. The one mid-stream exception is a genuine barge-in (the player talks over
+ * the AI): it stops local playback AND signals speech-start, since the player has
+ * taken the floor. The VAD additionally drives the 3-state conversation phase
+ * (listening / thinking / speaking).
  *
  * Security invariant (load-bearing, mirrors the demo): this hook connects ONLY to
  * the same-origin Worker WS and sends ONLY `{gameId, manualData, gameState}` plus
@@ -138,6 +143,13 @@ export interface UseVoiceSessionResult {
   summary: import('@amiclaw/platform-ai/contract').SessionSummary | null
   /** End the session: send `end`, await the summary, and tear down. */
   endSession: () => void
+  /**
+   * Request the closing-recap turn. Sends `{type:'closing'}` to the DO, which
+   * runs one final LLM+TTS recap and streams it back. The returned promise
+   * resolves when the recap audio has finished playing (all queued TTS frames
+   * drained). Resolves immediately if the socket is not open.
+   */
+  requestClosing: () => Promise<void>
 }
 
 /**
@@ -213,6 +225,16 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const turnStreamingRef = useRef(false)
   /** True while dropping the tail of a barged-in turn (until its `done` chunk). */
   const suppressTurnRef = useRef(false)
+  /**
+   * Closing-recap tracking. `closingInProgressRef` is true from the moment
+   * `{type:'closing'}` is sent until the recap audio finishes playing.
+   * `closingDoneRef` flips to true when the recap's terminal `done` chunk
+   * arrives — at that point the promise resolves as soon as all queued audio
+   * frames drain. `closingResolveRef` holds the pending promise resolver.
+   */
+  const closingInProgressRef = useRef(false)
+  const closingDoneRef = useRef(false)
+  const closingResolveRef = useRef<(() => void) | null>(null)
 
   const safeDispatch = useCallback((action: Parameters<typeof dispatch>[0]) => {
     if (mountedRef.current) dispatch(action)
@@ -273,6 +295,18 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
           activeSourcesRef.current.delete(source)
           playingCountRef.current = Math.max(0, playingCountRef.current - 1)
           if (playingCountRef.current === 0 && mountedRef.current) setIsAiSpeaking(false)
+          // If the closing recap's terminal `done` chunk already arrived and
+          // this was the last audio frame, resolve the pending requestClosing
+          // promise so GamePage can navigate to the results screen.
+          if (playingCountRef.current === 0 && closingDoneRef.current) {
+            const resolve = closingResolveRef.current
+            if (resolve) {
+              closingResolveRef.current = null
+              closingInProgressRef.current = false
+              closingDoneRef.current = false
+              resolve()
+            }
+          }
         }
       } catch {
         // A playback failure must never break the turn — text still renders.
@@ -376,15 +410,47 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
 
   /** A VAD `speech-start`: the player began an utterance (incl. barge-in). */
   const onSpeechStart = useCallback(() => {
-    setPlayerSpeaking(true)
     // Barge-in: the player is talking while the AI's audio is playing. Stop the
     // playback at once and drop the rest of the interrupted turn's streamed
     // chunks (text + audio) — the server keeps streaming them (it cancels nothing
     // in v1), so the client must locally discard them until that turn's `done`.
-    if (playingCountRef.current > 0) {
+    const bargeIn = playingCountRef.current > 0
+    if (bargeIn) {
       interruptPlayback()
       if (turnStreamingRef.current) suppressTurnRef.current = true
       safeDispatch({ type: 'barge-in' })
+    }
+    // Signal the utterance START to the server so it opens the recognizer and
+    // transcribes LIVE while the player speaks; the matching `turn` on
+    // utterance-end finalizes it (one speech-start per utterance, paired with the
+    // one turn). Guard it the SAME way the `turn` send in `onUtteranceEnd` is
+    // guarded — only signal a REAL utterance. A genuine barge-in (the player took
+    // the floor over the AI's own audio) IS a real utterance, so it signals after
+    // the interrupt above; otherwise suppress while the AI holds the floor (the
+    // AI-first opening greeting / a pending reply — `awaitingResponse`, set until
+    // the first reply chunk — or a non-barged-in turn still streaming), so the
+    // greeting's own voice or a leaked stopwatch tick cannot open a spurious
+    // utterance. The mic only opens on `created`, so this never fires pre-session.
+    const aiHoldsFloor =
+      !bargeIn &&
+      (awaitingResponseRef.current || (turnStreamingRef.current && !suppressTurnRef.current))
+    if (aiHoldsFloor) return
+    // Only a REAL utterance (a fresh turn, or a genuine barge-in) flips the phase
+    // to `listening`. Setting this BEFORE the guard made a suppressed speech-start
+    // — a breath / room-noise tail crossing the VAD threshold for 400ms while the
+    // AI is still `thinking` (awaitingResponse) — yank the indicator straight from
+    // `thinking` back to `listening`, reading as "it heard me finish, then ignored
+    // me". The server-side send is already suppressed for this case; the UI phase
+    // must be suppressed in lockstep, so it stays `thinking` until the reply lands
+    // (or the no-response watchdog fires).
+    setPlayerSpeaking(true)
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'speech-start' }))
+      } catch {
+        /* non-fatal — a dropped speech-start just defers live transcription to the turn */
+      }
     }
   }, [interruptPlayback, safeDispatch])
 
@@ -537,6 +603,22 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
           playAudioFrame(base64ToBytes(frame.audio))
         }
         safeDispatch({ type: 'frame', frame })
+        // Closing-recap resolution: when the recap's terminal `done` chunk
+        // arrives, flip `closingDoneRef`. If no audio frames are queued (a
+        // text-only or zero-TTS edge case), resolve the promise immediately;
+        // otherwise `source.onended` resolves it once the last frame drains.
+        if (frame.done && closingInProgressRef.current) {
+          closingDoneRef.current = true
+          if (playingCountRef.current === 0) {
+            const resolve = closingResolveRef.current
+            if (resolve) {
+              closingResolveRef.current = null
+              closingInProgressRef.current = false
+              closingDoneRef.current = false
+              resolve()
+            }
+          }
+        }
         return
       }
       if (frame.type === 'error') {
@@ -592,6 +674,37 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       safeDispatch({ type: 'closed' })
     }
   }, [stopCapture, closeSocket, safeDispatch])
+
+  /**
+   * Request the closing-recap turn from the DO. Returns a promise that resolves
+   * when the recap audio has finished playing (all queued TTS frames drained
+   * after the terminal `done` chunk), so the caller can gate results-screen
+   * navigation on the player HEARING the recap. Resolves immediately if the
+   * WebSocket is not open (no audio to wait for).
+   *
+   * Called once per successful daily defuse, from GamePage's RESULT effect.
+   * GamePage applies its own hard-max timeout (~8 s) so a TTS hiccup never
+   * strands the player on the win screen.
+   */
+  const requestClosing = useCallback((): Promise<void> => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      closingResolveRef.current = resolve
+      closingInProgressRef.current = true
+      closingDoneRef.current = false
+      try {
+        ws.send(JSON.stringify({ type: 'closing' }))
+      } catch {
+        // Send failed — resolve immediately so the caller does not hang.
+        closingResolveRef.current = null
+        closingInProgressRef.current = false
+        resolve()
+      }
+    })
+  }, [])
 
   // --- Connect on mount (once the manual is ready); full teardown on unmount ---
 
@@ -651,5 +764,6 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     error: state.error,
     summary: state.summary,
     endSession,
+    requestClosing,
   }
 }

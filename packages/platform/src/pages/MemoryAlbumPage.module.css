@@ -1,0 +1,78 @@
+.page {
+  padding: 60px 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.more {
+  margin-top: 24px;
+}
+
+.note {
+  max-width: 520px;
+  padding: 28px 32px;
+}
+
+.noteText {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+}
+
+/* ----------  delete-confirm modal  ---------- */
+.modalText {
+  margin: 0;
+  font: 400 15px var(--font-body);
+  color: var(--text-2);
+  line-height: var(--lh-loose);
+}
+
+.modalError {
+  margin: 14px 0 0;
+  font: 400 13px var(--font-body);
+  color: var(--amio-danger);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* Destructive confirm — danger-tinted pill, distinct from the brand-yellow
+   primary so deletion never wears the affirmative colour. */
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border-radius: var(--radius-pill);
+  background: var(--amio-danger);
+  border: none;
+  color: #fff;
+  font: 600 15px var(--font-body);
+  cursor: pointer;
+  transition: opacity var(--t-fast);
+}
+
+.danger:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .danger {
+    transition: none;
+  }
+}

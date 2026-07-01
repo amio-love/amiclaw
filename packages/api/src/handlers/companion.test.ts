@@ -15,6 +15,7 @@ import { createTestDb } from '../../../companion-memory/src/test-support/sqlite-
 import type { CompanionDb } from '../../../companion-memory/src/db'
 import { FakeKV } from '../auth/fake-kv'
 import { handleCompanionSetup } from './companion-setup'
+import { handleGetCompanion } from './companion-get'
 import {
   handleDeleteProfile,
   handleGetProfile,
@@ -115,10 +116,40 @@ describe('require-session gate (every endpoint, unauthenticated -> 401)', () => 
       handleClaimDelete(anonRequest('/api/companion/profile/x', { method: 'DELETE' }), env, 'x'),
       handleGetMemories(anonRequest('/api/companion/memories'), env),
       handleMemoryDelete(anonRequest('/api/companion/memories/x', { method: 'DELETE' }), env, 'x'),
+      handleGetCompanion(anonRequest('/api/companion'), env),
     ])
     for (const response of responses) {
       expect(response.status).toBe(401)
     }
+  })
+})
+
+describe('GET /api/companion (identity read)', () => {
+  it('404s before setup', async () => {
+    const { env } = await makeEnv()
+    const response = await handleGetCompanion(authedRequest('/api/companion'), env)
+    expect(response.status).toBe(404)
+  })
+
+  it('returns the session user identity after setup', async () => {
+    const { env } = await makeEnv()
+    await setupCompanion(env)
+    const response = await handleGetCompanion(authedRequest('/api/companion'), env)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      name: string
+      address_style: string
+      voice_id: string
+      profile_enabled: boolean
+      created_at: string
+    }
+    expect(body).toMatchObject({
+      name: 'Ami',
+      address_style: 'captain',
+      voice_id: 'companion-warm',
+      profile_enabled: true,
+    })
+    expect(typeof body.created_at).toBe('string')
   })
 })
 

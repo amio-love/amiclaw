@@ -55,6 +55,9 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
   if (submission.ai_model !== undefined && typeof submission.ai_model !== 'string') {
     return fail('Invalid ai_model')
   }
+  if (submission.run_id !== undefined && typeof submission.run_id !== 'string') {
+    return fail('Invalid run_id')
+  }
 
   if (submission.time_ms < MIN_GAME_TIME_MS) return fail('Time too short — minimum 15 seconds')
   if (submission.time_ms > MAX_GAME_TIME_MS) return fail('Time exceeds maximum')

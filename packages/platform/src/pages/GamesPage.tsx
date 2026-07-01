@@ -7,7 +7,7 @@ import FooterPitch from '@/components/home/FooterPitch'
 import { useAuth } from '@/hooks/useAuth'
 import { useDailyBoard } from '@/hooks/useDailyBoard'
 
-/* The `/` route — the Amiclaw platform homepage. Renders the anonymous
+/* The `/` route — the AMIO Arcade platform homepage. Renders the anonymous
    hero or the signed-in welcome strip per useAuth(), then the homepage
    sections. The homepage carries the anonymous play entry into the BombSquad
    landing page (/bombsquad): the AnonHero primary「开始玩」CTA (the TopNav now

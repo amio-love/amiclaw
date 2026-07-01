@@ -4,6 +4,7 @@ import {
   ManualNotFoundError,
   ManualParseError,
   loadManual,
+  toManualDataUrl,
 } from './yaml-loader'
 
 const SAMPLE_MANUAL_YAML = `
@@ -22,6 +23,47 @@ modules:
 // a YAMLException ("undefined alias"), which is the parse-failure path we
 // want to distinguish from network failures at the loader boundary.
 const INVALID_YAML = '*missing'
+
+// ---------------------------------------------------------------------------
+// toManualDataUrl — regression: daily engine must fetch YAML, not HTML page
+// ---------------------------------------------------------------------------
+// Pre-fix: GamePage passed the HTML share URL (/manual/<date>) directly to
+// loadManual, which returned HTML text that yaml.load() could not parse →
+// ManualParseError → "手册格式异常". The fix routes the engine through
+// toManualDataUrl so it always fetches /manual/data/<date>.yaml.
+
+describe('toManualDataUrl', () => {
+  it('converts the HTML share URL to the YAML data URL (root regression)', () => {
+    // This is the exact transform the daily engine now applies on every start.
+    // Red before fix: GamePage called loadManual('/manual/2026-06-30') directly.
+    // Green after fix: GamePage calls loadManual(toManualDataUrl('/manual/2026-06-30')).
+    expect(toManualDataUrl('https://claw.amio.fans/manual/2026-06-30')).toBe(
+      'https://claw.amio.fans/manual/data/2026-06-30.yaml'
+    )
+  })
+
+  it('preserves an arbitrary origin (preview / staging deployments)', () => {
+    expect(toManualDataUrl('https://amiclaw.pages.dev/manual/2026-01-15')).toBe(
+      'https://amiclaw.pages.dev/manual/data/2026-01-15.yaml'
+    )
+  })
+
+  it('returns a data URL unchanged (idempotent — already correct path)', () => {
+    const already = 'https://claw.amio.fans/manual/data/2026-06-30.yaml'
+    expect(toManualDataUrl(already)).toBe(already)
+  })
+
+  it('does not transform the player→AI share URL shape (HTML page stays at /manual/<date>)', () => {
+    // ConnectPage copies /manual/<date> to the clipboard — that URL must NOT
+    // become the data URL. ConnectPage never calls toManualDataUrl; this test
+    // confirms the two URL shapes are distinct after the conversion.
+    const shareUrl = 'https://claw.amio.fans/manual/2026-06-30'
+    const dataUrl = toManualDataUrl(shareUrl)
+    expect(dataUrl).not.toBe(shareUrl)
+    expect(dataUrl).toContain('/manual/data/')
+    expect(dataUrl.endsWith('.yaml')).toBe(true)
+  })
+})
 
 describe('loadManual', () => {
   const originalFetch = globalThis.fetch

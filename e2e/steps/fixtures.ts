@@ -154,6 +154,15 @@ export class World {
   authIdentity: { user_id: string; email: string } | null = null
   /** Captured POST /api/auth/magic-link/request bodies for assertions. */
   readonly magicLinkRequests: Record<string, unknown>[] = []
+  /** The route-mocked companion identity, or null for "not set up yet". POST
+   *  /api/companion/setup creates it; GET /api/companion reflects it. */
+  companion: {
+    name: string
+    address_style: string
+    voice_id: string
+    profile_enabled: boolean
+    created_at: string
+  } | null = null
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
@@ -450,6 +459,62 @@ export const test = base.extend<{ world: World }>({
             ok: true,
             message: 'If that email can sign in, a link is on its way.',
           }),
+        })
+      })
+
+      // Companion identity read (GET /api/companion). 404 until setup, then the
+      // created identity. The static build has no Workers runtime, so the
+      // companion control plane is route-mocked exactly like the auth session.
+      await page.route('**/api/companion', async (route) => {
+        if (world.companion === null) {
+          await route.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'no companion set up' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(world.companion),
+        })
+      })
+
+      // Companion setup (POST /api/companion/setup). Creates the one companion
+      // (or 409 if one already exists — one companion per account).
+      await page.route('**/api/companion/setup', async (route) => {
+        const request = route.request()
+        if (request.method() !== 'POST') {
+          await route.fulfill({ status: 405, body: 'Method Not Allowed' })
+          return
+        }
+        if (world.companion !== null) {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'companion already exists' }),
+          })
+          return
+        }
+        const body = request.postDataJSON() as {
+          name: string
+          voice_id: string
+          address_style?: string
+        }
+        world.companion = {
+          name: body.name,
+          address_style: body.address_style ?? '',
+          voice_id: body.voice_id,
+          profile_enabled: true,
+          created_at: '2026-06-30T00:00:00.000Z',
+        }
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ companion: world.companion }),
         })
       })
 

@@ -1,7 +1,7 @@
 /**
  * GamesPage (platform homepage) integration tests.
  *
- * Covers the `/` route — the Amiclaw「星图 / Atlas」homepage:
+ * Covers the `/` route — the AMIO Arcade「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
  *   2. the anonymous hero「开始玩」CTA routes to /bombsquad
  *   3. a signed-in visitor renders the WelcomeStrip (greeting by the
@@ -100,7 +100,7 @@ describe('GamesPage homepage', () => {
       screen.getByText(
         (_, el) =>
           el?.textContent ===
-          'AmiClaw 是 AMIO 的人机协作游戏平台。带上你的 AI，一起进入不同小游戏。'
+          'AMIO 游乐场是你和 AI 伙伴的轻量体验入口。带上你的 AI 伙伴，来玩一局。'
       )
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /开始玩/ })).toBeInTheDocument()

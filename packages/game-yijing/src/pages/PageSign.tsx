@@ -64,7 +64,7 @@ export function PageSign() {
 
         <div className={styles.card}>
           <div className={styles.cardHead}>
-            <span className={styles.cardLbl}>amiclaw oracle · 卦签</span>
+            <span className={styles.cardLbl}>AMIO 游乐场 · 卦签</span>
             <span className={styles.cardDate}>{todayCN()}</span>
           </div>
 

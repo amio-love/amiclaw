@@ -23,7 +23,7 @@ describe('TermsPage', () => {
   it('renders the agreement with its title and lead', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: /使用本服务的约定/ })).toBeInTheDocument()
-    expect(screen.getByText(/本条款是你与运营方就使用 AmiClaw 平台达成的协议/)).toBeInTheDocument()
+    expect(screen.getByText(/本条款是你与运营方就使用 AMIO 游乐场达成的协议/)).toBeInTheDocument()
   })
 
   it('covers the applicable-law and dispute-resolution section', () => {

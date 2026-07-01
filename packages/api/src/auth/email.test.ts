@@ -25,7 +25,7 @@ describe('createResendSender', () => {
     const sender = createResendSender({
       AUTH: {} as unknown as KVNamespace,
       RESEND_API_KEY: 'test_key',
-      AUTH_EMAIL_FROM: 'AmiClaw <login@claw.amio.fans>',
+      AUTH_EMAIL_FROM: 'AMIO Arcade <login@claw.amio.fans>',
     })
 
     const result = await sender({ to: 'a@example.com', verifyUrl: 'https://x/verify?token=t' })
@@ -38,7 +38,7 @@ describe('createResendSender', () => {
     expect(headers.Authorization).toBe('Bearer test_key')
     const body = JSON.parse((init as RequestInit).body as string)
     expect(body.to).toBe('a@example.com')
-    expect(body.from).toBe('AmiClaw <login@claw.amio.fans>')
+    expect(body.from).toBe('AMIO Arcade <login@claw.amio.fans>')
     expect(body.html).toContain('https://x/verify?token=t')
   })
 

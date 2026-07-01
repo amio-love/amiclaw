@@ -227,6 +227,31 @@ export async function createSessionOverWs(
   return created.sessionId
 }
 
+/** A `speech-start` control frame: opens the per-utterance live recognizer. */
+export const SPEECH_START = JSON.stringify({ type: 'speech-start' })
+
+/** A `turn` control frame: finalizes the open utterance into the reply. */
+export const TURN = JSON.stringify({ type: 'turn' })
+
+/**
+ * Drive one full utterance over the socket the live way: `speech-start` opens the
+ * recognizer (the STT phase starts), then `turn` closes the bridge to finalize it
+ * into the reply. The two control frames ride back-to-back (WS-ordered), so the
+ * recognizer opens, the STT finalizes on the close, and the reply runs. Resolves
+ * once that reply reaches the gated LLM (`kit.llmTurns.length === expected`) — the
+ * live-model replacement for the prior "wait until `sttCalls === n`" signal, which
+ * now fires at `speech-start` (recognizer open), BEFORE the reply parks.
+ */
+export async function driveUtteranceToLlm(
+  socket: TestSocket,
+  kit: { llmTurns: GatedTurnHandle[] },
+  expected: number
+): Promise<void> {
+  socket.send(SPEECH_START)
+  socket.send(TURN)
+  await waitFor(() => kit.llmTurns.length === expected, `reply ${expected} reached the gated LLM`)
+}
+
 /** The socket's outbound messages of one protocol type (free-function form). */
 export function messagesOfType(socket: TestSocket, type: string): WsMessage[] {
   return socket.messagesOfType(type)
@@ -434,6 +459,75 @@ export function makeStreamingTranscriptProviders(transcripts: SttTranscriptChunk
   return {
     providers: { stt, llm, tts: createMockTtsProvider() },
     sttCalls: () => calls,
+  }
+}
+
+/**
+ * Provider bundle whose STT transcribes LIVE: it yields one CUMULATIVE interim
+ * transcript per audio frame it PULLS (so a test can assert interim caption frames
+ * surface WHILE audio arrives — between `speech-start` and `turn`), then a terminal
+ * `isFinal` chunk on the bridge close. The LLM completes immediately so the reply
+ * runs end-to-end. This is the DO-level analog of the real 火山 live-stream cadence
+ * (the real adapter is the manager's live-probe surface; the mock proves the DO's
+ * speech-start -> live-feed -> interim-stream wiring).
+ */
+export function makeLiveStreamingAsrProviders(): {
+  providers: TurnProviders
+  sttCalls(): number
+} {
+  let calls = 0
+  const stt: SttProvider = {
+    async *transcribe(audio): AsyncIterable<SttTranscriptChunk> {
+      calls += 1
+      let cumulative = ''
+      for await (const frame of audio) {
+        cumulative += `[${frame.byteLength}]`
+        yield { text: cumulative, isFinal: false }
+      }
+      yield { text: `${cumulative} done`, isFinal: true }
+    },
+  }
+  const llm: LlmProvider = {
+    async *streamCompletion() {
+      yield { content: 'ok.', done: true }
+    },
+  }
+  return {
+    providers: { stt, llm, tts: createMockTtsProvider() },
+    sttCalls: () => calls,
+  }
+}
+
+/**
+ * Provider bundle whose STT yields one interim transcript then throws a REAL ASR
+ * error (an error frame surfaces as a throw out of `transcribe` — NOT a benign
+ * no-speech close). The live DO must fail loud (1008) even before `turn`, and the
+ * LLM is never reached.
+ */
+export function makeErroringAsrProviders(message = 'Volcengine ASR error: boom'): {
+  providers: TurnProviders
+  sttCalls(): number
+  llmCalls(): number
+} {
+  let sttCalls = 0
+  let llmCalls = 0
+  const stt: SttProvider = {
+    async *transcribe(): AsyncIterable<SttTranscriptChunk> {
+      sttCalls += 1
+      yield { text: '部分', isFinal: false }
+      throw new Error(message)
+    },
+  }
+  const llm: LlmProvider = {
+    async *streamCompletion() {
+      llmCalls += 1
+      yield { content: '', done: true }
+    },
+  }
+  return {
+    providers: { stt, llm, tts: createMockTtsProvider() },
+    sttCalls: () => sttCalls,
+    llmCalls: () => llmCalls,
   }
 }
 

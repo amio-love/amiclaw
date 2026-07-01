@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import { Scenery } from '@amiclaw/ui'
@@ -155,6 +155,15 @@ export default function ResultPage() {
     () => hasFinishedDailyRun && nickname !== null && leaderboardMetadata !== null
   )
 
+  // Idempotency latch: prevents the same run from being submitted more than
+  // once within a single ResultPage lifecycle. Guards all three submit paths
+  // (mount effect, modal-confirm, retry). The latch is released back to 'idle'
+  // on a network failure so the retry button can fire a second attempt.
+  // Across remounts (e.g. page refresh with game state still in sessionStorage),
+  // the per-run stable run_id in buildSubmission + backend dedup provide the
+  // second layer of protection.
+  const submittedRef = useRef<'idle' | 'in-flight' | 'done'>('idle')
+
   // The daily score is still gated while the modal is open with a leaderboard
   // submission section present.
   const leaderboardGatePending = modalPurpose === 'leaderboard'
@@ -168,8 +177,27 @@ export default function ResultPage() {
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
       if (totalMs === null) return null
+      const date = getTodayString()
+      // Generate a UUID once per run and persist it so a page-refresh retry
+      // sends the same run_id, enabling backend dedup to collapse duplicates.
+      let run_id: string | undefined
+      try {
+        const storageKey = `run-id:${date}:${state.attemptNumber}`
+        const stored = sessionStorage.getItem(storageKey)
+        if (stored) {
+          run_id = stored
+        } else {
+          run_id = crypto.randomUUID()
+          sessionStorage.setItem(storageKey, run_id)
+        }
+      } catch {
+        // sessionStorage unavailable (e.g. private-browsing restrictions) —
+        // fall back to a per-call UUID; the backend rate limit still provides
+        // a weak guard and the frontend latch covers within-mount doubles.
+        run_id = crypto.randomUUID()
+      }
       return {
-        date: getTodayString(),
+        date,
         nickname: nicknameValue,
         time_ms: Math.round(totalMs),
         attempt_number: state.attemptNumber,
@@ -178,6 +206,7 @@ export default function ResultPage() {
         ai_tool: metadataValue.aiTool,
         ...(metadataValue.aiModel ? { ai_model: metadataValue.aiModel } : {}),
         device_id: getDeviceId(),
+        run_id,
       }
     },
     [totalMs, state.attemptNumber, state.moduleStats]
@@ -200,10 +229,13 @@ export default function ResultPage() {
   // Applies a submission outcome to UI state. Centralizes the three-way mapping
   // (success / network failure / server rejection) so the mount, modal-confirm,
   // and retry paths stay in lockstep.
+  // Also manages the idempotency latch: locks it permanently on success so no
+  // further submit can fire; releases it to 'idle' on failure so retry works.
   const applySubmitResult = useCallback(
     (submission: ScoreSubmission, result: SubmitScoreResult) => {
       setSubmitting(false)
       if (result.ok) {
+        submittedRef.current = 'done' // permanently lock — this run is on the board
         setSubmitFailed(false)
         setSubmitFailKind(null)
         setSubmitFailMessage(null)
@@ -215,6 +247,7 @@ export default function ResultPage() {
           /* ignore */
         }
       } else {
+        submittedRef.current = 'idle' // release latch so the retry button can fire
         setSubmitFailed(true)
         setSubmitFailKind(result.kind)
         setSubmitFailMessage(result.kind === 'rejected' ? (result.error ?? null) : null)
@@ -228,10 +261,21 @@ export default function ResultPage() {
   // the modal-confirm path flips it on synchronously before calling here.
   // Keeping `setSubmitting(true)` out of this function lets us call it from
   // inside `useEffect` without tripping react-hooks/set-state-in-effect.
+  //
+  // Idempotency: the submittedRef latch guards against concurrent or double
+  // invocations within a single component lifecycle (e.g. React StrictMode
+  // double-effect invocation). A cross-mount double (page refresh) is handled
+  // by the stable run_id in buildSubmission + backend dedup.
   const performSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata) => {
+      if (submittedRef.current !== 'idle') return // already in-flight or done
+      submittedRef.current = 'in-flight'
+
       const submission = buildSubmission(nicknameValue, metadataValue)
-      if (!submission) return
+      if (!submission) {
+        submittedRef.current = 'idle' // release if build failed (totalMs unavailable)
+        return
+      }
 
       // Persist locally so a retry can succeed even if user navigates back
       try {
@@ -317,13 +361,10 @@ export default function ResultPage() {
     setSubmitFailKind(null)
     setSubmitFailMessage(null)
     setSubmitting(true)
-    const submission = buildSubmission(nickname, leaderboardMetadata)
-    if (!submission) {
-      setSubmitting(false)
-      return
-    }
-    submitScore(submission).then((result) => applySubmitResult(submission, result))
-  }, [buildSubmission, applySubmitResult, nickname, leaderboardMetadata])
+    // applySubmitResult resets submittedRef to 'idle' on failure, so
+    // performSubmission will proceed here on the retry path.
+    performSubmission(nickname, leaderboardMetadata)
+  }, [performSubmission, nickname, leaderboardMetadata])
 
   const handlePlayAgain = () => {
     // Emit BEFORE the RESET so we still capture the just-finished run's mode

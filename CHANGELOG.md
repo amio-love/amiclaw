@@ -5,6 +5,92 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**AMIO Arcade brand rename** — The active product surfaces now use AMIO Arcade /
+AMIO 游乐场 instead of AmiClaw, including the shared wordmark, page titles,
+homepage copy, legal pages, auth emails, README, and canonical docs. Existing
+`claw.amio.fans` URLs and `amiclaw` internal identifiers stay in place as
+compatibility infrastructure.
+
+**Meet your AI companion** - New. Signed-in players can now give their platform
+AI partner a name and choose its voice, so it feels like theirs from the first
+hello. The companion card counts how many days you've been together from the day
+you met. Two new places live under 我的: a memory album to look back on the runs
+you've shared, and an understanding panel where you can see — and correct,
+delete, or switch off — what your companion has come to understand about you,
+with every understanding linking back to the exact memory it came from. If you
+haven't met your companion yet, both places guide you to do that first. They
+start out empty, honestly waiting for the story you'll build together.
+
+**BombSquad mode② voice: the indicator no longer flips back to "聆听中" mid-think** -
+Fix. After you finished speaking, the indicator would show "思考中" and then snap
+straight back to "聆听中" without the AI answering. A breath or room-noise tail
+crossing the voice-detection threshold for a moment while the AI was still
+thinking was being treated as the start of a new utterance for the indicator
+only — the server request was already suppressed, but the on-screen phase was
+flipped before that same guard ran. The indicator now stays "思考中" until the AI
+replies (or the no-response fallback fires); a genuine interruption while the AI
+is speaking still works.
+
+**BombSquad mode② voice: the AI can now tell the symbols apart** - Fix. On the
+星盘 (dial) and 星符 (keypad) modules the AI kept asking the player to re-describe
+a symbol — it only received the lookup table of bare symbol names (psi / spiral /
+crescent / …) and never the visual descriptions, so it could not map a player's
+shape description ("海神叉", "咖啡豆") to the right name. Those descriptions live in
+the manual's top-level `symbols` block, which sits outside any single module
+section and so never rode the per-module injection. The two symbol modules now
+embed the visual description of each symbol they reference, so the AI receives
+both the lookup table and what each symbol looks like — including the built-in
+disambiguation for look-alike pairs (psi vs trident, hourglass vs delta).
+
+**BombSquad mode② voice: the AI gives a short closing recap when you win** - Add.
+After a successful daily defuse the results screen used to appear instantly,
+cutting the voice partner off before it could react. Now, on a daily win, the AI
+plays one short spoken recap — a warm one-to-two-sentence congratulation — and the
+results screen waits until that finishes (with an 8-second hard cap so a TTS hiccup
+never strands you on the win screen). The "拆除成功" burst stays on screen during
+the recap as the celebration beat. Only a successful daily defuse triggers it; a
+loss, a timeout, or practice mode navigates straight to results as before.
+
+**BombSquad leaderboard: a single run can no longer appear twice** - Fix. One
+finished daily run was sometimes posted to the leaderboard more than once
+(showing two identical rows), because the result page had several submit paths
+that could each fire and the backend appended a new row on every POST. The fix
+adds two layers: the result page now latches submission so a run is sent at most
+once per page lifecycle (the retry button still works after a real failure), and
+every run carries a stable client-generated `run_id` so the backend replaces any
+existing row with that id instead of appending — a refresh or network race
+collapses to one row. `run_id` is internal and never exposed in the public
+leaderboard response.
+
+**BombSquad mode② voice: your first word is no longer dropped, and the AI speaks
+plain spoken words** - Fix. Two recognition/voice polish fixes. First, the very
+start of each utterance was being clipped: the recognizer only opened once the
+client confirmed ~400ms of speech, so the leading word was lost. The server now
+keeps a rolling ~700ms pre-roll buffer of incoming audio and prepends it to the
+recognizer the moment your utterance opens, so the onset is captured. Second, the
+AI partner's replies are read aloud, but it had been emitting parenthetical
+asides and symbol names in brackets (e.g. "the middle wheel (trident)") which got
+spoken literally; its prompt now constrains it to plain spoken Chinese — no
+brackets, markdown, or written-form counts — so a symbol name is woven naturally
+into the sentence instead.
+
+**BombSquad mode② voice: live captions while you speak** - Change. Recognition
+now runs live as you talk instead of waiting until you stop, so your `你：…`
+caption builds up word by word while you're still speaking, and the connection no
+longer drops with an 8-second recognizer timeout. The client tells the server when
+your utterance starts; the server opens the recognizer, transcribes the live
+audio into streaming captions, and finalizes the full text when you pause —
+verified end to end against the live provider (captions arriving mid-speech, full
+final transcript, clean finish).
+
+**BombSquad daily challenge: "手册格式异常" on start** - Fix. The daily run
+always showed a parse error on load because the game engine was fetching the
+human-readable HTML manual page (`/manual/<date>`) and trying to parse it as
+YAML. The engine now fetches the machine-readable YAML data file
+(`/manual/data/<date>.yaml`). The player→AI share link that ConnectPage copies
+to the clipboard is unchanged — it still points to the HTML page at
+`/manual/<date>`, which is what the AI partner reads.
+
 **BombSquad mode② voice: one conversation per run, clearer recognition, longer
 pauses** - Change. The AI partner is now a single continuous conversation for the
 whole daily run: it greets you once and remembers the whole game, and when you
