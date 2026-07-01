@@ -6,6 +6,9 @@ import Button from '@/components/bombsquad/Button'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getAudioContext } from '@/audio/audio-context'
+import { useGame } from '@/store/game-context'
+import { clearPersistedState } from '@/store/persistence'
+import { saveEntryRecoveryState } from '@/utils/session'
 import styles from './ConnectPage.module.css'
 
 type ConnectMode = 'daily' | 'practice'
@@ -21,6 +24,7 @@ type ConnectMode = 'daily' | 'practice'
 export default function ConnectPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { dispatch } = useGame()
   const mode: ConnectMode = searchParams.get('mode') === 'practice' ? 'practice' : 'daily'
   const modeLabel = mode === 'daily' ? '每日挑战' : '练习'
 
@@ -30,6 +34,10 @@ export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
+
+  useEffect(() => {
+    saveEntryRecoveryState({ mode, manualUrl, manualHandoffComplete: false })
+  }, [mode, manualUrl])
 
   /* Once the manual link is copied, the card turns green and the flow
      auto-advances to step 2 after ~0.7s. The timer is owned by an effect
@@ -66,6 +74,9 @@ export default function ConnectPage() {
      outside one. getAudioContext() is idempotent; the run calls it again at
      game start as a fallback. */
   const confirmStart = () => {
+    saveEntryRecoveryState({ mode, manualUrl, manualHandoffComplete: true })
+    clearPersistedState()
+    dispatch({ type: 'RESET' })
     getAudioContext()
     if (mode === 'daily') {
       navigate(`/bombsquad/run?mode=daily&url=${encodeURIComponent(dailyUrl)}`)
@@ -165,40 +176,19 @@ export default function ConnectPage() {
             </div>
           </div>
 
-          {/* Step 1 — copy the manual link. The full URL card and the bottom
-              primary CTA share the same copy action: the card keeps the link
-              visible and trustworthy, while the CTA remains the strongest
-              explicit command for players scanning fast. */}
+          {/* Step 1 — copy the manual link. Before a copy failure, the URL card
+              and bottom primary CTA share the same copy action. After failure,
+              the card becomes a stable manual-link fallback while the CTA is
+              the single retry surface. */}
           {step === 1 && (
             <div className={styles.action}>
-              <button
-                type="button"
-                className={`${styles.urlPreview} ${copied ? styles.urlPreviewDone : ''}`}
-                onClick={handleCopy}
-                aria-label={
-                  copied ? '已复制手册链接' : copyFailed ? '重试复制手册链接' : '复制手册链接'
-                }
-              >
-                <div className={styles.copyCardText}>
-                  <div className={styles.copyCardLabel}>
-                    {copied ? '已复制到剪贴板' : copyFailed ? '复制失败，链接仍可用' : '手册链接'}
+              {copyFailed && !copied ? (
+                <div className={`${styles.urlPreview} ${styles.urlPreviewFailed}`}>
+                  <div className={styles.copyCardText}>
+                    <div className={styles.copyCardLabel}>复制失败，链接仍可用</div>
+                    <div className={styles.copyCardUrl}>{manualUrl}</div>
                   </div>
-                  <div className={styles.copyCardUrl}>{manualUrl}</div>
-                </div>
-                <div className={styles.copyCardIcon} aria-hidden="true">
-                  {copied ? (
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    >
-                      <path d="M5 12 L10 17 L19 7" />
-                    </svg>
-                  ) : (
+                  <div className={styles.copyCardIcon} aria-hidden="true">
                     <svg
                       viewBox="0 0 24 24"
                       width="20"
@@ -211,9 +201,51 @@ export default function ConnectPage() {
                       <rect x="8" y="8" width="12" height="12" rx="2" />
                       <path d="M16 8 V5 a2 2 0 0 0 -2 -2 H6 a2 2 0 0 0 -2 2 v9 a2 2 0 0 0 2 2 h3" />
                     </svg>
-                  )}
+                  </div>
                 </div>
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`${styles.urlPreview} ${copied ? styles.urlPreviewDone : ''}`}
+                  onClick={handleCopy}
+                  aria-label={copied ? '已复制手册链接' : '复制手册链接'}
+                >
+                  <div className={styles.copyCardText}>
+                    <div className={styles.copyCardLabel}>
+                      {copied ? '已复制到剪贴板' : '手册链接'}
+                    </div>
+                    <div className={styles.copyCardUrl}>{manualUrl}</div>
+                  </div>
+                  <div className={styles.copyCardIcon} aria-hidden="true">
+                    {copied ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 12 L10 17 L19 7" />
+                      </svg>
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      >
+                        <rect x="8" y="8" width="12" height="12" rx="2" />
+                        <path d="M16 8 V5 a2 2 0 0 0 -2 -2 H6 a2 2 0 0 0 -2 2 v9 a2 2 0 0 0 2 2 h3" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              )}
 
               <p className={styles.hint}>
                 {copyFailed

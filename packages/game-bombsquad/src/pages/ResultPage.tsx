@@ -17,6 +17,7 @@ import {
   type LeaderboardPlayerMetadata,
 } from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
+import { readEntryRecoveryState } from '@/utils/session'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
@@ -83,6 +84,7 @@ export default function ResultPage() {
   // the failure copy can be honest. `null` while no failure is showing.
   const [submitFailKind, setSubmitFailKind] = useState<'network' | 'rejected' | null>(null)
   const [submitFailMessage, setSubmitFailMessage] = useState<string | null>(null)
+  const [entryRecovery] = useState(() => readEntryRecoveryState())
 
   // Fall back to `defused` for any legacy RESULT state persisted before the
   // game-modes rework added the `outcome` field.
@@ -382,36 +384,71 @@ export default function ResultPage() {
   // modules (an exploded run, which still carries an `outcome`). Reached when
   // the result page is opened with no live run: a direct link to
   // /bombsquad/result, a refresh that cleared the run context, or an odd
-  // back-navigation. Instead of a dead "返回主页" link, offer the same three
-  // entry points the landing page funnels through, so the player is never
-  // pushed out of the game. Daily is the primary CTA; both connect entries go
-  // through /bombsquad/connect (not a deep link into /bombsquad/run) so the
-  // copy-manual handoff still runs.
+  // back-navigation. Recover from the last selected entry mode when available.
+  // If the player already completed the connect-page handoff, the primary CTA
+  // returns directly to the matching run; otherwise it goes back through the
+  // connect flow and explains why the manual step is still required.
   if (noRunData) {
+    const recoveryMode = entryRecovery?.mode ?? 'daily'
+    const manualHandoffComplete = entryRecovery?.manualHandoffComplete === true
+    const recoveryRunTarget =
+      recoveryMode === 'daily'
+        ? `/bombsquad/run?mode=daily${
+            entryRecovery?.manualUrl ? `&url=${encodeURIComponent(entryRecovery.manualUrl)}` : ''
+          }`
+        : '/bombsquad/run?mode=practice'
+    const recoveryConnectTarget = `/bombsquad/connect?mode=${recoveryMode}`
+    const recoveryTitle =
+      recoveryMode === 'practice'
+        ? '重新进入练习'
+        : manualHandoffComplete
+          ? '重新进入每日挑战'
+          : '重新开始一局'
+    const recoveryText =
+      recoveryMode === 'practice'
+        ? manualHandoffComplete
+          ? '这里没有正在结算的练习关卡。手册对接已经完成，可以直接重新进入练习。'
+          : '这里没有正在结算的练习关卡。先把练习手册交给 AI，等它读完，再进入练习。'
+        : manualHandoffComplete
+          ? '手册对接已经完成，但这一局还没真正开始。可以直接重新进入每日挑战；如果 AI 没读完，再回到对接页。'
+          : '这里没有正在结算的关卡。先把手册交给 AI，等它读完，再进入每日挑战。'
+    const primaryLabel =
+      recoveryMode === 'practice'
+        ? manualHandoffComplete
+          ? '直接进入练习'
+          : '先交练习手册，再开始'
+        : manualHandoffComplete
+          ? '直接进入每日挑战'
+          : '先交手册，再开始每日挑战'
+    const secondaryAction = manualHandoffComplete
+      ? { label: '重新对接手册', target: recoveryConnectTarget }
+      : recoveryMode === 'daily'
+        ? { label: '练习一局', target: '/bombsquad/connect?mode=practice' }
+        : null
+
     return (
       <main className={styles.page}>
         <Scenery accent="yellow" />
         <div className={styles.stage}>
           <div className={styles.noData}>
-            <h1 className={styles.noDataTitle}>重新开始一局</h1>
-            <p className={styles.noDataText}>
-              这里没有正在结算的关卡。先把手册交给 AI，等它读完，再进入每日挑战。
-            </p>
+            <h1 className={styles.noDataTitle}>{recoveryTitle}</h1>
+            <p className={styles.noDataText}>{recoveryText}</p>
             <div className={styles.cta}>
               <Button
                 variant="primary"
                 full
-                onClick={() => navigate('/bombsquad/connect?mode=daily')}
+                onClick={() =>
+                  navigate(manualHandoffComplete ? recoveryRunTarget : recoveryConnectTarget)
+                }
               >
-                先交手册，再开始每日挑战<span aria-hidden="true"> →</span>
+                {primaryLabel}
+                <span aria-hidden="true"> →</span>
               </Button>
-              <Button
-                variant="ghost"
-                full
-                onClick={() => navigate('/bombsquad/connect?mode=practice')}
-              >
-                练习一局
-              </Button>
+              {secondaryAction && (
+                <Button variant="ghost" full onClick={() => navigate(secondaryAction.target)}>
+                  {secondaryAction.label}
+                </Button>
+              )}
               <Button variant="ghost" full onClick={() => navigate('/bombsquad')}>
                 返回主页
               </Button>

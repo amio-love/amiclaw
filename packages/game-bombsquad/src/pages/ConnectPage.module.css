@@ -177,7 +177,8 @@
 }
 
 /* ----------  manual-URL copy card  ----------
-   The whole card copies the manual link, matching the bottom CTA. */
+   The whole card copies the manual link until clipboard access fails; then it
+   becomes a read-only fallback so there is only one retry action. */
 .urlPreview {
   display: flex;
   align-items: center;
@@ -235,6 +236,25 @@
 
 .urlPreviewDone .copyCardLabel {
   color: var(--green);
+}
+
+.urlPreviewFailed {
+  cursor: text;
+  border-color: rgba(255, 107, 157, 0.28);
+}
+
+.urlPreviewFailed:hover {
+  background: var(--glass);
+  border-color: rgba(255, 107, 157, 0.28);
+}
+
+.urlPreviewFailed .copyCardLabel {
+  color: var(--rose);
+}
+
+.urlPreviewFailed .copyCardIcon {
+  background: rgba(255, 107, 157, 0.12);
+  color: var(--rose);
 }
 
 .copyCardUrl {

@@ -20,6 +20,15 @@ handoff path as copy-and-paste. The button module also separates the small stati
 preview light from the hold-time release strip, so the strip only comes alive
 while holding and still gives away nothing about the correct release color.
 
+**BombSquad entry recovery keeps your mode** - Fix. Starting a new run now clears
+stale finished-run state before the game page opens, so a completed result can no
+longer bounce practice or daily players back to the restart screen. Recovery copy
+now follows the last selected mode: practice recovery stays practice-specific,
+daily recovery after a completed manual handoff can go straight back into the
+challenge, pre-module daily failures no longer reserve an attempt, copy-failure
+retry has one clear action, and the button's static preview light is visually
+quieter than the active release strip.
+
 **Meet your AI companion** - New. Signed-in players can now give their platform
 AI partner a name and choose its voice, so it feels like theirs from the first
 hello. The companion card counts how many days you've been together from the day

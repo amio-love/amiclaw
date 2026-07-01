@@ -33,7 +33,7 @@ import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { generateSceneInfo } from '@/engine/scene-info'
-import { getAttemptNumberForMode, getRunSeed } from '@/utils/session'
+import { commitAttemptNumberForMode, getAttemptNumberForMode, getRunSeed } from '@/utils/session'
 import { getAudioContext, setSfxSuppressed } from '@/audio/audio-context'
 import VoicePanel, { type VoicePanelHandle } from '@/voice/VoicePanel'
 import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
@@ -216,6 +216,7 @@ export default function GamePage() {
   // Guard: the closing recap fires exactly once per RESULT entry — even if the
   // effect re-runs (StrictMode double-invoke, unlikely state oscillation).
   const closingFiredRef = useRef(false)
+  const resultNavigationArmedRef = useRef(state.status !== 'RESULT')
 
   // Voice-session inputs for the current module, recomputed only when the loaded
   // manual or the current module changes (NOT on every timer-frame re-render).
@@ -285,6 +286,12 @@ export default function GamePage() {
   useEffect(() => {
     if (showSceneNudge) markSceneNudgeSeen()
   }, [showSceneNudge])
+
+  useEffect(() => {
+    if (state.status !== 'RESULT') {
+      resultNavigationArmedRef.current = true
+    }
+  }, [state.status])
 
   // Consume the one-shot refresh flag from a commit-phase effect rather than
   // from inside `detectRefresh`. This keeps the detector pure so StrictMode's
@@ -457,8 +464,9 @@ export default function GamePage() {
   useEffect(() => {
     if (state.status !== 'READY') return
     getAudioContext()
+    commitAttemptNumberForMode(state.mode, state.attemptNumber)
     dispatch({ type: 'START_GAME' })
-  }, [state.status, dispatch])
+  }, [state.status, state.mode, state.attemptNumber, dispatch])
 
   // Navigate to result when ALL_COMPLETE transitions to RESULT
   useEffect(() => {
@@ -469,6 +477,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (state.status !== 'RESULT') return
+    if (!resultNavigationArmedRef.current) return
 
     // Closing recap only for a successful daily defuse with the voice partner
     // active. All other outcomes (loss, timeout, practice) navigate immediately.

@@ -177,15 +177,18 @@ describe('ButtonModule release-strip cue is target-agnostic', () => {
     const isActive = () => releaseStrip().getAttribute('data-active') === 'true'
 
     expect(previewLight).toHaveAttribute('data-color', 'red')
+    expect(previewLight).toHaveAttribute('data-visual-priority', 'context')
 
     // idle: release strip inactive.
     expect(isActive(), 'must not activate the release strip in idle state').toBe(false)
     expect(releaseStrip()).toHaveAttribute('data-color', 'inactive')
+    expect(releaseStrip()).toHaveAttribute('data-visual-priority', 'inactive-release')
 
     // pressed (before the hold threshold): release strip still inactive.
     fireEvent.pointerDown(btn)
     expect(isActive(), 'must not activate the release strip in pressed state').toBe(false)
     expect(releaseStrip()).toHaveAttribute('data-color', 'inactive')
+    expect(releaseStrip()).toHaveAttribute('data-visual-priority', 'inactive-release')
 
     // holding (after the hold threshold): release strip activates.
     act(() => {
@@ -193,7 +196,40 @@ describe('ButtonModule release-strip cue is target-agnostic', () => {
     })
     expect(isActive(), 'must activate the release strip in holding state').toBe(true)
     expect(releaseStrip()).toHaveAttribute('data-color', 'white')
+    expect(releaseStrip()).toHaveAttribute('data-visual-priority', 'active-release')
     expect(previewLight).toHaveAttribute('data-color', 'red')
+    expect(previewLight).toHaveAttribute('data-visual-priority', 'context')
+
+    vi.useRealTimers()
+  })
+
+  it('keeps a blue preview light structurally subordinate to the active blue strip phase', () => {
+    vi.useFakeTimers()
+    const config = { color: 'red', label: 'ABORT', indicatorColor: 'blue', displayNumber: 5 }
+    const answer = { type: 'button' as const, action: 'hold' as const, releaseOnColor: 'white' }
+    render(
+      <ButtonModule
+        config={config}
+        answer={answer}
+        onComplete={vi.fn()}
+        onError={vi.fn()}
+        sceneInfo={sceneInfo}
+      />
+    )
+    const btn = screen.getByTestId('big-button')
+    const previewLight = screen.getByTestId('button-preview-light')
+    const releaseStrip = screen.getByTestId('button-release-strip')
+
+    fireEvent.pointerDown(btn)
+    act(() => {
+      vi.advanceTimersByTime(500)
+      vi.advanceTimersByTime(800 * 2)
+    })
+
+    expect(previewLight).toHaveAttribute('data-color', 'blue')
+    expect(previewLight).toHaveAttribute('data-visual-priority', 'context')
+    expect(releaseStrip).toHaveAttribute('data-color', 'blue')
+    expect(releaseStrip).toHaveAttribute('data-visual-priority', 'active-release')
 
     vi.useRealTimers()
   })
