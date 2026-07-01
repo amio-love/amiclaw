@@ -4,18 +4,14 @@
  * When the result page is opened with no live run in memory (a direct link to
  * /bombsquad/result, a refresh that cleared the run context, or an odd
  * back-navigation), the `noRunData` branch used to render a broken-sounding
- * no-data message. It now renders an explicit restart surface that sends daily
- * players back through the manual handoff before the run starts.
+ * no-data message. It now renders an explicit restart surface keyed to the last
+ * selected entry mode when available.
  *
- * These tests assert the three recovery actions are present with the correct
- * destinations, and that clicking the primary CTA navigates to the daily
- * connect funnel. Setup mirrors the other ResultPage tests but leaves
- * sessionStorage empty so `GameProvider` hydrates to INITIAL_STATE
- * (moduleStats: [], outcome: null), which is exactly the `noRunData` case.
- *
- * Also includes the GamePage manual-URL regression guard (Optional ①): a daily
- * run launched with NO `url` query param must derive the manual URL from the
- * UTC current date, not crash or fall back to a stale hostname.
+ * These tests assert the default recovery actions, the completed daily handoff
+ * direct-run path, and the practice-specific recovery copy. Setup mirrors the
+ * other ResultPage tests but leaves sessionStorage without a game-state seed so
+ * `GameProvider` hydrates to INITIAL_STATE (moduleStats: [], outcome: null),
+ * which is exactly the `noRunData` case.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -44,6 +40,7 @@ vi.mock('@/utils/nickname', () => ({
 
 import ResultPage from './ResultPage'
 import { GameProvider } from '@/store/game-context'
+import { saveEntryRecoveryState } from '@/utils/session'
 
 // Renders the current pathname + search so navigation destinations can be
 // asserted after a CTA click.
@@ -130,5 +127,41 @@ describe('ResultPage no-run-data recovery', () => {
     fireEvent.click(screen.getByRole('button', { name: /先交手册，再开始每日挑战/ }))
 
     expect(screen.getByTestId('location')).not.toHaveTextContent('/bombsquad/run')
+  })
+
+  it('daily recovery after manual handoff goes straight back to the daily run', () => {
+    const manualUrl = 'https://claw.amio.fans/manual/2026-07-01'
+    saveEntryRecoveryState({
+      mode: 'daily',
+      manualUrl,
+      manualHandoffComplete: true,
+    })
+    renderRecovery()
+
+    expect(screen.getByRole('heading', { name: '重新进入每日挑战' })).toBeInTheDocument()
+    expect(screen.getByText(/手册对接已经完成/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /直接进入每日挑战/ }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      `/bombsquad/run?mode=daily&url=${encodeURIComponent(manualUrl)}`
+    )
+  })
+
+  it('practice recovery uses practice-specific copy and never points to daily challenge', () => {
+    saveEntryRecoveryState({
+      mode: 'practice',
+      manualUrl: 'https://claw.amio.fans/manual/practice',
+      manualHandoffComplete: true,
+    })
+    renderRecovery()
+
+    expect(screen.getByRole('heading', { name: '重新进入练习' })).toBeInTheDocument()
+    expect(screen.getByText(/练习关卡/)).toBeInTheDocument()
+    expect(screen.queryByText(/每日挑战/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /直接进入练习/ }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/bombsquad/run?mode=practice')
   })
 })

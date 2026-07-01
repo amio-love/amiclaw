@@ -128,6 +128,10 @@ export default function ButtonModule({
   const releaseStripStyle = {
     '--release-color': releaseColor,
   } as CSSProperties
+  const previewLightStyle = {
+    '--preview-color': previewColor,
+    backgroundColor: previewColor,
+  } as CSSProperties
 
   return (
     <div
@@ -138,11 +142,9 @@ export default function ButtonModule({
         <div className={styles.lightPanel}>
           <div
             className={styles.previewLight}
-            style={{
-              backgroundColor: previewColor,
-              boxShadow: `0 0 10px ${previewColor}`,
-            }}
+            style={previewLightStyle}
             data-color={config.indicatorColor}
+            data-visual-priority="context"
             data-testid="button-preview-light"
             aria-hidden="true"
           />
@@ -155,6 +157,7 @@ export default function ButtonModule({
             style={releaseStripStyle}
             data-active={isHolding ? 'true' : 'false'}
             data-color={isHolding ? releaseColorName : 'inactive'}
+            data-visual-priority={isHolding ? 'active-release' : 'inactive-release'}
             data-testid="button-release-strip"
             aria-hidden="true"
           >

@@ -54,9 +54,35 @@ vi.mock('@/audio/audio-context', () => ({
 import ConnectPage from './ConnectPage'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getAudioContext } from '@/audio/audio-context'
+import { GameProvider, type GameState } from '@/store/game-context'
+import { loadPersistedState, savePersistedState } from '@/store/persistence'
 
 /** The exact AI-readiness sync prompt copy rendered on step 2. */
 const SYNC_PROMPT = '等 AI 说完「好了」，点「进入游戏」就开始，计时随即启动。'
+
+const STALE_RESULT_STATE: GameState = {
+  status: 'RESULT',
+  mode: 'daily',
+  manual: null,
+  manualUrl: 'https://claw.amio.fans/manual/2026-05-22',
+  sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
+  moduleSequence: ['wire', 'dial', 'button', 'keypad'],
+  moduleConfigs: [null, null, null, null],
+  moduleAnswers: [null, null, null, null],
+  currentModuleIndex: 4,
+  moduleStats: [{ moduleType: 'wire', timeMs: 1000, errorCount: 0 }],
+  totalStartTime: 1_700_000_000_000,
+  totalEndTime: 1_700_000_001_000,
+  currentModuleStartTime: null,
+  currentModuleErrorCount: 0,
+  strikeCount: 0,
+  timeBudgetMs: 3_600_000,
+  outcome: 'defused',
+  errorMessage: null,
+  errorKind: null,
+  attemptNumber: 2,
+  rngSeed: 123,
+}
 
 /* Renders the current location so the run-handoff target is assertable
    without mounting the real GamePage. */
@@ -69,7 +95,14 @@ function renderConnect(mode: 'daily' | 'practice') {
   return render(
     <MemoryRouter initialEntries={[`/bombsquad/connect?mode=${mode}`]}>
       <Routes>
-        <Route path="/bombsquad/connect" element={<ConnectPage />} />
+        <Route
+          path="/bombsquad/connect"
+          element={
+            <GameProvider>
+              <ConnectPage />
+            </GameProvider>
+          }
+        />
         <Route path="/bombsquad/run" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
@@ -89,6 +122,7 @@ async function copyAndReachStep2() {
 
 describe('ConnectPage', () => {
   beforeEach(() => {
+    sessionStorage.clear()
     vi.mocked(copyToClipboard).mockReset()
     vi.mocked(copyToClipboard).mockResolvedValue(true)
     vi.mocked(getAudioContext).mockReset()
@@ -187,7 +221,7 @@ describe('ConnectPage', () => {
     expect(screen.getByText(/上面的链接就是同一份手册/)).toBeInTheDocument()
     expect(screen.getByText(/和复制后粘贴完全一样/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试复制' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '重试复制手册链接' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重试复制手册链接' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /我已手动发给 AI/ }))
 
@@ -225,6 +259,19 @@ describe('ConnectPage', () => {
     // iOS Safari only permits audio to start from inside a user gesture, so the
     // 进入游戏 tap is where the shared AudioContext gets unlocked.
     expect(getAudioContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears stale persisted result state before entering a new run', async () => {
+    savePersistedState(STALE_RESULT_STATE)
+    expect(loadPersistedState()?.status).toBe('RESULT')
+
+    renderConnect('practice')
+
+    await copyAndReachStep2()
+    fireEvent.click(screen.getByRole('button', { name: /进入游戏/ }))
+
+    expect(loadPersistedState()).toBeNull()
+    expect(screen.getByTestId('location')).toHaveTextContent('/bombsquad/run?mode=practice')
   })
 
   it('unlocks the AudioContext when 进入游戏 is tapped (practice)', async () => {
