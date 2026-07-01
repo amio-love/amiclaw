@@ -4,8 +4,8 @@ import styles from './PrivacyPage.module.css'
 const CONTACT_EMAIL = 'hi@amio.love'
 const EFFECTIVE_DATE = '2026-06-07'
 
-/* Privacy policy page — a production-grade Chinese privacy policy for the
-   AmiClaw platform (claw.amio.fans). The collected-data inventory is kept
+/* Privacy policy page — a production-grade Chinese privacy policy for
+   AMIO Arcade (claw.amio.fans). The collected-data inventory is kept
    faithful to the real submission and telemetry contracts (validation.ts /
    post-event.ts / leaderboard-types.ts / event-types.ts) and the real KV
    retention windows (leaderboard 48h, telemetry 30d). Platform chrome —
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         我们如何对待<span className={styles.accent}>你的数据</span>。
       </h2>
       <p className={styles.lead}>
-        本政策说明 AmiClaw 收集哪些信息、为什么收集、如何使用与保存，以及你对这些信息拥有的权利。
+        本政策说明 AMIO 游乐场收集哪些信息、为什么收集、如何使用与保存，以及你对这些信息拥有的权利。
         请在使用本服务前阅读。
       </p>
 
@@ -27,8 +27,9 @@ export default function PrivacyPage() {
           <section className={styles.section}>
             <h3 className={styles.heading}>一、适用范围与运营方</h3>
             <p>
-              本政策适用于你访问与使用 AmiClaw 平台（claw.amio.fans，含 BombSquad
-              等其上的游戏）时，运营方对你个人信息的处理。本服务的运营方为 AMIO 团队。
+              {
+                '本政策适用于你访问与使用 AMIO 游乐场（AMIO Arcade，原 AmiClaw，claw.amio.fans，含 BombSquad 等其上的游戏）时，运营方对你个人信息的处理。本服务的运营方为 AMIO 团队。'
+              }
             </p>
             <p>
               本服务不设账号体系，无须注册，也无须提供邮箱、手机号或真实姓名即可游玩。

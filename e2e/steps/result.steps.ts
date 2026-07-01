@@ -201,7 +201,7 @@ Then('no row mentions a required browser or "Clipboard API"', async ({ page }) =
 
 Then('I am back on the BombSquad landing page', async ({ page }) => {
   // The compatibility page's 返回 link lands on the BombSquad landing (/bombsquad),
-  // not the Amiclaw platform homepage — the landing carries the mode CTAs.
+  // not the AMIO Arcade platform homepage — the landing carries the mode CTAs.
   // BombSquad is served at /bombsquad/, so the landing may carry a trailing
   // slash; normalize it away before comparing.
   await expect.poll(() => new URL(page.url()).pathname.replace(/\/$/, '')).toBe('/bombsquad')

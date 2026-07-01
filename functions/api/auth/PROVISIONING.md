@@ -41,11 +41,11 @@ wrangler pages secret put RESEND_API_KEY
 Optional environment variables (plain vars, not secrets — set in the Pages
 dashboard or via config):
 
-| Variable          | Purpose                                   | Default (dev fallback)            |
-| ----------------- | ----------------------------------------- | --------------------------------- |
-| `RESEND_API_KEY`  | Resend API key (secret)                   | unset → link logged, not emailed  |
-| `AUTH_EMAIL_FROM` | Verified `From` address                   | `AmiClaw <onboarding@resend.dev>` |
-| `AUTH_BASE_URL`   | Origin for verify URL + post-login target | `https://claw.amio.fans`          |
+| Variable          | Purpose                                   | Default (dev fallback)                |
+| ----------------- | ----------------------------------------- | ------------------------------------- |
+| `RESEND_API_KEY`  | Resend API key (secret)                   | unset → link logged, not emailed      |
+| `AUTH_EMAIL_FROM` | Verified `From` address                   | `AMIO Arcade <onboarding@resend.dev>` |
+| `AUTH_BASE_URL`   | Origin for verify URL + post-login target | `https://claw.amio.fans`              |
 
 When `RESEND_API_KEY` is unset the request endpoint still returns its normal
 unified response, but no email is sent — the magic link is written to the
@@ -58,7 +58,7 @@ Create an OAuth 2.0 client in Google Cloud so the Google sign-in path can run.
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select
    (or create) a project.
 2. Configure the **OAuth consent screen** (APIs & Services → OAuth consent
-   screen): External user type, app name (e.g. `AmiClaw`), support email, and
+   screen): External user type, app name (e.g. `AMIO Arcade`), support email, and
    the `openid` + `email` scopes (the only scopes the code requests).
 3. Create credentials → **OAuth client ID** → application type **Web
    application**.

@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**AMIO Arcade brand rename** — The active product surfaces now use AMIO Arcade /
+AMIO 游乐场 instead of AmiClaw, including the shared wordmark, page titles,
+homepage copy, legal pages, auth emails, README, and canonical docs. Existing
+`claw.amio.fans` URLs and `amiclaw` internal identifiers stay in place as
+compatibility infrastructure.
+
 **Meet your AI companion** - New. Signed-in players can now give their platform
 AI partner a name and choose its voice, so it feels like theirs from the first
 hello. The companion card counts how many days you've been together from the day

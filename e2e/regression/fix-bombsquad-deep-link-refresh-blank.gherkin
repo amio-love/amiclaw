@@ -61,7 +61,7 @@ Feature: bombsquad-deep-link-refresh-blank regression coverage
   #   200 rewrite resolved to a redirect rather than serving the SPA, and the
   #   follow-up request fell through to the /* platform-shell catch-all. Every
   #   hard-load / refresh of a BombSquad deep route rendered the blank platform
-  #   shell (HTTP 200, title "AmiClaw — 和 AI 一起玩点新的") instead of the game.
+  #   shell (HTTP 200, title "AMIO Arcade — 和 AI 一起玩点新的") instead of the game.
   # fix: target the directory /bombsquad/ instead of /bombsquad/index.html, so
   #   Pages serves /bombsquad/index.html cleanly with no canonicalization bounce.
   # retire-when: BombSquad stops being a BrowserRouter sub-app under /bombsquad/

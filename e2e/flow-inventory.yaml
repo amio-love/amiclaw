@@ -1,4 +1,4 @@
-# e2e/flow-inventory.yaml — BombSquad + Amiclaw platform user-flow SSOT
+# e2e/flow-inventory.yaml — BombSquad + AMIO Arcade platform user-flow SSOT
 #
 # This file is the single source of truth for all user-facing flows the e2e
 # journey scenarios cover. Every journey Gherkin scenario in e2e/*.gherkin MUST

@@ -16,7 +16,7 @@ export interface AuthEnv {
   AUTH: KVNamespace
   /** Resend API key (secret). When unset, email send is logged, not sent. */
   RESEND_API_KEY?: string
-  /** Verified Resend sending address, e.g. `AmiClaw <login@claw.amio.fans>`. */
+  /** Verified Resend sending address, e.g. `AMIO Arcade <login@claw.amio.fans>`. */
   AUTH_EMAIL_FROM?: string
   /**
    * Origin used to build the magic-link verify URL and the post-login redirect
@@ -57,7 +57,7 @@ export const OAUTH_STATE_TTL_SECONDS = 10 * 60 // 10 minutes
 // --- Dev fallbacks ----------------------------------------------------------
 
 const DEFAULT_BASE_URL = 'https://claw.amio.fans'
-const DEFAULT_EMAIL_FROM = 'AmiClaw <onboarding@resend.dev>'
+const DEFAULT_EMAIL_FROM = 'AMIO Arcade <onboarding@resend.dev>'
 
 export function resolveBaseUrl(env: AuthEnv): string {
   return env.AUTH_BASE_URL && env.AUTH_BASE_URL.length > 0 ? env.AUTH_BASE_URL : DEFAULT_BASE_URL

@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-# CI pipeline for AmiClaw (pnpm monorepo, React + Vite web app)
+# CI pipeline for AMIO Arcade (amiclaw pnpm monorepo, React + Vite web app)
 # Runs on push/PR to main: install, test, build
 
 name: CI
