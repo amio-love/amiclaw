@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { AuthIdentity, SessionResponse } from '@shared/auth-types'
 import { API_BASE } from '@shared/api-base'
 
@@ -30,6 +30,16 @@ export type AuthState =
   | { status: 'loading'; user: null }
   | { status: 'authed'; user: DisplayUser }
   | { status: 'anon'; user: null }
+
+/**
+ * What `useAuth` returns: the read-only session state plus `logout`. `logout`
+ * is stable across renders (`status`/`user` still narrow as before), so every
+ * consumer can destructure it without breaking the existing state branches.
+ */
+export type UseAuthResult = AuthState & {
+  /** Revoke the session server-side, then return the whole UI to anonymous. */
+  logout: () => Promise<void>
+}
 
 function deriveDisplayUser(identity: AuthIdentity): DisplayUser {
   const localPart = identity.email.split('@')[0] ?? identity.email
@@ -63,9 +73,27 @@ function devBypassState(): AuthState | undefined {
  * always legal), so any non-`authenticated` response — including a network
  * failure — resolves to `anon`, never an error UI.
  */
-export function useAuth(): AuthState {
+export function useAuth(): UseAuthResult {
   const bypass = devBypassState()
   const [state, setState] = useState<AuthState>(bypass ?? { status: 'loading', user: null })
+
+  /**
+   * Log out: POST `/api/auth/logout` (idempotent — always clears the cookie),
+   * then hard-navigate home. There is no shared auth store — TopNav, the
+   * account page and each `useAuth` caller hold their own copy of the session
+   * state — so a full navigation is the only reliable way to return every
+   * surface to anonymous at once, and it re-reads the now-cleared session on
+   * the fresh load. A failed request still falls through to the navigation; the
+   * session endpoint is the source of truth on the next load.
+   */
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', credentials: 'include' })
+    } catch {
+      // Network failure — navigate anyway; the reloaded session read decides.
+    }
+    window.location.assign('/')
+  }, [])
 
   useEffect(() => {
     // Dev bypass is resolved synchronously above; skip the network read.
@@ -92,5 +120,5 @@ export function useAuth(): AuthState {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return state
+  return { ...state, logout }
 }

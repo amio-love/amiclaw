@@ -63,6 +63,12 @@
   word-break: break-all;
 }
 
+/* Sign-out action — a full-width ghost button under the identity. */
+.logout {
+  margin-top: 20px;
+  width: 100%;
+}
+
 /* ----------  right — detail column  ---------- */
 .detail {
   display: flex;

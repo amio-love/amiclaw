@@ -86,6 +86,29 @@
   text-align: center;
 }
 
+/* ----------  signed-in notice (an authenticated visitor on /login)  ---------- */
+.identityLabel {
+  margin: 0;
+  font: 500 12px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.identityEmail {
+  margin: 8px 0 0;
+  font: 400 18px var(--font-body);
+  color: var(--text-1);
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 /* "或" divider between the email form and the Google button. */
 .divider {
   display: flex;

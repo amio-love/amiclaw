@@ -13,11 +13,36 @@
  *      of whether the email is known (the page never reveals which addresses can
  *      sign in).
  *   3. a network failure surfaces a retry message, not the confirmation.
+ *   4. an already-authenticated visitor sees their identity and the continue /
+ *      sign-out actions instead of the bare form; signing out POSTs
+ *      /api/auth/logout and returns the site to the anonymous state.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import type { SessionResponse } from '@shared/auth-types'
 import LoginPage from './LoginPage'
+
+/** Resolve any fetch input to its URL string. */
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.toString()
+  return (input as Request).url
+}
+
+const ANON: SessionResponse = { authenticated: false, identity: null }
+const AUTHED: SessionResponse = {
+  authenticated: true,
+  identity: { user_id: 'u_1', email: 'nova@amio.fans' },
+}
+
+/** Stub GET /api/auth/session (read by useAuth on mount) with a given body. */
+function stubSession(session: SessionResponse) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify(session), { status: 200 })))
+  )
+}
 
 function renderLogin() {
   return render(
@@ -28,6 +53,12 @@ function renderLogin() {
 }
 
 describe('LoginPage /login', () => {
+  beforeEach(() => {
+    // useAuth reads GET /api/auth/session on mount. Default to anonymous so the
+    // sign-in form renders; tests needing a session or POST override this stub.
+    stubSession(ANON)
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -74,9 +105,16 @@ describe('LoginPage /login', () => {
   })
 
   it('shows the unified confirmation after submitting an email', async () => {
-    const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true, message: 'x' }), { status: 200 }))
-    )
+    // useAuth reads the session (anonymous here); the form submit POSTs the
+    // magic-link request. One URL-aware spy answers both.
+    const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+      if (urlOf(input).includes('/api/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify(ANON), { status: 200 }))
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, message: 'x' }), { status: 200 })
+      )
+    })
     vi.stubGlobal('fetch', fetchSpy)
     renderLogin()
 
@@ -84,10 +122,12 @@ describe('LoginPage /login', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送登录链接' }))
 
     expect(await screen.findByText('如果该邮箱可用，你会收到一封登录邮件。')).toBeInTheDocument()
-    // The POST hit the magic-link request endpoint with the typed email.
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toContain('/api/auth/magic-link/request')
+    // The POST hit the magic-link request endpoint exactly once, with the email.
+    const magicCalls = fetchSpy.mock.calls.filter(([input]) =>
+      urlOf(input as RequestInfo | URL).includes('/api/auth/magic-link/request')
+    )
+    expect(magicCalls).toHaveLength(1)
+    const [, init] = magicCalls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ email: 'nova@amio.fans' })
   })
 
@@ -104,5 +144,44 @@ describe('LoginPage /login', () => {
     expect(await screen.findByText('发送失败，请检查网络后重试。')).toBeInTheDocument()
     // The unified confirmation must NOT appear on a true network failure.
     expect(screen.queryByText('如果该邮箱可用，你会收到一封登录邮件。')).not.toBeInTheDocument()
+  })
+
+  it('shows the signed-in identity and continue / sign-out actions, not the form', async () => {
+    stubSession(AUTHED)
+    renderLogin()
+
+    // Identity: the session email, with continue + sign-out actions.
+    expect(await screen.findByText('nova@amio.fans')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeInTheDocument()
+    // The bare sign-in form must NOT render for an already-authenticated visitor.
+    expect(screen.queryByLabelText('邮箱')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '发送登录链接' })).not.toBeInTheDocument()
+  })
+
+  it('signs out via POST /api/auth/logout and returns to the anonymous state', async () => {
+    const assignSpy = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign: assignSpy })
+    const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+      if (urlOf(input).includes('/api/auth/logout')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify(AUTHED), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    renderLogin()
+
+    fireEvent.click(await screen.findByRole('button', { name: '退出登录' }))
+
+    // The sign-out POST hit /api/auth/logout, and the whole UI is reset to
+    // anonymous via a hard navigation home.
+    await vi.waitFor(() => expect(assignSpy).toHaveBeenCalledWith('/'))
+    const logoutCall = fetchSpy.mock.calls.find(([input]) =>
+      urlOf(input as RequestInfo | URL).includes('/api/auth/logout')
+    )
+    expect(logoutCall).toBeDefined()
+    const [, init] = logoutCall as unknown as [string, RequestInit]
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
   })
 })
