@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import type { MagicLinkRequestBody } from '@shared/auth-types'
 import { API_BASE } from '@shared/api-base'
+import { useAuth, type DisplayUser } from '@/hooks/useAuth'
 import styles from './LoginPage.module.css'
 
 /* Google sign-in start endpoint. A plain navigational link, NOT a fetch: the
@@ -32,6 +34,7 @@ function startWithOwnAI() {
      free anonymous play.
    Platform chrome — brand yellow, dark-only, CSS-only transitions. */
 export default function LoginPage() {
+  const { status, user, logout } = useAuth()
   const [email, setEmail] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
 
@@ -55,6 +58,13 @@ export default function LoginPage() {
       setPhase('error')
     }
   }
+
+  // An already-authenticated visitor on /login gets their identity and the two
+  // honest next steps, not the bare form. Loading and anonymous both fall
+  // through to the sign-in form: /login is anonymous-by-default, so the form is
+  // shown optimistically rather than holding the page blank while the session
+  // read is in flight.
+  if (status === 'authed' && user) return <AuthedNotice user={user} onLogout={logout} />
 
   return (
     <div className={styles.page}>
@@ -126,6 +136,37 @@ export default function LoginPage() {
           带自己的 AI 直接开始玩
         </button>
       </p>
+    </div>
+  )
+}
+
+/* An already-authenticated visitor who lands on /login should not see the bare
+   sign-in form. Show who they are and the two honest next steps: continue into
+   the platform, or sign out. Same one-card layout and page-load reveal as the
+   sign-in state. */
+function AuthedNotice({ user, onLogout }: { user: DisplayUser; onLogout: () => void }) {
+  const navigate = useNavigate()
+  return (
+    <div className={styles.page}>
+      <div className={styles.head}>
+        <EyebrowTag variant="section">已登录 · SIGNED IN</EyebrowTag>
+        <h2 className={styles.title}>
+          你已<span className={styles.accent}>登录</span>。
+        </h2>
+      </div>
+
+      <GlassCard radius="2xl" className={styles.card}>
+        <p className={styles.identityLabel}>当前登录</p>
+        <p className={styles.identityEmail}>{user.email}</p>
+        <div className={styles.actions}>
+          <Button variant="primary" onClick={() => navigate('/')}>
+            继续
+          </Button>
+          <Button variant="ghost" onClick={onLogout}>
+            退出登录
+          </Button>
+        </div>
+      </GlassCard>
     </div>
   )
 }

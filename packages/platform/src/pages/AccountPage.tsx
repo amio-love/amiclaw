@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
+import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
 import CompanionCard from '@/components/companion/CompanionCard'
 import { companionSeedEnabled } from '@/lib/companion-seed'
@@ -13,7 +13,7 @@ import styles from './AccountPage.module.css'
 
    Platform chrome — every accent is brand yellow; no BombSquad cyan here. */
 export default function AccountPage() {
-  const { status, user } = useAuth()
+  const { status, user, logout } = useAuth()
   // The dev seed lets a Cloudflare preview feel the companion surfaces without a
   // live session; treat it as enough to show the companion entry here too.
   const seeded = companionSeedEnabled()
@@ -22,7 +22,7 @@ export default function AccountPage() {
     <div className={styles.page}>
       <EyebrowTag variant="section">我的 · ACCOUNT</EyebrowTag>
       {status === 'loading' && !seeded ? null : status === 'authed' && user ? (
-        <SignedInProfile user={user} />
+        <SignedInProfile user={user} onLogout={logout} />
       ) : seeded ? (
         <SeededCompanionPreview />
       ) : (
@@ -55,7 +55,7 @@ function SeededCompanionPreview() {
    fake-data problem PR #133 fixed for the signed-out state. So the detail
    column is an honest empty state — "还没有成绩，去玩一局" with a play CTA —
    not mock numbers and not a「即将推出」placeholder. */
-function SignedInProfile({ user }: { user: DisplayUser }) {
+function SignedInProfile({ user, onLogout }: { user: DisplayUser; onLogout: () => void }) {
   return (
     <>
       <h2 className={styles.title}>
@@ -70,6 +70,9 @@ function SignedInProfile({ user }: { user: DisplayUser }) {
           </div>
           <div className={styles.name}>{user.displayName}</div>
           <div className={styles.rank}>{user.email}</div>
+          <Button variant="ghost" size="sm" className={styles.logout} onClick={onLogout}>
+            退出登录
+          </Button>
         </GlassCard>
 
         <div className={styles.detail}>

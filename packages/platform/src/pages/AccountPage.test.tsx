@@ -159,4 +159,37 @@ describe('AccountPage /me', () => {
     // The voice is represented by name, not fabricated audio playback.
     expect(screen.getByText('暖声')).toBeInTheDocument()
   })
+
+  it('signs out via POST /api/auth/logout and returns to the anonymous state', async () => {
+    const assignSpy = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign: assignSpy })
+    const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+      const url = urlOf(input)
+      if (url.includes('/api/companion')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: 'no companion set up' }), { status: 404 })
+        )
+      }
+      if (url.includes('/api/auth/logout')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify(AUTHED), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    renderAccount('/me')
+
+    // The sign-out action lives on the signed-in profile card.
+    fireEvent.click(await screen.findByRole('button', { name: '退出登录' }))
+
+    // The whole UI is reset to anonymous via a hard navigation home, and the
+    // sign-out POST hit /api/auth/logout.
+    await vi.waitFor(() => expect(assignSpy).toHaveBeenCalledWith('/'))
+    const logoutCall = fetchSpy.mock.calls.find(([input]) =>
+      urlOf(input as RequestInfo | URL).includes('/api/auth/logout')
+    )
+    expect(logoutCall).toBeDefined()
+    const [, init] = logoutCall as unknown as [string, RequestInit]
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+  })
 })

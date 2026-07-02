@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Sign out, and a login page that knows you're already in** - New. Signed-in
+players now have a 退出登录 action on their 我的 account page, and opening the
+login page while already signed in shows your email with two clear next steps —
+continue into the platform, or sign out — instead of the bare sign-in form.
+Signing out returns the whole site to the anonymous state.
+
 **AMIO Arcade brand rename** — The active product surfaces now use AMIO Arcade /
 AMIO 游乐场 instead of AmiClaw, including the shared wordmark, page titles,
 homepage copy, legal pages, auth emails, README, and canonical docs. Existing
