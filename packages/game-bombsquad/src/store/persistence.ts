@@ -27,7 +27,10 @@ import type { GameState } from './game-context'
 //        therefore neutrally end at 10 minutes instead of running on. Bumping
 //        the key forces any stale v2 entry to be ignored so the player gets a
 //        clean fresh run carrying the correct 1-hour cap.
-const KEY = 'bombsquad:game-state:v3'
+//   v4 — the run identity moved into GameState as `gameRunId`. Restoring an
+//        older v3 blob would produce a live run whose voice session and score
+//        settlement cannot share the same id, so stale v3 state is ignored.
+const KEY = 'bombsquad:game-state:v4'
 
 export function loadPersistedState(): GameState | null {
   if (typeof sessionStorage === 'undefined') return null

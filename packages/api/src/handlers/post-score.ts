@@ -3,11 +3,10 @@ import type {
   LeaderboardEntry,
   ScoreSubmissionResponse,
 } from '../../../../shared/leaderboard-types'
-
-// Internal KV shape: LeaderboardEntry plus the dedup key, which is never
-// exposed through the public GET response (stripped in get-leaderboard.ts).
-type StoredEntry = LeaderboardEntry & { run_id?: string }
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
+import { captureSettlementEvent } from '../../../companion-memory/src/capture'
+import type { CompanionDb } from '../../../companion-memory/src/db'
+import { readSessionFromRequest } from '../auth/session'
 import {
   MAX_AI_MODEL_LEN,
   MAX_AI_TOOL_LEN,
@@ -16,11 +15,25 @@ import {
   validateSubmission,
 } from '../validation'
 
+// Internal KV shape: LeaderboardEntry plus the dedup key, which is never
+// exposed through the public GET response (stripped in get-leaderboard.ts).
+type StoredEntry = LeaderboardEntry & { run_id?: string }
+
 const RATE_LIMIT_MS = 10_000
 const MAX_ENTRIES = 100
 const KV_TTL_SECONDS = 48 * 60 * 60 // 48 hours
 
-export async function handlePostScore(request: Request, kv: KVNamespace): Promise<Response> {
+export interface PostScoreOptions {
+  auth?: KVNamespace
+  companionDb?: CompanionDb
+  now?: () => string
+}
+
+export async function handlePostScore(
+  request: Request,
+  kv: KVNamespace,
+  options: PostScoreOptions = {}
+): Promise<Response> {
   let body: ScoreSubmission
   try {
     body = (await request.json()) as ScoreSubmission
@@ -96,7 +109,37 @@ export async function handlePostScore(request: Request, kv: KVNamespace): Promis
       ? { personal_best_attempt: bestRecord.attempt_number }
       : {}),
   }
+  await captureAuthenticatedSettlement(request, body, options)
   return jsonResponse(response, 200)
+}
+
+async function captureAuthenticatedSettlement(
+  request: Request,
+  body: ScoreSubmission,
+  options: PostScoreOptions
+): Promise<void> {
+  if (!body.run_id || !options.auth || !options.companionDb) return
+
+  try {
+    const session = await readSessionFromRequest(options.auth, request)
+    if (session === null) return
+    const now = options.now ?? (() => new Date().toISOString())
+    await captureSettlementEvent(
+      options.companionDb,
+      {
+        settlementId: body.run_id,
+        userId: session.user_id,
+        gameId: 'bombsquad',
+        gameRunId: body.run_id,
+        outcome: 'win',
+        durationSeconds: body.time_ms / 1000,
+        occurredAt: now(),
+      },
+      { now, newId: () => crypto.randomUUID() }
+    )
+  } catch {
+    console.warn('score settlement capture failed')
+  }
 }
 
 function jsonResponse(body: unknown, status: number): Response {

@@ -26,7 +26,7 @@ vi.mock('@/modules/keypad/KeypadModule', () => ({
 import GamePage from './GamePage'
 import { GameProvider, type GameState, TIME_BUDGET_MS } from '@/store/game-context'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
 const T0 = 1_700_000_000_000
 
 // The old daily countdown ended at 10 minutes. The stopwatch must sail past
@@ -41,6 +41,7 @@ function playingState(mode: GameState['mode'], overrides: Partial<GameState> = {
     mode,
     manual: {} as GameState['manual'],
     manualUrl: `https://claw.amio.fans/manual/${mode}`,
+    gameRunId: `run-${mode}`,
     sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
     moduleSequence: sequence,
     moduleConfigs: sequence.map(() => ({})) as GameState['moduleConfigs'],

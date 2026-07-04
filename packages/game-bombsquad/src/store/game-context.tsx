@@ -76,6 +76,8 @@ export interface GameState {
   mode: GameMode
   manual: Manual | null
   manualUrl: string | null
+  /** Stable identity for this run, generated before the manual is loaded. */
+  gameRunId: string | null
   sceneInfo: SceneInfo | null
   /** Module kinds for this run, in order. Derived from MODULE_SEQUENCE[mode]. */
   moduleSequence: ModuleKind[]
@@ -112,7 +114,13 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type GameAction =
-  | { type: 'START_LOADING'; mode: GameMode; manualUrl: string; attemptNumber: number }
+  | {
+      type: 'START_LOADING'
+      mode: GameMode
+      manualUrl: string
+      attemptNumber: number
+      gameRunId: string
+    }
   | {
       type: 'MANUAL_LOADED'
       manual: Manual
@@ -140,6 +148,7 @@ const INITIAL_STATE: GameState = {
   mode: 'practice',
   manual: null,
   manualUrl: null,
+  gameRunId: null,
   sceneInfo: null,
   moduleSequence: [],
   moduleConfigs: [],
@@ -172,6 +181,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         status: 'LOADING',
         mode: action.mode,
         manualUrl: action.manualUrl,
+        gameRunId: action.gameRunId,
         attemptNumber: action.attemptNumber,
         moduleSequence: sequence,
         moduleConfigs: sequence.map(() => null),

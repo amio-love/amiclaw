@@ -3,6 +3,7 @@ import { handlePostScore } from '../../packages/api/src/handlers/post-score'
 import { applyCorsHeaders, buildCorsHeaders } from '../../packages/api/src/cors'
 import { extractClaimedUserId } from '../../packages/api/src/auth/extract-claim'
 import { guardClaimedUserId } from '../../packages/api/src/auth/guard'
+import type { CompanionDb } from '../../packages/companion-memory/src/db'
 
 interface Env {
   LEADERBOARD: KVNamespace
@@ -11,6 +12,7 @@ interface Env {
   // submissions claim none, so the guard never touches `AUTH` for them and the
   // existing anonymous flow is unaffected even before `AUTH` is provisioned.
   AUTH?: KVNamespace
+  COMPANION_DB?: CompanionDb
 }
 
 interface Context {
@@ -54,7 +56,13 @@ export async function onRequest(context: Context): Promise<Response> {
         )
       }
     }
-    return applyCorsHeaders(await handlePostScore(request, env.LEADERBOARD), corsHeaders)
+    return applyCorsHeaders(
+      await handlePostScore(request, env.LEADERBOARD, {
+        auth: env.AUTH,
+        companionDb: env.COMPANION_DB,
+      }),
+      corsHeaders
+    )
   }
 
   if (request.method === 'GET') {

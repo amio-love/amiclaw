@@ -51,7 +51,7 @@ import ResultPage from './ResultPage'
 import { submitScore } from '@shared/leaderboard-api'
 import { GameProvider, type GameState } from '@/store/game-context'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
 const NICKNAME_KEY = 'bombsquad-nickname'
 const AI_TOOL_KEY = 'bombsquad-leaderboard-ai-tool'
 
@@ -88,6 +88,7 @@ function finishedDailyState(): GameState {
     mode: 'daily',
     manual: null,
     manualUrl: null,
+    gameRunId: 'run-daily-result',
     sceneInfo: null,
     moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [null, null, null, null],
@@ -170,6 +171,7 @@ describe('ResultPage nickname gate', () => {
       nickname: '小明',
       ai_tool: 'claude',
       device_id: STUB_DEVICE_ID,
+      run_id: 'run-daily-result',
     })
 
     // localStorage persisted the nickname; modal is gone.
@@ -190,6 +192,7 @@ describe('ResultPage nickname gate', () => {
       nickname: '小红',
       ai_tool: 'chatgpt',
       device_id: STUB_DEVICE_ID,
+      run_id: 'run-daily-result',
     })
   })
 

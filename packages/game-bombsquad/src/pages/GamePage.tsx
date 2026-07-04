@@ -33,7 +33,12 @@ import ButtonModule from '@/modules/button/ButtonModule'
 import KeypadModule from '@/modules/keypad/KeypadModule'
 import practiceYamlRaw from '../../../manual/data/practice.yaml?raw'
 import { generateSceneInfo } from '@/engine/scene-info'
-import { commitAttemptNumberForMode, getAttemptNumberForMode, getRunSeed } from '@/utils/session'
+import {
+  commitAttemptNumberForMode,
+  createGameRunId,
+  getAttemptNumberForMode,
+  getRunSeed,
+} from '@/utils/session'
 import { getAudioContext, setSfxSuppressed } from '@/audio/audio-context'
 import VoicePanel, { type VoicePanelHandle } from '@/voice/VoicePanel'
 import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
@@ -219,7 +224,7 @@ export default function GamePage() {
   const resultNavigationArmedRef = useRef(state.status !== 'RESULT')
 
   // Voice-session inputs for the current module, recomputed only when the loaded
-  // manual or the current module changes (NOT on every timer-frame re-render).
+  // manual, run identity, or the current module changes (NOT on every timer-frame re-render).
   // Advancing modules changes `gameState.relevantSections` but keeps the same
   // run-stable `sessionKey`, so the panel does NOT remount — the hook steers the
   // live session with one `update-gamestate` instead of reconnecting (one
@@ -236,7 +241,13 @@ export default function GamePage() {
       return deriveVoicePanelInputs({ ...state, currentModuleIndex: clampedIdx })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [usePlatformVoice, state.manual, state.currentModuleIndex, state.moduleSequence.length]
+    [
+      usePlatformVoice,
+      state.manual,
+      state.gameRunId,
+      state.currentModuleIndex,
+      state.moduleSequence.length,
+    ]
   )
 
   // Mute every game SFX while the mode② voice partner is mounted. The stopwatch
@@ -381,8 +392,9 @@ export default function GamePage() {
         ? `${origin}/manual/practice`
         : toManualDataUrl(customUrl ?? `${origin}/manual/${new Date().toISOString().slice(0, 10)}`)
     const attemptNumber = getAttemptNumberForMode(mode)
+    const gameRunId = createGameRunId()
 
-    dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber })
+    dispatch({ type: 'START_LOADING', mode, manualUrl, attemptNumber, gameRunId })
 
     const load = async () => {
       try {
@@ -750,6 +762,7 @@ export default function GamePage() {
           key={voiceInputs.sessionKey}
           manualData={voiceInputs.manualData}
           gameState={voiceInputs.gameState}
+          gameRunId={voiceInputs.gameRunId}
         />
       )}
 

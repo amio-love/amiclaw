@@ -26,9 +26,10 @@
  * (listening / thinking / speaking).
  *
  * Security invariant (load-bearing, mirrors the demo): this hook connects ONLY to
- * the same-origin Worker WS and sends ONLY `{gameId, manualData, gameState}` plus
- * binary audio. It carries NO provider key, NO system prompt, and NO userId — the
- * session cookie authenticates same-origin and the server holds every secret.
+ * the same-origin Worker WS and sends ONLY `{gameId, manualData, gameState,
+ * gameRunId}` plus binary audio. It carries NO provider key, NO system prompt,
+ * and NO userId — the session cookie authenticates same-origin and the server
+ * holds every secret.
  *
  * Audio formats (both 16 kHz mono PCM16):
  *  - mic capture: `AudioContext({ sampleRate: 16000 })` + `ScriptProcessorNode`,
@@ -106,6 +107,8 @@ function closeAudioContext(ctx: AudioContext | null): void {
 }
 
 export interface UseVoiceSessionOptions {
+  /** Stable per-run join key shared by voice summary and score settlement. */
+  gameRunId?: string
   /**
    * The per-run manual payload (built via `bombsquadManualToManualData`). `null`
    * while the manual is still loading — the hook stays `idle` and connects once a
@@ -163,7 +166,7 @@ export interface UseVoiceSessionResult {
  * and only after the session is `created`; an unchanged re-render sends nothing.
  */
 export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessionResult {
-  const { manualData, gameState, gameId = 'bombsquad' } = options
+  const { gameRunId, manualData, gameState, gameId = 'bombsquad' } = options
 
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
@@ -185,10 +188,12 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const manualDataRef = useRef<ManualData | null>(manualData)
   const gameStateRef = useRef<GameState>(gameState)
   const gameIdRef = useRef<string>(gameId)
+  const gameRunIdRef = useRef<string | undefined>(gameRunId)
   useEffect(() => {
     manualDataRef.current = manualData
     gameStateRef.current = gameState
     gameIdRef.current = gameId
+    gameRunIdRef.current = gameRunId
   })
 
   // Side-effect handles (never trigger re-render).
@@ -558,6 +563,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         gameId: gameIdRef.current,
         manualData: manualDataRef.current,
         gameState: gameStateRef.current,
+        ...(gameRunIdRef.current ? { gameRunId: gameRunIdRef.current } : {}),
       }
       try {
         ws.send(JSON.stringify(create))

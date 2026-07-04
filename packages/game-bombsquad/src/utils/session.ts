@@ -15,6 +15,13 @@ export function getRunSeed(mode: SessionMode, now = Date.now()): number {
   return mode === 'practice' ? PRACTICE_SEED : now
 }
 
+export function createGameRunId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 export function getDailyAttemptKey(date = getTodayString()): string {
   return `attempt-${date}`
 }

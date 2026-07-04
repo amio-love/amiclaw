@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② memory: one run now carries one join key** - Change. A daily
+run now gets a stable `gameRunId` when the run starts, and that same id is passed
+to the platform-AI voice session, reused as the leaderboard `run_id`, and written
+as the logged-in companion-memory settlement join key after a successful score
+submission. This lets a voice session summary and the finished run settle into
+one memory event. Anonymous leaderboard submissions still work the same way and
+do not write memory.
+
 **Sign out, and a login page that knows you're already in** - New. Signed-in
 players now have a 退出登录 action on their 我的 account page, and opening the
 login page while already signed in shows your email with two clear next steps —

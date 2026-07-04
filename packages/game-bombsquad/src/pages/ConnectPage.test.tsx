@@ -65,6 +65,7 @@ const STALE_RESULT_STATE: GameState = {
   mode: 'daily',
   manual: null,
   manualUrl: 'https://claw.amio.fans/manual/2026-05-22',
+  gameRunId: 'run-stale-result',
   sceneInfo: { sceneTongueTwister: '四是四十是十', batteryCount: 2, indicators: [] },
   moduleSequence: ['wire', 'dial', 'button', 'keypad'],
   moduleConfigs: [null, null, null, null],

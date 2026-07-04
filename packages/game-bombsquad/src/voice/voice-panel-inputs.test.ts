@@ -38,6 +38,7 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     mode: 'daily',
     manual: makeManual(),
     manualUrl: 'https://claw.amio.fans/manual/2026-06-28',
+    gameRunId: 'run-default',
     sceneInfo: null,
     moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [],
@@ -97,27 +98,38 @@ describe('deriveVoicePanelInputs (current module -> hook inputs)', () => {
   })
 
   it('keeps a run-stable sessionKey across module advances so the panel never remounts', () => {
-    const first = deriveVoicePanelInputs(makeState({ currentModuleIndex: 0, rngSeed: 42 }))
-    const second = deriveVoicePanelInputs(makeState({ currentModuleIndex: 1, rngSeed: 42 }))
-    // Same run (same seed) → identical key as the module advances → one session.
-    expect(first?.sessionKey).toBe('run-42')
-    expect(second?.sessionKey).toBe('run-42')
+    const first = deriveVoicePanelInputs({
+      ...makeState({ currentModuleIndex: 0 }),
+      gameRunId: 'shared',
+    })
+    const second = deriveVoicePanelInputs({
+      ...makeState({ currentModuleIndex: 1 }),
+      gameRunId: 'shared',
+    })
+    // Same run (same gameRunId) → identical key as the module advances → one session.
+    expect(first?.sessionKey).toBe('run-shared')
+    expect(second?.sessionKey).toBe('run-shared')
     expect(first?.sessionKey).toBe(second?.sessionKey)
+    expect(first?.gameRunId).toBe('shared')
     // But the per-module sections still change, so the hook can steer the session.
     expect(first?.gameState.relevantSections).toEqual(['wire_routing'])
     expect(second?.gameState.relevantSections).toEqual(['symbol_dial'])
   })
 
   it('gives a different run a different sessionKey (a genuinely new session)', () => {
-    const runA = deriveVoicePanelInputs(makeState({ rngSeed: 1 }))
-    const runB = deriveVoicePanelInputs(makeState({ rngSeed: 2 }))
-    expect(runA?.sessionKey).toBe('run-1')
-    expect(runB?.sessionKey).toBe('run-2')
+    const runA = deriveVoicePanelInputs(makeState({ gameRunId: 'a' }))
+    const runB = deriveVoicePanelInputs(makeState({ gameRunId: 'b' }))
+    expect(runA?.sessionKey).toBe('run-a')
+    expect(runB?.sessionKey).toBe('run-b')
     expect(runA?.sessionKey).not.toBe(runB?.sessionKey)
   })
 
   it('returns null until a manual is loaded', () => {
     expect(deriveVoicePanelInputs(makeState({ manual: null }))).toBeNull()
+  })
+
+  it('returns null until the run identity is available', () => {
+    expect(deriveVoicePanelInputs(makeState({ gameRunId: null }))).toBeNull()
   })
 
   it('returns null when there is no current module kind', () => {
