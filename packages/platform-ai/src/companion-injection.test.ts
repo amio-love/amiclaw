@@ -202,23 +202,24 @@ describe('assembleSession — companion voice wiring', () => {
       volcengineVoiceType: 'zh_female_warm_real_token',
     })
     assembleSession('demo', 'user-a', MANUAL, undefined, VOLC_ENV, { companionContext: CONTEXT })
-    expect(voiceMapping.resolveVendorVoice).toHaveBeenCalledWith('companion-warm')
+    expect(voiceMapping.resolveVendorVoice).toHaveBeenCalledWith('companion-warm', VOLC_ENV)
     expect(speech).toHaveBeenCalledWith(
       expect.objectContaining({ ttsSpeaker: 'zh_female_warm_real_token' })
     )
   })
 
-  it('degrades to the provider default voice on a placeholder/missing mapping — never throws', () => {
+  it('degrades to the provider default voice on a missing deploy mapping — never throws', () => {
     const speech = vi.spyOn(volcengine, 'createVolcengineSpeechProvider')
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // The committed mapping is all PLACEHOLDER_* tokens, so the real resolver
-    // degrades here — assembly must still succeed, with no speaker override.
+    // No VOLC_TTS_VOICE_COMPANION_* env vars are configured in this test env, so
+    // the real resolver degrades here — assembly must still succeed, with no
+    // speaker override.
     const assembled = assembleSession('demo', 'user-a', MANUAL, undefined, VOLC_ENV, {
       companionContext: CONTEXT,
     })
     expect(assembled.state.companionContext).toEqual(CONTEXT)
     expect(speech).toHaveBeenCalledWith(expect.objectContaining({ ttsSpeaker: undefined }))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unfilled placeholder'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing a real deploy env'))
   })
 
   it('does not consult the voice mapping without a companion context (zero behavior change)', () => {

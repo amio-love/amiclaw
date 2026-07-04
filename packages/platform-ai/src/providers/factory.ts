@@ -15,6 +15,7 @@
 
 import type { LlmProvider, SttProvider, TtsProvider } from './types'
 import type { ResolvedConfig } from '../provider-config'
+import type { VoiceMappingEnv } from '../voice-id-mapping'
 import { createDeepSeekLlmProvider } from './deepseek'
 import { createVolcengineSpeechProvider } from './volcengine'
 import { createMockLlmProvider, createMockSpeechProvider } from './mock'
@@ -36,7 +37,7 @@ const PROVIDER_MOCK = 'mock'
  * factory can throw a precise "missing credential" error for the specific
  * vendor a config actually selects, rather than failing on an unrelated one.
  */
-export interface ProviderEnv {
+export interface ProviderEnv extends VoiceMappingEnv {
   /** DeepSeek API key, server-side only. */
   DEEPSEEK_API_KEY?: string
   /** Optional DeepSeek base URL override. */

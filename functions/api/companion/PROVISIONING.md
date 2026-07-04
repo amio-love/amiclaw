@@ -50,17 +50,40 @@ The consolidator reuses the Worker's existing `DEEPSEEK_API_KEY` /
 degrades to settlement-facts-only consolidation — episodes from conversation
 highlights and all profile claims are skipped.
 
-## 5. Voice mapping back-fill (deploy-blocking)
+## 5. Voice mapping configuration (deploy-blocking)
 
 `packages/platform-ai/src/voice-id-mapping.ts` maps the platform-neutral
-`voice_id` catalog to Volcengine `voice_type` tokens, and session assembly
-threads the resolved token into the TTS provider as the companion's speaker.
-The committed values are `PLACEHOLDER_*`: at runtime an unfilled placeholder
-(or a missing mapping) degrades to the provider's default voice with a
-`console.warn` — sessions still assemble, but every companion speaks the
-default voice instead of its chosen one.
+`voice_id` catalog to Volcengine `voice_type` tokens at session assembly time.
+The concrete vendor tokens are deploy configuration, not source code. Configure
+all three Worker env values before exposing the companion feature:
 
-**Back-filling the real `voice_type` tokens is therefore a deploy-blocking
-checklist item**: confirm the tokens against the Volcengine console and fill
-them in before the companion feature ships. The mapping mechanism, its
-completeness test, and the degrade path are already in place.
+- `VOLC_TTS_VOICE_COMPANION_WARM`
+- `VOLC_TTS_VOICE_COMPANION_BRIGHT`
+- `VOLC_TTS_VOICE_COMPANION_CALM`
+
+Confirm the real `voice_type` tokens in the Volcengine console or provider
+dashboard. Do not guess token strings and do not commit token values to source.
+At runtime, a missing value degrades to the provider default voice with a
+`console.warn`; the session still assembles, but the selected companion voice is
+not honored. Launch readiness must fail loud on that condition.
+
+Run the low-side-effect readiness gate after deployment:
+
+```sh
+PLATFORM_AI_BASE_URL=https://claw.amio.fans \
+VOLC_TTS_VOICE_COMPANION_WARM=<real token> \
+VOLC_TTS_VOICE_COMPANION_BRIGHT=<real token> \
+VOLC_TTS_VOICE_COMPANION_CALM=<real token> \
+pnpm --filter @amiclaw/platform-ai smoke:readiness
+```
+
+If the voice values are deployed as Worker secrets, also verify the deployed
+secret names without reading their values:
+
+```sh
+RUN_WORKER_SECRET_NAME_CHECK=1 \
+pnpm --filter @amiclaw/platform-ai smoke:readiness
+```
+
+See `packages/platform-ai/POST_DEPLOY_READINESS.md` for the D1, `USAGE`, auth,
+and log-lookup checks that complete the mode2 launch gate.

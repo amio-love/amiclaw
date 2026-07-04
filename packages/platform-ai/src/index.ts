@@ -56,6 +56,20 @@ export { assembleLlmContext } from './manual-injection'
 export type { ProviderEnv, SessionProviders } from './providers/factory'
 export { createProviders } from './providers/factory'
 
+// Companion voice mapping readiness — runtime fails open, launch checks fail loud.
+export type {
+  VendorVoiceParams,
+  VoiceMappingEnv,
+  VoiceMappingIssue,
+  VoiceMappingReadiness,
+} from './voice-id-mapping'
+export {
+  VOICE_ENV_BINDINGS,
+  checkVoiceMappingReadiness,
+  assertVoiceMappingReady,
+  resolveVendorVoice,
+} from './voice-id-mapping'
+
 // Deterministic mock providers — no-credential demo / e2e harness backend.
 export type {
   MockLlmProvider,

@@ -3,8 +3,8 @@
  *
  * Asserts the production privacy policy renders and that the faithfulness-
  * critical facts are present: the retention windows (48h leaderboard / 30d
- * telemetry), the contact address, the "we do not collect email / phone /
- * real name" disclaimer, and the public-leaderboard disclosure. These are the
+ * telemetry / 30d sessions / 90d audit), the contact address, the mode① versus
+ * mode② data split, and the public-leaderboard disclosure. These are the
  * legal-compliance load-bearing claims, so the test guards them against an
  * accidental edit that would make the page misstate the real data practice.
  */
@@ -32,6 +32,8 @@ describe('PrivacyPage', () => {
     renderPage()
     expect(screen.getByText(/保留 48\s*小时后自动过期/)).toBeInTheDocument()
     expect(screen.getByText(/保留 30 天后自动过期/)).toBeInTheDocument()
+    expect(screen.getByText(/会话记录与会话[\s\S]*Cookie 默认保留 30 天/)).toBeInTheDocument()
+    expect(screen.getByText(/认证审计记录保留 90 天/)).toBeInTheDocument()
   })
 
   it('discloses the public leaderboard and what it shows', () => {
@@ -42,17 +44,27 @@ describe('PrivacyPage', () => {
     expect(screen.getByText(/在每日排行榜上公开展示/)).toBeInTheDocument()
   })
 
-  it('carries the faithful "we do not collect email / phone / real name" disclaimer', () => {
+  it('discloses the mode-specific email and account session collection', () => {
     renderPage()
-    expect(
-      screen.getByText(/我们不收集邮箱、手机号、真实姓名、精确地理位置或任何支付信息/)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/平台 AI[\s\S]*伙伴需要登录邮箱来建立账号会话/)).toBeInTheDocument()
+    expect(screen.getAllByText(/amiclaw_session/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/自带 AI 游玩不要求邮箱、手机号或真实姓名/)).toBeInTheDocument()
   })
 
-  it('names Cloudflare as the hosting and storage processor', () => {
+  it('names Cloudflare and platform AI providers as processors', () => {
     renderPage()
     expect(screen.getByText(/Cloudflare Pages/)).toBeInTheDocument()
     expect(screen.getByText(/Cloudflare KV/)).toBeInTheDocument()
+    expect(screen.getByText(/Cloudflare D1/)).toBeInTheDocument()
+    expect(screen.getByText(/Volcengine/)).toBeInTheDocument()
+    expect(screen.getByText(/DeepSeek/)).toBeInTheDocument()
+  })
+
+  it('discloses Companion Memory and user controls', () => {
+    renderPage()
+    expect(screen.getAllByText(/Companion Memory/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/删除对应回忆、删除或更正个人画像项/)).toBeInTheDocument()
+    expect(screen.getAllByText(/关闭个人画像层/).length).toBeGreaterThan(0)
   })
 
   it('provides the deletion / contact email and an effective date', () => {
@@ -60,6 +72,6 @@ describe('PrivacyPage', () => {
     const mailtoLinks = screen.getAllByRole('link', { name: 'hi@amio.love' })
     expect(mailtoLinks.length).toBeGreaterThan(0)
     expect(mailtoLinks[0]).toHaveAttribute('href', 'mailto:hi@amio.love')
-    expect(screen.getByText(/生效日期：2026-06-07/)).toBeInTheDocument()
+    expect(screen.getByText(/生效日期：2026-07-04/)).toBeInTheDocument()
   })
 })
