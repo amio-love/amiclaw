@@ -79,6 +79,7 @@ export function assembleSession(
   extras: AssembleSessionExtras = {}
 ): AssembledSession {
   const config = resolveConfig(gameId)
+  const sessionId = crypto.randomUUID()
   // Companion voice wiring (L2 §Mechanism Variant 2): the companion's
   // platform-neutral `voice_id` resolves to vendor voice params HERE, at
   // assembly. Resolution is total — an unknown id or an unfilled placeholder
@@ -96,6 +97,7 @@ export function assembleSession(
     vendorVoice === undefined ? undefined : { ttsSpeaker: vendorVoice.volcengineVoiceType }
   )
   const state: SessionState = {
+    traceSessionId: sessionId,
     config,
     manualData,
     gameState: gameState ?? { relevantSections: [] },
@@ -108,5 +110,5 @@ export function assembleSession(
     ...(extras.companionContext !== undefined ? { companionContext: extras.companionContext } : {}),
     ...(extras.gameRunId !== undefined ? { gameRunId: extras.gameRunId } : {}),
   }
-  return { sessionId: crypto.randomUUID(), userId, providers, state }
+  return { sessionId, userId, providers, state }
 }

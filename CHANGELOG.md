@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**BombSquad mode② voice sessions are easier to diagnose** - Change. The
+platform-AI worker now attaches the same opaque session id to the structured
+trace lines for a voice run's ASR, LLM, TTS, and turn-settle boundaries. When a
+live run stalls or fails, maintainers can query one session directly in
+Cloudflare Workers Logs instead of stitching the run together from time windows.
+
 **BombSquad mode② memory: one run now carries one join key** - Change. A daily
 run now gets a stable `gameRunId` when the run starts, and that same id is passed
 to the platform-AI voice session, reused as the leaderboard `run_id`, and written

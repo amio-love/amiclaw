@@ -186,6 +186,67 @@ describe('runTurn', () => {
     expect(chunks.at(-1)?.done).toBe(true)
   })
 
+  it('attaches the session id to production turn-trace lines', async () => {
+    const logs: string[] = []
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      if (typeof message === 'string') logs.push(message)
+    })
+    try {
+      const state = freshState()
+      state.traceSessionId = 'session-trace-1'
+      const turn = runTurn(
+        providers(
+          mockStt([{ text: 'I see a red wire.', isFinal: true }]),
+          mockLlm(['Cut the blue wire.']),
+          mockTts([])
+        ),
+        state,
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+      await collect(turn)
+
+      const traces = logs
+        .map(
+          (line) =>
+            JSON.parse(line) as { t?: string; hop?: string; stage?: string; sessionId?: string }
+        )
+        .filter((entry) => entry.t === 'turn-trace')
+
+      expect(traces).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            hop: 'turn',
+            stage: 'pipeline-start',
+            sessionId: 'session-trace-1',
+          }),
+          expect.objectContaining({
+            hop: 'asr',
+            stage: 'final-transcript',
+            sessionId: 'session-trace-1',
+          }),
+          expect.objectContaining({
+            hop: 'llm',
+            stage: 'first-delta',
+            sessionId: 'session-trace-1',
+          }),
+          expect.objectContaining({
+            hop: 'tts',
+            stage: 'first-frame',
+            sessionId: 'session-trace-1',
+          }),
+          expect.objectContaining({
+            hop: 'turn',
+            stage: 'settle',
+            sessionId: 'session-trace-1',
+          }),
+        ])
+      )
+      expect(traces.every((entry) => entry.sessionId === 'session-trace-1')).toBe(true)
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   it('emits the player transcript as a leading chunk, before the AI reply chunks', async () => {
     const turn = runTurn(
       providers(

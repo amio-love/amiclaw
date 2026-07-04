@@ -72,6 +72,12 @@ function audioSecondsFromBytes(byteLength: number): number {
  * into the next turn.
  */
 export interface SessionState {
+  /**
+   * Opaque session id attached to structured trace lines so one production voice
+   * session can be queried end to end in Workers Logs. This is diagnostic only;
+   * it never crosses the provider boundary and does not affect protocol state.
+   */
+  traceSessionId?: string
   /** Resolved provider/prompt config for this session's game. */
   config: ResolvedConfig
   /** This run's manual payload (deterministic injection source). */
@@ -352,7 +358,8 @@ async function* streamLlmTts(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
   model: string,
   messages: ChatMessage[],
-  turnStart: number
+  turnStart: number,
+  traceSessionId?: string
 ): AsyncGenerator<AiResponseChunk, LlmTtsResult> {
   // LLM + TTS run concurrently: the LLM loop segments text into sentences and
   // feeds a queue the TTS provider drains. We interleave text chunks (as the
@@ -431,7 +438,10 @@ async function* streamLlmTts(
             llmDeltaCount += 1
             if (!firstDeltaTraced) {
               firstDeltaTraced = true
-              traceTurn('llm', 'first-delta', { elapsedMs: Date.now() - turnStart })
+              traceTurn('llm', 'first-delta', {
+                sessionId: traceSessionId,
+                elapsedMs: Date.now() - turnStart,
+              })
             }
             yield { kind: 'text', text: delta, done: false }
           }
@@ -446,6 +456,7 @@ async function* streamLlmTts(
           // LLM stream finished and all text has crossed into TTS — the boundary
           // is fully drained. A park AFTER this with no audio isolates TTS.
           traceTurn('llm', 'stream-end', {
+            sessionId: traceSessionId,
             deltaCount: llmDeltaCount,
             sentenceCount,
             assistantChars: assistantText.length,
@@ -460,7 +471,10 @@ async function* streamLlmTts(
             llmDeltaCount += 1
             if (!firstDeltaTraced) {
               firstDeltaTraced = true
-              traceTurn('llm', 'first-delta', { elapsedMs: Date.now() - turnStart })
+              traceTurn('llm', 'first-delta', {
+                sessionId: traceSessionId,
+                elapsedMs: Date.now() - turnStart,
+              })
             }
             yield { kind: 'text', text: delta, done: false }
             const { sentences, remainder } = splitSentences(pending)
@@ -481,6 +495,7 @@ async function* streamLlmTts(
             if (!firstFrameTraced) {
               firstFrameTraced = true
               traceTurn('tts', 'first-frame', {
+                sessionId: traceSessionId,
                 frameBytes: result.value.audio.byteLength,
                 elapsedMs: Date.now() - turnStart,
               })
@@ -531,13 +546,15 @@ async function* streamLlmTts(
  */
 export async function* runUtteranceStt(
   providers: Pick<TurnProviders, 'stt'>,
-  audio: AsyncIterable<AudioChunk>
+  audio: AsyncIterable<AudioChunk>,
+  traceSessionId?: string
 ): AsyncGenerator<AiResponseChunk, UtteranceResult> {
   const sttStart = Date.now()
   const { transcript, audioBytes } = yield* collectFinalTranscript(providers.stt, audio)
   // ASR hop boundary: the complete cumulative transcript is in hand (length only —
   // never the text). An empty transcript here explains a downstream LLM no-op.
   traceTurn('asr', 'final-transcript', {
+    sessionId: traceSessionId,
     transcriptChars: transcript.length,
     elapsedMs: Date.now() - sttStart,
   })
@@ -575,6 +592,7 @@ export async function* runReply(
   // `runUtteranceStt` (fail loud), never reaching here with a transcript.
   if (playerText.trim().length === 0) {
     traceTurn('turn', 'skip-no-speech', {
+      sessionId: state.traceSessionId,
       turnCount: state.turnCount,
       elapsedMs: Date.now() - turnStart,
     })
@@ -596,7 +614,13 @@ export async function* runReply(
   const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
 
   // LLM + TTS run concurrently via the shared half.
-  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+  const result = yield* streamLlmTts(
+    providers,
+    state.config.llm.model,
+    messages,
+    turnStart,
+    state.traceSessionId
+  )
 
   // Settle turn state: record history, count, and usage; emit the terminal chunk
   // so the consumer can close out the turn.
@@ -612,6 +636,7 @@ export async function* runReply(
   // ttsFrameCount:0 says nothing flowed past LLM; a high llmDeltaCount with
   // ttsFrameCount:0 isolates TTS at the LLM->TTS boundary.
   traceTurn('turn', 'settle', {
+    sessionId: state.traceSessionId,
     turnCount: state.turnCount,
     llmDeltaCount: result.llmDeltaCount,
     llmOutputTokens: outputTokens,
@@ -647,9 +672,10 @@ export async function* runTurn(
   audio: AsyncIterable<AudioChunk>
 ): AsyncIterable<AiResponseChunk> {
   traceTurn('turn', 'pipeline-start', {
+    sessionId: state.traceSessionId,
     turnCount: state.turnCount,
   })
-  const utterance = yield* runUtteranceStt(providers, audio)
+  const utterance = yield* runUtteranceStt(providers, audio, state.traceSessionId)
   yield* runReply(providers, state, utterance)
 }
 
@@ -689,7 +715,13 @@ export async function* runClosingTurn(
   const userMessage: ChatMessage = { role: 'user', content: CLOSING_DIRECTIVE }
   const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
 
-  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+  const result = yield* streamLlmTts(
+    providers,
+    state.config.llm.model,
+    messages,
+    turnStart,
+    state.traceSessionId
+  )
 
   // Settle: the closing directive is synthetic and must never leak into history
   // (the recap it elicits is the only thing remembered). turnCount tracks
@@ -698,6 +730,7 @@ export async function* runClosingTurn(
   const { outputTokens } = applyLlmTtsUsage(providers, state, result)
 
   traceTurn('turn', 'closing-settle', {
+    sessionId: state.traceSessionId,
     turnCount: state.turnCount,
     llmDeltaCount: result.llmDeltaCount,
     llmOutputTokens: outputTokens,
@@ -732,7 +765,13 @@ export async function* runOpeningTurn(
   const userMessage: ChatMessage = { role: 'user', content: OPENING_DIRECTIVE }
   const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
 
-  const result = yield* streamLlmTts(providers, state.config.llm.model, messages, turnStart)
+  const result = yield* streamLlmTts(
+    providers,
+    state.config.llm.model,
+    messages,
+    turnStart,
+    state.traceSessionId
+  )
 
   // Settle. The opening directive is synthetic and must never leak into history
   // (the greeting it elicits is the only thing remembered). turnCount tracks
@@ -742,6 +781,7 @@ export async function* runOpeningTurn(
   const { outputTokens } = applyLlmTtsUsage(providers, state, result)
 
   traceTurn('turn', 'opening-settle', {
+    sessionId: state.traceSessionId,
     turnCount: state.turnCount,
     llmDeltaCount: result.llmDeltaCount,
     llmOutputTokens: outputTokens,

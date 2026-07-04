@@ -64,6 +64,7 @@ describe('assembleSession — all-or-nothing session construction', () => {
     expect(assembled.providers.llm).toBeDefined()
     expect(assembled.providers.tts).toBeDefined()
     expect(assembled.state.config.gameId).toBe('demo-mock')
+    expect(assembled.state.traceSessionId).toBe(assembled.sessionId)
     expect(assembled.state.manualData).toBe(MANUAL)
     // Omitted game state defaults to the empty injection selection.
     expect(assembled.state.gameState).toEqual({ relevantSections: [] })

@@ -805,7 +805,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // transcript, not a rejection), so it never reaches here.
         if (this.turnEpoch === myEpoch) {
           const reason = err instanceof Error ? err.message : 'live ASR failed'
-          traceTurnError('asr', 'live-error', { messageChars: reason.length })
+          traceTurnError('asr', 'live-error', {
+            sessionId: this.sessionId,
+            messageChars: reason.length,
+          })
           try {
             ws.close(1008, safeCloseReason(reason))
           } catch {
@@ -833,7 +836,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     myEpoch: number
   ): Promise<UtteranceResult> {
     if (!this.providers) throw new Error('session-do: speech-start before createSession')
-    const gen = runUtteranceStt(this.providers, bridge)[Symbol.asyncIterator]()
+    const gen = runUtteranceStt(this.providers, bridge, this.sessionId)[Symbol.asyncIterator]()
     try {
       for (;;) {
         const next = await gen.next()
@@ -1118,7 +1121,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // the socket now).
       if (this.turnEpoch === myEpoch) {
         const reason = err instanceof Error ? err.message : 'opening greeting failed'
-        traceTurnError('turn', 'opening-error', { messageChars: reason.length })
+        traceTurnError('turn', 'opening-error', {
+          sessionId: this.sessionId,
+          messageChars: reason.length,
+        })
         try {
           ws.close(1008, safeCloseReason(reason))
         } catch {
@@ -1149,7 +1155,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // the socket now). Mirrors the opening-greeting error path exactly.
       if (this.turnEpoch === myEpoch) {
         const reason = err instanceof Error ? err.message : 'closing recap failed'
-        traceTurnError('turn', 'closing-error', { messageChars: reason.length })
+        traceTurnError('turn', 'closing-error', {
+          sessionId: this.sessionId,
+          messageChars: reason.length,
+        })
         try {
           ws.close(1008, safeCloseReason(reason))
         } catch {
