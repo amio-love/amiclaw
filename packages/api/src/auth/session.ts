@@ -71,6 +71,19 @@ export async function readSessionFromRequest(
 }
 
 /**
+ * Decode a cookie value without ever throwing on attacker-controlled input.
+ * Malformed percent escapes stay raw, which fails closed downstream because no
+ * real session id should match that raw garbage value.
+ */
+function decodeCookieValue(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/**
  * Read a single cookie value by name from a request's `Cookie` header, or
  * `null`. Shared by the session reader and the OAuth state-cookie check so the
  * (slightly fiddly) parse loop lives in one place.
@@ -83,7 +96,7 @@ export function readCookie(request: Request, name: string): string | null {
     if (eq === -1) continue
     const cookieName = part.slice(0, eq).trim()
     if (cookieName === name) {
-      return decodeURIComponent(part.slice(eq + 1).trim())
+      return decodeCookieValue(part.slice(eq + 1).trim())
     }
   }
   return null

@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from '../../../../shared/auth-types'
 import { SESSION_TTL_SECONDS } from './config'
 import {
   createSession,
+  readCookie,
   readSession,
   revokeSession,
   readSessionCookie,
@@ -44,9 +45,40 @@ describe('auth session', () => {
     expect(readSessionCookie(req)).toBe('abc123')
   })
 
+  it('percent-decodes a well-formed cookie value', () => {
+    const req = requestWithCookie(`${SESSION_COOKIE_NAME}=abc%20123`)
+    expect(readSessionCookie(req)).toBe('abc 123')
+  })
+
+  it('does not throw on malformed percent escapes in cookie values', () => {
+    for (const value of ['%', '%E', '%ZZ', '%C3%28']) {
+      const req = requestWithCookie(`${SESSION_COOKIE_NAME}=${value}`)
+      expect(() => readSessionCookie(req)).not.toThrow()
+      expect(readSessionCookie(req)).toBe(value)
+    }
+  })
+
+  it('keeps sibling cookie parsing total when one value has a malformed escape', () => {
+    const req = requestWithCookie(`a=ok; bad=%; b=%41`)
+    expect(readCookie(req, 'a')).toBe('ok')
+    expect(readCookie(req, 'bad')).toBe('%')
+    expect(readCookie(req, 'b')).toBe('A')
+  })
+
   it('returns null when no cookie present', () => {
     const req = new Request('https://claw.amio.fans/api/auth/session')
     expect(readSessionCookie(req)).toBeNull()
+  })
+
+  it('malformed session cookies fail closed through readSessionFromRequest', async () => {
+    const kv = new FakeKV()
+    const { sessionId } = await createSession(kv.asKV(), IDENTITY)
+    expect(sessionId).not.toBe('%')
+
+    for (const value of ['%', '%E', '%C3%28']) {
+      const req = requestWithCookie(`${SESSION_COOKIE_NAME}=${value}`)
+      await expect(readSessionFromRequest(kv.asKV(), req)).resolves.toBeNull()
+    }
   })
 
   it('readSessionFromRequest round-trips a real cookie', async () => {

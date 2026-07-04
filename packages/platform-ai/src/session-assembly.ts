@@ -89,7 +89,7 @@ export function assembleSession(
   const vendorVoice =
     extras.companionContext === undefined
       ? undefined
-      : resolveVendorVoice(extras.companionContext.companion.voice_id)
+      : resolveVendorVoice(extras.companionContext.companion.voice_id, env)
   const providers = createProviders(
     config,
     env,

@@ -53,6 +53,17 @@ with every understanding linking back to the exact memory it came from. If you
 haven't met your companion yet, both places guide you to do that first. They
 start out empty, honestly waiting for the story you'll build together.
 
+**AMIO Arcade mode2 launch readiness hardened** - Internal reliability and
+compliance hardening. The privacy policy and terms now describe the real mode1
+versus mode2 data boundary: auth sessions, platform-AI voice sessions, usage
+metering, Companion D1 memory, and third-party AI providers. Auth cookie parsing
+now treats malformed percent-encoding as attacker-controlled input and fails
+closed instead of throwing. Companion `voice_id` resolution now reads
+deploy-configured Volcengine voice tokens from `VOLC_TTS_VOICE_COMPANION_*`,
+keeps runtime sessions fail-open to the provider default voice, and adds a
+fail-loud readiness gate plus post-deploy runbook checks for auth, Companion D1,
+usage KV, observability, and deployed voice secret names.
+
 **BombSquad mode② voice: the indicator no longer flips back to "聆听中" mid-think** -
 Fix. After you finished speaking, the indicator would show "思考中" and then snap
 straight back to "聆听中" without the AI answering. A breath or room-noise tail
