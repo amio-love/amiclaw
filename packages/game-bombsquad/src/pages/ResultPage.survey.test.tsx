@@ -72,7 +72,7 @@ import ResultPage from './ResultPage'
 import { GameProvider, type GameState, type GameOutcome } from '@/store/game-context'
 import { submitScore } from '@shared/leaderboard-api'
 
-const PERSISTENCE_KEY = 'bombsquad:game-state:v3'
+const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
 const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
 
 interface FixtureOptions {
@@ -88,6 +88,7 @@ function finishedState({ mode, outcome }: FixtureOptions): GameState {
     mode,
     manual: null,
     manualUrl: null,
+    gameRunId: `run-${mode}-${outcome}`,
     sceneInfo: null,
     moduleSequence: sequence,
     moduleConfigs: sequence.map(() => null),

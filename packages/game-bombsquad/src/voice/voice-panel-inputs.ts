@@ -28,16 +28,18 @@ export function isPlatformVoicePartner(mode: GameMode, partnerParam: string | nu
 }
 
 export interface VoicePanelInputs {
+  /** Stable per-run join key shared by voice summary and score settlement. */
+  gameRunId: string
   /** Per-run manual payload for the voice session. */
   manualData: ManualData
   /** Drives the platform's manual-subset selection for the current module. */
   gameState: VoiceGameState
   /**
    * Stable per-RUN identity. Used as the `VoicePanel` React `key`. It is keyed on
-   * the run (the run's `rngSeed`), NOT the module, so it stays constant as the
-   * player advances modules — the panel mounts ONCE and keeps one continuous WS /
-   * mic / conversation for the whole run (the AI greets once and remembers it).
-   * A genuinely new run gets a new seed and therefore a fresh session.
+   * the run's `gameRunId`, NOT the module, so it stays constant as the player
+   * advances modules — the panel mounts ONCE and keeps one continuous WS / mic /
+   * conversation for the whole run (the AI greets once and remembers it). A
+   * genuinely new run gets a new id and therefore a fresh session.
    */
   sessionKey: string
   /** The current module kind (surfaced for labelling / callers). */
@@ -52,11 +54,12 @@ export interface VoicePanelInputs {
  */
 export function deriveVoicePanelInputs(state: BombSquadGameState): VoicePanelInputs | null {
   const moduleKind = state.moduleSequence[state.currentModuleIndex]
-  if (!moduleKind || state.manual === null) return null
+  if (!moduleKind || state.manual === null || state.gameRunId === null) return null
   return {
+    gameRunId: state.gameRunId,
     manualData: bombsquadManualToManualData(state.manual, state.manual.meta.version),
     gameState: { relevantSections: moduleKindToRelevantSections(moduleKind) },
-    sessionKey: `run-${state.rngSeed}`,
+    sessionKey: `run-${state.gameRunId}`,
     moduleKind,
   }
 }

@@ -191,7 +191,7 @@ function lastSocket(): MockWebSocket {
 /** Bring a hook to a live session with the mic streaming. */
 async function ready() {
   const rendered = renderHook(() =>
-    useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    useVoiceSession({ gameRunId: 'run-voice', manualData: manualData(), gameState: gameState() })
   )
   const ws = lastSocket()
   act(() => ws.fireOpen())
@@ -213,7 +213,7 @@ describe('useVoiceSession — connection', () => {
 
   it('connects same-origin and sends create with no userId/prompt', () => {
     const { result } = renderHook(() =>
-      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+      useVoiceSession({ gameRunId: 'run-voice', manualData: manualData(), gameState: gameState() })
     )
     expect(result.current.status).toBe('connecting')
     const ws = lastSocket()
@@ -224,6 +224,7 @@ describe('useVoiceSession — connection', () => {
     expect(create).toMatchObject({
       type: 'create',
       gameId: 'bombsquad',
+      gameRunId: 'run-voice',
       manualData: { version: 'v1' },
       gameState: { relevantSections: ['button'] },
     })

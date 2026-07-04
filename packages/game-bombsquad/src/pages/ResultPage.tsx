@@ -118,7 +118,8 @@ export default function ResultPage() {
     state.mode === 'daily' &&
     outcome === 'defused' &&
     totalMs !== null &&
-    state.moduleStats.length > 0
+    state.moduleStats.length > 0 &&
+    state.gameRunId !== null
 
   // Lazy initializers: read the stored nickname once on mount. Subsequent
   // useState calls reuse the captured value so the pieces of mount
@@ -179,25 +180,8 @@ export default function ResultPage() {
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
       if (totalMs === null) return null
+      if (state.gameRunId === null) return null
       const date = getTodayString()
-      // Generate a UUID once per run and persist it so a page-refresh retry
-      // sends the same run_id, enabling backend dedup to collapse duplicates.
-      let run_id: string | undefined
-      try {
-        const storageKey = `run-id:${date}:${state.attemptNumber}`
-        const stored = sessionStorage.getItem(storageKey)
-        if (stored) {
-          run_id = stored
-        } else {
-          run_id = crypto.randomUUID()
-          sessionStorage.setItem(storageKey, run_id)
-        }
-      } catch {
-        // sessionStorage unavailable (e.g. private-browsing restrictions) —
-        // fall back to a per-call UUID; the backend rate limit still provides
-        // a weak guard and the frontend latch covers within-mount doubles.
-        run_id = crypto.randomUUID()
-      }
       return {
         date,
         nickname: nicknameValue,
@@ -208,10 +192,10 @@ export default function ResultPage() {
         ai_tool: metadataValue.aiTool,
         ...(metadataValue.aiModel ? { ai_model: metadataValue.aiModel } : {}),
         device_id: getDeviceId(),
-        run_id,
+        run_id: state.gameRunId,
       }
     },
-    [totalMs, state.attemptNumber, state.moduleStats]
+    [totalMs, state.attemptNumber, state.gameRunId, state.moduleStats]
   )
 
   const recordOptimistic = useCallback(

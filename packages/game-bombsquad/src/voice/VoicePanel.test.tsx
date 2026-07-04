@@ -31,10 +31,11 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
 
 const manualData: ManualData = { version: 'v1', sections: { button: { rule: 'hold' } } }
 const gameState: GameState = { relevantSections: ['button'] }
+const gameRunId = 'run-panel'
 
 function renderPanel(partial: Partial<UseVoiceSessionResult> = {}) {
   mockHook.mockReturnValue(hookState(partial))
-  return render(<VoicePanel manualData={manualData} gameState={gameState} />)
+  return render(<VoicePanel gameRunId={gameRunId} manualData={manualData} gameState={gameState} />)
 }
 
 beforeEach(() => {
@@ -105,17 +106,17 @@ describe('VoicePanel — cues and content', () => {
     const props = () => ({ manualData: { ...manualData }, gameState: { ...gameState } })
 
     mockHook.mockReturnValue(hookState({ playerTranscript: '红' }))
-    const { rerender } = render(<VoicePanel {...props()} />)
+    const { rerender } = render(<VoicePanel gameRunId={gameRunId} {...props()} />)
     expect(screen.getByLabelText('你说的话')).toHaveTextContent('你：红')
 
     // An interim grows: the subtitle builds up to the latest cumulative text.
     mockHook.mockReturnValue(hookState({ playerTranscript: '红色的线' }))
-    rerender(<VoicePanel {...props()} />)
+    rerender(<VoicePanel gameRunId={gameRunId} {...props()} />)
     expect(screen.getByLabelText('你说的话')).toHaveTextContent('你：红色的线')
 
     // The next utterance's first interim replaces the prior subtitle, not appends.
     mockHook.mockReturnValue(hookState({ playerTranscript: '第' }))
-    rerender(<VoicePanel {...props()} />)
+    rerender(<VoicePanel gameRunId={gameRunId} {...props()} />)
     const subtitle = screen.getByLabelText('你说的话')
     expect(subtitle).toHaveTextContent('你：第')
     expect(subtitle).not.toHaveTextContent('红色的线')
@@ -142,6 +143,15 @@ describe('VoicePanel — cues and content', () => {
 })
 
 describe('VoicePanel — hands-free (no push-to-talk)', () => {
+  it('passes the run identity into the voice-session hook', () => {
+    renderPanel({ status: 'ready' })
+    expect(mockHook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameRunId,
+      })
+    )
+  })
+
   it('renders no push-to-talk button', () => {
     renderPanel({ status: 'ready' })
     expect(screen.queryByRole('button')).not.toBeInTheDocument()

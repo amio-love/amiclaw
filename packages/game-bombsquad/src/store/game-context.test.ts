@@ -30,6 +30,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     mode: 'daily',
     manual: null,
     manualUrl: null,
+    gameRunId: 'run-test',
     sceneInfo: null,
     moduleSequence: ['wire', 'dial', 'button', 'keypad'],
     moduleConfigs: [null, null, null, null],
@@ -58,6 +59,7 @@ describe('gameReducer — START_LOADING', () => {
       mode: 'daily',
       manualUrl: 'u',
       attemptNumber: 1,
+      gameRunId: 'run-daily',
     })
     expect(daily.moduleSequence).toEqual(MODULE_SEQUENCE.daily)
     expect(daily.moduleConfigs).toHaveLength(MODULE_SEQUENCE.daily.length)
@@ -68,9 +70,21 @@ describe('gameReducer — START_LOADING', () => {
       mode: 'practice',
       manualUrl: 'u',
       attemptNumber: 1,
+      gameRunId: 'run-practice',
     })
     expect(practice.moduleSequence).toEqual(MODULE_SEQUENCE.practice)
     expect(practice.moduleConfigs).toHaveLength(2)
+  })
+
+  it('stores a stable run identity before the manual is loaded', () => {
+    const state = gameReducer(baseState(), {
+      type: 'START_LOADING',
+      mode: 'daily',
+      manualUrl: 'u',
+      attemptNumber: 1,
+      gameRunId: 'run-identity',
+    })
+    expect(state.gameRunId).toBe('run-identity')
   })
 })
 

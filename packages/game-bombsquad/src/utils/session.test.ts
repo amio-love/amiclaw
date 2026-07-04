@@ -3,6 +3,7 @@ import {
   PRACTICE_SEED,
   commitAttemptNumberForMode,
   commitDailyAttemptNumber,
+  createGameRunId,
   getAttemptNumberForMode,
   getRunSeed,
   readEntryRecoveryState,
@@ -27,6 +28,10 @@ describe('session utilities', () => {
   it('uses a fixed seed for practice mode', () => {
     expect(getRunSeed('practice')).toBe(PRACTICE_SEED)
     expect(getRunSeed('daily', 123456)).toBe(123456)
+  })
+
+  it('creates a non-empty run identity', () => {
+    expect(createGameRunId()).toMatch(/^[a-z0-9-]+$/i)
   })
 
   it('reserves and reads daily attempts from storage', () => {

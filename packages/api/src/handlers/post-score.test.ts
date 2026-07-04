@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { LeaderboardEntry, ScoreSubmission } from '../../../../shared/leaderboard-types'
+import { createTestDb } from '../../../companion-memory/src/test-support/sqlite-db'
+import type {
+  CaptureEventRecord,
+  SettlementCaptureInput,
+} from '../../../companion-memory/src/types'
 import { handlePostScore } from './post-score'
 
 const VALID_DEVICE_ID = 'aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee'
@@ -15,6 +20,10 @@ class FakeKV {
 
   async put(key: string, value: string): Promise<void> {
     this.store.set(key, value)
+  }
+
+  asKV(): KVNamespace {
+    return this as unknown as KVNamespace
   }
 }
 
@@ -33,10 +42,10 @@ function submission(overrides: Partial<ScoreSubmission> = {}): ScoreSubmission {
   }
 }
 
-function request(body: unknown): Request {
+function request(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request('https://claw.amio.fans/api/leaderboard', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
 }
@@ -102,6 +111,78 @@ describe('handlePostScore — leaderboard AI metadata', () => {
       expect.objectContaining({ rank: 1, nickname: '小明', ai_tool: 'chatgpt' }),
       expect.objectContaining({ rank: 2, nickname: 'Legacy' }),
     ])
+  })
+})
+
+describe('handlePostScore — authenticated settlement capture', () => {
+  it('captures a logged-in score settlement with the same run_id as game_run_id', async () => {
+    const leaderboardKv = new FakeKV()
+    const authKv = new FakeKV()
+    await authKv.put(
+      'session:sess-a',
+      JSON.stringify({
+        user_id: 'user-a',
+        email: 'a@example.com',
+        created_at: '2026-07-04T00:00:00.000Z',
+      })
+    )
+    const db = createTestDb()
+
+    const response = await handlePostScore(
+      request(submission({ run_id: 'run-123' }), { Cookie: 'amiclaw_session=sess-a' }),
+      leaderboardKv.asKV(),
+      {
+        auth: authKv.asKV(),
+        companionDb: db,
+        now: () => '2026-07-04T12:00:00.000Z',
+      }
+    )
+
+    expect(response.status).toBe(200)
+    const row = await db
+      .prepare(
+        `SELECT event_id, user_id, kind, game_id, game_run_id, payload, occurred_at
+         FROM capture_event`
+      )
+      .bind()
+      .first<CaptureEventRecord>()
+    expect(row).toMatchObject({
+      event_id: 'settlement:run-123',
+      user_id: 'user-a',
+      kind: 'settlement',
+      game_id: 'bombsquad',
+      game_run_id: 'run-123',
+      occurred_at: '2026-07-04T12:00:00.000Z',
+    })
+    const payload = JSON.parse(row?.payload ?? '{}') as SettlementCaptureInput
+    expect(payload).toMatchObject({
+      settlementId: 'run-123',
+      userId: 'user-a',
+      gameId: 'bombsquad',
+      gameRunId: 'run-123',
+      outcome: 'win',
+      durationSeconds: 130,
+      occurredAt: '2026-07-04T12:00:00.000Z',
+    })
+  })
+
+  it('keeps anonymous submissions successful and memory-free', async () => {
+    const leaderboardKv = new FakeKV()
+    const authKv = new FakeKV()
+    const db = createTestDb()
+
+    const response = await handlePostScore(
+      request(submission({ run_id: 'run-anon' })),
+      leaderboardKv.asKV(),
+      {
+        auth: authKv.asKV(),
+        companionDb: db,
+      }
+    )
+
+    expect(response.status).toBe(200)
+    const rows = await db.prepare('SELECT event_id FROM capture_event').bind().all()
+    expect(rows.results).toHaveLength(0)
   })
 })
 

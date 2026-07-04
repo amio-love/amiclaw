@@ -5,6 +5,8 @@ import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
 
 interface VoicePanelProps {
+  /** Stable per-run join key shared by voice summary and score settlement. */
+  gameRunId: string
   /** Per-run manual payload (`null` while the manual is still loading). */
   manualData: ManualData | null
   /** Game state driving the manual-subset selection for this module. */
@@ -65,7 +67,7 @@ function placeholderFor(status: VoiceStatus, phase: ConversationPhase): string {
 }
 
 function VoicePanelImpl(
-  { manualData, gameState, gameId }: VoicePanelProps,
+  { gameRunId, manualData, gameState, gameId }: VoicePanelProps,
   ref: React.ForwardedRef<VoicePanelHandle>
 ) {
   const {
@@ -77,6 +79,7 @@ function VoicePanelImpl(
     error,
     requestClosing,
   } = useVoiceSession({
+    gameRunId,
     manualData,
     gameState,
     gameId,
