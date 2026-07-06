@@ -14,6 +14,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LeaderboardPage from './LeaderboardPage'
 import { fetchLeaderboard } from '@shared/leaderboard-api'
+import { fetchArcadeStreakLeaderboard } from '@amiclaw/arcade-profile/api-client'
 import { saveOptimisticEntry, loadOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getTodayString } from '@shared/date'
 import type { LeaderboardEntry } from '@shared/leaderboard-types'
@@ -22,7 +23,12 @@ vi.mock('@shared/leaderboard-api', () => ({
   fetchLeaderboard: vi.fn(),
 }))
 
+vi.mock('@amiclaw/arcade-profile/api-client', () => ({
+  fetchArcadeStreakLeaderboard: vi.fn(),
+}))
+
 const mockedFetch = vi.mocked(fetchLeaderboard)
+const mockedStreakFetch = vi.mocked(fetchArcadeStreakLeaderboard)
 
 const otherEntries: LeaderboardEntry[] = [
   { rank: 1, nickname: 'Alpha', time_ms: 80000, attempt_number: 1 },
@@ -41,6 +47,11 @@ describe('LeaderboardPage optimistic flow', () => {
   beforeEach(() => {
     sessionStorage.clear()
     mockedFetch.mockReset()
+    mockedStreakFetch.mockReset()
+    mockedStreakFetch.mockResolvedValue({
+      kind: 'ok',
+      board: { date: getTodayString(), entries: [] },
+    })
   })
 
   afterEach(() => {
@@ -163,5 +174,34 @@ describe('LeaderboardPage optimistic flow', () => {
     expect(bodyRows[0]).toHaveTextContent('ChatGPT')
     expect(bodyRows[1]).toHaveTextContent('Legacy')
     expect(bodyRows[1]).not.toHaveTextContent('ChatGPT')
+  })
+
+  it('renders the public streak leaderboard without private identifiers', async () => {
+    const today = getTodayString()
+    mockedFetch.mockResolvedValueOnce({ date: today, entries: [] })
+    mockedStreakFetch.mockResolvedValueOnce({
+      kind: 'ok',
+      board: {
+        date: today,
+        entries: [
+          {
+            rank: 1,
+            public_label: 'Player 8F3A',
+            current_streak_days: 5,
+            longest_streak_days: 7,
+            last_active_date: today,
+            today: { bombsquad_defused: true, oracle_signed: false },
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Player 8F3A')).toBeInTheDocument()
+    expect(screen.getByText(/今日 BombSquad/)).toBeInTheDocument()
+    expect(screen.getByText('最长 7 天')).toBeInTheDocument()
+    expect(screen.queryByText(/user_/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument()
   })
 })

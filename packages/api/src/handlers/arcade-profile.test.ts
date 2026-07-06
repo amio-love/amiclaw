@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { ArcadeStreakLeaderboardResponse } from '@amiclaw/arcade-profile/types'
 import { createTestDb } from '../../../arcade-profile/src/test-support/sqlite-db'
 import { FakeKV } from '../auth/fake-kv'
 import {
+  handleGetArcadeStreakLeaderboard,
   handleGetArcadeProfile,
   handlePostArcadeProfileClaim,
+  handlePostArcadeProfileEvent,
   type ArcadeProfileApiEnv,
 } from './arcade-profile'
 
@@ -30,7 +33,7 @@ const CLAIM_BODY = {
   ],
 }
 
-async function env(): Promise<ArcadeProfileApiEnv> {
+async function env(db = createTestDb()): Promise<ArcadeProfileApiEnv> {
   const auth = new FakeKV()
   await auth.put(
     'session:sess-1',
@@ -42,7 +45,7 @@ async function env(): Promise<ArcadeProfileApiEnv> {
   )
   return {
     AUTH: auth.asKV(),
-    COMPANION_DB: createTestDb(),
+    COMPANION_DB: db,
   }
 }
 
@@ -54,6 +57,13 @@ function request(body?: unknown, cookie = SESSION_COOKIE): Request {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+function getRequest(url: string, cookie = SESSION_COOKIE): Request {
+  return new Request(url, {
+    method: 'GET',
+    headers: cookie ? { Cookie: cookie } : {},
   })
 }
 
@@ -72,13 +82,99 @@ describe('arcade profile handlers', () => {
     const profile = await handleGetArcadeProfile(request(), testEnv)
 
     expect(first.status).toBe(200)
-    expect(await first.json()).toMatchObject({ inserted: 1, source_keys: ['bombsquad:run-1'] })
+    expect(await first.json()).toMatchObject({
+      inserted: 1,
+      source_keys: ['bombsquad:run-1'],
+      public_profile: {
+        claimed: true,
+        public_label: expect.stringMatching(/^Player [0-9A-F]{4}$/),
+      },
+    })
     expect(await replay.json()).toMatchObject({ inserted: 0, source_keys: ['bombsquad:run-1'] })
     expect(await profile.json()).toMatchObject({
       profile: {
         counts: { bombsquad_runs: 1, oracle_signs: 0 },
         bombsquad: { best_daily: { run_id: 'run-1' } },
+        daily_loop: { streak: { current_days: 1 } },
       },
+      public_profile: { claimed: true },
     })
+  })
+
+  it('does not let event writes create public streak-board eligibility', async () => {
+    const testEnv = await env()
+
+    const response = await handlePostArcadeProfileEvent(request(CLAIM_BODY.events[0]), testEnv)
+    const board = await handleGetArcadeStreakLeaderboard(
+      getRequest('https://claw.amio.fans/api/arcade/streaks?date=2026-07-06'),
+      testEnv
+    )
+
+    expect(response.status).toBe(200)
+    expect(await board.json()).toEqual({ date: '2026-07-06', entries: [] })
+  })
+
+  it('keeps account profile reads working before public-profile migration exists', async () => {
+    const testEnv = await env(createTestDb({ migrations: ['0002_arcade_profile.sql'] }))
+
+    await handlePostArcadeProfileEvent(request(CLAIM_BODY.events[0]), testEnv)
+    const response = await handleGetArcadeProfile(request(), testEnv)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      profile: {
+        counts: { bombsquad_runs: 1, oracle_signs: 0 },
+      },
+      public_profile: { claimed: false, public_label: null },
+    })
+  })
+
+  it('lets an explicit empty claim enable public streak eligibility for existing account events', async () => {
+    const testEnv = await env()
+
+    await handlePostArcadeProfileEvent(request(CLAIM_BODY.events[0]), testEnv)
+    const claim = await handlePostArcadeProfileClaim(
+      request({ profile_id: 'local-profile', events: [] }),
+      testEnv
+    )
+    const board = await handleGetArcadeStreakLeaderboard(
+      getRequest('https://claw.amio.fans/api/arcade/streaks?date=2026-07-06'),
+      testEnv
+    )
+    const body = (await board.json()) as ArcadeStreakLeaderboardResponse
+
+    expect(claim.status).toBe(200)
+    expect(await claim.clone().json()).toMatchObject({
+      inserted: 0,
+      source_keys: [],
+      public_profile: { claimed: true },
+    })
+    expect(body.entries).toHaveLength(1)
+    expect(body.entries[0].current_streak_days).toBe(1)
+  })
+
+  it('returns public streak entries without private identity fields', async () => {
+    const testEnv = await env()
+
+    await handlePostArcadeProfileClaim(
+      request({ ...CLAIM_BODY, public_label: 'a@example.com' }),
+      testEnv
+    )
+    const response = await handleGetArcadeStreakLeaderboard(
+      getRequest('https://claw.amio.fans/api/arcade/streaks?date=2026-07-06&limit=10'),
+      testEnv
+    )
+    const body = (await response.json()) as ArcadeStreakLeaderboardResponse
+    const serialized = JSON.stringify(body)
+
+    expect(response.status).toBe(200)
+    expect(body.entries).toHaveLength(1)
+    expect(body.entries[0].public_label).toMatch(/^Player [0-9A-F]{4}$/)
+    expect(serialized).not.toContain('user-a')
+    expect(serialized).not.toContain('a@example.com')
+    expect(serialized).not.toContain('example.com')
+    expect(serialized).not.toContain('local-profile')
+    expect(serialized).not.toContain('profile_id')
+    expect(serialized).not.toContain('user_id')
   })
 })

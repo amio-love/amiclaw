@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
-import type { ArcadeLocalProfile, ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
+import type {
+  ArcadeLocalProfile,
+  ArcadeProfileSummary,
+  ArcadePublicProfileStatus,
+} from '@amiclaw/arcade-profile/types'
 import {
   ensureArcadeLocalProfile,
   getClaimableArcadeProfileEvents,
@@ -62,7 +66,11 @@ export default function AccountPage() {
 type AccountProfileState =
   | { status: 'idle'; profile: null }
   | { status: 'loading'; profile: null }
-  | { status: 'ok'; profile: ArcadeProfileSummary }
+  | {
+      status: 'ok'
+      profile: ArcadeProfileSummary
+      publicProfile: ArcadePublicProfileStatus
+    }
   | { status: 'error'; profile: null }
 
 function useAccountArcadeProfile(): {
@@ -78,7 +86,11 @@ function useAccountArcadeProfile(): {
     fetchArcadeProfile().then((result) => {
       if (!active) return
       if (result.kind === 'ok') {
-        setState({ status: 'ok', profile: result.profile })
+        setState({
+          status: 'ok',
+          profile: result.profile,
+          publicProfile: result.publicProfile,
+        })
       } else {
         setState({ status: 'error', profile: null })
       }
@@ -156,7 +168,14 @@ function SignedInProfile({
             {accountProfile.status === 'loading' || accountProfile.status === 'idle' ? (
               <div className={styles.skeleton} aria-hidden="true" />
             ) : accountProfile.status === 'ok' ? (
-              <ArcadeStatsCard profile={accountProfile.profile} emptyCtaHref="/bombsquad/" />
+              <>
+                <ArcadeStatsCard profile={accountProfile.profile} emptyCtaHref="/bombsquad/" />
+                <PublicProfileCard
+                  profile={accountProfile.profile}
+                  publicProfile={accountProfile.publicProfile}
+                  onEnabled={reloadAccountProfile}
+                />
+              </>
             ) : (
               <GlassCard radius="2xl" className={styles.emptyCard}>
                 <p className={styles.emptyText}>账号记录暂时读不出来，稍后再试。</p>
@@ -278,12 +297,17 @@ function ArcadeStatsCard({
       <div className={styles.statGrid}>
         <StatBlock
           label="今日"
-          value={profile.today_played ? '已开始' : '未开始'}
+          value={profile.daily_loop.streak.today_completed ? '已打卡' : '未打卡'}
           detail={
             profile.last_activity_at
               ? `最近 ${toChineseDateString(profile.last_activity_at.slice(0, 10))}`
               : '还没有记录'
           }
+        />
+        <StatBlock
+          label="连续"
+          value={`${profile.daily_loop.streak.current_days} 天`}
+          detail={`最长 ${profile.daily_loop.streak.longest_days} 天`}
         />
         <StatBlock
           label="BombSquad"
@@ -310,6 +334,62 @@ function ArcadeStatsCard({
         <a className={styles.emptyCta} href={emptyCtaHref}>
           开始玩
         </a>
+      )}
+    </GlassCard>
+  )
+}
+
+function PublicProfileCard({
+  profile,
+  publicProfile,
+  onEnabled,
+}: {
+  profile: ArcadeProfileSummary
+  publicProfile: ArcadePublicProfileStatus
+  onEnabled: () => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const canEnable =
+    !publicProfile.claimed &&
+    profile.profile_id !== undefined &&
+    (profile.counts.bombsquad_runs > 0 || profile.counts.oracle_signs > 0)
+
+  const handleEnable = async () => {
+    if (!profile.profile_id) return
+    setStatus('saving')
+    const result = await claimArcadeProfile({
+      profile_id: profile.profile_id,
+      events: [],
+    })
+    if (result.kind !== 'ok') {
+      setStatus('error')
+      return
+    }
+    setStatus('idle')
+    onEnabled()
+  }
+
+  return (
+    <GlassCard radius="2xl" className={styles.publicCard}>
+      <div>
+        <h3 className={styles.publicTitle}>公开连续榜</h3>
+        <p className={styles.publicText}>
+          {publicProfile.claimed
+            ? `上榜名：${publicProfile.public_label}`
+            : canEnable
+              ? '账号已有记录；启用公开上榜名后，会进入连续打卡榜。'
+              : '保存本设备记录到账号后，会生成公开上榜名。'}
+        </p>
+        {status === 'error' && <p className={styles.publicError}>启用失败，请稍后再试。</p>}
+      </div>
+      {canEnable ? (
+        <Button variant="ghost" size="sm" onClick={handleEnable} disabled={status === 'saving'}>
+          {status === 'saving' ? '启用中' : '启用公开上榜'}
+        </Button>
+      ) : (
+        <Link to="/leaderboard" className={styles.publicLink}>
+          查看排行榜
+        </Link>
       )}
     </GlassCard>
   )

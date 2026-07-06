@@ -49,6 +49,9 @@ vi.mock('@/utils/survey', () => ({
 
 import ResultPage from './ResultPage'
 import { submitScore } from '@shared/leaderboard-api'
+import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
+import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
+import { ARCADE_LOCAL_PROFILE_KEY, readArcadeLocalProfile } from '@amiclaw/arcade-profile/local'
 import { GameProvider, type GameState } from '@/store/game-context'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
@@ -56,6 +59,7 @@ const NICKNAME_KEY = 'bombsquad-nickname'
 const AI_TOOL_KEY = 'bombsquad-leaderboard-ai-tool'
 
 const mockedSubmit = vi.mocked(submitScore)
+const mockedProfileSubmit = vi.mocked(submitArcadeProfileEvent)
 
 // jsdom's `localStorage` in this workspace is a method-less stub (see the
 // boot-time `--localstorage-file` warning and the precedent in
@@ -134,6 +138,8 @@ describe('ResultPage nickname gate', () => {
     sessionStorage.clear()
     mockedSubmit.mockReset()
     mockedSubmit.mockResolvedValue({ ok: true, data: { rank: 5, total_players: 100 } })
+    mockedProfileSubmit.mockReset()
+    mockedProfileSubmit.mockResolvedValue({ kind: 'anon' })
   })
 
   afterEach(() => {
@@ -194,6 +200,80 @@ describe('ResultPage nickname gate', () => {
       device_id: STUB_DEVICE_ID,
       run_id: 'run-daily-result',
     })
+  })
+
+  it('shows profile save, share, and leaderboard actions on a daily result', async () => {
+    const writeText = vi.fn((_: string) => Promise.resolve())
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    localStorage.setItem(NICKNAME_KEY, '小红')
+    localStorage.setItem(AI_TOOL_KEY, 'chatgpt')
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    expect(await screen.findByText('已保存到本设备')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '分享今日成绩' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看排行榜' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存到我的档案' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '分享今日成绩' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0][0]).toContain('BombSquad 每日挑战')
+    expect(await screen.findByText('分享文案已复制。')).toBeInTheDocument()
+  })
+
+  it('does not show a local-save success when local profile persistence fails', async () => {
+    localStorage.setItem(NICKNAME_KEY, '小红')
+    localStorage.setItem(AI_TOOL_KEY, 'chatgpt')
+    const originalSetItem = localStorage.setItem.bind(localStorage)
+    localStorage.setItem = vi.fn((key: string, value: string) => {
+      if (key === ARCADE_LOCAL_PROFILE_KEY) throw new Error('quota exceeded')
+      originalSetItem(key, value)
+    })
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    expect(await screen.findByText('本局暂未写入档案')).toBeInTheDocument()
+    expect(readArcadeLocalProfile()).toBeNull()
+  })
+
+  it('marks auto-synced result profile events as claimed locally', async () => {
+    localStorage.setItem(NICKNAME_KEY, '小红')
+    localStorage.setItem(AI_TOOL_KEY, 'chatgpt')
+    const syncedProfile: ArcadeProfileSummary = {
+      profile_id: 'local-profile',
+      last_activity_at: '2023-11-14T22:15:50.000Z',
+      today_played: true,
+      counts: { bombsquad_runs: 1, oracle_signs: 0 },
+      bombsquad: { recent: null, best_daily: null, best_practice: null },
+      oracle: { recent: null },
+      daily_loop: {
+        date: '2023-11-14',
+        checklist: {
+          bombsquad_daily: { completed: true, completed_at: '2023-11-14T22:15:50.000Z' },
+          oracle_sign: { completed: false, completed_at: null },
+        },
+        streak: {
+          today_completed: true,
+          current_days: 1,
+          longest_days: 1,
+          last_active_date: '2023-11-14',
+        },
+      },
+    }
+    mockedProfileSubmit.mockResolvedValue({
+      kind: 'ok',
+      profile: syncedProfile,
+      publicProfile: { claimed: false, public_label: null },
+    })
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    expect(await screen.findByText('已保存到账号档案')).toBeInTheDocument()
+    expect(readArcadeLocalProfile()?.claimed_source_keys).toContain('bombsquad:run-daily-result')
   })
 
   it('practice mode: never shows the modal and never submits', async () => {

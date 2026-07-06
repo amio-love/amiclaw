@@ -99,6 +99,31 @@ const MANUAL_YAML = readFileSync(resolve(FIXTURES_DIR, 'daily-manual.yaml'), 'ut
 const LEADERBOARD_DEFAULT = readJson<{ get: LeaderboardGetResponse; post: SubmitResponse }>(
   'leaderboard-default.json'
 )
+const ARCADE_PROFILE_TODAY = new Date(ANSWERS.seed).toISOString().slice(0, 10)
+
+function emptyArcadeProfile(profileId?: string) {
+  return {
+    ...(profileId ? { profile_id: profileId } : {}),
+    last_activity_at: null,
+    today_played: false,
+    counts: { bombsquad_runs: 0, oracle_signs: 0 },
+    bombsquad: { recent: null, best_daily: null, best_practice: null },
+    oracle: { recent: null },
+    daily_loop: {
+      date: ARCADE_PROFILE_TODAY,
+      checklist: {
+        bombsquad_daily: { completed: false, completed_at: null },
+        oracle_sign: { completed: false, completed_at: null },
+      },
+      streak: {
+        today_completed: false,
+        current_days: 0,
+        longest_days: 0,
+        last_active_date: null,
+      },
+    },
+  }
+}
 
 // --- Voice-session stub ------------------------------------------------------
 //
@@ -476,14 +501,7 @@ export const test = base.extend<{ world: World }>({
         }
 
         const request = route.request()
-        const emptyProfile = {
-          profile_id: world.authIdentity.user_id,
-          last_activity_at: null,
-          today_played: false,
-          counts: { bombsquad_runs: 0, oracle_signs: 0 },
-          bombsquad: { recent: null, best_daily: null, best_practice: null },
-          oracle: { recent: null },
-        }
+        const emptyProfile = emptyArcadeProfile(world.authIdentity.user_id)
 
         if (request.method() === 'POST' && request.url().includes('/claim')) {
           const body = request.postDataJSON() as {
@@ -497,7 +515,12 @@ export const test = base.extend<{ world: World }>({
             status: 200,
             contentType: 'application/json',
             headers: { 'Cache-Control': 'no-store' },
-            body: JSON.stringify({ profile: emptyProfile, source_keys: sourceKeys, inserted: 0 }),
+            body: JSON.stringify({
+              profile: emptyProfile,
+              source_keys: sourceKeys,
+              inserted: 0,
+              public_profile: { claimed: true, public_label: 'Player E2E' },
+            }),
           })
           return
         }
@@ -506,7 +529,10 @@ export const test = base.extend<{ world: World }>({
           status: 200,
           contentType: 'application/json',
           headers: { 'Cache-Control': 'no-store' },
-          body: JSON.stringify({ profile: emptyProfile }),
+          body: JSON.stringify({
+            profile: emptyProfile,
+            public_profile: { claimed: false, public_label: null },
+          }),
         })
       })
 

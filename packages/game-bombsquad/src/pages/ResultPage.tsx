@@ -2,7 +2,13 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import { Scenery } from '@amiclaw/ui'
-import { recordBombSquadLocalRun } from '@amiclaw/arcade-profile/local'
+import {
+  markArcadeProfileEventsClaimed,
+  readArcadeLocalProfile,
+  recordBombSquadLocalRun,
+  summarizeArcadeLocalProfile,
+} from '@amiclaw/arcade-profile/local'
+import type { ArcadeDailyLoopSummary } from '@amiclaw/arcade-profile/types'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
 import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
@@ -50,6 +56,8 @@ const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
 /** The result screen has two visual variants (handoff README §6.6 / §6.7). */
 type ResultVariant = 'success' | 'failure'
 type PostGameModalPurpose = 'leaderboard' | 'survey'
+type ProfileSaveState = 'idle' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
+type ShareState = 'idle' | 'shared' | 'copied' | 'error'
 
 /**
  * Map a frozen game outcome to a result variant. `defused` and
@@ -87,6 +95,9 @@ export default function ResultPage() {
   const [submitFailKind, setSubmitFailKind] = useState<'network' | 'rejected' | null>(null)
   const [submitFailMessage, setSubmitFailMessage] = useState<string | null>(null)
   const [entryRecovery] = useState(() => readEntryRecoveryState())
+  const [profileSaveState, setProfileSaveState] = useState<ProfileSaveState>('idle')
+  const [dailyLoop, setDailyLoop] = useState<ArcadeDailyLoopSummary | null>(null)
+  const [shareState, setShareState] = useState<ShareState>('idle')
 
   // Fall back to `defused` for any legacy RESULT state persisted before the
   // game-modes rework added the `outcome` field.
@@ -128,7 +139,34 @@ export default function ResultPage() {
       finishedAt: new Date(state.totalEndTime ?? Date.now()).toISOString(),
     })
     if (event) {
-      void submitArcadeProfileEvent(event)
+      if (event.kind !== 'bombsquad_run') {
+        queueMicrotask(() => setProfileSaveState('unavailable'))
+        return
+      }
+      const sourceKey = event.run.source_key
+      const localProfile = readArcadeLocalProfile()
+      const localSaved =
+        localProfile?.bombsquad_runs.some((run) => run.source_key === sourceKey) ?? false
+      const localDailyLoop = localSaved
+        ? summarizeArcadeLocalProfile(localProfile).daily_loop
+        : null
+      queueMicrotask(() => {
+        setProfileSaveState(localSaved ? 'saved-local' : 'unavailable')
+        if (localDailyLoop) setDailyLoop(localDailyLoop)
+      })
+      submitArcadeProfileEvent(event).then((result) => {
+        if (result.kind === 'ok') {
+          markArcadeProfileEventsClaimed([sourceKey])
+          setProfileSaveState('synced')
+          setDailyLoop(result.profile.daily_loop)
+        } else if (result.kind === 'anon') {
+          setProfileSaveState(localSaved ? 'saved-local' : 'unavailable')
+        } else {
+          setProfileSaveState(localSaved ? 'account-error' : 'unavailable')
+        }
+      })
+    } else {
+      queueMicrotask(() => setProfileSaveState('unavailable'))
     }
   }, [
     noRunData,
@@ -384,6 +422,38 @@ export default function ResultPage() {
     performSubmission(nickname, leaderboardMetadata)
   }, [performSubmission, nickname, leaderboardMetadata])
 
+  const buildShareText = useCallback(() => {
+    const time = totalMs !== null ? formatMs(totalMs) : '一局'
+    const mode = state.mode === 'daily' ? 'BombSquad 每日挑战' : 'BombSquad 练习'
+    const result = variant === 'success' ? '完成' : '差一点'
+    const streak =
+      state.mode === 'daily' && outcome === 'defused' && dailyLoop
+        ? ` · 连续 ${dailyLoop.streak.current_days} 天`
+        : ''
+    return `${mode} ${result}：${time}${streak}。来 AMIO 游乐场一起玩：${window.location.origin}/bombsquad/`
+  }, [dailyLoop, outcome, state.mode, totalMs, variant])
+
+  const handleShareResult = useCallback(async () => {
+    const text = buildShareText()
+    try {
+      const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
+      if (share) {
+        await share({
+          title: 'AMIO Arcade BombSquad',
+          text,
+          url: `${window.location.origin}/bombsquad/`,
+        })
+        setShareState('shared')
+        return
+      }
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
+      await navigator.clipboard.writeText(text)
+      setShareState('copied')
+    } catch {
+      setShareState('error')
+    }
+  }, [buildShareText])
+
   const handlePlayAgain = () => {
     // Emit BEFORE the RESET so we still capture the just-finished run's mode
     // and attempt number — after RESET those revert to INITIAL_STATE values
@@ -488,6 +558,7 @@ export default function ResultPage() {
     stuckKind !== undefined ? `${modeMeta} · 卡在${MODULE_LABEL[stuckKind] ?? stuckKind}` : modeMeta
 
   const showRankCard = variant === 'success' && state.mode === 'daily' && outcome === 'defused'
+  const showDailyLoopCard = totalMs !== null && state.gameRunId !== null
   const showBreakdown = state.moduleStats.length > 0
   const breakdownTitle = variant === 'success' ? '模块用时' : '本局回顾'
   const okMarker = variant === 'success' ? '— —' : '✓'
@@ -579,6 +650,46 @@ export default function ResultPage() {
             </div>
           )}
 
+          {showDailyLoopCard && (
+            <div className={styles.loopCard}>
+              <div>
+                <div className={styles.loopLabel}>我的档案</div>
+                <div className={styles.loopTitle}>{profileSaveText(profileSaveState)}</div>
+                <p className={styles.loopText}>
+                  {state.mode === 'daily' &&
+                  outcome === 'defused' &&
+                  dailyLoop?.streak.today_completed
+                    ? `今日已打卡 · 连续 ${dailyLoop.streak.current_days} 天 · 最长 ${dailyLoop.streak.longest_days} 天`
+                    : state.mode === 'daily' && outcome === 'defused'
+                      ? '本局已保存；连续打卡状态以今日活动为准。'
+                      : '本局已保存；练习、失败和超时不计入连续打卡。'}
+                </p>
+                {shareState !== 'idle' && (
+                  <p className={styles.shareStatus}>{shareStatusText(shareState)}</p>
+                )}
+              </div>
+              <div className={styles.loopActions}>
+                <button type="button" className={styles.loopAction} onClick={handleShareResult}>
+                  分享今日成绩
+                </button>
+                <button
+                  type="button"
+                  className={styles.loopAction}
+                  onClick={() => window.location.assign('/leaderboard')}
+                >
+                  查看排行榜
+                </button>
+                <button
+                  type="button"
+                  className={styles.loopAction}
+                  onClick={() => window.location.assign('/me')}
+                >
+                  保存到我的档案
+                </button>
+              </div>
+            </div>
+          )}
+
           {variant === 'failure' && (
             <div className={styles.quote}>
               <div className={styles.quoteLabel}>AI 说</div>
@@ -658,4 +769,32 @@ export default function ResultPage() {
       />
     </main>
   )
+}
+
+function profileSaveText(state: ProfileSaveState): string {
+  switch (state) {
+    case 'synced':
+      return '已保存到账号档案'
+    case 'saved-local':
+      return '已保存到本设备'
+    case 'account-error':
+      return '本设备已保存，账号同步失败'
+    case 'unavailable':
+      return '本局暂未写入档案'
+    default:
+      return '保存中…'
+  }
+}
+
+function shareStatusText(state: ShareState): string {
+  switch (state) {
+    case 'shared':
+      return '已打开系统分享。'
+    case 'copied':
+      return '分享文案已复制。'
+    case 'error':
+      return '分享失败，请稍后再试。'
+    default:
+      return ''
+  }
 }

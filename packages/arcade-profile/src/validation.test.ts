@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseArcadeProfileClaimBody, parseArcadeProfileEvent } from './validation'
+import {
+  defaultArcadePublicLabel,
+  parseArcadeProfileClaimBody,
+  parseArcadeProfileEvent,
+  sanitizeArcadePublicLabel,
+} from './validation'
 
 const RUN_EVENT = {
   kind: 'bombsquad_run',
@@ -40,8 +45,19 @@ describe('arcade profile validation', () => {
     const claim = parseArcadeProfileClaimBody({
       profile_id: 'profile-claim',
       events: [{ ...RUN_EVENT, profile_id: undefined }],
+      public_label: 'Atlas Player',
     })
     expect(claim?.events[0].profile_id).toBe('profile-claim')
+    expect(claim?.public_label).toBe('Atlas Player')
     expect(parseArcadeProfileClaimBody({ profile_id: 'p', user_id: 'u', events: [] })).toBeNull()
+  })
+
+  it('sanitizes public labels and falls back without deriving from email text', () => {
+    const fallback = defaultArcadePublicLabel('user-a')
+
+    expect(sanitizeArcadePublicLabel('  Atlas   Player  ', 'user-a')).toBe('Atlas Player')
+    expect(sanitizeArcadePublicLabel('a@example.com', 'user-a')).toBe(fallback)
+    expect(sanitizeArcadePublicLabel('', 'user-a')).toBe(fallback)
+    expect(sanitizeArcadePublicLabel('x'.repeat(40), 'user-a')).toBe('x'.repeat(28))
   })
 })

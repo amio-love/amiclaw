@@ -1,23 +1,41 @@
 import { EyebrowTag } from '@amiclaw/ui'
 import DailyLeaderboardList from '@/components/leaderboard/DailyLeaderboardList'
+import StreakLeaderboardList from '@/components/leaderboard/StreakLeaderboardList'
 import { toChineseDateString } from '@shared/date'
 import styles from './LeaderboardPage.module.css'
 
-/* Leaderboard page — handoff §6.9. Only the 每日 board exists: it reads the
-   real daily API (DailyLeaderboardList). There is NO week / month / all-time
-   aggregation backend (the API stores per-day KV only), so those tabs are not
-   shown — surfacing them would promise aggregates the product does not track. */
+/* Leaderboard page — BombSquad's daily time board remains the KV-backed daily
+   leaderboard. The public streak board is a separate arcade-profile read
+   model backed by claimed public profiles, not by leaderboard rows. */
 export default function LeaderboardPage() {
   return (
     <div className={styles.page}>
       <EyebrowTag variant="section">排行榜 · LEADERBOARD</EyebrowTag>
       <h2 className={styles.title}>
-        BombSquad · <span className={styles.accent}>每日</span>
+        Arcade · <span className={styles.accent}>每日</span>
       </h2>
       <p className={styles.lead}>{toChineseDateString()} · 每日 UTC 0 点重置。</p>
 
-      <div className={styles.card}>
-        <DailyLeaderboardList />
+      <div className={styles.boardGrid}>
+        <section className={styles.boardSection}>
+          <div className={styles.sectionHead}>
+            <h3 className={styles.sectionTitle}>BombSquad 每日时间榜</h3>
+            <p className={styles.sectionLead}>只记录成功拆除的每日挑战成绩。</p>
+          </div>
+          <div className={styles.card}>
+            <DailyLeaderboardList />
+          </div>
+        </section>
+
+        <section className={styles.boardSection}>
+          <div className={styles.sectionHead}>
+            <h3 className={styles.sectionTitle}>连续打卡榜</h3>
+            <p className={styles.sectionLead}>登录并保存到账号后公开展示上榜名。</p>
+          </div>
+          <div className={styles.card}>
+            <StreakLeaderboardList />
+          </div>
+        </section>
       </div>
     </div>
   )
