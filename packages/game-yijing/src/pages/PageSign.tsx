@@ -1,5 +1,9 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Scenery } from '@amiclaw/ui'
+import { recordOracleLocalSign } from '@amiclaw/arcade-profile/local'
+import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
+import { getTodayString } from '@shared/date'
 import { Hexagram } from '../glyphs'
 import { changedValues, ganzhi, hexagramFromBinary, type YaoSextet } from '../glyphs/utils'
 import { useSession } from '../session'
@@ -24,12 +28,26 @@ function todayCN(): string {
 
 export function PageSign() {
   const navigate = useNavigate()
-  const { yaoValues } = useSession()
+  const { sessionId, yaoValues } = useSession()
 
   const values: YaoSextet = yaoValues ?? DEMO_YAO
   const changed = changedValues(values) as unknown as YaoSextet
   const [, benCn] = hexagramFromBinary(values)
   const [, bianCn] = hexagramFromBinary(changed)
+
+  useEffect(() => {
+    if (yaoValues === null) return
+    const event = recordOracleLocalSign({
+      sessionId,
+      signDate: getTodayString(),
+      ben: benCn,
+      bian: bianCn,
+      yaoValues: [...yaoValues] as [number, number, number, number, number, number],
+    })
+    if (event) {
+      void submitArcadeProfileEvent(event)
+    }
+  }, [bianCn, benCn, sessionId, yaoValues])
 
   return (
     <main className={styles.page}>

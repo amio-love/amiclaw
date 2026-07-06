@@ -462,6 +462,54 @@ export const test = base.extend<{ world: World }>({
         })
       })
 
+      // Arcade profile — the static-build harness has no D1 or auth cookie
+      // runtime. Signed-in scenarios get an honest empty account profile; signed-
+      // out scenarios get the same 401 shape as production.
+      await page.route('**/api/arcade/profile**', async (route) => {
+        if (!world.authIdentity) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'unauthorized' }),
+          })
+          return
+        }
+
+        const request = route.request()
+        const emptyProfile = {
+          profile_id: world.authIdentity.user_id,
+          last_activity_at: null,
+          today_played: false,
+          counts: { bombsquad_runs: 0, oracle_signs: 0 },
+          bombsquad: { recent: null, best_daily: null, best_practice: null },
+          oracle: { recent: null },
+        }
+
+        if (request.method() === 'POST' && request.url().includes('/claim')) {
+          const body = request.postDataJSON() as {
+            events?: Array<{ run?: { source_key?: string }; sign?: { source_key?: string } }>
+          }
+          const sourceKeys =
+            body.events
+              ?.map((event) => event.run?.source_key ?? event.sign?.source_key)
+              .filter((key): key is string => typeof key === 'string') ?? []
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ profile: emptyProfile, source_keys: sourceKeys, inserted: 0 }),
+          })
+          return
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({ profile: emptyProfile }),
+        })
+      })
+
       // Companion identity read (GET /api/companion). 404 until setup, then the
       // created identity. The static build has no Workers runtime, so the
       // companion control plane is route-mocked exactly like the auth session.

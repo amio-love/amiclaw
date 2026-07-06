@@ -1,0 +1,23 @@
+{
+  "name": "@amiclaw/arcade-profile",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./api-client": "./src/api-client.ts",
+    "./local": "./src/local.ts",
+    "./store": "./src/store.ts",
+    "./types": "./src/types.ts",
+    "./validation": "./src/validation.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260621.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

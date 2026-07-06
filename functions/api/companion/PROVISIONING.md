@@ -1,7 +1,9 @@
 # Companion Memory — out-of-band provisioning
 
-The companion-memory backend needs one **D1 database** (the repo's first)
-bound in TWO places — the Cloudflare **Pages** project (the
+The account data backend currently uses one **D1 database** (the repo's first).
+It was introduced for companion-memory and is now also used by the
+arcade-profile component for small account-owned game profile records. The same
+physical database is bound in TWO places — the Cloudflare **Pages** project (the
 `/api/companion/*` control plane) and the **platform-ai Worker** (resolver
 read at session assembly + the consolidator's writes). Same database, two
 binding points, both with the variable name `COMPANION_DB`.
@@ -9,7 +11,8 @@ binding points, both with the variable name `COMPANION_DB`.
 The code ships inert without the bindings: the control plane returns errors
 only when called, the voice pipeline runs memory-less, and the tests run with
 zero configuration (they use an in-process SQLite stand-in). The steps below
-are required only for production / preview to actually persist memories.
+are required only for production / preview to actually persist memories and
+account Arcade profile records.
 
 ## 1. Create the database and apply migrations
 
@@ -17,9 +20,11 @@ are required only for production / preview to actually persist memories.
 wrangler d1 create amiclaw-companion
 ```
 
-Copy the `database_id` from the output, then apply the schema (the migrations
-SSOT lives in `packages/companion-memory/migrations/`; the platform-ai
-`wrangler.toml` points its `migrations_dir` there):
+Copy the `database_id` from the output, then apply the schema. The physical
+migrations SSOT currently lives in `packages/companion-memory/migrations/`
+because that package created the database first; migration `0002` adds
+arcade-profile tables owned by `packages/arcade-profile`, not by Companion
+Memory. The platform-ai `wrangler.toml` points its `migrations_dir` there:
 
 ```sh
 cd packages/platform-ai

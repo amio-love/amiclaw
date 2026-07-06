@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import { Scenery } from '@amiclaw/ui'
+import { recordBombSquadLocalRun } from '@amiclaw/arcade-profile/local'
+import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
 import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
@@ -110,6 +112,36 @@ export default function ResultPage() {
     state.totalStartTime !== null && state.totalEndTime !== null
       ? state.totalEndTime - state.totalStartTime
       : null
+
+  useEffect(() => {
+    if (noRunData) return
+    if (totalMs === null || state.gameRunId === null || state.outcome === null) return
+    const event = recordBombSquadLocalRun({
+      runId: state.gameRunId,
+      mode: state.mode,
+      outcome: state.outcome,
+      durationMs: totalMs,
+      attemptNumber: state.attemptNumber,
+      moduleCount: state.moduleSequence.length,
+      completedModules: state.moduleStats.length,
+      strikeCount: state.strikeCount,
+      finishedAt: new Date(state.totalEndTime ?? Date.now()).toISOString(),
+    })
+    if (event) {
+      void submitArcadeProfileEvent(event)
+    }
+  }, [
+    noRunData,
+    totalMs,
+    state.gameRunId,
+    state.outcome,
+    state.mode,
+    state.attemptNumber,
+    state.moduleSequence.length,
+    state.moduleStats.length,
+    state.strikeCount,
+    state.totalEndTime,
+  ])
 
   // Daily mode submits a score — but only on a successful defuse. An
   // exploded run never submits and never asks for a nickname. Practice mode

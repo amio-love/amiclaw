@@ -2,12 +2,13 @@ import { EyebrowTag, GlassCard } from '@amiclaw/ui'
 import styles from './TermsPage.module.css'
 
 const CONTACT_EMAIL = 'hi@amio.love'
-const EFFECTIVE_DATE = '2026-07-04'
+const EFFECTIVE_DATE = '2026-07-06'
 
 /* Terms-of-service page — a production-grade Chinese user agreement for
    AMIO Arcade (claw.amio.fans). Mirrors the real service shape: anonymous
-   bring-your-own-AI play, account-gated platform-AI play, companion memory
-   controls, public leaderboard content, and third-party AI providers.
+   bring-your-own-AI play, local Arcade profiles, account claims,
+   account-gated platform-AI play, companion memory controls, public
+   leaderboard content, and third-party AI providers.
    Platform chrome — every accent is brand yellow; no BombSquad cyan here. */
 export default function TermsPage() {
   return (
@@ -57,8 +58,13 @@ export default function TermsPage() {
               游玩无须登录，我们通过你浏览器本地生成的设备标识符区分设备。你在提交成绩时填写的昵称仅用于排行榜标识，不构成对你真实身份的认证。
             </p>
             <p>
-              平台 AI 伙伴和 Companion Memory 需要登录。你可通过邮件登录或 Google
-              登录建立账号会话，并应自行妥善管理邮箱、Google
+              不登录时，本服务可以在你的浏览器本地保存 Arcade 档案，用来在我的页显示本设备上的
+              BombSquad
+              和卦签记录。登录后，你可以选择把本设备记录保存到账号；该保存动作只影响账号内档案，不会自动修改或补交公开排行榜成绩。
+            </p>
+            <p>
+              平台 AI 伙伴、账号内 Arcade 档案和 Companion Memory 需要登录。你可通过邮件登录或
+              Google 登录建立账号会话，并应自行妥善管理邮箱、Google
               账号、设备和会话。如果发现账号或会话被未经授权使用，请及时联系我们。
             </p>
           </section>
@@ -83,6 +89,11 @@ export default function TermsPage() {
             <p>
               你提交的昵称，以及你所填写的 AI
               工具与模型信息，将在每日排行榜上公开展示。提交即表示你授权我们为运营本服务之目的展示、存储与处理这些内容。
+            </p>
+            <p>
+              你保存到账号内的 Arcade
+              档案记录用于个人页展示和账号内同步，不作为公开排行榜内容展示。公开排行榜仍只展示你主动提交上榜的昵称、成绩和
+              AI 工具信息。
             </p>
             <p>
               当你使用平台 AI

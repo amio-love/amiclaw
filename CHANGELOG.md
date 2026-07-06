@@ -5,6 +5,14 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your page now shows real local and account Arcade records** - New. Anonymous
+players now get a browser-local Arcade profile that records BombSquad results
+and real Oracle signs, so `/me` shows this device's actual play history instead
+of a promise card. Signed-in players can explicitly save unclaimed local records
+to their account, and new signed-in results are written to the account profile
+idempotently. Public leaderboard rows are unchanged and are never backfilled by
+profile claims.
+
 **BombSquad mode② voice sessions are easier to diagnose** - Change. The
 platform-AI worker now attaches the same opaque session id to the structured
 trace lines for a voice run's ASR, LLM, TTS, and turn-settle boundaries. When a

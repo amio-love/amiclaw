@@ -54,21 +54,25 @@ Then('a magic-link request was sent for my email', async ({ world }) => {
   expect(world.magicLinkRequests.at(-1)).toMatchObject({ email: TEST_EMAIL })
 })
 
-// --- signed-out /me guide ----------------------------------------------------
+// --- signed-out /me local profile -------------------------------------------
 
 Then('I see the account login guide and no fake profile', async ({ page }) => {
   // Scope to the routed page content (<main>): the TopNav shell also renders a
   // 登录 / 注册 auth entry (substring-matched by name '登录'), so page-wide
   // role/text queries would be ambiguous.
   const main = page.getByRole('main')
-  // Exact match targets the guide-card title (the page header carries the same
-  // text plus a trailing 。, so a substring match would hit both).
-  await expect(main.getByText('登录后查看你的星轨', { exact: true })).toBeVisible()
-  await expect(main.getByText('战绩与单局完成率')).toBeVisible()
+  await expect(main.getByText('本设备的星轨。')).toBeVisible()
+  await expect(main.getByText('保存到账号', { exact: true })).toBeVisible()
+  await expect(
+    main.getByText('登录后可以把这台设备上的 BombSquad 和卦签记录保存到账号。')
+  ).toBeVisible()
+  await expect(main.getByText('今日')).toBeVisible()
+  await expect(main.getByText('未开始')).toBeVisible()
   await expect(main.getByRole('link', { name: '登录' })).toBeVisible()
   // No retired mock-profile content for anyone now.
   await expect(main.getByText('林星海')).toHaveCount(0)
   await expect(main.getByText('最近 5 局')).toHaveCount(0)
+  await expect(main.getByText('登录后查看你的星轨')).toHaveCount(0)
 })
 
 When('I click the login guide CTA', async ({ page }) => {
@@ -97,10 +101,15 @@ Then('I see my real identity from the session', async ({ page }) => {
 Then('I see the honest empty stats state with a play CTA', async ({ page }) => {
   // No fabricated numbers, no「即将推出」placeholder — an honest empty state.
   const main = page.getByRole('main')
-  await expect(main.getByText('还没有成绩，去玩一局。')).toBeVisible()
+  await expect(main.getByText('账号记录')).toBeVisible()
+  await expect(main.getByText('未开始')).toBeVisible()
+  await expect(main.getByText('还没有记录').first()).toBeVisible()
+  await expect(main.getByText('无记录').first()).toBeVisible()
   await expect(main.getByRole('link', { name: '开始玩' })).toBeVisible()
 })
 
 Then('the account login guide is not shown', async ({ page }) => {
-  await expect(page.getByRole('main').getByText('登录后查看你的星轨')).toHaveCount(0)
+  const main = page.getByRole('main')
+  await expect(main.getByText('登录后查看你的星轨')).toHaveCount(0)
+  await expect(main.getByText('本设备的星轨。')).toHaveCount(0)
 })
