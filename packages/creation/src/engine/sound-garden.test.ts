@@ -68,6 +68,38 @@ describe('GameSession — scripted sg-demo-001 build to win', () => {
     expect(!missing.ok && missing.reason).toContain('target element')
   })
 
+  it('honors declared action params: place_piece accepts its declared slot arg', () => {
+    // place_piece declares {slot: int} in the action_registry; a caller
+    // supplying it is schema-conformant and must NOT be rejected (pre-fix the
+    // engine hardcoded element_id/action_type and errored on "slot"). The
+    // arg is call payload — placement still reads the element's own
+    // timeline_slot, so the pair scores as usual.
+    const session = new GameSession(gameType, level)
+    const placed = session.performAction('rhythm_builder', 'place_piece', {
+      element_id: 'r1',
+      slot: 1,
+    })
+    expect(placed.ok).toBe(true)
+    session.performAction('melody_builder', 'place_piece', { element_id: 'm1', slot: 1 })
+    expect(session.score()).toBe(3)
+    const removed = session.performAction('melody_builder', 'remove_piece', {
+      element_id: 'm1',
+      slot: 1,
+    })
+    expect(removed.ok).toBe(true)
+    expect(session.score()).toBe(0)
+  })
+
+  it('still rejects a truly-unknown arg key', () => {
+    const session = new GameSession(gameType, level)
+    const unknown = session.performAction('rhythm_builder', 'place_piece', {
+      element_id: 'r1',
+      velocity: 9,
+    })
+    expect(unknown.ok).toBe(false)
+    expect(!unknown.ok && unknown.reason).toContain('velocity')
+  })
+
   it('a noise pair (snare+flute on one slot) reduces the score per the matrix', () => {
     const noisy = structuredClone(level)
     const m3 = noisy.elements.find((element) => element.id === 'm3')

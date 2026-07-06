@@ -164,15 +164,18 @@ export function constructionEffectsForArchetype(
 }
 
 /**
- * Can some role act on this archetype — i.e. perform a player-performable
- * action (scope != rule_verb) whose target_archetypes covers it (empty list
- * = all)? This mirrors performAction's role + target_archetypes gate: a rule
- * fires only as a side effect of a successful action on one of its target
- * elements, so a rule targeting only un-actable archetypes can never fire in
- * the live engine. The solver uses this to keep rule-move reachability a
- * subset of engine reachability (no false-positive publishability).
+ * Can some role drive action_event_mapping events on this archetype — i.e.
+ * perform a player-performable action (scope != rule_verb) that DECLARES an
+ * `action_type` param AND may target the archetype (target_archetypes; empty
+ * list = all)? Mirrors performAction's event path exactly: only an action
+ * declaring an action_type param may carry one, and actionEvent() maps that
+ * value to a state_transition event. The action_type VALUE is a free string
+ * (param_def declares no value domain), so any such action can produce any
+ * mapping row's event — per-archetype granularity IS the engine's
+ * reachability. The solver uses this to keep state_transition moves a subset
+ * of engine reachability (no false-positive publishability).
  */
-export function elementArchetypeActable(gameType: GameType, archetypeId: string): boolean {
+export function eventDrivableOnArchetype(gameType: GameType, archetypeId: string): boolean {
   for (const capability of gameType.information_partition_template?.action_capability ?? []) {
     if (
       capability.target_archetypes.length > 0 &&
@@ -182,7 +185,13 @@ export function elementArchetypeActable(gameType: GameType, archetypeId: string)
     }
     for (const actionName of capability.can_perform) {
       const action = gameType.action_registry.find((entry) => entry.name === actionName)
-      if (action && action.scope !== 'rule_verb') return true
+      if (
+        action &&
+        action.scope !== 'rule_verb' &&
+        action.params.some((param) => param.name === 'action_type')
+      ) {
+        return true
+      }
     }
   }
   return false
@@ -201,7 +210,7 @@ export function actionTriggers(
  * player-performable action (scope != rule_verb) that BOTH triggers the
  * template (lists it in `triggers`) AND may target the archetype
  * (target_archetypes; empty list = all)? The trigger-gated counterpart of
- * elementArchetypeActable, mirroring performAction + the engine's per-kind
+ * eventDrivableOnArchetype, mirroring performAction + the engine's per-kind
  * trigger gate for temporal_sequence / condition_action / interaction_matrix:
  * such a rule fires only when a triggering action lands on one of its target
  * elements, so the solver keeps its move for the rule only when a real
@@ -390,6 +399,10 @@ export function applyStateEffect(
   }
   const current = machine.get(primary.name)
   const index = primary.values.indexOf(String(current))
+  // Unknown CURRENT value (e.g. a typo'd GameType state initial) is rejected
+  // as a no-op too — advance_state must never launder it into values[0], nor
+  // complete_state into the terminal value (same G6 discipline as effects).
+  if (index < 0) return false
   const lastIndex = primary.values.length - 1
   const nextIndex = effect === 'complete_state' ? lastIndex : Math.min(index + 1, lastIndex)
   if (index === nextIndex) return false

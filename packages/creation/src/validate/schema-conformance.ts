@@ -45,6 +45,198 @@ import {
   WILDCARD,
 } from './helpers'
 
+/**
+ * Structural shape gate (pre-check). The loader's narrowing only asserts
+ * top-level fields PRESENT, so a malformed document (`elements: {}`,
+ * `rules: "x"`, …) can reach the validator typed as a Level — and every
+ * check iterates these collections, so it would THROW instead of reporting.
+ * Validating shape first turns those exceptions into the report contract
+ * (schema_conformance violations with field_path), keeping the public
+ * validator total over adversarial AI-authored input. validateLevel runs
+ * this FIRST and short-circuits on any violation — the semantic checks
+ * assume the shapes below.
+ */
+export function levelShapeViolations(level: Level): Violation[] {
+  const violations: Violation[] = []
+  const describeShape = (value: unknown): string => {
+    if (value === null) return 'null'
+    if (value === undefined) return 'missing'
+    if (Array.isArray(value)) return 'a sequence'
+    return `a ${typeof value}`
+  }
+  const requireShape = (ok: boolean, path: string, expected: string, actual: unknown): boolean => {
+    if (ok) return true
+    violations.push({
+      severity: 'error',
+      field_path: path,
+      constraint: 'structural_shape',
+      expected,
+      actual: describeShape(actual),
+      suggestion: `Rewrite ${path} as ${expected} — the validator cannot interpret this shape`,
+    })
+    return false
+  }
+
+  requireShape(isMappingValue(level.metadata), 'metadata', 'a mapping', level.metadata)
+  requireShape(isMappingValue(level.difficulty), 'difficulty', 'a mapping', level.difficulty)
+  requireShape(
+    isMappingValue(level.communication_estimate),
+    'communication_estimate',
+    'a mapping',
+    level.communication_estimate
+  )
+
+  if (requireShape(Array.isArray(level.elements), 'elements', 'an array', level.elements)) {
+    level.elements.forEach((element, i) => {
+      if (!requireShape(isMappingValue(element), `elements[${i}]`, 'a mapping', element)) return
+      requireShape(
+        isMappingValue(element.params),
+        `elements[${i}].params`,
+        'a mapping',
+        element.params
+      )
+      if (element.initial_states !== undefined) {
+        requireShape(
+          isMappingValue(element.initial_states),
+          `elements[${i}].initial_states`,
+          'a mapping',
+          element.initial_states
+        )
+      }
+    })
+  }
+
+  if (requireShape(Array.isArray(level.rules), 'rules', 'an array', level.rules)) {
+    level.rules.forEach((rule, i) => {
+      if (!requireShape(isMappingValue(rule), `rules[${i}]`, 'a mapping', rule)) return
+      requireShape(
+        isMappingValue(rule.bindings),
+        `rules[${i}].bindings`,
+        'a mapping',
+        rule.bindings
+      )
+      requireShape(
+        Array.isArray(rule.target_elements),
+        `rules[${i}].target_elements`,
+        'an array',
+        rule.target_elements
+      )
+    })
+  }
+
+  if (
+    requireShape(
+      isMappingValue(level.information_partition),
+      'information_partition',
+      'a mapping',
+      level.information_partition
+    ) &&
+    requireShape(
+      Array.isArray(level.information_partition.role_assignments),
+      'information_partition.role_assignments',
+      'an array',
+      level.information_partition.role_assignments
+    )
+  ) {
+    level.information_partition.role_assignments.forEach((assignment, i) => {
+      const base = `information_partition.role_assignments[${i}]`
+      if (!requireShape(isMappingValue(assignment), base, 'a mapping', assignment)) return
+      if (
+        !requireShape(
+          Array.isArray(assignment.element_views),
+          `${base}.element_views`,
+          'an array',
+          assignment.element_views
+        )
+      ) {
+        return
+      }
+      assignment.element_views.forEach((view, j) => {
+        const viewPath = `${base}.element_views[${j}]`
+        if (!requireShape(isMappingValue(view), viewPath, 'a mapping', view)) return
+        requireShape(
+          Array.isArray(view.visible_attributes),
+          `${viewPath}.visible_attributes`,
+          'an array',
+          view.visible_attributes
+        )
+        requireShape(
+          Array.isArray(view.visible_states),
+          `${viewPath}.visible_states`,
+          'an array',
+          view.visible_states
+        )
+      })
+    })
+  }
+
+  if (
+    requireShape(
+      isMappingValue(level.win_condition),
+      'win_condition',
+      'a mapping',
+      level.win_condition
+    )
+  ) {
+    requireShape(
+      isMappingValue(level.win_condition.params),
+      'win_condition.params',
+      'a mapping',
+      level.win_condition.params
+    )
+  }
+
+  if (level.initial_state !== undefined) {
+    if (
+      requireShape(
+        isMappingValue(level.initial_state),
+        'initial_state',
+        'a mapping',
+        level.initial_state
+      )
+    ) {
+      requireShape(
+        Array.isArray(level.initial_state.occupied),
+        'initial_state.occupied',
+        'an array',
+        level.initial_state.occupied
+      )
+    }
+  }
+
+  if (level.available_materials !== undefined) {
+    if (
+      requireShape(
+        isMappingValue(level.available_materials),
+        'available_materials',
+        'a mapping',
+        level.available_materials
+      )
+    ) {
+      for (const [role, entries] of Object.entries(level.available_materials)) {
+        requireShape(Array.isArray(entries), `available_materials.${role}`, 'an array', entries)
+      }
+    }
+  }
+
+  if (level.communication_surfaces !== undefined) {
+    if (
+      requireShape(
+        Array.isArray(level.communication_surfaces),
+        'communication_surfaces',
+        'an array',
+        level.communication_surfaces
+      )
+    ) {
+      level.communication_surfaces.forEach((surface, i) => {
+        requireShape(isMappingValue(surface), `communication_surfaces[${i}]`, 'a mapping', surface)
+      })
+    }
+  }
+
+  return violations
+}
+
 export function checkSchemaConformance(
   gameType: GameType,
   level: Level,
@@ -88,6 +280,27 @@ export function checkSchemaConformance(
         'Register the new co-play form (with its floor checks) in the CoPlayFormCatalog, or declare a registered form',
     })
   }
+
+  // Element instance ids must be unique BEFORE any reference resolution:
+  // elementsById keeps only the last duplicate, so rules / win-condition /
+  // view references would silently collapse onto one instance.
+  const seenElementIds = new Map<string, number>()
+  level.elements.forEach((element, i) => {
+    const first = seenElementIds.get(element.id)
+    if (first !== undefined) {
+      violations.push({
+        severity: 'error',
+        field_path: `elements[${i}].id`,
+        constraint: 'element_id_unique',
+        expected: 'a level-unique element instance id',
+        actual: `"${element.id}" already declared at elements[${first}]`,
+        suggestion: `Rename one of the "${element.id}" instances — duplicate ids make rule and win-condition references ambiguous`,
+        related_elements: [element.id],
+      })
+    } else {
+      seenElementIds.set(element.id, i)
+    }
+  })
 
   level.elements.forEach((element, i) => {
     const archetype = archetypes.get(element.archetype)
@@ -524,6 +737,15 @@ function validateRuleBindings(
         const typeViolation = checkParamValueType(param.type, value, path)
         if (typeViolation) violations.push(typeViolation)
       }
+      // Every declared step param is REQUIRED (param_def has no optional
+      // marker): a missing binding (e.g. decrypt_step without cipher_key_id)
+      // would strip the level of its material/solution data yet still play
+      // structurally — reject it before it can publish.
+      for (const name of params.keys()) {
+        if (rule.bindings[name] === undefined || rule.bindings[name] === null) {
+          violations.push(missingBindingParam(`${basePath}.${name}`, name, template.id))
+        }
+      }
       return
     }
   }
@@ -542,6 +764,18 @@ function unknownBindingKey(
     expected: `one of [${legalKeys.join(', ')}]`,
     actual: key,
     suggestion: `Use the canonical binding shape for template "${templateId}" (spec Mechanism binding contract)`,
+  }
+}
+
+/** A declared param with no bound value (param_def has no optional marker). */
+function missingBindingParam(path: string, name: string, owner: string): Violation {
+  return {
+    severity: 'error',
+    field_path: path,
+    constraint: 'binding_param_required',
+    expected: `a value for declared param "${name}"`,
+    actual: 'missing',
+    suggestion: `Bind "${name}" (declared by "${owner}") — every declared param is required until the schema grows an optional marker`,
   }
 }
 
@@ -592,7 +826,7 @@ function validatePredicatesBinding(
       })
       return
     }
-    validateInlinedParams(predicate.params, inlined, entryPath, violations)
+    validateInlinedParams(predicate.params, inlined, entryPath, violations, predicate.name)
   })
 }
 
@@ -655,7 +889,7 @@ function validateActionBinding(
     return
   }
   const registryEntry = gameType.action_registry.find((action) => action.name === verb)
-  validateInlinedParams(registryEntry?.params ?? [], inlined, path, violations)
+  validateInlinedParams(registryEntry?.params ?? [], inlined, path, violations, verb)
 }
 
 /** Controlled transitions[] binding: [state, event, next_state] rows. */
@@ -754,14 +988,26 @@ function rowValueViolation(
   }
 }
 
-/** Inlined controlled params: unknown keys rejected, leaf values stay flat. */
+/**
+ * Inlined controlled params: unknown keys rejected, leaf values stay flat,
+ * and EVERY declared param must be present (param_def has no optional
+ * marker) — a predicate instantiated without its params would evaluate
+ * unconditionally (evaluatePredicates has nothing to compare), turning e.g.
+ * `{name: species_is}` into an always-true condition.
+ */
 function validateInlinedParams(
   paramDefs: ParamDef[],
   inlined: Record<string, unknown>,
   basePath: string,
-  violations: Violation[]
+  violations: Violation[],
+  owner: string
 ): void {
   const defs = new Map(paramDefs.map((p) => [p.name, p]))
+  for (const name of defs.keys()) {
+    if (inlined[name] === undefined || inlined[name] === null) {
+      violations.push(missingBindingParam(`${basePath}.${name}`, name, owner))
+    }
+  }
   for (const [paramName, paramValue] of Object.entries(inlined)) {
     const paramPath = `${basePath}.${paramName}`
     const def = defs.get(paramName)

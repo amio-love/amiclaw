@@ -41,9 +41,11 @@ import type { CheckResult, GameType, Level, Violation } from '../schema/types'
 import {
   buildCheckResult,
   consumedParamsForRule,
+  consumedStatesForRule,
   elementsById,
   startDeadline,
   visibleAttributesByRole,
+  visibleStatesByRole,
   WILDCARD,
 } from './helpers'
 
@@ -51,6 +53,15 @@ export function checkCommunicationCompleteness(gameType: GameType, level: Level)
   const violations: Violation[] = []
   const assignments = level.information_partition.role_assignments
 
+  // Scope gate: exactly the two DISTINCT communicating roles the GameType
+  // declares, each assigned exactly once. Counting alone is not enough — two
+  // assignments for the SAME role would silently drop the other role's
+  // rule-consumption requirements (consumers filter on assigned role ids) and
+  // leave that runtime role with no level view at all.
+  const declaredRoles = (gameType.information_partition_template?.roles ?? []).map(
+    (role) => role.id
+  )
+  const assignedRoles = assignments.map((assignment) => assignment.role)
   if (assignments.length !== 2) {
     violations.push({
       severity: 'error',
@@ -60,6 +71,19 @@ export function checkCommunicationCompleteness(gameType: GameType, level: Level)
       actual: `${assignments.length} role assignment(s)`,
       suggestion:
         'Model the level with exactly two communicating roles, or defer to the multi-role extension',
+    })
+  } else if (
+    declaredRoles.length !== 2 ||
+    !declaredRoles.every((id) => assignedRoles.filter((role) => role === id).length === 1)
+  ) {
+    violations.push({
+      severity: 'error',
+      field_path: 'information_partition.role_assignments',
+      constraint: 'distinct_communicating_roles',
+      expected: `one assignment for each declared communicating role [${declaredRoles.join(', ')}]`,
+      actual: `assignments for [${assignedRoles.join(', ')}]`,
+      suggestion:
+        'Assign each GameType-declared communicating role exactly once in information_partition.role_assignments',
     })
   } else {
     checkStaticCoverage(gameType, level, violations)
@@ -83,10 +107,16 @@ export function checkCommunicationCompleteness(gameType: GameType, level: Level)
   return buildCheckResult('communication_completeness', violations)
 }
 
-/** Sub-check (i): per-consuming-role observable-or-transmissible coverage. */
+/**
+ * Sub-check (i): per-consuming-role observable-or-transmissible coverage,
+ * over consumed instance params AND consumed runtime states (condition
+ * predicates read live states — e.g. botanical effective_light). Visibility
+ * is cannot_see-filtered (helpers), matching the runtime role views.
+ */
 function checkStaticCoverage(gameType: GameType, level: Level, violations: Violation[]): void {
   const roleIds = level.information_partition.role_assignments.map((a) => a.role)
-  const views = visibleAttributesByRole(gameType, level)
+  const attrViews = visibleAttributesByRole(gameType, level)
+  const stateViews = visibleStatesByRole(gameType, level)
   const template = gameType.information_partition_template
   const channels = template?.communication_channels ?? []
   const ruleVisibility = template?.rule_visibility ?? []
@@ -102,15 +132,18 @@ function checkStaticCoverage(gameType: GameType, level: Level, violations: Viola
       )
       .map((entry) => entry.role)
 
-  for (const rule of level.rules) {
-    const consumers = rolesKnowing(rule.template).filter((role) => roleIds.includes(role))
-    if (consumers.length === 0) continue // engine-internal rule: no human consumption
-    for (const [elementId, attrs] of consumedParamsForRule(gameType, level, rule)) {
+  const coverFields = (
+    consumed: Map<string, Set<string>>,
+    views: Map<string, Map<string, Set<string>>>,
+    kind: 'attribute' | 'state',
+    consumers: string[]
+  ): void => {
+    for (const [elementId, fields] of consumed) {
       const k = elementIndex.get(elementId)
-      for (const attr of attrs) {
-        const seers = roleIds.filter((role) => views.get(role)?.get(elementId)?.has(attr) ?? false)
+      for (const field of fields) {
+        const seers = roleIds.filter((role) => views.get(role)?.get(elementId)?.has(field) ?? false)
         for (const role of consumers) {
-          const key = `${elementId}|${attr}|${role}`
+          const key = `${kind}|${elementId}|${field}|${role}`
           if (reported.has(key) || seers.includes(role)) continue
           const reachable = channels.some(
             (channel) => channel.to === role && seers.includes(channel.from)
@@ -119,20 +152,30 @@ function checkStaticCoverage(gameType: GameType, level: Level, violations: Viola
             reported.add(key)
             violations.push({
               severity: 'error',
-              field_path: `elements[${k}].params.${attr}`,
+              field_path:
+                kind === 'attribute' ? `elements[${k}].params.${field}` : `elements[${k}]`,
               constraint: 'communication_coverage',
-              expected: `"${attr}" observable by its consuming role "${role}" or transmissible to it through a declared legal channel`,
+              expected: `${kind} "${field}" observable by its consuming role "${role}" or transmissible to it through a declared legal channel`,
               actual:
                 seers.length === 0
-                  ? 'no role can observe the field'
+                  ? `no role can observe the ${kind}`
                   : `only [${seers.join(', ')}] observe it and no declared channel reaches "${role}"`,
-              suggestion: `Expose "${attr}" of "${elementId}" to role "${role}" in information_partition.role_assignments, or declare a communication channel from an observing role to "${role}"`,
+              suggestion: `Expose ${kind} "${field}" of "${elementId}" to role "${role}" in information_partition.role_assignments (${
+                kind === 'attribute' ? 'visible_attributes' : 'visible_states'
+              }), or declare a communication channel from an observing role to "${role}"`,
               related_elements: [elementId],
             })
           }
         }
       }
     }
+  }
+
+  for (const rule of level.rules) {
+    const consumers = rolesKnowing(rule.template).filter((role) => roleIds.includes(role))
+    if (consumers.length === 0) continue // engine-internal rule: no human consumption
+    coverFields(consumedParamsForRule(gameType, level, rule), attrViews, 'attribute', consumers)
+    coverFields(consumedStatesForRule(gameType, level, rule), stateViews, 'state', consumers)
   }
 }
 

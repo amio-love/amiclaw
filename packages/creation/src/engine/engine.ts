@@ -11,8 +11,8 @@
  * GameType inputs.
  */
 
-import type { ElementArchetype, GameType, Level } from '../schema/types'
-import { elementsById, expandNames, WILDCARD } from '../validate/helpers'
+import type { GameType, Level } from '../schema/types'
+import { elementsById, expandNames, forbiddenFieldsForRole, WILDCARD } from '../validate/helpers'
 import type { ElementStates, RuleContext } from './rules'
 import {
   actionEvent,
@@ -56,6 +56,14 @@ export interface PerformActionArgs {
   element_id?: string
   /** Param value driving action_event_mapping rows (e.g. apply_care's action_type). */
   action_type?: string
+  /**
+   * Any further arg must be a param the action DECLARES in its
+   * action_registry param_defs (e.g. sound-garden place_piece's `slot`).
+   * Declared params other than action_type are accepted as call payload but
+   * carry no engine semantics (placement reads the element's own params);
+   * undeclared keys are rejected as malformed.
+   */
+  [param: string]: unknown
 }
 
 /**
@@ -90,35 +98,9 @@ export class GameSession {
     const { gameType, level, archetypes } = this.ctx
     const elements = elementsById(level)
     const template = gameType.information_partition_template
-    const forbidden = new Map<string, { attributes: Set<string>; states: Set<string> }>()
-    const visibilityRule = template?.visibility_rules.find((entry) => entry.role === roleId)
-    for (const entry of visibilityRule?.cannot_see ?? []) {
-      const matched =
-        entry.element_archetype === WILDCARD
-          ? [...archetypes.values()]
-          : [archetypes.get(entry.element_archetype)].filter(
-              (a): a is ElementArchetype => a !== undefined
-            )
-      for (const archetype of matched) {
-        const bucket = forbidden.get(archetype.id) ?? {
-          attributes: new Set<string>(),
-          states: new Set<string>(),
-        }
-        for (const attr of expandNames(
-          entry.attributes,
-          archetype.attributes.map((a) => a.name)
-        )) {
-          bucket.attributes.add(attr)
-        }
-        for (const state of expandNames(
-          entry.states,
-          (archetype.states ?? []).map((s) => s.name)
-        )) {
-          bucket.states.add(state)
-        }
-        forbidden.set(archetype.id, bucket)
-      }
-    }
+    // Shared cannot_see subtraction — the same helper the validator's
+    // visibility model uses, so runtime and validator can never diverge.
+    const forbidden = forbiddenFieldsForRole(gameType, roleId)
 
     const assignment = level.information_partition.role_assignments.find((a) => a.role === roleId)
     const views: RoleElementView[] = []
@@ -181,21 +163,29 @@ export class GameSession {
       return { ok: false, reason: `role "${roleId}" cannot perform "${actionName}"` }
     }
 
-    // Arg validation. Distinguish a malformed call from a legitimate no-op,
-    // and keep action_type NON-FORGEABLE (B part 2): a MEANINGFUL action_type
-    // is honored only on an action that actually DECLARES an action_type param
+    // Arg validation honors the action's DECLARED param_defs: element_id and
+    // every declared param are legal call args; anything else is malformed.
+    // Distinguish a malformed call from a legitimate no-op, and keep
+    // action_type NON-FORGEABLE (B part 2): a MEANINGFUL action_type is
+    // honored only on an action that actually DECLARES an action_type param
     // — it can never be smuggled onto an unrelated action to claim an effect
     // that action does not have. An empty/absent action_type is "not provided"
-    // (a no-op), not a forgery. An unknown arg key, a missing declared
-    // action_type, and a construction action with no target are all malformed.
-    const declaresActionType = action.params.some((param) => param.name === 'action_type')
+    // (a no-op), not a forgery. Declared params other than action_type (e.g.
+    // sound-garden place_piece's slot) are accepted but engine-inert — only
+    // action_type is machine-consumed (it drives action_event_mapping).
+    const declaredParams = new Set(action.params.map((param) => param.name))
+    const declaresActionType = declaredParams.has('action_type')
     const providedActionType = args.action_type === '' ? undefined : args.action_type
-    for (const key of Object.keys(args)) {
-      if (key === 'element_id' || key === 'action_type') continue
-      return { ok: false, reason: `unknown arg "${key}" for action "${actionName}"` }
-    }
-    if (providedActionType !== undefined && !declaresActionType) {
-      return { ok: false, reason: `action "${actionName}" does not declare an action_type` }
+    for (const [key, value] of Object.entries(args)) {
+      if (key === 'element_id' || declaredParams.has(key)) continue
+      if (key === 'action_type' && (value === undefined || value === '')) continue
+      return {
+        ok: false,
+        reason:
+          key === 'action_type'
+            ? `action "${actionName}" does not declare an action_type`
+            : `unknown arg "${key}" for action "${actionName}"`,
+      }
     }
     if (declaresActionType && providedActionType === undefined) {
       return { ok: false, reason: `action "${actionName}" requires an action_type param` }

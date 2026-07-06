@@ -241,6 +241,69 @@ describe('schema_conformance failures', () => {
     expect(violation?.field_path).toBe('rules[0].bindings.cipher_segment_id')
   })
 
+  it('requires every declared temporal_sequence step param to be bound', () => {
+    // decrypt_step declares cipher_segment_id + cipher_key_id; dropping the
+    // key binding used to pass (only PRESENT keys were checked) and still
+    // publish — the level then plays without its solution material.
+    const bad = cloneLevel()
+    delete bad.rules[0].bindings.cipher_key_id
+    const report = validateLevel(gameType, bad)
+    const check = checkOf(report, 'schema_conformance')
+    expect(check.verdict).toBe('fail')
+    const violation = check.violations.find((v) => v.constraint === 'binding_param_required')
+    expect(violation?.field_path).toBe('rules[0].bindings.cipher_key_id')
+    expect(violation?.suggestion).toContain('cipher_key_id')
+    expect(report.publish_ready).toBe(false)
+  })
+
+  it('requires a predicate instantiation to inline every declared param', () => {
+    // {name: plaintext_is_valid_word} with no category used to be accepted —
+    // evaluatePredicates then has nothing to compare and the condition_action
+    // becomes unconditional.
+    const bad = cloneLevel()
+    const verify = bad.rules.find((r) => r.id === 'rule-verify')
+    if (!verify) throw new Error('fixture rule missing')
+    verify.bindings = { ...verify.bindings, predicates: [{ name: 'plaintext_is_valid_word' }] }
+    const check = checkOf(validateLevel(gameType, bad), 'schema_conformance')
+    expect(check.verdict).toBe('fail')
+    const violation = check.violations.find((v) => v.constraint === 'binding_param_required')
+    expect(violation?.field_path).toBe('rules[2].bindings.predicates[0].category')
+    expect(violation?.suggestion).toContain('plaintext_is_valid_word')
+  })
+
+  it('rejects duplicate element instance ids before reference resolution', () => {
+    // A repeated id collapses the element index: rules / win-condition / view
+    // references silently resolve to the LAST instance.
+    const bad = cloneLevel()
+    bad.elements.push({ ...structuredClone(bad.elements[0]) }) // second "seg-1"
+    const check = checkOf(validateLevel(gameType, bad), 'schema_conformance')
+    expect(check.verdict).toBe('fail')
+    const violation = check.violations.find((v) => v.constraint === 'element_id_unique')
+    expect(violation?.field_path).toBe('elements[5].id')
+    expect(violation?.actual).toContain('elements[0]')
+    expect(violation?.related_elements).toEqual(['seg-1'])
+  })
+
+  it('returns a structural-shape failure (never throws) on malformed collections', () => {
+    // loadLevel only asserts top-level fields PRESENT: `elements: {}` reaches
+    // the validator typed as a Level and used to CRASH the forEach. The
+    // public validator must return the report contract instead.
+    const bad = cloneLevel()
+    bad.elements = {} as unknown as Level['elements']
+    bad.rules = 'nope' as unknown as Level['rules']
+    const report = validateLevel(gameType, bad)
+    expect(report.overall_verdict).toBe('fail')
+    expect(report.publish_ready).toBe(false)
+    expect(report.checks).toHaveLength(1)
+    const check = checkOf(report, 'schema_conformance')
+    expect(check.verdict).toBe('fail')
+    const elementsViolation = check.violations.find((v) => v.field_path === 'elements')
+    expect(elementsViolation?.constraint).toBe('structural_shape')
+    expect(elementsViolation?.suggestion).toContain('elements')
+    expect(check.violations.some((v) => v.field_path === 'rules')).toBe(true)
+    expect(report.level_id).toBe('rc-demo-001')
+  })
+
   it('flags an unregistered co_play_form and appends no floor checks', () => {
     const badGameType = cloneGameType()
     badGameType.co_play_form = 'freeform_jam'
@@ -430,6 +493,24 @@ describe('gametype_consistency failures (registration gate)', () => {
     expect(violation?.field_path).toBe('game_type.action_registry[0].state_effect')
     expect(violation?.expected).toContain('advance_state')
   })
+
+  it('requires an information partition template for hidden_info_coop', () => {
+    // Registering the form without a partition leaves the hidden-info floor
+    // checks with no basis (no role/rule visibility, channels, capabilities).
+    const badGameType = cloneGameType()
+    delete badGameType.information_partition_template
+    const result = validateGameType(badGameType)
+    expect(result.verdict).toBe('fail')
+    const violation = result.violations.find((v) => v.constraint === 'partition_template_required')
+    expect(violation?.field_path).toBe('game_type.information_partition_template')
+    expect(violation?.suggestion).toContain('information_partition_template')
+
+    // Shared-state forms may still omit it (spec: co_build shares all state).
+    const sharedState = cloneGameType()
+    delete sharedState.information_partition_template
+    sharedState.co_play_form = 'co_build'
+    expect(validateGameType(sharedState).verdict).toBe('pass')
+  })
 })
 
 describe('communication_completeness failures', () => {
@@ -452,13 +533,21 @@ describe('communication_completeness failures', () => {
     // Move seg-1's plaintext_category from the decoder (its consuming role)
     // to the listener, and drop the listener→decoder channel: the consumer
     // can neither observe the field nor receive it. fairness still passes —
-    // the listener observes the field, so it is not a guess.
+    // the listener observes the field, so it is not a guess. The listener's
+    // cannot_see entry for the field is lifted so its view is LEGITIMATE
+    // (an over-declared forbidden view is runtime-hidden and filtered — that
+    // case has its own regression below).
     const badGameType = cloneGameType()
     const template = badGameType.information_partition_template
     if (!template) throw new Error('fixture partition template missing')
     template.communication_channels = template.communication_channels.filter(
       (channel) => !(channel.from === 'listener' && channel.to === 'decoder')
     )
+    const listenerRule = template.visibility_rules.find((entry) => entry.role === 'listener')
+    if (!listenerRule) throw new Error('fixture visibility rule missing')
+    for (const entry of listenerRule.cannot_see) {
+      entry.attributes = entry.attributes.filter((attr) => attr !== 'plaintext_category')
+    }
     const bad = cloneLevel()
     const roles = bad.information_partition.role_assignments
     const listenerView = roles
@@ -483,6 +572,64 @@ describe('communication_completeness failures', () => {
     expect(violation?.expected).toContain('decoder')
     expect(violation?.actual).toContain('listener')
     expect(checkOf(report, 'fairness').verdict).toBe('pass')
+  })
+
+  it('rejects two assignments for the SAME role (distinct communicating roles required)', () => {
+    // Two listener assignments (decoder omitted) used to pass the count-only
+    // scope check; decoder-consumed rules were then silently filtered out and
+    // the runtime decoder role had no level view at all.
+    const bad = cloneLevel()
+    bad.information_partition.role_assignments[1].role = 'listener'
+    const report = validateLevel(gameType, bad)
+    const check = checkOf(report, 'communication_completeness')
+    expect(check.verdict).toBe('fail')
+    const violation = check.violations.find((v) => v.constraint === 'distinct_communicating_roles')
+    expect(violation?.field_path).toBe('information_partition.role_assignments')
+    expect(violation?.expected).toContain('decoder')
+    expect(violation?.actual).toContain('listener')
+    expect(report.publish_ready).toBe(false)
+  })
+
+  it('ignores a level view over-declaring a cannot_see field (runtime hides it)', () => {
+    // Move plaintext_category from the decoder to the LISTENER's view while
+    // the GameType cannot_see still forbids the listener from seeing it:
+    // GameSession.getRoleView subtracts cannot_see, so NO runtime view shows
+    // the field. Pre-fix the validator trusted the level view, counted the
+    // listener as a seer, and published a level whose runtime hides the
+    // solve-relevant field from everyone.
+    const bad = cloneLevel()
+    const roles = bad.information_partition.role_assignments
+    const listenerView = roles
+      .find((a) => a.role === 'listener')
+      ?.element_views.find((view) => view.element_id === 'seg-1')
+    const decoderView = roles
+      .find((a) => a.role === 'decoder')
+      ?.element_views.find((view) => view.element_id === 'seg-1')
+    if (!listenerView || !decoderView) throw new Error('fixture views missing')
+    listenerView.visible_attributes = [...listenerView.visible_attributes, 'plaintext_category']
+    decoderView.visible_attributes = decoderView.visible_attributes.filter(
+      (attr) => attr !== 'plaintext_category'
+    )
+    const report = validateLevel(gameType, bad)
+    // fairness: the consumed field is observable by NO role → a guess.
+    const fairness = checkOf(report, 'fairness')
+    expect(fairness.verdict).toBe('fail')
+    expect(
+      fairness.violations.some(
+        (v) =>
+          v.constraint === 'solution_information_observable' &&
+          v.actual.includes('plaintext_category')
+      )
+    ).toBe(true)
+    // coverage: its consuming role can neither see nor receive it.
+    const communication = checkOf(report, 'communication_completeness')
+    expect(communication.verdict).toBe('fail')
+    const coverage = communication.violations.find(
+      (v) =>
+        v.constraint === 'communication_coverage' && v.field_path.includes('plaintext_category')
+    )
+    expect(coverage?.actual).toContain('no role can observe')
+    expect(report.publish_ready).toBe(false)
   })
 
   it('flags merged information admitting two solutions for one target', () => {

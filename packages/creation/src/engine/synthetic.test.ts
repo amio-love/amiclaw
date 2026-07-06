@@ -13,6 +13,7 @@ import { checkSolvability } from '../validate/solvability'
 import { validateGameType } from '../validate/validate'
 import { startDeadline } from '../validate/helpers'
 import { GameSession } from './engine'
+import { applyStateEffect } from './rules'
 import { searchSolution, solutionDriversForTarget } from './search'
 
 // --- Synthetic fixture A: event-gated state_transition ("gate-lab") ---
@@ -308,6 +309,35 @@ describe('synthetic state_transition (gate-lab)', () => {
     const analysis = solutionDriversForTarget(gateGameType, gateLevel, 'g1', startDeadline(0))
     expect(analysis.timedOut).toBe(true)
   })
+
+  it('F1: a mapping row alone is not producible — the event needs an action_type-declaring action on the archetype', () => {
+    // press_switch stops declaring an action_type param: the mapping row
+    // (press → switch_pressed) survives, but the engine has NO path to carry
+    // an action_type, so the event can never fire. Pre-fix the solver treated
+    // every mapping event as producible whenever SOME action could target the
+    // gate — a false-positive publishability hole for state_transition.
+    const undrivable = structuredClone(gateGameType)
+    undrivable.action_registry[0].params = []
+
+    // Engine: a smuggled action_type is rejected; a bare press fires nothing.
+    const session = new GameSession(undrivable, gateLevel)
+    const smuggled = session.performAction('operator', 'press_switch', {
+      element_id: 'g1',
+      action_type: 'press',
+    })
+    expect(smuggled.ok).toBe(false)
+    expect(!smuggled.ok && smuggled.reason).toContain('action_type')
+    const bare = session.performAction('operator', 'press_switch', { element_id: 'g1' })
+    expect(bare.ok).toBe(true)
+    expect(bare.ok && bare.effects).toEqual([])
+    expect(session.getState().elements.g1.gate_state).toBe('closed')
+
+    // Solver agrees through the event-drivable gate: NOT solvable.
+    expect(searchSolution(undrivable, gateLevel).solvable).toBe(false)
+    const check = checkSolvability(undrivable, gateLevel)
+    expect(check.verdict).toBe('fail')
+    expect(check.violations.some((v) => v.constraint === 'solution_path_exists')).toBe(true)
+  })
 })
 
 describe('synthetic interaction_matrix (duet-lab)', () => {
@@ -360,5 +390,26 @@ describe('synthetic interaction_matrix (duet-lab)', () => {
     expect(session.isWon()).toBe(false)
     // The solver, sharing the core, agrees the level is now unplayable.
     expect(searchSolution(badGameType, duetLevel).solvable).toBe(false)
+  })
+
+  it('G6: an unknown CURRENT state value is a no-op, never laundered into progress', () => {
+    // A typo'd GameType state initial ('siilent' ∉ values) used to become
+    // real progress: advance_state computed index -1 → values[0], and
+    // complete_state jumped straight to the terminal value.
+    const badGameType = structuredClone(duetGameType)
+    const typoState = badGameType.element_archetypes[0].states?.[0]
+    if (!typoState) throw new Error('fixture state missing')
+    typoState.initial = 'siilent'
+    const session = new GameSession(badGameType, duetLevel)
+    session.performAction('player', 'strike', { element_id: 'p1' }) // resonate = complete_state
+    expect(session.getState().elements.p1.resonance).toBe('siilent') // NOT 'resonant'
+    expect(session.isWon()).toBe(false)
+    expect(searchSolution(badGameType, duetLevel).solvable).toBe(false)
+
+    // advance_state unit: unknown current must not launder into values[0].
+    const archetype = duetGameType.element_archetypes[0]
+    const machine = new Map<string, unknown>([['resonance', 'siilent']])
+    expect(applyStateEffect(archetype, machine, 'advance_state')).toBe(false)
+    expect(machine.get('resonance')).toBe('siilent')
   })
 })

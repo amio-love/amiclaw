@@ -11,6 +11,10 @@
  * 'warn' (never 'pass'), and publish_ready is true only when every check —
  * universal and activated floor alike — is a literal 'pass'.
  *
+ * A structural shape gate runs before everything: malformed top-level
+ * collections short-circuit into a schema_conformance failure (report
+ * contract), never an exception (see levelShapeViolations).
+ *
  * The validator is strictly read-only over both inputs (spec invariant:
  * validators never modify the Level).
  */
@@ -29,8 +33,9 @@ import { checkCommunicationCompleteness } from './communication-completeness'
 import { checkConstructionVisibility } from './construction-visibility'
 import { checkFairness } from './fairness'
 import { checkGoalReachability } from './goal-reachability'
+import { buildCheckResult, isMappingValue } from './helpers'
 import { checkProgressMeasurability } from './progress-measurability'
-import { checkSchemaConformance } from './schema-conformance'
+import { checkSchemaConformance, levelShapeViolations } from './schema-conformance'
 import { checkSolvability } from './solvability'
 import { checkVerbalDistinguishability } from './verbal-distinguishability'
 
@@ -55,6 +60,25 @@ export function validateLevel(
   level: Level,
   catalog: CoPlayFormCatalog = SEED_CO_PLAY_FORM_CATALOG
 ): ValidationReport {
+  // Structural shape gate FIRST: malformed collections (elements: {}, …)
+  // would make the semantic checks throw. Surface them as a
+  // schema_conformance failure — the report contract, never an exception —
+  // and short-circuit (nothing downstream can interpret the shapes).
+  const shapeViolations = levelShapeViolations(level)
+  if (shapeViolations.length > 0) {
+    const metadata: Partial<Level['metadata']> = isMappingValue(level.metadata)
+      ? level.metadata
+      : {}
+    return {
+      level_id: String(metadata.id ?? ''),
+      game_type: String(metadata.game_type ?? ''),
+      game_type_version: String(metadata.game_type_version ?? ''),
+      overall_verdict: 'fail',
+      publish_ready: false,
+      checks: [buildCheckResult('schema_conformance', shapeViolations)],
+    }
+  }
+
   const checks: CheckResult[] = [
     checkSchemaConformance(gameType, level, catalog),
     checkSolvability(gameType, level),

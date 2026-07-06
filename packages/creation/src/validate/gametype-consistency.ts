@@ -20,6 +20,7 @@ import type {
   GameType,
   Violation,
 } from '../schema/types'
+import { PARTITION_REQUIRED_CO_PLAY_FORMS } from '../schema/types'
 import { archetypesById, attributeNames, buildCheckResult, stateNames, WILDCARD } from './helpers'
 
 export function validateGameType(gameType: GameType): CheckResult {
@@ -143,7 +144,24 @@ export function validateGameType(gameType: GameType): CheckResult {
   })
 
   const template = gameType.information_partition_template
-  if (!template) return buildCheckResult('gametype_consistency', violations)
+  if (!template) {
+    // Forms whose floor checks NEED the partition may not omit it: without
+    // role visibility / rule visibility / channels / action capabilities the
+    // hidden-info floors have no basis, and degenerate levels (e.g.
+    // initially-solved) could publish without a real information partition.
+    if (PARTITION_REQUIRED_CO_PLAY_FORMS.includes(gameType.co_play_form)) {
+      violations.push({
+        severity: 'error',
+        field_path: 'game_type.information_partition_template',
+        constraint: 'partition_template_required',
+        expected: `an information_partition_template (co_play_form "${gameType.co_play_form}" floor checks need role/rule visibility, channels, and action capabilities)`,
+        actual: 'missing',
+        suggestion:
+          'Declare information_partition_template on the GameType, or use a shared-state co-play form that may omit it',
+      })
+    }
+    return buildCheckResult('gametype_consistency', violations)
+  }
 
   const roleIds = new Set(template.roles.map((role) => role.id))
   const requireRole = (role: string, path: string): void => {

@@ -103,6 +103,93 @@ describe('F2 solver rule-move capability gate (solver reachability ⊆ engine re
   })
 })
 
+describe('state_transition solver gate mirrors the engine event path', () => {
+  it('fails solvability when no performable action can carry an action_type', () => {
+    // Strip apply_care's declared action_type param: the mapping rows
+    // survive, but the engine's ONLY event path (an action_type-declaring
+    // performable action) is gone — no state_transition can ever fire.
+    // Pre-fix the solver treated every mapping event as producible whenever
+    // SOME action could target the plant, and published this level.
+    const badGameType = cloneGameType()
+    const applyCare = badGameType.action_registry.find((a) => a.name === 'apply_care')
+    if (!applyCare) throw new Error('fixture action missing')
+    applyCare.params = []
+
+    expect(searchSolution(badGameType, level).solvable).toBe(false)
+    const report = validateLevel(badGameType, level)
+    expect(checkOf(report, 'solvability').verdict).toBe('fail')
+    expect(report.publish_ready).toBe(false)
+
+    // Engine mirror: a smuggled action_type is rejected; bare care is inert
+    // on the state tables.
+    const session = new GameSession(badGameType, level)
+    const smuggled = session.performAction('gardener', 'apply_care', {
+      element_id: 'plant-1',
+      action_type: 'water',
+    })
+    expect(smuggled.ok).toBe(false)
+    expect(session.getState().elements['plant-1'].health).toBe('wilting')
+  })
+})
+
+describe('solve-relevant runtime states (hidden-state coverage)', () => {
+  it('fails fairness + coverage when every role hides a consumed state', () => {
+    // rule-orchid-care / rule-fern-needs predicates consume the RUNTIME
+    // state effective_light (light_is). Hiding it from every gardener view
+    // (the botanist never sees plant states) forces the players to guess the
+    // current light — pre-fix the helpers only scanned element.params, so
+    // this level published clean.
+    const bad = cloneLevel()
+    const gardener = bad.information_partition.role_assignments.find((a) => a.role === 'gardener')
+    if (!gardener) throw new Error('fixture role missing')
+    for (const view of gardener.element_views) {
+      view.visible_states = view.visible_states.filter((state) => state !== 'effective_light')
+    }
+    const report = validateLevel(gameType, bad)
+
+    const fairness = checkOf(report, 'fairness')
+    expect(fairness.verdict).toBe('fail')
+    expect(
+      fairness.violations.some(
+        (v) =>
+          v.constraint === 'solution_information_observable' &&
+          v.actual.includes('hidden states: effective_light')
+      )
+    ).toBe(true)
+
+    const communication = checkOf(report, 'communication_completeness')
+    expect(communication.verdict).toBe('fail')
+    const coverage = communication.violations.find(
+      (v) => v.constraint === 'communication_coverage' && v.expected.includes('effective_light')
+    )
+    expect(coverage?.expected).toContain('state')
+    expect(coverage?.suggestion).toContain('visible_states')
+    expect(report.publish_ready).toBe(false)
+  })
+
+  it('still passes the golden: effective_light is gardener-visible and channeled to the botanist', () => {
+    const report = validateLevel(gameType, level)
+    expect(checkOf(report, 'fairness').verdict).toBe('pass')
+    expect(checkOf(report, 'communication_completeness').verdict).toBe('pass')
+  })
+})
+
+describe('condition_action action tuple requires declared params', () => {
+  it('rejects an action binding missing a declared param', () => {
+    // change_health declares {delta}; dropping it used to pass (only present
+    // keys were validated).
+    const bad = cloneLevel()
+    const fern = bad.rules.find((r) => r.id === 'rule-fern-needs')
+    if (!fern) throw new Error('fixture rule missing')
+    fern.bindings = { ...fern.bindings, action: { verb: 'change_health' } }
+    const check = checkOf(validateLevel(gameType, bad), 'schema_conformance')
+    expect(check.verdict).toBe('fail')
+    const violation = check.violations.find((v) => v.constraint === 'binding_param_required')
+    expect(violation?.field_path).toBe('rules[2].bindings.action.delta')
+    expect(violation?.suggestion).toContain('change_health')
+  })
+})
+
 describe('csp solver strategy', () => {
   it('is registered: the csp GameType runs a real search, not a strategy rejection', () => {
     expect(gameType.solver_strategy).toBe('csp')

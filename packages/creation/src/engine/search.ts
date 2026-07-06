@@ -6,7 +6,9 @@
  * rules.ts (the same semantics the live GameSession plays), so the solver
  * can never report solvable for a level the engine cannot play.
  * state_transition moves are EVENT-GATED (only action_event_mapping
- * producible events); construction moves are CAPABILITY-GATED PER ELEMENT
+ * producible events, and only on elements whose archetype some role can
+ * target with an action_type-declaring action — the engine's sole event
+ * path); construction moves are CAPABILITY-GATED PER ELEMENT
  * ARCHETYPE — a place/remove move exists only when some role both
  * can_perform the construction action AND may target the element's
  * archetype (target_archetypes; empty list admits all), exactly mirroring
@@ -27,8 +29,8 @@ import {
   applyConstruction,
   buildRuleContext,
   constructionEffectsForArchetype,
-  elementArchetypeActable,
   evaluateWin,
+  eventDrivableOnArchetype,
   executeConditionAction,
   executeInteractionMatrix,
   executeStateTransition,
@@ -70,10 +72,10 @@ function hashNode(states: ElementStates, stepsUsed: Map<string, number>): string
   return JSON.stringify([stateEntries, stepEntries])
 }
 
-/** Is this element's archetype actable by some role (mirrors performAction)? */
-function targetActable(ctx: RuleContext, elementId: string): boolean {
+/** Can some role drive mapping events on this element (mirrors performAction)? */
+function targetEventDrivable(ctx: RuleContext, elementId: string): boolean {
   const archetype = ctx.elements.get(elementId)?.archetype
-  return archetype !== undefined && elementArchetypeActable(ctx.gameType, archetype)
+  return archetype !== undefined && eventDrivableOnArchetype(ctx.gameType, archetype)
 }
 
 /** Can some role fire this template on the element's archetype (trigger gate)? */
@@ -89,8 +91,9 @@ function targetTriggerable(ctx: RuleContext, templateId: string, elementId: stri
  * Rule moves are gated exactly as the live engine fires them (keeping solver
  * reachability ⊆ engine reachability):
  * - state_transition: EVENT-gated (no producible action_event_mapping row →
- *   no move) AND capability-gated per element — the move acts on one element,
- *   so that element must be actable.
+ *   no move) AND event-drivable per element — the move acts on one element,
+ *   so some role must be able to perform an action_type-declaring action on
+ *   that element's archetype (the engine's only path to a mapping event).
  * - temporal_sequence / condition_action / interaction_matrix: TRIGGER-gated —
  *   they fire only when a player action that lists this template in its
  *   `triggers` lands on one of the rule's target elements, so the move is
@@ -105,7 +108,7 @@ function movesForRule(ctx: RuleContext, rule: LevelRule, template: RuleTemplate)
       const moves: MoveFn[] = []
       for (const event of producibleEvents(ctx.gameType, template.id)) {
         for (const elementId of rule.target_elements) {
-          if (!targetActable(ctx, elementId)) continue
+          if (!targetEventDrivable(ctx, elementId)) continue
           moves.push((states) => executeStateTransition(rule, states, event, elementId))
         }
       }

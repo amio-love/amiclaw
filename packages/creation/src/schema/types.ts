@@ -87,6 +87,18 @@ export interface CoPlayFormDefinition {
 
 export type CoPlayFormCatalog = readonly CoPlayFormDefinition[]
 
+/**
+ * Co-play forms whose floor checks REQUIRE an information partition:
+ * hidden_info_coop's floors (communication_completeness /
+ * verbal_distinguishability's cross-role model) are meaningless without the
+ * template's role visibility, rule visibility, channels, and action
+ * capabilities. gametype_consistency rejects registration of these forms
+ * without an information_partition_template; shared-state forms (co_build
+ * etc.) may omit or simplify it (spec Mechanism 1). Registry constant — a
+ * newly registered form that needs a partition adds itself here.
+ */
+export const PARTITION_REQUIRED_CO_PLAY_FORMS: readonly CoPlayFormId[] = ['hidden_info_coop']
+
 /** Seed catalog per spec Mechanism 2 (form → validator floor checks). */
 export const SEED_CO_PLAY_FORM_CATALOG: CoPlayFormCatalog = [
   {
