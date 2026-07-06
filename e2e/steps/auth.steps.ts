@@ -67,7 +67,7 @@ Then('I see the account login guide and no fake profile', async ({ page }) => {
     main.getByText('登录后可以把这台设备上的 BombSquad 和卦签记录保存到账号。')
   ).toBeVisible()
   await expect(main.getByText('今日')).toBeVisible()
-  await expect(main.getByText('未开始')).toBeVisible()
+  await expect(main.getByText('未打卡')).toBeVisible()
   await expect(main.getByRole('link', { name: '登录' })).toBeVisible()
   // No retired mock-profile content for anyone now.
   await expect(main.getByText('林星海')).toHaveCount(0)
@@ -102,7 +102,7 @@ Then('I see the honest empty stats state with a play CTA', async ({ page }) => {
   // No fabricated numbers, no「即将推出」placeholder — an honest empty state.
   const main = page.getByRole('main')
   await expect(main.getByText('账号记录')).toBeVisible()
-  await expect(main.getByText('未开始')).toBeVisible()
+  await expect(main.getByText('未打卡')).toBeVisible()
   await expect(main.getByText('还没有记录').first()).toBeVisible()
   await expect(main.getByText('无记录').first()).toBeVisible()
   await expect(main.getByRole('link', { name: '开始玩' })).toBeVisible()

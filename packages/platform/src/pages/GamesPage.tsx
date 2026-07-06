@@ -1,9 +1,14 @@
+import { useEffect, useMemo, useState } from 'react'
 import AnonHero from '@/components/home/AnonHero'
 import WelcomeStrip from '@/components/home/WelcomeStrip'
+import DailyChecklist from '@/components/home/DailyChecklist'
 import FeaturedBombSquad from '@/components/home/FeaturedBombSquad'
 import WhatIsAmiclaw from '@/components/home/WhatIsAmiclaw'
 import UpcomingGames from '@/components/home/UpcomingGames'
 import FooterPitch from '@/components/home/FooterPitch'
+import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
+import { fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
+import { readArcadeLocalProfile, summarizeArcadeLocalProfile } from '@amiclaw/arcade-profile/local'
 import { useAuth } from '@/hooks/useAuth'
 import { useDailyBoard } from '@/hooks/useDailyBoard'
 
@@ -25,6 +30,12 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
 export default function GamesPage() {
   const { status, user } = useAuth()
   const board = useDailyBoard()
+  const [localProfile] = useState(() => readArcadeLocalProfile())
+  const localSummary = useMemo(() => summarizeArcadeLocalProfile(localProfile), [localProfile])
+  const [accountSummary, setAccountSummary] = useState<{
+    userId: string
+    profile: ArcadeProfileSummary
+  } | null>(null)
 
   /* The AnonHero primary CTA's target — the BombSquad landing page. Mode is
      chosen on the landing, not here. BombSquad now lives in its own SPA at
@@ -41,6 +52,28 @@ export default function GamesPage() {
      loading→authed transition swaps it in without a jarring signed-in flash.
      `authed` requires a resolved `user`. */
   const signedIn = status === 'authed' && user !== null
+  const signedInUserId = signedIn ? user.user_id : null
+
+  useEffect(() => {
+    if (signedInUserId === null) return
+    let active = true
+    fetchArcadeProfile().then((result) => {
+      if (!active) return
+      setAccountSummary(
+        result.kind === 'ok' ? { userId: signedInUserId, profile: result.profile } : null
+      )
+    })
+    return () => {
+      active = false
+    }
+  }, [signedInUserId])
+
+  const accountProfile =
+    signedInUserId !== null && accountSummary?.userId === signedInUserId
+      ? accountSummary.profile
+      : null
+  const checklistProfile = accountProfile ?? localSummary
+  const checklistScope = accountProfile ? 'account' : 'device'
 
   return (
     <>
@@ -50,6 +83,11 @@ export default function GamesPage() {
         <AnonHero onStart={enterBombSquad} board={board} />
       )}
 
+      <DailyChecklist
+        profile={checklistProfile}
+        scope={checklistScope}
+        loading={signedIn && accountProfile === null}
+      />
       <FeaturedBombSquad />
       {!signedIn && <WhatIsAmiclaw />}
       <UpcomingGames />

@@ -5,6 +5,13 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Daily Arcade loop and streaks** - New. The homepage now shows a real daily
+checklist for BombSquad and Oracle, result pages show profile-save and share
+feedback, and the leaderboard now includes a public streak board for claimed
+account profiles. Streaks are derived from Arcade profile events: BombSquad
+daily defuses and real Oracle signs count, while practice, failures, and
+timeouts do not.
+
 **Your page now shows real local and account Arcade records** - New. Anonymous
 players now get a browser-local Arcade profile that records BombSquad results
 and real Oracle signs, so `/me` shows this device's actual play history instead

@@ -57,6 +57,31 @@ export interface OracleProfileSummary {
   recent: OracleProfileSign | null
 }
 
+export type ArcadeDailyLoopActivityId = 'bombsquad_daily' | 'oracle_sign'
+
+export interface ArcadeDailyLoopActivityStatus {
+  completed: boolean
+  completed_at: string | null
+}
+
+export interface ArcadeDailyLoopChecklist {
+  bombsquad_daily: ArcadeDailyLoopActivityStatus
+  oracle_sign: ArcadeDailyLoopActivityStatus
+}
+
+export interface ArcadeStreakSummary {
+  today_completed: boolean
+  current_days: number
+  longest_days: number
+  last_active_date: string | null
+}
+
+export interface ArcadeDailyLoopSummary {
+  date: string
+  checklist: ArcadeDailyLoopChecklist
+  streak: ArcadeStreakSummary
+}
+
 export interface ArcadeProfileSummary {
   profile_id?: string
   last_activity_at: string | null
@@ -67,19 +92,48 @@ export interface ArcadeProfileSummary {
   }
   bombsquad: BombSquadProfileSummary
   oracle: OracleProfileSummary
+  daily_loop: ArcadeDailyLoopSummary
+}
+
+export interface ArcadePublicProfileStatus {
+  claimed: boolean
+  public_label: string | null
 }
 
 export interface ArcadeProfileResponse {
   profile: ArcadeProfileSummary
+  public_profile: ArcadePublicProfileStatus
 }
 
 export interface ArcadeProfileClaimBody {
   profile_id: string
   events: ArcadeProfileEvent[]
+  public_label?: string
 }
 
 export interface ArcadeProfileClaimResponse {
   profile: ArcadeProfileSummary
   source_keys: string[]
   inserted: number
+  public_profile: {
+    claimed: true
+    public_label: string
+  }
+}
+
+export interface ArcadeStreakLeaderboardEntry {
+  rank: number
+  public_label: string
+  current_streak_days: number
+  longest_streak_days: number
+  last_active_date: string
+  today: {
+    bombsquad_defused: boolean
+    oracle_signed: boolean
+  }
+}
+
+export interface ArcadeStreakLeaderboardResponse {
+  date: string
+  entries: ArcadeStreakLeaderboardEntry[]
 }

@@ -38,36 +38,39 @@ function stubApi(opts: {
   companion?: { status: number; body?: unknown }
 }) {
   const companion = opts.companion ?? { status: 404, body: { error: 'no companion set up' } }
-  const arcadeProfile = opts.arcadeProfile ?? { profile: EMPTY_ARCADE_PROFILE }
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: RequestInfo | URL) => {
-      const url = urlOf(input)
-      if (url.includes('/api/arcade/profile/claim')) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              profile: ACCOUNT_ARCADE_PROFILE,
-              source_keys: ['bombsquad:local-run'],
-              inserted: 1,
-            }),
-            { status: 200 }
-          )
+  const arcadeProfile = opts.arcadeProfile ?? {
+    profile: EMPTY_ARCADE_PROFILE,
+    public_profile: { claimed: false, public_label: null },
+  }
+  const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+    const url = urlOf(input)
+    if (url.includes('/api/arcade/profile/claim')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            profile: ACCOUNT_ARCADE_PROFILE,
+            source_keys: ['bombsquad:local-run'],
+            inserted: 1,
+            public_profile: { claimed: true, public_label: 'Player 8F3A' },
+          }),
+          { status: 200 }
         )
-      }
-      if (url.includes('/api/arcade/profile')) {
-        return Promise.resolve(new Response(JSON.stringify(arcadeProfile), { status: 200 }))
-      }
-      if (url.includes('/api/companion')) {
-        return Promise.resolve(
-          new Response(companion.body === undefined ? null : JSON.stringify(companion.body), {
-            status: companion.status,
-          })
-        )
-      }
-      return Promise.resolve(new Response(JSON.stringify(opts.session), { status: 200 }))
-    })
-  )
+      )
+    }
+    if (url.includes('/api/arcade/profile')) {
+      return Promise.resolve(new Response(JSON.stringify(arcadeProfile), { status: 200 }))
+    }
+    if (url.includes('/api/companion')) {
+      return Promise.resolve(
+        new Response(companion.body === undefined ? null : JSON.stringify(companion.body), {
+          status: companion.status,
+        })
+      )
+    }
+    return Promise.resolve(new Response(JSON.stringify(opts.session), { status: 200 }))
+  })
+  vi.stubGlobal('fetch', fetchSpy)
+  return fetchSpy
 }
 
 const ANON: SessionResponse = { authenticated: false, identity: null }
@@ -82,9 +85,23 @@ const EMPTY_ARCADE_PROFILE = {
   counts: { bombsquad_runs: 0, oracle_signs: 0 },
   bombsquad: { recent: null, best_daily: null, best_practice: null },
   oracle: { recent: null },
+  daily_loop: {
+    date: '2026-07-06',
+    checklist: {
+      bombsquad_daily: { completed: false, completed_at: null },
+      oracle_sign: { completed: false, completed_at: null },
+    },
+    streak: {
+      today_completed: false,
+      current_days: 0,
+      longest_days: 0,
+      last_active_date: null,
+    },
+  },
 }
 
 const ACCOUNT_ARCADE_PROFILE = {
+  profile_id: 'local-profile',
   last_activity_at: '2026-07-06T08:00:00.000Z',
   today_played: true,
   counts: { bombsquad_runs: 1, oracle_signs: 1 },
@@ -124,6 +141,19 @@ const ACCOUNT_ARCADE_PROFILE = {
       bian: '坤',
       yao_values: [7, 8, 7, 8, 7, 8],
       created_at: '2026-07-06T09:00:00.000Z',
+    },
+  },
+  daily_loop: {
+    date: '2026-07-06',
+    checklist: {
+      bombsquad_daily: { completed: true, completed_at: '2026-07-06T08:00:00.000Z' },
+      oracle_sign: { completed: true, completed_at: '2026-07-06T09:00:00.000Z' },
+    },
+    streak: {
+      today_completed: true,
+      current_days: 1,
+      longest_days: 1,
+      last_active_date: '2026-07-06',
     },
   },
 }
@@ -227,7 +257,13 @@ describe('AccountPage /me', () => {
   })
 
   it('renders the real-identity profile with an honest empty stats state', async () => {
-    stubApi({ session: AUTHED, arcadeProfile: { profile: ACCOUNT_ARCADE_PROFILE } })
+    stubApi({
+      session: AUTHED,
+      arcadeProfile: {
+        profile: ACCOUNT_ARCADE_PROFILE,
+        public_profile: { claimed: true, public_label: 'Player 8F3A' },
+      },
+    })
     renderAccount('/me')
 
     // Identity is derived from the session email local-part (nova@... → nova).
@@ -237,8 +273,10 @@ describe('AccountPage /me', () => {
     expect(screen.getByText('nova@amio.fans')).toBeInTheDocument()
     // Account stats are read from /api/arcade/profile, not invented locally.
     expect(await screen.findByText('账号记录')).toBeInTheDocument()
+    expect(screen.getByText('1 天')).toBeInTheDocument()
     expect(screen.getByText('每日挑战 · 01:05 · 最快 01:05')).toBeInTheDocument()
     expect(screen.getByText('乾 → 坤')).toBeInTheDocument()
+    expect(screen.getByText('上榜名：Player 8F3A')).toBeInTheDocument()
     // The retired mock stats / runs / badges must be absent.
     expect(screen.queryByText('林星海')).not.toBeInTheDocument()
     expect(screen.queryByText('42')).not.toBeInTheDocument()
@@ -249,7 +287,13 @@ describe('AccountPage /me', () => {
 
   it('claims local profile entries into the signed-in account and marks them locally claimed', async () => {
     seedLocalProfile(localStore)
-    stubApi({ session: AUTHED, arcadeProfile: { profile: EMPTY_ARCADE_PROFILE } })
+    stubApi({
+      session: AUTHED,
+      arcadeProfile: {
+        profile: EMPTY_ARCADE_PROFILE,
+        public_profile: { claimed: false, public_label: null },
+      },
+    })
     renderAccount('/me')
 
     fireEvent.click(await screen.findByRole('button', { name: '保存到账号' }))
@@ -259,6 +303,31 @@ describe('AccountPage /me', () => {
       const raw = localStore.get(ARCADE_LOCAL_PROFILE_KEY)
       expect(raw).toContain('bombsquad:local-run')
       expect(JSON.parse(raw ?? '{}').claimed_source_keys).toContain('bombsquad:local-run')
+    })
+  })
+
+  it('enables the public streak profile for existing account records without new local events', async () => {
+    const fetchSpy = stubApi({
+      session: AUTHED,
+      arcadeProfile: {
+        profile: ACCOUNT_ARCADE_PROFILE,
+        public_profile: { claimed: false, public_label: null },
+      },
+    })
+    renderAccount('/me')
+
+    fireEvent.click(await screen.findByRole('button', { name: '启用公开上榜' }))
+
+    await waitFor(() => {
+      const claimCall = fetchSpy.mock.calls.find(([input]) =>
+        urlOf(input as RequestInfo | URL).includes('/api/arcade/profile/claim')
+      )
+      expect(claimCall).toBeDefined()
+      const [, init] = claimCall as unknown as [RequestInfo | URL, RequestInit]
+      expect(JSON.parse(String(init.body))).toEqual({
+        profile_id: 'local-profile',
+        events: [],
+      })
     })
   })
 
@@ -311,7 +380,13 @@ describe('AccountPage /me', () => {
       }
       if (url.includes('/api/arcade/profile')) {
         return Promise.resolve(
-          new Response(JSON.stringify({ profile: EMPTY_ARCADE_PROFILE }), { status: 200 })
+          new Response(
+            JSON.stringify({
+              profile: EMPTY_ARCADE_PROFILE,
+              public_profile: { claimed: false, public_label: null },
+            }),
+            { status: 200 }
+          )
         )
       }
       return Promise.resolve(new Response(JSON.stringify(AUTHED), { status: 200 }))

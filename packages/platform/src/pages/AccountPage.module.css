@@ -142,7 +142,7 @@
 
 .statGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
 }
@@ -195,6 +195,45 @@
   font: 600 13px var(--font-body);
   color: var(--amio-yellow);
   white-space: nowrap;
+}
+
+.publicCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 22px 26px;
+}
+
+.publicTitle {
+  margin: 0;
+  font: 400 20px var(--font-display);
+  color: var(--text-1);
+}
+
+.publicText {
+  margin: 8px 0 0;
+  font: 400 14px var(--font-body);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.publicError {
+  margin: 8px 0 0;
+  color: var(--amio-danger);
+  font: 600 12px var(--font-body);
+}
+
+.publicLink {
+  flex: 0 0 auto;
+  color: var(--amio-yellow);
+  font: 600 13px var(--font-body);
+  text-decoration: none;
+}
+
+.publicLink:hover {
+  color: #fff;
 }
 
 /* ----------  signed-out — login-guide empty state  ----------
@@ -263,6 +302,12 @@
   color: rgba(255, 255, 255, 0.64);
 }
 
+@media (max-width: 1080px) {
+  .statGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ----------  responsive: mobile  ----------
    atlas.html ≤768px — .acct-grid collapses to one column (profile card
    stacks above the recent-runs / badges detail column). */
@@ -276,7 +321,8 @@
     grid-template-columns: 1fr;
   }
 
-  .claimCard {
+  .claimCard,
+  .publicCard {
     align-items: flex-start;
     flex-direction: column;
   }

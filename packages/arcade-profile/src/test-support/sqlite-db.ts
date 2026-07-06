@@ -4,15 +4,15 @@ import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import type { ArcadeProfileDb, ArcadeProfileDbRunResult, ArcadeProfileDbStatement } from '../db'
 
-const MIGRATION = join(
+const MIGRATIONS_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
   '..',
   'companion-memory',
-  'migrations',
-  '0002_arcade_profile.sql'
+  'migrations'
 )
+const ARCADE_MIGRATIONS = ['0002_arcade_profile.sql', '0003_arcade_public_profile.sql']
 
 class SqliteStatement implements ArcadeProfileDbStatement {
   private params: unknown[] = []
@@ -68,6 +68,8 @@ class SqliteArcadeProfileDb implements ArcadeProfileDb {
 
 export function createTestDb(): ArcadeProfileDb {
   const db = new DatabaseSync(':memory:')
-  db.exec(readFileSync(MIGRATION, 'utf8'))
+  for (const file of ARCADE_MIGRATIONS) {
+    db.exec(readFileSync(join(MIGRATIONS_DIR, file), 'utf8'))
+  }
   return new SqliteArcadeProfileDb(db)
 }

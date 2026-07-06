@@ -16,6 +16,7 @@ const OUTCOMES = new Set<BombSquadProfileOutcome>([
   'practice-timeout',
   'daily-timeout',
 ])
+const PUBLIC_LABEL_MAX_LENGTH = 28
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -30,6 +31,31 @@ function text(value: unknown, max: number): string | null {
   const trimmed = value.trim()
   if (trimmed.length === 0 || trimmed.length > max) return null
   return trimmed
+}
+
+export function defaultArcadePublicLabel(userId: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < userId.length; i += 1) {
+    hash ^= userId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `Player ${((hash >>> 0) & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`
+}
+
+export function sanitizeArcadePublicLabel(value: unknown, userId: string): string {
+  if (typeof value !== 'string') return defaultArcadePublicLabel(userId)
+  const trimmed = value.trim().replace(/\s+/g, ' ')
+  if (trimmed.length === 0) return defaultArcadePublicLabel(userId)
+  if (trimmed.includes('@') || /^https?:\/\//i.test(trimmed)) {
+    return defaultArcadePublicLabel(userId)
+  }
+  const safe = Array.from(trimmed)
+    .filter((char) => /[\p{L}\p{N} _.'-]/u.test(char))
+    .join('')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, PUBLIC_LABEL_MAX_LENGTH)
+  return safe.length > 0 ? safe : defaultArcadePublicLabel(userId)
 }
 
 function integer(value: unknown, min: number, max: number): number | null {
@@ -165,5 +191,6 @@ export function parseArcadeProfileClaimBody(value: unknown): ArcadeProfileClaimB
       ...event,
       profile_id: event.profile_id ?? profileId,
     })),
+    ...(typeof value.public_label === 'string' ? { public_label: value.public_label } : {}),
   }
 }

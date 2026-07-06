@@ -230,6 +230,74 @@
   outline-offset: 2px;
 }
 
+/* ----------  profile / daily-loop feedback  ---------- */
+.loopCard {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 229, 62, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 229, 62, 0.06);
+}
+
+.loopLabel {
+  font: 500 10px var(--amio-font-mono);
+  color: rgba(255, 229, 62, 0.7);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.loopTitle {
+  margin-top: 6px;
+  font: 400 19px var(--font-display);
+  color: #fff;
+}
+
+.loopText {
+  margin: 6px 0 0;
+  font: 400 13px/1.55 var(--font-body);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.shareStatus {
+  margin: 8px 0 0;
+  font: 600 12px var(--font-body);
+  color: var(--y);
+}
+
+.loopActions {
+  display: flex;
+  flex: 0 0 132px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loopAction {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.86);
+  font: 600 12px var(--font-body);
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    color 0.2s;
+}
+
+.loopAction:hover {
+  border-color: rgba(255, 229, 62, 0.36);
+  background: rgba(255, 229, 62, 0.08);
+  color: #fff;
+}
+
+.loopAction:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
 /* ----------  AI consolation quote (failure only)  ---------- */
 .quote {
   padding: 14px 16px;
@@ -435,6 +503,7 @@
       'time     breakdown'
       'subtitle breakdown'
       'rank     breakdown'
+      'loop     breakdown'
       'quote    breakdown'
       'cta      breakdown';
     gap: 8px 56px;
@@ -463,6 +532,11 @@
   .rankCard {
     grid-area: rank;
     margin-top: 18px;
+  }
+
+  .loopCard {
+    grid-area: loop;
+    margin-top: 14px;
   }
 
   .quote {
@@ -496,5 +570,15 @@
     grid-template-columns: 40px 1fr 80px 80px;
     padding: 14px 6px;
     font-size: 15px;
+  }
+}
+
+@media (max-width: 520px) {
+  .loopCard {
+    flex-direction: column;
+  }
+
+  .loopActions {
+    flex: none;
   }
 }

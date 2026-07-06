@@ -25,6 +25,34 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+.boardGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.boardSection {
+  min-width: 0;
+}
+
+.sectionHead {
+  margin-bottom: 14px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--text-1);
+  font: 400 24px var(--font-display);
+}
+
+.sectionLead {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.55);
+  font: 400 13px var(--font-body);
+  line-height: 1.5;
+}
+
 /* §6.9 long-leaderboard card container. */
 .card {
   padding: 14px;
@@ -33,4 +61,10 @@
   background: var(--glass-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+@media (max-width: 960px) {
+  .boardGrid {
+    grid-template-columns: 1fr;
+  }
 }

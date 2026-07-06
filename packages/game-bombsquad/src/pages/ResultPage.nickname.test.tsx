@@ -196,6 +196,27 @@ describe('ResultPage nickname gate', () => {
     })
   })
 
+  it('shows profile save, share, and leaderboard actions on a daily result', async () => {
+    const writeText = vi.fn((_: string) => Promise.resolve())
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    localStorage.setItem(NICKNAME_KEY, '小红')
+    localStorage.setItem(AI_TOOL_KEY, 'chatgpt')
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    expect(await screen.findByText('已保存到本设备')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '分享今日成绩' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看排行榜' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存到我的档案' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '分享今日成绩' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0][0]).toContain('BombSquad 每日挑战')
+    expect(await screen.findByText('分享文案已复制。')).toBeInTheDocument()
+  })
+
   it('practice mode: never shows the modal and never submits', async () => {
     sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedPracticeState()))
 
