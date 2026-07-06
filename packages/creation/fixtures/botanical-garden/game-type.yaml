@@ -1,0 +1,317 @@
+# Botanical Garden GameType vocabulary (v1.0.0). Extracted from the
+# creation-schema design spec (docs/architecture/arch-component-creation-schema.md,
+# "实例化 B：植物园养护") and RESTRUCTURED per the R7 H1 decision: the care
+# loop runs entirely through already-formal mechanisms (state_transition
+# tables + condition_action direct-style predicates + action_event_mapping
+# `<template>_event` columns + optimization_target). The non-machine-consumed
+# action_event_mapping condition/side_effect columns are RETIRED (their
+# behaviour is now carried by the light_adjustment state_transition rule and
+# the health_response/growth_advancement tables). See the r7-produce report
+# for the full decision + every spec line moved. Chinese strings are
+# target-language instantiation DATA; comments are English per repo policy.
+GameType:
+  id: botanical-garden
+  version: '1.0.0'
+  display_name: 植物园养护
+  description: 视觉多实体并行管理——一方看植物园场景，另一方持养护手册
+
+  co_play_form: hidden_info_coop # gardener sees the scene, botanist knows the rules
+
+  element_archetypes:
+    - id: plant
+      category: visual
+      verbal_label:
+        canonical: '植株'
+        phonetic_pinyin: 'zhí zhū'
+        aliases: ['植物']
+        forbidden_terms: ['花', '草'] # too generic
+      description: 一株植物，有品种、生长阶段和健康状态
+      attributes:
+        - name: species
+          type: enum
+          required: true
+          values: [fern, succulent, orchid, moss, vine]
+          display_labels:
+            { fern: '蕨类', succulent: '多肉', orchid: '兰花', moss: '苔藓', vine: '藤蔓' }
+          verbal_template: '{species}植株'
+        - name: pot_position
+          type: range
+          required: true
+          min: 1
+          max: 9 # 3x3 grid
+          step: 1
+          verbal_template: '在{pot_position}号位置'
+        - name: soil_type
+          type: enum
+          required: false
+          values: [sandy, loamy, peaty]
+          default: loamy
+      states:
+        # RESTRUCTURE: health ordered worst→best so advance_state = heal, and
+        # so optimization_target's `at_least` ranks by declared order.
+        - name: health
+          type: enum
+          values: [critical, wilting, stable, thriving]
+          initial: stable
+          verbal_template: '健康状态{health}'
+        - name: growth_stage
+          type: enum
+          values: [seedling, juvenile, mature, flowering]
+          initial: seedling
+          verbal_template: '生长阶段{growth_stage}'
+        - name: effective_light
+          type: enum
+          values: [full_sun, partial_shade, full_shade]
+          initial: full_sun # per-instance override via Level.elements[].initial_states
+          verbal_template: '实际光照{effective_light}'
+      interaction_model: reactive
+
+    - id: environment_zone
+      category: visual
+      verbal_label:
+        canonical: '环境区'
+        phonetic_pinyin: 'huán jìng qū'
+        aliases: ['区域']
+        forbidden_terms: ['地方', '位置']
+      description: 覆盖若干花盆位置的环境因子区域
+      attributes:
+        - name: zone_id
+          type: enum
+          required: true
+          values: [north, center, south]
+          verbal_template: '{zone_id}区'
+        - name: light_level
+          type: enum
+          required: true
+          values: [full_sun, partial_shade, full_shade]
+          verbal_template: '光照{light_level}'
+        - name: temperature
+          type: enum
+          required: true
+          values: [cool, moderate, warm]
+          verbal_template: '温度{temperature}'
+        - name: covers_positions
+          type: set
+          required: true
+          values: ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+      states: []
+      interaction_model: stateless
+
+  action_registry:
+    - name: apply_care
+      description: 对植株执行养护操作（浇水/施肥/遮光/换盆/催花）
+      params: [{ name: action_type, type: string }]
+      scope: both
+      # apply_care drives the botanist manual's condition rules + compatibility
+      # matrix; the state_transition tables (health/growth/light) are driven by
+      # action_event_mapping events, not triggers.
+      triggers: [needs_rule, compatibility_matrix]
+    - name: heal
+      description: 健康状态推进一档（引擎内部效果）
+      params: []
+      scope: rule_verb
+      state_effect: advance_state # advances health toward thriving (worst→best order)
+    - name: change_health
+      description: 健康状态变更（引擎内部效果，供兼容矩阵手册引用；本关卡不触发）
+      params: [{ name: delta, type: string }]
+      scope: rule_verb
+    - name: give_instruction
+      description: 植物学家给出养护指令
+      params: []
+      scope: player_action
+    - name: describe_state
+      description: 园丁描述植株当前状态
+      params: []
+      scope: player_action
+
+  # action_type → per-template rule event. ONLY the `<rule_template_id>_event`
+  # columns exist and are machine-consumed (the retired condition/side_effect
+  # columns are gone). A single apply_care action_type may drive several
+  # templates by carrying several `_event` columns.
+  action_event_mapping:
+    - action_type: water
+      health_response_event: correct_care
+    - action_type: overwater
+      health_response_event: wrong_care # over-application harms health (degradation demo)
+    - action_type: shade
+      light_adjustment_event: shade_applied
+    - action_type: fertilize
+      growth_advancement_event: fertilize_correct
+    - action_type: repot
+      growth_advancement_event: repot_correct
+    - action_type: bloom
+      growth_advancement_event: bloom_correct
+
+  rule_templates:
+    # Botanist manual: species care rules (direct-style predicates — a param
+    # name is an attribute or state name; the engine resolves it structurally).
+    - id: needs_rule
+      type: condition_action
+      condition_schema:
+        predicates:
+          - name: species_is
+            params: [{ name: species, type: string }]
+            description: 植株品种等于指定值
+          - name: light_is
+            params: [{ name: effective_light, type: string }]
+            description: 植株实际光照等于指定值
+          - name: growth_is
+            params: [{ name: growth_stage, type: string }]
+            description: 植株生长阶段等于指定值
+          - name: soil_is
+            params: [{ name: soil_type, type: string }]
+            description: 土壤类型等于指定值
+        combinators: [AND, OR, NOT]
+      action_schema:
+        verbs: [heal, change_health]
+      communication_weight: 2.0 # per plant: describe → ask species → look up → instruct → execute → confirm
+
+    - id: compatibility_matrix
+      type: interaction_matrix
+      matrix_schema:
+        entity_types: [fern, succulent, orchid, moss, vine]
+        entity_type_attributes: [species]
+        relation_types: [compatible, incompatible, synergy, neutral]
+        effect_schema:
+          - relation: compatible
+            effect: change_health # inert on this level (no state_effect): the botanist's compatibility manual
+            params: [{ name: delta, type: string }]
+          - relation: incompatible
+            effect: change_health
+            params: [{ name: delta, type: string }]
+          - relation: synergy
+            effect: change_health
+            params: [{ name: delta, type: string }]
+          - relation: neutral
+            effect: change_health
+            params: [{ name: delta, type: string }]
+      communication_weight: 0.5
+
+    - id: health_response
+      type: state_transition
+      transition_table_schema:
+        states: [critical, wilting, stable, thriving]
+        events: [correct_care, wrong_care, neglect]
+      communication_weight: 0.5
+
+    - id: growth_advancement
+      type: state_transition
+      transition_table_schema:
+        states: [seedling, juvenile, mature, flowering]
+        events: [fertilize_correct, repot_correct, bloom_correct]
+      communication_weight: 1.0 # growth advance needs a round: confirm condition → execute → observe
+
+    - id: light_adjustment
+      type: state_transition
+      transition_table_schema:
+        states: [full_sun, partial_shade, full_shade]
+        events: [shade_applied]
+      communication_weight: 0.5 # shade action adjusts effective_light one step
+
+  information_partition_template:
+    roles:
+      - id: gardener
+        display_name: 园丁
+        verbal_label: '园丁'
+        description: 看到植物园场景，能执行养护操作，但不知道养护规则
+        input_modality: visual
+        output_modality: voice
+      - id: botanist
+        display_name: 植物学家
+        verbal_label: '植物学家'
+        description: 持有养护手册，知道规则和兼容性矩阵，但看不到当前场景
+        input_modality: visual
+        output_modality: voice
+
+    visibility_rules:
+      - role: gardener
+        can_see:
+          - element_archetype: plant
+            attributes: [species, pot_position] # species is a shared reference-label source
+            states: [health, growth_stage, effective_light]
+          - element_archetype: environment_zone
+            attributes: [zone_id, light_level, temperature, covers_positions]
+            states: []
+        cannot_see:
+          - element_archetype: plant
+            attributes: [soil_type]
+            states: []
+      - role: botanist
+        can_see:
+          - element_archetype: plant
+            attributes: [species, soil_type]
+            states: []
+        cannot_see:
+          - element_archetype: plant
+            attributes: [pot_position]
+            states: [health, growth_stage, effective_light]
+          - element_archetype: environment_zone
+            attributes: [light_level, temperature]
+            states: []
+
+    shared_label_attributes: # only cross-role-communicated archetypes
+      - element_archetype: plant
+        attributes: [species] # species is visible to both → instance_label 「蕨类植株」…
+
+    rule_visibility:
+      - role: gardener
+        visible_rule_templates: []
+      - role: botanist
+        visible_rule_templates:
+          [needs_rule, compatibility_matrix, health_response, growth_advancement, light_adjustment]
+
+    action_capability:
+      - role: gardener
+        can_perform: [apply_care, describe_state]
+        target_archetypes: [plant]
+      - role: botanist
+        can_perform: [give_instruction]
+        target_archetypes: []
+
+    communication_channels:
+      - from: gardener
+        to: botanist
+        modality: voice
+        constraints:
+          turn_time_limit_seconds: 30
+      - from: botanist
+        to: gardener
+        modality: voice
+        constraints:
+          turn_time_limit_seconds: 30
+
+    partition_pattern: ability_complement
+
+  win_condition_type:
+    type: optimization_target
+    description: 所有植株健康达到 stable 或更高，且至少一株生长阶段达到 flowering
+
+  difficulty_budget:
+    element_count:
+      min: 4
+      max: 15
+    rule_count:
+      min: 3
+      max: 15
+    partition_complexity:
+      max: 8.0
+    weights:
+      element: 0.8
+      rule: 1.2
+      partition: 2.0
+    total_score:
+      min: 6.0
+      max: 35.0
+
+  communication_budget:
+    max_round_trips: 20
+    estimated_seconds_per_round: 10.0
+    time_limit_seconds: 480
+    safety_margin: 0.75
+
+  solver_strategy: csp # larger state space (3 plants × health × growth × light × care combos)
+  # CALIBRATED (R7, engine-backed bounded search): golden bg-demo-001 solves
+  # in ~99ms median / 119ms max; a stressed variant (require 2 flowering)
+  # ~677ms median / 732ms max. 3000ms ≈ 4× the hardest measured — an
+  # evidence-based bound (was a 10000ms guess). Closes design-debt #2.
+  solver_timeout_ms: 3000

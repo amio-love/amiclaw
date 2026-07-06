@@ -1,0 +1,210 @@
+# Sound Garden GameType vocabulary (v1.0.0), extracted verbatim from the
+# creation-schema design spec (docs/architecture/arch-component-creation-schema.md,
+# "实例化 C：声音花园（Sound Garden）— co_build 形态"). Data values are
+# spec-faithful; inline commentary is translated to English per the repo
+# language policy. Chinese strings are target-language instantiation DATA.
+GameType:
+  id: sound-garden
+  version: '1.0.0'
+  display_name: 声音花园
+  description: 共同建造——双方在共享时间线上放置节奏与旋律元素，追求和声目标
+
+  co_play_form: co_build # co-construction form
+
+  element_archetypes:
+    - id: rhythm_piece
+      category: auditory
+      verbal_label:
+        canonical: '节奏件'
+        phonetic_pinyin: 'jié zòu jiàn'
+        aliases: ['鼓点']
+        forbidden_terms: ['音符']
+      description: 放置在时间线上的节奏元素
+      attributes:
+        - name: rhythm_type
+          type: enum
+          required: true
+          values: [kick, snare, hihat, clap]
+          display_labels: { kick: '底鼓', snare: '军鼓', hihat: '踩镲', clap: '拍掌' }
+          verbal_template: '{rhythm_type}节奏件'
+        - name: timeline_slot
+          type: range
+          required: true
+          min: 1
+          max: 8
+          step: 1
+          verbal_template: '第{timeline_slot}拍'
+      states: []
+      interaction_model: stateless
+
+    - id: melody_piece
+      category: auditory
+      verbal_label:
+        canonical: '旋律件'
+        phonetic_pinyin: 'xuán lǜ jiàn'
+        aliases: ['音色']
+        forbidden_terms: ['节奏']
+      description: 放置在时间线上的旋律元素
+      attributes:
+        - name: melody_type
+          type: enum
+          required: true
+          values: [bell, chime, flute, harp]
+          display_labels: { bell: '铃铛', chime: '风铃', flute: '笛音', harp: '竖琴' }
+          verbal_template: '{melody_type}旋律件'
+        - name: timeline_slot
+          type: range
+          required: true
+          min: 1
+          max: 8
+          step: 1
+          verbal_template: '第{timeline_slot}拍'
+      states: []
+      interaction_model: stateless
+
+  action_registry:
+    - name: place_piece
+      description: 在时间线槽位放置一个元素
+      params: [{ name: slot, type: int }]
+      scope: both
+      construction_effect: place # declarative construction effect: place the target element
+      triggers: [harmony_rule] # placing a piece re-evaluates same-slot harmony
+    - name: remove_piece
+      description: 从时间线移除一个元素
+      params: [{ name: slot, type: int }]
+      scope: both
+      construction_effect: remove # declarative construction effect: remove the target element
+      triggers: [harmony_rule] # removing a piece re-evaluates same-slot harmony
+    - name: propose_plan
+      description: 口头提议放置计划
+      params: []
+      scope: player_action # pure coordination: proposing a plan fires no rule
+    - name: score_harmony
+      description: 计算当前花园的和声得分（引擎内部）
+      params: []
+      scope: rule_verb
+
+  rule_templates:
+    - id: harmony_rule
+      type: interaction_matrix # rhythm×melody pair lookup — only same-timeline_slot pairs score
+      matrix_schema:
+        entity_types: [kick, snare, hihat, clap, bell, chime, flute, harp]
+        entity_type_attributes: [rhythm_type, melody_type] # entity type from each piece's type attribute
+        pair_match_attributes: [timeline_slot] # only same-slot pairs are eligible (formal declaration)
+        relation_types: [synergy, compatible, neutral, incompatible]
+        relation_scores: { synergy: 3, compatible: 2, neutral: 1, incompatible: -1 }
+        # the SINGLE machine scoring source: score = sum of eligible pairs'
+        # matrix relations mapped through this table (score_threshold basis)
+        effect_schema:
+          - relation: synergy
+            effect: score_harmony # references action_registry
+            params: []
+          - relation: compatible
+            effect: score_harmony
+            params: []
+          - relation: neutral
+            effect: score_harmony
+            params: []
+          - relation: incompatible
+            effect: score_harmony
+            params: []
+      communication_weight: 0.5 # passive scoring, no active communication needed
+
+  information_partition_template:
+    roles:
+      - id: rhythm_builder
+        display_name: 节奏手
+        verbal_label: '节奏手'
+        description: 放置节奏元素，看到完整时间线
+        input_modality: visual
+        output_modality: voice
+      - id: melody_builder
+        display_name: 旋律手
+        verbal_label: '旋律手'
+        description: 放置旋律元素，看到完整时间线
+        input_modality: visual
+        output_modality: voice
+
+    visibility_rules: # co_build form: both sides share the full state
+      - role: rhythm_builder
+        can_see:
+          - element_archetype: rhythm_piece
+            attributes: ['*']
+            states: []
+          - element_archetype: melody_piece
+            attributes: ['*']
+            states: []
+        cannot_see: []
+      - role: melody_builder
+        can_see:
+          - element_archetype: rhythm_piece
+            attributes: ['*']
+            states: []
+          - element_archetype: melody_piece
+            attributes: ['*']
+            states: []
+        cannot_see: []
+
+    shared_label_attributes: # co_build: both see everything — disambiguate via type+slot
+      - element_archetype: rhythm_piece
+        attributes: [rhythm_type, timeline_slot]
+      - element_archetype: melody_piece
+        attributes: [melody_type, timeline_slot]
+
+    rule_visibility: # co_build: both sides know the harmony rule
+      - role: rhythm_builder
+        visible_rule_templates: [harmony_rule]
+      - role: melody_builder
+        visible_rule_templates: [harmony_rule]
+
+    action_capability:
+      - role: rhythm_builder
+        can_perform: [place_piece, remove_piece, propose_plan]
+        target_archetypes: [rhythm_piece] # may only place rhythm pieces
+      - role: melody_builder
+        can_perform: [place_piece, remove_piece, propose_plan]
+        target_archetypes: [melody_piece] # may only place melody pieces
+
+    communication_channels:
+      - from: rhythm_builder
+        to: melody_builder
+        modality: voice
+        constraints:
+          turn_time_limit_seconds: 30
+      - from: melody_builder
+        to: rhythm_builder
+        modality: voice
+        constraints:
+          turn_time_limit_seconds: 30
+
+    partition_pattern: ability_complement
+
+  win_condition_type:
+    type: score_threshold
+    description: 和声总分达到目标阈值
+
+  difficulty_budget:
+    element_count:
+      min: 4
+      max: 16
+    rule_count:
+      min: 1
+      max: 4
+    partition_complexity:
+      max: 4.0
+    weights:
+      element: 1.0
+      rule: 1.0
+      partition: 1.0
+    total_score:
+      min: 4.0
+      max: 20.0
+
+  communication_budget:
+    max_round_trips: 10
+    estimated_seconds_per_round: 8.0
+    time_limit_seconds: 240
+    safety_margin: 0.8
+
+  solver_strategy: exhaustive_path_search # small state space (bounded timeline slots × finite piece combos)
+  solver_timeout_ms: 5000 # provisional bound — calibration lands with spec design-debt "solver_strategy / solver_timeout_ms 校准"

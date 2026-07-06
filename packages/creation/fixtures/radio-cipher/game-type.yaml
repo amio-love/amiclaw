@@ -1,0 +1,284 @@
+# Radio Cipher GameType vocabulary (v1.0.0), extracted verbatim from the
+# creation-schema design spec (docs/architecture/arch-component-creation-schema.md,
+# "实例化 A：密码电台" — Schema instantiation A). Data values are spec-faithful;
+# inline commentary is translated to English per the repo language policy.
+# Chinese strings (display names, verbal labels, descriptions) are DATA in the
+# target language, as the spec mandates for GameType instantiations.
+GameType:
+  id: radio-cipher
+  version: '1.0.0'
+  display_name: 密码电台
+  description: 听觉信息不对称解密协作——一方听到加密消息，另一方持有密码本
+
+  co_play_form: hidden_info_coop # each side holds half the information; voice merges them
+
+  element_archetypes:
+    - id: cipher_segment
+      category: auditory
+      verbal_label:
+        canonical: '密文段'
+        phonetic_pinyin: 'mì wén duàn'
+        aliases: ['加密片段']
+        forbidden_terms: ['密码', '暗号']
+      description: 一段经过加密处理的语音片段
+      attributes:
+        - name: content_length
+          type: enum
+          required: true
+          values: [short, medium, long] # 3/5/8 syllables
+          display_labels: { short: '短', medium: '中等', long: '长' }
+          verbal_template: '{content_length}密文段' # rendered with display_label: 「短密文段」「中等密文段」
+        - name: plaintext_category
+          type: enum
+          required: true
+          values: [animal, color, number_word, direction, weather]
+          verbal_template: '答案是一个{plaintext_category}类词汇'
+      states:
+        - name: decryption_progress
+          type: enum
+          values: [encrypted, partial, decrypted]
+          initial: encrypted
+          verbal_template: '这段目前{decryption_progress}'
+      interaction_model: stateful
+
+    - id: cipher_key
+      category: visual
+      verbal_label:
+        canonical: '密钥'
+        phonetic_pinyin: 'mì yào'
+        aliases: ['钥匙']
+        forbidden_terms: ['密码本']
+      description: 解密所需的密钥参数——每种加密方法的密钥材料均为有界整数
+      attributes:
+        - name: target_method
+          type: enum
+          required: true
+          values: [caesar_shift, reverse]
+          display_labels: { caesar_shift: '凯撒偏移', reverse: '反转' }
+          verbal_template: '{target_method}密钥'
+        - name: shift_amount
+          type: range
+          required: false
+          min: 1
+          max: 25
+          step: 1
+          verbal_template: '偏移量{shift_amount}'
+          # caesar_shift uses this field; reverse needs no key parameter (self-inverse operation)
+      states: []
+      interaction_model: stateless
+
+    - id: frequency_hint
+      category: visual
+      verbal_label:
+        canonical: '频率提示'
+        phonetic_pinyin: 'pín lǜ tí shì'
+        aliases: []
+        forbidden_terms: ['线索', '暗示']
+      description: 音节出现频率的统计提示
+      attributes:
+        - name: hint_type
+          type: enum
+          required: true
+          values: [most_frequent, least_frequent, repeated]
+          display_labels: { most_frequent: '最高频', least_frequent: '最低频', repeated: '重复' }
+          verbal_template: '{hint_type}音节提示'
+        - name: target_syllable
+          type: enum
+          required: true
+          values: [a, e, i, o, u, ai, ei, ao, ou, an, en, ang, eng]
+      states: []
+      interaction_model: stateless
+
+  action_registry:
+    - name: apply_key
+      description: 对密文段应用密钥执行解密
+      params: [{ name: cipher_segment_id, type: string }, { name: cipher_key_id, type: string }]
+      scope: rule_verb
+      state_effect: advance_state # each application advances one step: encrypted→partial→decrypted
+    - name: reverse_decode
+      description: 对密文段执行反转解密（无需密钥）
+      params: [{ name: cipher_segment_id, type: string }]
+      scope: rule_verb
+      state_effect: complete_state # self-inverse operation jumps to the terminal state: encrypted→decrypted
+    - name: identify_shift
+      description: 根据频率分析确定偏移量
+      params: [{ name: shift_value, type: int }]
+      scope: rule_verb
+    - name: confirm_decryption
+      description: 确认该段解密正确
+      params: []
+      scope: rule_verb
+    - name: retry_decryption
+      description: 重试解密（密钥可能错误）
+      params: []
+      scope: rule_verb
+    - name: describe_heard_content
+      description: 口头复述听到的加密内容
+      params: []
+      scope: player_action
+      # pure communication: repeating what is heard fires no rule
+    - name: execute_decryption
+      description: 按译码员指令执行解密操作
+      params: []
+      scope: player_action
+      triggers: [decrypt_step, reverse_decrypt, verification_check] # the listener's decrypt action drives the pipelines
+    - name: give_instruction
+      description: 根据密码本给出解密指令
+      params: []
+      scope: player_action
+
+  rule_templates:
+    - id: decrypt_step
+      type: temporal_sequence
+      sequence_schema:
+        max_steps: 5
+        step_schema:
+          action: apply_key # references action_registry
+          params:
+            - name: cipher_segment_id
+              type: string
+            - name: cipher_key_id
+              type: string
+        ordering: strict
+      communication_weight: 2.0 # each step needs: listen → repeat → look up → instruct → execute → confirm
+
+    - id: reverse_decrypt
+      type: temporal_sequence
+      sequence_schema:
+        max_steps: 1
+        step_schema:
+          action: reverse_decode # references action_registry
+          params:
+            - name: cipher_segment_id
+              type: string
+        ordering: strict
+      communication_weight: 1.5 # reverse decryption is simpler: listen → repeat → instruct "say it backwards" → execute → confirm
+
+    - id: verification_check
+      type: condition_action
+      condition_schema:
+        predicates:
+          - name: plaintext_is_valid_word
+            params:
+              - name: category
+                type: string
+            description: 解密结果是否为目标类别的合法词汇
+        combinators: [AND]
+      action_schema:
+        verbs: [confirm_decryption, retry_decryption] # references an action_registry subset
+      communication_weight: 1.0
+
+  information_partition_template:
+    roles:
+      - id: listener
+        display_name: 监听员
+        verbal_label: '监听员'
+        description: 听到加密语音消息，需要口头复述听到的内容
+        input_modality: auditory
+        output_modality: voice
+      - id: decoder
+        display_name: 译码员
+        verbal_label: '译码员'
+        description: 持有密码本和频率提示，指导监听员解密
+        input_modality: visual
+        output_modality: voice
+
+    visibility_rules:
+      - role: listener
+        can_see:
+          - element_archetype: cipher_segment
+            attributes: [content_length] # content_length is visible to both sides (shared label source)
+            states: [decryption_progress]
+        cannot_see:
+          - element_archetype: cipher_segment
+            attributes: [plaintext_category]
+            states: []
+          - element_archetype: cipher_key
+            attributes: ['*']
+            states: []
+          - element_archetype: frequency_hint
+            attributes: ['*']
+            states: []
+      - role: decoder
+        can_see:
+          - element_archetype: cipher_key
+            attributes: ['*']
+            states: []
+          - element_archetype: frequency_hint
+            attributes: ['*']
+            states: []
+          - element_archetype: cipher_segment
+            attributes: [plaintext_category, content_length]
+            states: [decryption_progress]
+        cannot_see:
+          - element_archetype: cipher_segment
+            attributes: []
+            states: []
+
+    # Cross-role shared label source — only archetypes needing cross-role
+    # communication are listed, and the attributes must be visible to all
+    # communicating roles.
+    shared_label_attributes:
+      - element_archetype: cipher_segment
+        attributes: [content_length] # visible to both → instance_label like 「短密文段」「中等密文段」
+      # cipher_key and frequency_hint are consumed by the decoder only — no
+      # cross-role communication need, so they are not listed here.
+
+    rule_visibility:
+      - role: listener
+        visible_rule_templates: []
+      - role: decoder
+        visible_rule_templates: [decrypt_step, reverse_decrypt, verification_check]
+
+    action_capability:
+      - role: listener
+        can_perform: [describe_heard_content, execute_decryption] # references action_registry
+        target_archetypes: [cipher_segment]
+      - role: decoder
+        can_perform: [give_instruction]
+        target_archetypes: []
+
+    communication_channels:
+      - from: listener
+        to: decoder
+        modality: voice
+        constraints:
+          turn_time_limit_seconds: 30
+      - from: decoder
+        to: listener
+        modality: voice
+        constraints:
+          forbidden_content: [plaintext_answer]
+          turn_time_limit_seconds: 30
+
+    partition_pattern: describe_execute
+
+  win_condition_type:
+    type: all_solved
+    description: 所有 cipher_segment 的 decryption_progress 到达 decrypted 状态
+
+  difficulty_budget:
+    element_count:
+      min: 3
+      max: 12
+    rule_count:
+      min: 1
+      max: 8
+    partition_complexity:
+      max: 6.0
+    weights:
+      element: 1.0
+      rule: 1.5
+      partition: 2.0
+    total_score:
+      min: 5.0
+      max: 30.0
+
+  communication_budget:
+    max_round_trips: 15
+    estimated_seconds_per_round: 12.0
+    time_limit_seconds: 300
+    safety_margin: 0.8
+
+  solver_strategy: exhaustive_path_search # small state space (2 segments × 2 methods × bounded key space)
+  solver_timeout_ms: 5000 # provisional bound — calibration lands with spec design-debt "solver_strategy / solver_timeout_ms 校准"

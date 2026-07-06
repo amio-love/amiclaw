@@ -1,0 +1,197 @@
+# Botanical Garden worked Level (bg-demo-001). Restructured per the R7 H1
+# decision to run entirely on formal mechanisms. Per-instance starting states
+# come from elements[].initial_states (the small general schema field added
+# this round). Winning path (all via apply_care → action_event_mapping →
+# state_transition / condition_action):
+#   water plant-1 (fern wilting → stable)
+#   shade plant-3 (orchid: effective_light full_sun→partial_shade, which lets
+#         rule-orchid-care advance its health wilting→stable in the same care)
+#   fertilize / repot / bloom plant-3 (seedling→juvenile→mature→flowering)
+Level:
+  metadata:
+    id: bg-demo-001
+    game_type: botanical-garden
+    game_type_version: '1.0.0'
+    title: 小花圃急救
+    author: ai-author-002
+    created_at: '2026-07-02T22:00:00+08:00'
+
+  # partition_complexity:
+  # total_fields: plant(3 attr + 3 state = 6) + environment_zone(4 attr = 4) = 10
+  # gardener hidden: plant.soil_type(1) = 1; ratio = 1/10 = 0.1
+  # botanist hidden: plant.pot_position(1) + health/growth_stage/effective_light(3)
+  #                  + env.light_level/temperature(2) = 6; ratio = 6/10 = 0.6
+  # mean_hidden = (0.1+0.6)/2 = 0.35; roles_term = 2*0.35 = 0.7
+  # channels: 2 × 1 constraint each; mean = 1.0; channels_term = 2*1.0 = 2.0
+  # partition_complexity = 0.7 + 2.0 = 2.7
+  difficulty:
+    element_count: 6 # plant-1..3 + zone-north/center/south
+    rule_count: 6 # light + orchid-care + fern-needs + compatibility + health + growth
+    partition_complexity: 2.7
+    total_score: 17.4 # 6*0.8 + 6*1.2 + 2.7*2.0 = 4.8 + 7.2 + 5.4
+
+  # round_trips: light(0.5) + needs_rule×2(2.0+2.0) + compatibility(0.5)
+  #            + health_response(0.5) + growth_advancement(1.0) = 6.5 → ceil = 7
+  communication_estimate:
+    round_trips: 7
+    estimated_seconds: 70
+    time_limit_seconds: 480
+    feasibility: feasible # 70 <= 480*0.75 = 360
+
+  elements:
+    - id: plant-1
+      archetype: plant
+      params:
+        species: fern
+        pot_position: 1
+        soil_type: peaty
+      position: { slot: 1 }
+      initial_states: { health: wilting, effective_light: partial_shade } # north zone: partial_shade
+    - id: plant-2
+      archetype: plant
+      params:
+        species: succulent
+        pot_position: 5
+        soil_type: sandy
+      position: { slot: 5 }
+      initial_states: { health: stable, effective_light: full_sun } # center zone: full_sun
+    - id: plant-3
+      archetype: plant
+      params:
+        species: orchid
+        pot_position: 6
+        soil_type: loamy
+      position: { slot: 6 }
+      initial_states: { health: wilting, effective_light: full_sun } # center zone: full_sun
+    - id: zone-north
+      archetype: environment_zone
+      params:
+        zone_id: north
+        light_level: partial_shade
+        temperature: cool
+        covers_positions: ['1', '2', '3']
+    - id: zone-center
+      archetype: environment_zone
+      params:
+        zone_id: center
+        light_level: full_sun
+        temperature: warm
+        covers_positions: ['4', '5', '6']
+    - id: zone-south
+      archetype: environment_zone
+      params:
+        zone_id: south
+        light_level: full_shade
+        temperature: moderate
+        covers_positions: ['7', '8', '9']
+
+  rules:
+    # Order matters: rule-light precedes rule-orchid-care so a single
+    # apply_care(shade) on the orchid sets partial_shade THEN heals it.
+    - id: rule-light
+      template: light_adjustment
+      bindings:
+        transitions:
+          - [full_sun, shade_applied, partial_shade]
+          - [partial_shade, shade_applied, full_shade]
+      target_elements: [plant-1, plant-2, plant-3]
+    - id: rule-orchid-care
+      template: needs_rule
+      bindings:
+        predicates:
+          [
+            { name: species_is, species: orchid },
+            { name: light_is, effective_light: partial_shade },
+          ]
+        combinator: AND
+        action: { verb: heal }
+      target_elements: [plant-3]
+    - id: rule-fern-needs
+      template: needs_rule
+      # Danger rule (botanist manual): a fern under full_shade suffers. In this
+      # safe garden the fern sits under partial_shade, so it never fires.
+      bindings:
+        predicates:
+          [{ name: species_is, species: fern }, { name: light_is, effective_light: full_shade }]
+        combinator: AND
+        action: { verb: change_health, delta: down }
+      target_elements: [plant-1]
+    - id: rule-compatibility
+      template: compatibility_matrix
+      bindings:
+        matrix:
+          - [fern, succulent, incompatible]
+          - [fern, orchid, compatible]
+          - [succulent, orchid, neutral]
+          - [fern, moss, synergy]
+          - [succulent, vine, compatible]
+      target_elements: [plant-1, plant-2, plant-3]
+    - id: rule-health
+      template: health_response
+      bindings:
+        transitions:
+          - [wilting, correct_care, stable]
+          - [stable, correct_care, thriving]
+          - [critical, correct_care, wilting]
+          - [stable, wrong_care, wilting]
+          - [thriving, wrong_care, stable]
+          - [wilting, wrong_care, critical]
+          - [thriving, neglect, stable]
+          - [stable, neglect, wilting]
+      target_elements: [plant-1, plant-2]
+    - id: rule-growth
+      template: growth_advancement
+      bindings:
+        transitions:
+          - [seedling, fertilize_correct, juvenile]
+          - [juvenile, repot_correct, mature]
+          - [mature, bloom_correct, flowering]
+      target_elements: [plant-1, plant-2, plant-3]
+
+  information_partition:
+    role_assignments:
+      - role: gardener
+        element_views:
+          - {
+              element_id: plant-1,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-2,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-3,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: zone-north,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+          - {
+              element_id: zone-center,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+          - {
+              element_id: zone-south,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+      - role: botanist
+        element_views:
+          - { element_id: plant-1, visible_attributes: [species, soil_type], visible_states: [] }
+          - { element_id: plant-2, visible_attributes: [species, soil_type], visible_states: [] }
+          - { element_id: plant-3, visible_attributes: [species, soil_type], visible_states: [] }
+
+  win_condition:
+    type: optimization_target
+    params:
+      all_states_at_least:
+        - { state: health, value: stable } # every plant health >= stable (declared-order rank)
+      count_states_equal:
+        - { state: growth_stage, value: flowering, count: 1 } # >= 1 plant flowering
