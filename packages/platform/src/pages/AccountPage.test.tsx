@@ -273,7 +273,7 @@ describe('AccountPage /me', () => {
     expect(screen.getByText('nova@amio.fans')).toBeInTheDocument()
     // Account stats are read from /api/arcade/profile, not invented locally.
     expect(await screen.findByText('账号记录')).toBeInTheDocument()
-    expect(screen.getByText('1 天')).toBeInTheDocument()
+    expect(await screen.findByText('1 天')).toBeInTheDocument()
     expect(screen.getByText('每日挑战 · 01:05 · 最快 01:05')).toBeInTheDocument()
     expect(screen.getByText('乾 → 坤')).toBeInTheDocument()
     expect(screen.getByText('上榜名：Player 8F3A')).toBeInTheDocument()

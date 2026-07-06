@@ -7,8 +7,11 @@ const mocks = vi.hoisted(() => ({
   session: {
     sessionId: 'oracle-session',
     yaoValues: null as number[] | null,
+    castCreatedAt: null as string | null,
   },
   recordOracleLocalSign: vi.fn(),
+  readArcadeLocalProfile: vi.fn(),
+  markArcadeProfileEventsClaimed: vi.fn(),
   submitArcadeProfileEvent: vi.fn(() => Promise.resolve({ kind: 'anon' })),
 }))
 
@@ -18,6 +21,8 @@ vi.mock('../session', () => ({
 
 vi.mock('@amiclaw/arcade-profile/local', () => ({
   recordOracleLocalSign: mocks.recordOracleLocalSign,
+  readArcadeLocalProfile: mocks.readArcadeLocalProfile,
+  markArcadeProfileEventsClaimed: mocks.markArcadeProfileEventsClaimed,
 }))
 
 vi.mock('@amiclaw/arcade-profile/api-client', () => ({
@@ -39,7 +44,10 @@ describe('PageSign arcade profile write', () => {
     cleanup()
     mocks.session.sessionId = 'oracle-session'
     mocks.session.yaoValues = null
+    mocks.session.castCreatedAt = null
     mocks.recordOracleLocalSign.mockReset()
+    mocks.readArcadeLocalProfile.mockReset()
+    mocks.markArcadeProfileEventsClaimed.mockReset()
     mocks.submitArcadeProfileEvent.mockReset()
     mocks.submitArcadeProfileEvent.mockResolvedValue({ kind: 'anon' })
     vi.unstubAllGlobals()
@@ -69,7 +77,11 @@ describe('PageSign arcade profile write', () => {
       },
     }
     mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
+    mocks.session.castCreatedAt = '2026-07-06T08:00:00.000Z'
     mocks.recordOracleLocalSign.mockReturnValue(event)
+    mocks.readArcadeLocalProfile.mockReturnValue({
+      oracle_signs: [event.sign],
+    })
 
     renderPage()
 
@@ -78,10 +90,23 @@ describe('PageSign arcade profile write', () => {
     expect(mocks.recordOracleLocalSign).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'oracle-session',
+        signDate: '2026-07-06',
+        createdAt: '2026-07-06T08:00:00.000Z',
         yaoValues: [7, 8, 9, 7, 7, 7],
       })
     )
     expect(mocks.submitArcadeProfileEvent).toHaveBeenCalledWith(event)
+  })
+
+  it('does not save a persisted sign when the cast creation date is unavailable', async () => {
+    mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
+    mocks.session.castCreatedAt = null
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('本次卦签暂未写入档案')).toBeTruthy())
+    expect(mocks.recordOracleLocalSign).not.toHaveBeenCalled()
+    expect(mocks.submitArcadeProfileEvent).not.toHaveBeenCalled()
   })
 
   it('copies the share text with visible feedback', async () => {

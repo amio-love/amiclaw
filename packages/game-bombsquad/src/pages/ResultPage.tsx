@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
 import { Scenery } from '@amiclaw/ui'
 import {
+  markArcadeProfileEventsClaimed,
   readArcadeLocalProfile,
   recordBombSquadLocalRun,
   summarizeArcadeLocalProfile,
@@ -138,19 +139,30 @@ export default function ResultPage() {
       finishedAt: new Date(state.totalEndTime ?? Date.now()).toISOString(),
     })
     if (event) {
-      const localDailyLoop = summarizeArcadeLocalProfile(readArcadeLocalProfile()).daily_loop
+      if (event.kind !== 'bombsquad_run') {
+        queueMicrotask(() => setProfileSaveState('unavailable'))
+        return
+      }
+      const sourceKey = event.run.source_key
+      const localProfile = readArcadeLocalProfile()
+      const localSaved =
+        localProfile?.bombsquad_runs.some((run) => run.source_key === sourceKey) ?? false
+      const localDailyLoop = localSaved
+        ? summarizeArcadeLocalProfile(localProfile).daily_loop
+        : null
       queueMicrotask(() => {
-        setProfileSaveState('saved-local')
-        setDailyLoop(localDailyLoop)
+        setProfileSaveState(localSaved ? 'saved-local' : 'unavailable')
+        if (localDailyLoop) setDailyLoop(localDailyLoop)
       })
       submitArcadeProfileEvent(event).then((result) => {
         if (result.kind === 'ok') {
+          markArcadeProfileEventsClaimed([sourceKey])
           setProfileSaveState('synced')
           setDailyLoop(result.profile.daily_loop)
         } else if (result.kind === 'anon') {
-          setProfileSaveState('saved-local')
+          setProfileSaveState(localSaved ? 'saved-local' : 'unavailable')
         } else {
-          setProfileSaveState('account-error')
+          setProfileSaveState(localSaved ? 'account-error' : 'unavailable')
         }
       })
     } else {

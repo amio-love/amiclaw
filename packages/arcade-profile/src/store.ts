@@ -72,6 +72,10 @@ function eventProfileId(event: ArcadeProfileEvent, fallback?: string): string | 
   return event.profile_id ?? fallback ?? null
 }
 
+function isMissingPublicProfileTableError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('arcade_public_profile')
+}
+
 async function readAccountQualifiedDates(
   db: ArcadeProfileDb,
   userId: string
@@ -93,7 +97,7 @@ async function readAccountQualifiedDates(
     .prepare(
       `SELECT sign_date AS activity_date, MAX(created_at) AS completed_at
        FROM arcade_profile_oracle_sign
-       WHERE user_id = ?
+       WHERE user_id = ? AND substr(created_at, 1, 10) = sign_date
        GROUP BY sign_date`
     )
     .bind(userId)
@@ -216,10 +220,16 @@ export async function readArcadePublicProfile(
   db: ArcadeProfileDb,
   userId: string
 ): Promise<ArcadePublicProfileStatus> {
-  const row = await db
-    .prepare(`SELECT public_label FROM arcade_public_profile WHERE user_id = ? LIMIT 1`)
-    .bind(userId)
-    .first<PublicProfileRow>()
+  let row: PublicProfileRow | null
+  try {
+    row = await db
+      .prepare(`SELECT public_label FROM arcade_public_profile WHERE user_id = ? LIMIT 1`)
+      .bind(userId)
+      .first<PublicProfileRow>()
+  } catch (error) {
+    if (!isMissingPublicProfileTableError(error)) throw error
+    return { claimed: false, public_label: null }
+  }
   if (!row) return { claimed: false, public_label: null }
   return { claimed: true, public_label: row.public_label }
 }
@@ -325,7 +335,7 @@ export async function readArcadeStreakLeaderboard(
               MAX(o.created_at) AS completed_at, 'oracle' AS activity_kind
        FROM arcade_public_profile p
        JOIN arcade_profile_oracle_sign o ON o.user_id = p.user_id
-       WHERE o.sign_date <= ?
+       WHERE o.sign_date <= ? AND substr(o.created_at, 1, 10) = o.sign_date
        GROUP BY p.user_id, p.public_label, activity_date`
     )
     .bind(date, date)

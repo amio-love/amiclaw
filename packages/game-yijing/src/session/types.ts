@@ -21,6 +21,9 @@ export interface SessionState {
   /** Six yao values produced by the casting engine; null until cast completes. */
   yaoValues: YaoSextet | null
 
+  /** ISO timestamp for the cast that produced `yaoValues`; null until cast completes. */
+  castCreatedAt: string | null
+
   /** Cold-reading sub-phase on the reading screen. */
   phase: ColdReadingPhase
 

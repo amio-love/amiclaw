@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   readArcadeAccountProfile,
+  readArcadePublicProfile,
   readArcadeStreakLeaderboard,
   upsertArcadeProfileEvents,
   upsertArcadePublicProfile,
@@ -87,6 +88,47 @@ describe('arcade profile store', () => {
     expect(profile.counts.bombsquad_runs).toBe(102)
     expect(profile.daily_loop.streak.current_days).toBe(102)
     expect(profile.daily_loop.streak.longest_days).toBe(102)
+  })
+
+  it('ignores Oracle signs whose persisted sign date does not match creation date', async () => {
+    const db = createTestDb()
+    const deps = { now: () => '2026-07-06T10:00:00.000Z', today: () => '2026-07-06' }
+    const staleSign: ArcadeProfileEvent = {
+      ...SIGN_EVENT,
+      sign: {
+        ...SIGN_EVENT.sign,
+        source_key: 'oracle:2026-07-06:stale-session',
+        session_id: 'stale-session',
+        sign_date: '2026-07-06',
+        created_at: '2026-07-05T09:00:00.000Z',
+      },
+    }
+
+    await upsertArcadeProfileEvents(db, 'user-stale-oracle', [staleSign], { deps })
+    await upsertArcadePublicProfile(db, 'user-stale-oracle', {
+      profileId: 'profile-stale-oracle',
+      publicLabel: 'Stale Oracle',
+      deps,
+    })
+    const profile = await readArcadeAccountProfile(db, 'user-stale-oracle', deps)
+    const board = await readArcadeStreakLeaderboard(db, { date: '2026-07-06' })
+
+    expect(profile.today_played).toBe(false)
+    expect(profile.daily_loop.checklist.oracle_sign.completed).toBe(false)
+    expect(profile.daily_loop.streak.current_days).toBe(0)
+    expect(board.entries).toHaveLength(0)
+  })
+
+  it('keeps public profile reads compatible before migration 0003 exists', async () => {
+    const db = createTestDb({ migrations: ['0002_arcade_profile.sql'] })
+    const deps = { now: () => '2026-07-06T10:00:00.000Z', today: () => '2026-07-06' }
+
+    await upsertArcadeProfileEvents(db, 'user-before-0003', [RUN_EVENT], { deps })
+    const profile = await readArcadeAccountProfile(db, 'user-before-0003', deps)
+    const publicProfile = await readArcadePublicProfile(db, 'user-before-0003')
+
+    expect(profile.counts.bombsquad_runs).toBe(1)
+    expect(publicProfile).toEqual({ claimed: false, public_label: null })
   })
 
   it('derives the public streak board only from claimed public profiles', async () => {

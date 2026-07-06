@@ -66,9 +66,9 @@ class SqliteArcadeProfileDb implements ArcadeProfileDb {
   }
 }
 
-export function createTestDb(): ArcadeProfileDb {
+export function createTestDb(options: { migrations?: string[] } = {}): ArcadeProfileDb {
   const db = new DatabaseSync(':memory:')
-  for (const file of ARCADE_MIGRATIONS) {
+  for (const file of options.migrations ?? ARCADE_MIGRATIONS) {
     db.exec(readFileSync(join(MIGRATIONS_DIR, file), 'utf8'))
   }
   return new SqliteArcadeProfileDb(db)

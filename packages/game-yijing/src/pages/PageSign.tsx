@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Scenery } from '@amiclaw/ui'
-import { recordOracleLocalSign } from '@amiclaw/arcade-profile/local'
+import {
+  markArcadeProfileEventsClaimed,
+  readArcadeLocalProfile,
+  recordOracleLocalSign,
+} from '@amiclaw/arcade-profile/local'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
-import { getTodayString } from '@shared/date'
 import { Hexagram } from '../glyphs'
 import { changedValues, ganzhi, hexagramFromBinary, type YaoSextet } from '../glyphs/utils'
 import { useSession } from '../session'
@@ -20,7 +23,7 @@ const DEMO_YAO: YaoSextet = [7, 8, 9, 7, 7, 7]
 const JUDGMENT = '同人于野，亨。利涉大川，利君子贞。'
 const INSIGHT =
   '在协同与方向之间，你正寻求一致。占据更高视角，便能看见同心而异轨者亦可同人——主动停一停，不是放弃，是让真正的同行人显形。'
-type SaveState = 'demo' | 'saving' | 'saved-local' | 'synced' | 'account-error'
+type SaveState = 'demo' | 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
 type ShareState = 'idle' | 'shared' | 'copied' | 'error'
 
 function todayCN(): string {
@@ -30,7 +33,7 @@ function todayCN(): string {
 
 export function PageSign() {
   const navigate = useNavigate()
-  const { sessionId, yaoValues } = useSession()
+  const { sessionId, yaoValues, castCreatedAt } = useSession()
   const [saveState, setSaveState] = useState<SaveState>(yaoValues === null ? 'demo' : 'saving')
   const [shareState, setShareState] = useState<ShareState>('idle')
 
@@ -44,24 +47,38 @@ export function PageSign() {
       queueMicrotask(() => setSaveState('demo'))
       return
     }
+    if (castCreatedAt === null) {
+      queueMicrotask(() => setSaveState('unavailable'))
+      return
+    }
     const event = recordOracleLocalSign({
       sessionId,
-      signDate: getTodayString(),
+      signDate: castCreatedAt.slice(0, 10),
       ben: benCn,
       bian: bianCn,
       yaoValues: [...yaoValues] as [number, number, number, number, number, number],
+      createdAt: castCreatedAt,
     })
-    if (!event) {
-      queueMicrotask(() => setSaveState('account-error'))
+    if (!event || event.kind !== 'oracle_sign') {
+      queueMicrotask(() => setSaveState('unavailable'))
       return
     }
-    queueMicrotask(() => setSaveState('saved-local'))
+    const sourceKey = event.sign.source_key
+    const localProfile = readArcadeLocalProfile()
+    const localSaved =
+      localProfile?.oracle_signs.some((sign) => sign.source_key === sourceKey) ?? false
+    queueMicrotask(() => setSaveState(localSaved ? 'saved-local' : 'unavailable'))
     submitArcadeProfileEvent(event).then((result) => {
-      setSaveState(
-        result.kind === 'ok' ? 'synced' : result.kind === 'anon' ? 'saved-local' : 'account-error'
-      )
+      if (result.kind === 'ok') {
+        markArcadeProfileEventsClaimed([sourceKey])
+        setSaveState('synced')
+      } else if (result.kind === 'anon') {
+        setSaveState(localSaved ? 'saved-local' : 'unavailable')
+      } else {
+        setSaveState(localSaved ? 'account-error' : 'unavailable')
+      }
     })
-  }, [bianCn, benCn, sessionId, yaoValues])
+  }, [bianCn, benCn, castCreatedAt, sessionId, yaoValues])
 
   const shareText = useCallback(
     () => `AMIO 游乐场今日卦签：${benCn} → ${bianCn}。${INSIGHT} ${window.location.origin}/oracle/`,
@@ -170,7 +187,11 @@ export function PageSign() {
             <span className={styles.feedbackLabel}>保存状态</span>
             <strong className={styles.feedbackValue}>{saveStatusText(saveState)}</strong>
             <span className={styles.feedbackMeta}>
-              {yaoValues === null ? 'Demo 卦签不会写入档案。' : '真实卦签已计入今日清单。'}
+              {saveState === 'unavailable'
+                ? '本次卦签没有写入档案；请重新问卦后再试。'
+                : yaoValues === null
+                  ? 'Demo 卦签不会写入档案。'
+                  : '真实卦签已计入今日清单。'}
             </span>
             {shareState !== 'idle' && (
               <span className={styles.feedbackMeta}>{shareStatusText(shareState)}</span>
@@ -232,6 +253,8 @@ function saveStatusText(state: SaveState): string {
       return '已保存到本设备'
     case 'account-error':
       return '本设备已保存，账号同步失败'
+    case 'unavailable':
+      return '本次卦签暂未写入档案'
     case 'saving':
       return '保存中…'
     default:

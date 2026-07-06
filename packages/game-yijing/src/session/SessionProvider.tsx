@@ -15,6 +15,7 @@ const STORAGE_KEY = 'amiclaw-yijing-session-v1'
 interface StoredSession {
   picked: ProjArtId[]
   yaoValues: YaoSextet | null
+  castCreatedAt?: string | null
   phase: ColdReadingPhase
   voiceState: VoiceState
   sessionId: string
@@ -45,6 +46,9 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const [yaoValues, setYaoValuesState] = useState<YaoSextet | null>(
     () => loadStored()?.yaoValues ?? null
   )
+  const [castCreatedAt, setCastCreatedAt] = useState<string | null>(
+    () => loadStored()?.castCreatedAt ?? null
+  )
   const [phase, setPhaseState] = useState<ColdReadingPhase>(() => loadStored()?.phase ?? 0)
   const [voiceState, setVoiceStateState] = useState<VoiceState>(
     () => loadStored()?.voiceState ?? 'idle'
@@ -61,6 +65,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
   const setYaoValues = useCallback((values: YaoSextet) => {
     setYaoValuesState(values)
+    setCastCreatedAt(new Date().toISOString())
   }, [])
 
   const setPhase = useCallback((next: ColdReadingPhase) => {
@@ -84,6 +89,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     }
     setPicked([])
     setYaoValuesState(null)
+    setCastCreatedAt(null)
     setPhaseState(0)
     setVoiceStateState('idle')
     setSessionId(crypto.randomUUID())
@@ -93,17 +99,25 @@ export function SessionProvider({ children }: SessionProviderProps) {
   // the in-memory session is the source of truth; sessionStorage is a hint.
   useEffect(() => {
     try {
-      const snapshot: StoredSession = { picked, yaoValues, phase, voiceState, sessionId }
+      const snapshot: StoredSession = {
+        picked,
+        yaoValues,
+        castCreatedAt,
+        phase,
+        voiceState,
+        sessionId,
+      }
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
     } catch {
       // Swallow — full quota, disabled storage, serialization failure.
     }
-  }, [picked, yaoValues, phase, voiceState, sessionId])
+  }, [picked, yaoValues, castCreatedAt, phase, voiceState, sessionId])
 
   const value = useMemo<SessionContextValue>(
     () => ({
       picked,
       yaoValues,
+      castCreatedAt,
       phase,
       voiceState,
       sessionId,
@@ -117,6 +131,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     [
       picked,
       yaoValues,
+      castCreatedAt,
       phase,
       voiceState,
       sessionId,

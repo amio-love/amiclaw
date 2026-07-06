@@ -33,7 +33,7 @@ const CLAIM_BODY = {
   ],
 }
 
-async function env(): Promise<ArcadeProfileApiEnv> {
+async function env(db = createTestDb()): Promise<ArcadeProfileApiEnv> {
   const auth = new FakeKV()
   await auth.put(
     'session:sess-1',
@@ -45,7 +45,7 @@ async function env(): Promise<ArcadeProfileApiEnv> {
   )
   return {
     AUTH: auth.asKV(),
-    COMPANION_DB: createTestDb(),
+    COMPANION_DB: db,
   }
 }
 
@@ -112,6 +112,21 @@ describe('arcade profile handlers', () => {
 
     expect(response.status).toBe(200)
     expect(await board.json()).toEqual({ date: '2026-07-06', entries: [] })
+  })
+
+  it('keeps account profile reads working before public-profile migration exists', async () => {
+    const testEnv = await env(createTestDb({ migrations: ['0002_arcade_profile.sql'] }))
+
+    await handlePostArcadeProfileEvent(request(CLAIM_BODY.events[0]), testEnv)
+    const response = await handleGetArcadeProfile(request(), testEnv)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      profile: {
+        counts: { bombsquad_runs: 1, oracle_signs: 0 },
+      },
+      public_profile: { claimed: false, public_label: null },
+    })
   })
 
   it('lets an explicit empty claim enable public streak eligibility for existing account events', async () => {

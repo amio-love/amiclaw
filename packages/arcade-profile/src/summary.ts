@@ -63,7 +63,8 @@ export function qualifiedBombSquadRunDate(run: BombSquadProfileRun): QualifiedAc
 }
 
 export function qualifiedOracleSignDate(sign: OracleProfileSign): QualifiedActivityDate | null {
-  return isIsoDate(sign.sign_date) ? { date: sign.sign_date, completed_at: sign.created_at } : null
+  if (!isIsoDate(sign.sign_date) || sign.created_at.slice(0, 10) !== sign.sign_date) return null
+  return { date: sign.sign_date, completed_at: sign.created_at }
 }
 
 export function computeArcadeStreak(
@@ -169,7 +170,7 @@ export function summarizeArcadeProfile(input: {
     last_activity_at: lastActivityAt,
     today_played:
       bombsquadRuns.some((run) => run.finished_at.slice(0, 10) === input.today) ||
-      oracleSigns.some((sign) => sign.sign_date === input.today),
+      oracleSigns.some((sign) => qualifiedOracleSignDate(sign)?.date === input.today),
     counts: {
       bombsquad_runs: input.counts?.bombsquad_runs ?? bombsquadRuns.length,
       oracle_signs: input.counts?.oracle_signs ?? oracleSigns.length,

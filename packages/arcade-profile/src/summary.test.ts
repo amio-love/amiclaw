@@ -35,6 +35,14 @@ function sign(sessionId: string, date: string): OracleProfileSign {
   }
 }
 
+function staleSign(sessionId: string, signDate: string, createdDate: string): OracleProfileSign {
+  return {
+    ...sign(sessionId, signDate),
+    source_key: `oracle:${signDate}:${sessionId}`,
+    created_at: `${createdDate}T09:00:00.000Z`,
+  }
+}
+
 describe('daily loop summary', () => {
   it('counts only qualified daily activities and dedupes same-day completions', () => {
     const summary = summarizeDailyLoop({
@@ -71,5 +79,17 @@ describe('daily loop summary', () => {
     expect(active.streak.today_completed).toBe(false)
     expect(broken.streak.current_days).toBe(0)
     expect(broken.streak.longest_days).toBe(2)
+  })
+
+  it('does not count reopened Oracle signs as fresh streak activity', () => {
+    const summary = summarizeDailyLoop({
+      today: '2026-07-06',
+      bombsquadRuns: [],
+      oracleSigns: [staleSign('oracle-1', '2026-07-06', '2026-07-05')],
+    })
+
+    expect(summary.checklist.oracle_sign.completed).toBe(false)
+    expect(summary.streak.today_completed).toBe(false)
+    expect(summary.streak.current_days).toBe(0)
   })
 })
