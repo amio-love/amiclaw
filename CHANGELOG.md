@@ -34,6 +34,16 @@ submission. This lets a voice session summary and the finished run settle into
 one memory event. Anonymous leaderboard submissions still work the same way and
 do not write memory.
 
+**Creation-engine foundation (game-agnostic)** - Internal change. Adds a new
+`packages/creation` workspace package: the first implementation of the
+game-agnostic element+rule creation schema. It ships an executable validator
+(universal checks + per-form floor checks with a co-play-form floor registry), a
+declarative rule engine with a bounded-search solver, three worked case-game
+instantiations (Radio Cipher, Sound Garden, Botanical Garden) that each pass
+validation and play to a win through the engine, and a developer-only dev shell
+for driving a game locally. Not wired into any player-facing surface; no product
+behavior changes.
+
 **Sign out, and a login page that knows you're already in** - New. Signed-in
 players now have a 退出登录 action on their 我的 account page, and opening the
 login page while already signed in shows your email with two clear next steps —

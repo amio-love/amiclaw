@@ -1,0 +1,105 @@
+/**
+ * fairness — the universal, partition-aware core of the spec's fairness
+ * check: no solution step may depend on unreasoned guessing. Machine-checked
+ * here: every param AND every runtime state a rule actually CONSUMES must be
+ * observable by at least one role. A hidden consumed field forces a guess
+ * over its declared value domain; if the combined guess space exceeds the
+ * fairness threshold (spec default 2), the level is unfair.
+ *
+ * Consumption follows the shared v1 approximation in
+ * helpers.solveRelevantParams (material elements expose all params;
+ * target-only elements only value-matched params) plus
+ * helpers.solveRelevantStates (condition predicates that resolve against
+ * declared runtime states — e.g. botanical effective_light / growth_stage).
+ * Unconsumed cosmetic params may stay hidden without a fairness violation.
+ * Visibility is cannot_see-filtered (helpers) so an over-declared level view
+ * the runtime hides never counts as observable.
+ *
+ * The deeper, per-role deduction — whether observable information can
+ * actually travel through the allowed channels to the acting role — is
+ * form-specific and lives in the hidden_info_coop floor check
+ * communication_completeness (R3), per the spec's check taxonomy.
+ *
+ * Levels with no role assignments (shared-state forms like co_build) pass
+ * vacuously: with symmetric visibility there is no partition to hide behind.
+ */
+
+import type { CheckResult, GameType, Level, Violation } from '../schema/types'
+import {
+  archetypesById,
+  attributeDomainSize,
+  buildCheckResult,
+  solveRelevantParams,
+  solveRelevantStates,
+  stateDomainSize,
+  visibleAttributesByElement,
+  visibleStatesByElement,
+} from './helpers'
+
+/** Spec default: guessing among more than 2 equally likely options is unfair. */
+const FAIRNESS_THRESHOLD = 2
+
+export function checkFairness(gameType: GameType, level: Level): CheckResult {
+  const violations: Violation[] = []
+  if (level.information_partition.role_assignments.length === 0) {
+    return buildCheckResult('fairness', violations)
+  }
+
+  const archetypes = archetypesById(gameType)
+  const visible = visibleAttributesByElement(gameType, level)
+  const visibleStates = visibleStatesByElement(gameType, level)
+  const relevant = solveRelevantParams(gameType, level)
+  const relevantStates = solveRelevantStates(gameType, level)
+
+  level.elements.forEach((element, i) => {
+    const relevantParams = relevant.get(element.id) ?? new Set<string>()
+    const relevantStateNames = relevantStates.get(element.id) ?? new Set<string>()
+    if (relevantParams.size === 0 && relevantStateNames.size === 0) return // not solution-relevant
+    const archetype = archetypes.get(element.archetype)
+    if (!archetype) return // schema_conformance reports the broken reference
+    const attributesByName = new Map(archetype.attributes.map((a) => [a.name, a]))
+    const statesByName = new Map((archetype.states ?? []).map((s) => [s.name, s]))
+    const visibleNames = visible.get(element.id) ?? new Set<string>()
+    const visibleStateNames = visibleStates.get(element.id) ?? new Set<string>()
+
+    const hidden: string[] = []
+    const hiddenStates: string[] = []
+    let guessSpace = 1
+    for (const key of relevantParams) {
+      const attribute = attributesByName.get(key)
+      if (!attribute || visibleNames.has(key)) continue
+      hidden.push(key)
+      const domain = attributeDomainSize(attribute)
+      guessSpace = domain === undefined ? Number.POSITIVE_INFINITY : guessSpace * domain
+    }
+    for (const key of relevantStateNames) {
+      const state = statesByName.get(key)
+      if (!state || visibleStateNames.has(key)) continue
+      hiddenStates.push(key)
+      const domain = stateDomainSize(state)
+      guessSpace = domain === undefined ? Number.POSITIVE_INFINITY : guessSpace * domain
+    }
+
+    if (hidden.length + hiddenStates.length > 0 && guessSpace > FAIRNESS_THRESHOLD) {
+      const guessLabel = Number.isFinite(guessSpace) ? String(guessSpace) : 'unbounded'
+      const hiddenLabel = [
+        hidden.length > 0 ? `hidden params: ${hidden.join(', ')}` : undefined,
+        hiddenStates.length > 0 ? `hidden states: ${hiddenStates.join(', ')}` : undefined,
+      ]
+        .filter((part) => part !== undefined)
+        .join('; ')
+      const allHidden = [...hidden, ...hiddenStates]
+      violations.push({
+        severity: 'error',
+        field_path: `elements[${i}]`,
+        constraint: 'solution_information_observable',
+        expected: `solution-relevant fields observable by at least one role (guess space <= ${FAIRNESS_THRESHOLD})`,
+        actual: `${hiddenLabel} (guess space ${guessLabel})`,
+        suggestion: `Expose ${allHidden.join(', ')} of "${element.id}" to at least one role in information_partition.role_assignments, or remove the element from solution-relevant rules`,
+        related_elements: [element.id],
+      })
+    }
+  })
+
+  return buildCheckResult('fairness', violations)
+}

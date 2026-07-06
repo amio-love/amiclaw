@@ -1,0 +1,125 @@
+# Sound Garden worked Level example (sg-demo-001), extracted verbatim from
+# the creation-schema design spec (docs/architecture/arch-component-creation-schema.md,
+# "工作关卡示例" under 实例化 C). Data values are spec-faithful; inline
+# commentary is translated to English per the repo language policy.
+Level:
+  metadata:
+    id: sg-demo-001
+    game_type: sound-garden
+    game_type_version: '1.0.0'
+    title: 四拍和声
+    author: ai-author-003
+    created_at: '2026-07-03T01:00:00+08:00'
+
+  # partition_complexity: both roles see everything → hidden=0, roles_term=0
+  # channels: 2 channels × 1 constraint each → channels_term = 2*1 = 2.0
+  # partition_complexity = 0 + 2.0 = 2.0
+  difficulty:
+    element_count: 8 # 4 rhythm_piece + 4 melody_piece
+    rule_count: 1 # harmony_rule
+    partition_complexity: 2.0
+    total_score: 11.0 # 8*1.0 + 1*1.0 + 2.0*1.0
+
+  # round_trips: harmony_rule(0.5)*1 = 0.5 → ceil = 1; co_build coordination
+  # (propose_plan turns) counts separately: 4 coordination + 1 scoring = 5
+  communication_estimate:
+    round_trips: 5
+    coordination_round_trips: 4 # 4 coordination turns — round_trips = ceil(0.5) + 4 = 5
+    estimated_seconds: 40
+    time_limit_seconds: 240
+    feasibility: feasible # 40 <= 240*0.8 = 192
+
+  # co_build construction model: initial_state declares the starting space,
+  # available_materials each role's pool. goal_reachability derives
+  # machine-checkable reachability from these + relation scores + target.
+  initial_state:
+    timeline_slots: 8 # 8-beat timeline, initially empty
+    occupied: [] # nothing placed at start
+  available_materials:
+    rhythm_builder: # rhythm builder's pool
+      - { archetype: rhythm_piece, rhythm_type: kick, count: 1 }
+      - { archetype: rhythm_piece, rhythm_type: snare, count: 1 }
+      - { archetype: rhythm_piece, rhythm_type: hihat, count: 1 }
+      - { archetype: rhythm_piece, rhythm_type: clap, count: 1 }
+    melody_builder: # melody builder's pool
+      - { archetype: melody_piece, melody_type: bell, count: 1 }
+      - { archetype: melody_piece, melody_type: chime, count: 1 }
+      - { archetype: melody_piece, melody_type: flute, count: 1 }
+      - { archetype: melody_piece, melody_type: harp, count: 1 }
+
+  elements: # design-time element declarations (AI-authored product)
+    - id: r1
+      archetype: rhythm_piece
+      params: { rhythm_type: kick, timeline_slot: 1 }
+    - id: r2
+      archetype: rhythm_piece
+      params: { rhythm_type: snare, timeline_slot: 3 }
+    - id: r3
+      archetype: rhythm_piece
+      params: { rhythm_type: hihat, timeline_slot: 5 }
+    - id: r4
+      archetype: rhythm_piece
+      params: { rhythm_type: clap, timeline_slot: 7 }
+    - id: m1
+      archetype: melody_piece
+      params: { melody_type: bell, timeline_slot: 1 }
+    - id: m2
+      archetype: melody_piece
+      params: { melody_type: chime, timeline_slot: 3 }
+    - id: m3
+      archetype: melody_piece
+      params: { melody_type: flute, timeline_slot: 5 }
+    - id: m4
+      archetype: melody_piece
+      params: { melody_type: harp, timeline_slot: 7 }
+
+  rules:
+    - id: rule-harmony
+      template: harmony_rule
+      bindings: # same-slot rhythm+melody pairs score via matrix relations (relation_scores)
+        matrix:
+          - [kick, bell, synergy]
+          - [kick, chime, neutral]
+          - [kick, flute, compatible]
+          - [kick, harp, compatible]
+          - [snare, bell, neutral]
+          - [snare, chime, synergy]
+          - [snare, flute, incompatible] # noise penalty
+          - [snare, harp, neutral]
+          - [hihat, bell, compatible]
+          - [hihat, chime, compatible]
+          - [hihat, flute, synergy]
+          - [hihat, harp, neutral]
+          - [clap, bell, neutral]
+          - [clap, chime, neutral]
+          - [clap, flute, neutral]
+          - [clap, harp, synergy]
+      target_elements: [r1, r2, r3, r4, m1, m2, m3, m4]
+
+  information_partition:
+    role_assignments:
+      - role: rhythm_builder
+        element_views:
+          - { element_id: r1, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r2, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r3, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r4, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: m1, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m2, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m3, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m4, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+      - role: melody_builder
+        element_views:
+          - { element_id: r1, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r2, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r3, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: r4, visible_attributes: [rhythm_type, timeline_slot], visible_states: [] }
+          - { element_id: m1, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m2, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m3, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+          - { element_id: m4, visible_attributes: [melody_type, timeline_slot], visible_states: [] }
+
+  win_condition:
+    type: score_threshold
+    params:
+      target_score: 10 # total harmony score >= 10 wins

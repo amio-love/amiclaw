@@ -1,0 +1,118 @@
+# Radio Cipher worked Level example (rc-demo-001), extracted verbatim from the
+# creation-schema design spec (docs/architecture/arch-component-creation-schema.md,
+# "工作关卡示例" — worked level example). Data values are spec-faithful; inline
+# commentary is translated to English per the repo language policy.
+Level:
+  metadata:
+    id: rc-demo-001
+    game_type: radio-cipher
+    game_type_version: '1.0.0'
+    title: 新手训练电台
+    author: ai-author-001
+    created_at: '2026-07-02T22:00:00+08:00'
+
+  # partition_complexity computation (from the spec):
+  # total_fields: cipher_segment(2attr+1state=3) + cipher_key(2attr=2) + frequency_hint(2attr=2) = 7
+  # listener hidden: cipher_segment.plaintext_category(1) + cipher_key.*(2) + frequency_hint.*(2) = 5; ratio=5/7=0.714
+  # decoder hidden: 0; ratio=0/7=0.0
+  # mean_hidden=(0.714+0.0)/2=0.357; roles_term=2*0.357=0.714
+  # channels: listener→decoder: time_limit(1)=1; decoder→listener: forbidden(1)+time_limit(1)=2; mean=1.5
+  # channels_term=2*1.5=3.0
+  # partition_complexity=0.714+3.0=3.71
+  difficulty:
+    element_count: 5 # seg-1, seg-2, key-1, hint-1, hint-2
+    rule_count: 3 # rule-decrypt-1, rule-reverse-2, rule-verify
+    partition_complexity: 3.71
+    total_score: 16.92 # 5*1.0 + 3*1.5 + 3.71*2.0 = 5.0+4.5+7.42
+
+  # round_trips: decrypt_step(2.0) + reverse_decrypt(1.5) + verification_check(1.0) = 4.5 → ceil = 5
+  communication_estimate:
+    round_trips: 5
+    estimated_seconds: 60
+    time_limit_seconds: 300
+    feasibility: feasible # 60 <= 300*0.8=240
+
+  elements:
+    - id: seg-1
+      archetype: cipher_segment
+      params:
+        content_length: short
+        plaintext_category: animal
+      position:
+        slot: 1
+    - id: seg-2
+      archetype: cipher_segment
+      params:
+        content_length: medium
+        plaintext_category: color
+      position:
+        slot: 2
+    - id: key-1
+      archetype: cipher_key
+      params:
+        target_method: caesar_shift
+        shift_amount: 3
+    - id: hint-1
+      archetype: frequency_hint
+      params:
+        hint_type: most_frequent
+        target_syllable: a
+    - id: hint-2
+      archetype: frequency_hint
+      params:
+        hint_type: repeated
+        target_syllable: ei
+
+  rules:
+    - id: rule-decrypt-1
+      template: decrypt_step
+      bindings:
+        cipher_segment_id: seg-1
+        cipher_key_id: key-1 # seg-1 uses caesar_shift; key-1 has shift_amount=3
+      target_elements: [seg-1, key-1]
+    - id: rule-reverse-2
+      template: reverse_decrypt
+      bindings:
+        cipher_segment_id: seg-2 # seg-2 uses reverse (self-inverse, no key needed)
+      target_elements: [seg-2]
+    - id: rule-verify
+      template: verification_check
+      bindings:
+        predicates: [{ name: plaintext_is_valid_word, category: animal }]
+        combinator: AND
+        action: { verb: confirm_decryption }
+      target_elements: [seg-1]
+
+  information_partition:
+    role_assignments:
+      - role: listener
+        element_views:
+          - element_id: seg-1
+            visible_attributes: [content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-2
+            visible_attributes: [content_length]
+            visible_states: [decryption_progress]
+      - role: decoder
+        element_views:
+          - element_id: key-1
+            visible_attributes: [target_method, shift_amount]
+            visible_states: []
+          - element_id: hint-1
+            visible_attributes: [hint_type, target_syllable]
+            visible_states: []
+          - element_id: hint-2
+            visible_attributes: [hint_type, target_syllable]
+            visible_states: []
+          - element_id: seg-1
+            visible_attributes: [plaintext_category, content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-2
+            visible_attributes: [plaintext_category, content_length]
+            visible_states: [decryption_progress]
+
+  win_condition:
+    type: all_solved
+    params:
+      target_state: decrypted
+      target_elements: [seg-1, seg-2]
