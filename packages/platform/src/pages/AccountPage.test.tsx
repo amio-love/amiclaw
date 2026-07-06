@@ -14,9 +14,10 @@
  * is the real session fetch: each test stubs global.fetch.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { SessionResponse } from '@shared/auth-types'
+import { ARCADE_LOCAL_PROFILE_KEY } from '@amiclaw/arcade-profile/local'
 import AccountPage from './AccountPage'
 
 /** Resolve any fetch input to its URL string. */
@@ -33,13 +34,31 @@ function urlOf(input: RequestInfo | URL): string {
  */
 function stubApi(opts: {
   session: SessionResponse
+  arcadeProfile?: unknown
   companion?: { status: number; body?: unknown }
 }) {
   const companion = opts.companion ?? { status: 404, body: { error: 'no companion set up' } }
+  const arcadeProfile = opts.arcadeProfile ?? { profile: EMPTY_ARCADE_PROFILE }
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) => {
-      if (urlOf(input).includes('/api/companion')) {
+      const url = urlOf(input)
+      if (url.includes('/api/arcade/profile/claim')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              profile: ACCOUNT_ARCADE_PROFILE,
+              source_keys: ['bombsquad:local-run'],
+              inserted: 1,
+            }),
+            { status: 200 }
+          )
+        )
+      }
+      if (url.includes('/api/arcade/profile')) {
+        return Promise.resolve(new Response(JSON.stringify(arcadeProfile), { status: 200 }))
+      }
+      if (url.includes('/api/companion')) {
         return Promise.resolve(
           new Response(companion.body === undefined ? null : JSON.stringify(companion.body), {
             status: companion.status,
@@ -57,6 +76,108 @@ const AUTHED: SessionResponse = {
   identity: { user_id: 'u_1', email: 'nova@amio.fans' },
 }
 
+const EMPTY_ARCADE_PROFILE = {
+  last_activity_at: null,
+  today_played: false,
+  counts: { bombsquad_runs: 0, oracle_signs: 0 },
+  bombsquad: { recent: null, best_daily: null, best_practice: null },
+  oracle: { recent: null },
+}
+
+const ACCOUNT_ARCADE_PROFILE = {
+  last_activity_at: '2026-07-06T08:00:00.000Z',
+  today_played: true,
+  counts: { bombsquad_runs: 1, oracle_signs: 1 },
+  bombsquad: {
+    recent: {
+      source_key: 'bombsquad:account-run',
+      run_id: 'account-run',
+      mode: 'daily',
+      outcome: 'defused',
+      duration_ms: 65_000,
+      attempt_number: 1,
+      module_count: 4,
+      completed_modules: 4,
+      strike_count: 0,
+      finished_at: '2026-07-06T08:00:00.000Z',
+    },
+    best_daily: {
+      source_key: 'bombsquad:account-run',
+      run_id: 'account-run',
+      mode: 'daily',
+      outcome: 'defused',
+      duration_ms: 65_000,
+      attempt_number: 1,
+      module_count: 4,
+      completed_modules: 4,
+      strike_count: 0,
+      finished_at: '2026-07-06T08:00:00.000Z',
+    },
+    best_practice: null,
+  },
+  oracle: {
+    recent: {
+      source_key: 'oracle:2026-07-06:oracle-1',
+      session_id: 'oracle-1',
+      sign_date: '2026-07-06',
+      ben: '乾',
+      bian: '坤',
+      yao_values: [7, 8, 7, 8, 7, 8],
+      created_at: '2026-07-06T09:00:00.000Z',
+    },
+  },
+}
+
+function installFakeLocalStorage() {
+  const store = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => (store.has(key) ? (store.get(key) as string) : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value))
+    },
+    removeItem: (key: string) => {
+      store.delete(key)
+    },
+    clear: () => {
+      store.clear()
+    },
+    get length() {
+      return store.size
+    },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+  })
+  return store
+}
+
+function seedLocalProfile(store: Map<string, string>) {
+  store.set(
+    ARCADE_LOCAL_PROFILE_KEY,
+    JSON.stringify({
+      version: 1,
+      profile_id: 'local-profile',
+      created_at: '2026-07-06T07:00:00.000Z',
+      updated_at: '2026-07-06T08:00:00.000Z',
+      last_seen_at: '2026-07-06T08:00:00.000Z',
+      claimed_source_keys: [],
+      bombsquad_runs: [
+        {
+          source_key: 'bombsquad:local-run',
+          run_id: 'local-run',
+          mode: 'practice',
+          outcome: 'practice-cleared',
+          duration_ms: 42_000,
+          attempt_number: 1,
+          module_count: 2,
+          completed_modules: 2,
+          strike_count: 0,
+          finished_at: '2026-07-06T08:00:00.000Z',
+        },
+      ],
+      oracle_signs: [],
+    })
+  )
+}
+
 function renderAccount(entry = '/me') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
@@ -69,24 +190,23 @@ function renderAccount(entry = '/me') {
 }
 
 describe('AccountPage /me', () => {
+  let localStore: Map<string, string>
+
   beforeEach(() => {
-    // Section eyebrow is shown in every state; identity drives the body.
+    localStore = installFakeLocalStorage()
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the login guide and no fake profile for a signed-out visitor', async () => {
+  it('renders real local profile data and no fake profile for a signed-out visitor', async () => {
+    seedLocalProfile(localStore)
     stubApi({ session: ANON })
     renderAccount('/me')
 
-    // Login-guide markers: the heading and the plain-text unlock preview.
-    expect(await screen.findByText('登录后查看你的星轨')).toBeInTheDocument()
-    expect(screen.getByText('战绩与单局完成率')).toBeInTheDocument()
-    expect(screen.getByText('连胜与最快记录')).toBeInTheDocument()
-    expect(screen.getByText('勋章墙')).toBeInTheDocument()
-    // A functional CTA linking to /login.
+    expect(await screen.findByText('本设备的星轨。')).toBeInTheDocument()
+    expect(screen.getByText('练习 · 00:42 · 最快 00:42')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument()
 
     // None of the retired mock-profile content may render for anyone now.
@@ -107,7 +227,7 @@ describe('AccountPage /me', () => {
   })
 
   it('renders the real-identity profile with an honest empty stats state', async () => {
-    stubApi({ session: AUTHED })
+    stubApi({ session: AUTHED, arcadeProfile: { profile: ACCOUNT_ARCADE_PROFILE } })
     renderAccount('/me')
 
     // Identity is derived from the session email local-part (nova@... → nova).
@@ -115,15 +235,31 @@ describe('AccountPage /me', () => {
     // so assert at least one match resolves once the session read returns.
     expect((await screen.findAllByText('nova', { exact: true })).length).toBeGreaterThan(0)
     expect(screen.getByText('nova@amio.fans')).toBeInTheDocument()
-    // Honest empty stats state — no fake numbers, no「即将推出」placeholder.
-    expect(screen.getByText('还没有成绩，去玩一局。')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '开始玩' })).toBeInTheDocument()
+    // Account stats are read from /api/arcade/profile, not invented locally.
+    expect(await screen.findByText('账号记录')).toBeInTheDocument()
+    expect(screen.getByText('每日挑战 · 01:05 · 最快 01:05')).toBeInTheDocument()
+    expect(screen.getByText('乾 → 坤')).toBeInTheDocument()
     // The retired mock stats / runs / badges must be absent.
     expect(screen.queryByText('林星海')).not.toBeInTheDocument()
     expect(screen.queryByText('42')).not.toBeInTheDocument()
     expect(screen.queryByText('最近 5 局')).not.toBeInTheDocument()
     // The login-guide empty state must NOT be present.
-    expect(screen.queryByText('登录后查看你的星轨')).not.toBeInTheDocument()
+    expect(screen.queryByText('本设备的星轨。')).not.toBeInTheDocument()
+  })
+
+  it('claims local profile entries into the signed-in account and marks them locally claimed', async () => {
+    seedLocalProfile(localStore)
+    stubApi({ session: AUTHED, arcadeProfile: { profile: EMPTY_ARCADE_PROFILE } })
+    renderAccount('/me')
+
+    fireEvent.click(await screen.findByRole('button', { name: '保存到账号' }))
+
+    expect(await screen.findByText('已保存')).toBeInTheDocument()
+    await waitFor(() => {
+      const raw = localStore.get(ARCADE_LOCAL_PROFILE_KEY)
+      expect(raw).toContain('bombsquad:local-run')
+      expect(JSON.parse(raw ?? '{}').claimed_source_keys).toContain('bombsquad:local-run')
+    })
   })
 
   it('shows the companion setup CTA when the user has no companion yet', async () => {
@@ -172,6 +308,11 @@ describe('AccountPage /me', () => {
       }
       if (url.includes('/api/auth/logout')) {
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/api/arcade/profile')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ profile: EMPTY_ARCADE_PROFILE }), { status: 200 })
+        )
       }
       return Promise.resolve(new Response(JSON.stringify(AUTHED), { status: 200 }))
     })

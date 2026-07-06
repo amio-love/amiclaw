@@ -72,6 +72,6 @@ describe('PrivacyPage', () => {
     const mailtoLinks = screen.getAllByRole('link', { name: 'hi@amio.love' })
     expect(mailtoLinks.length).toBeGreaterThan(0)
     expect(mailtoLinks[0]).toHaveAttribute('href', 'mailto:hi@amio.love')
-    expect(screen.getByText(/生效日期：2026-07-04/)).toBeInTheDocument()
+    expect(screen.getByText(/生效日期：2026-07-06/)).toBeInTheDocument()
   })
 })

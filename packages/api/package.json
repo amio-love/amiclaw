@@ -1,6 +1,9 @@
 {
   "name": "api",
   "private": true,
+  "dependencies": {
+    "@amiclaw/arcade-profile": "workspace:*"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest",

@@ -2,13 +2,14 @@ import { EyebrowTag, GlassCard } from '@amiclaw/ui'
 import styles from './PrivacyPage.module.css'
 
 const CONTACT_EMAIL = 'hi@amio.love'
-const EFFECTIVE_DATE = '2026-07-04'
+const EFFECTIVE_DATE = '2026-07-06'
 
 /* Privacy policy page — a production-grade Chinese privacy policy for
    AMIO Arcade (claw.amio.fans). The collected-data inventory is kept
-   faithful to the anonymous leaderboard/event contracts, auth-session KV,
-   platform-AI Worker usage records, and Companion D1 memory plane. Platform
-   chrome — every accent is brand yellow; no BombSquad cyan on this surface. */
+   faithful to the anonymous leaderboard/event contracts, local Arcade profile,
+   auth-session KV, platform-AI Worker usage records, account Arcade profile,
+   and Companion D1 memory plane. Platform chrome — every accent is brand
+   yellow; no BombSquad cyan on this surface. */
 export default function PrivacyPage() {
   return (
     <div className={styles.page}>
@@ -81,6 +82,12 @@ export default function PrivacyPage() {
                 ：包括魔法链接 token 哈希、Google OAuth
                 state、登录/登出审计记录，以及邮件发送和验证接口的限流计数。
               </li>
+              <li>
+                <strong>账号内 Arcade 档案</strong>
+                ：当你登录后保存本设备记录，或登录状态下产生新的 BombSquad
+                结果和卦签时，我们会按你的 user_id
+                保存来源键、游戏类型、完成时间、用时、结果、尝试次数、模块完成数、卦签日期、本卦、变卦和六爻值。这些记录只用于你的账号内展示，不会回填公开排行榜。
+              </li>
             </ul>
 
             <h4 className={styles.subheading}>3. 平台 AI 伙伴与 Companion Memory 信息</h4>
@@ -122,6 +129,12 @@ export default function PrivacyPage() {
                 <strong>匿名行为事件</strong>
                 ：游戏开始、模块通关、通关、放弃、手册加载失败、再玩意向、三振出局、到达时间上限、问卷提交等事件的计数，附带发生时间与上述设备标识符。这些用于了解整体游玩与完成情况，均为聚合统计，不针对个人画像。
               </li>
+              <li>
+                <strong>本地 Arcade 档案</strong>
+                ：我们会在你的浏览器本地存储一个随机本地档案 ID，并保存本设备上的 BombSquad
+                最近结果、最好成绩、Oracle
+                最近卦签、最近访问时间和已保存到账号的来源键。清除浏览器本地存储会删除这些本地记录。
+              </li>
             </ul>
 
             <p className={styles.note}>
@@ -138,6 +151,9 @@ export default function PrivacyPage() {
               <li>以聚合方式统计游玩与完成情况，评估游戏体验并据此改进。</li>
               <li>根据问卷反馈了解协作中的问题，改进游戏设计。</li>
               <li>建立与维护登录会话，让已登录用户使用平台 AI 伙伴与账号相关功能。</li>
+              <li>
+                在我的页展示本设备或账号内的真实 Arcade 记录，并在你确认时把本设备记录保存到账号。
+              </li>
               <li>
                 组装平台 AI 语音会话，向 AI 伙伴提供当前游戏所需的手册、状态和 Companion Memory。
               </li>
@@ -160,8 +176,8 @@ export default function PrivacyPage() {
             <p>
               <strong>托管与存储服务商</strong>：本服务托管于 Cloudflare。页面由 Cloudflare Pages
               提供，服务端逻辑运行于 Cloudflare Workers，成绩、事件、认证和使用量数据存储于
-              Cloudflare KV，Companion Memory 存储于 Cloudflare D1，长连接会话运行于 Cloudflare
-              Durable Objects。这意味着上述数据会经由 Cloudflare
+              Cloudflare KV，账号内 Arcade 档案与 Companion Memory 存储于 Cloudflare
+              D1，长连接会话运行于 Cloudflare Durable Objects。这意味着上述数据会经由 Cloudflare
               的基础设施传输与存储，受其作为处理方的安全措施约束。
             </p>
             <p>
@@ -186,8 +202,9 @@ export default function PrivacyPage() {
               本服务不使用用于广告追踪的 Cookie。登录后，我们使用名为 amiclaw_session 的 HttpOnly
               Cookie 保存会话 ID；Google 登录流程还会短暂使用 oauth_state Cookie 防止登录 CSRF。
               我们使用浏览器的本地存储（localStorage）保存上述设备标识符，以及你填过的昵称与 AI
-              工具信息，便于你下次游玩时无须重填；并使用会话存储（sessionStorage）在你提交成绩后临时保留你的排行榜成绩，用于即时展示。清除浏览器的本地存储即可移除本地数据；登出会清除登录会话
-              Cookie。
+              工具信息、匿名 Arcade
+              档案和已保存来源键，便于你下次游玩时无须重填，并让我的页能显示本设备真实记录；我们使用会话存储（sessionStorage）在你提交成绩后临时保留你的排行榜成绩，用于即时展示。清除浏览器的本地存储即可移除本地数据；登出会清除登录会话
+              Cookie，但不会自动删除已经保存到账号的 Arcade 档案记录。
             </p>
           </section>
 
@@ -218,7 +235,12 @@ export default function PrivacyPage() {
                 ：保留至你删除对应回忆、删除或更正个人画像项、关闭个人画像层，或我们不再需要继续提供相关功能。
               </li>
               <li>
-                <strong>本地存储中的设备标识符与昵称等</strong>：保存在你的设备上，由你随时清除。
+                <strong>账号内 Arcade 档案</strong>
+                ：保留至你提出有效删除请求，或我们不再需要继续提供相关功能。
+              </li>
+              <li>
+                <strong>本地存储中的设备标识符、昵称与本地 Arcade 档案等</strong>
+                ：保存在你的设备上，由你随时清除。
               </li>
             </ul>
           </section>
@@ -229,9 +251,9 @@ export default function PrivacyPage() {
               在适用法律允许的范围内，你对自己的个人信息享有访问、更正、删除以及撤回同意的权利。
             </p>
             <p>
-              对匿名排行榜记录，我们通过你提交时的昵称与提交日期来定位；对登录账号、平台 AI 会话和
-              Companion Memory，我们通过你的登录邮箱或 user_id 定位。Companion Memory
-              支持查看、删除回忆、删除或更正个人画像项，并可关闭个人画像层。
+              对匿名排行榜记录，我们通过你提交时的昵称与提交日期来定位；对登录账号、账号内 Arcade
+              档案、平台 AI 会话和 Companion Memory，我们通过你的登录邮箱或 user_id 定位。Companion
+              Memory 支持查看、删除回忆、删除或更正个人画像项，并可关闭个人画像层。
             </p>
             <p>
               如需行使上述权利，请发送邮件至{' '}

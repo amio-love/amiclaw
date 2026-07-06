@@ -10,6 +10,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@amiclaw/arcade-profile": "workspace:*",
     "@amiclaw/ui": "workspace:*",
     "js-yaml": "^4.2.0",
     "react": "^19.2.7",
