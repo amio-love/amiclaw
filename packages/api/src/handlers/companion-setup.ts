@@ -13,7 +13,7 @@ import type { CompanionSetupResponse } from '../../../companion-memory/src/types
 import { createCompanion } from '../../../companion-memory/src/store'
 import { requireSession } from '../auth/require-session'
 import { jsonResponse } from '../auth/respond'
-import { parseJsonBody, type CompanionApiEnv } from './companion-shared'
+import { parseJsonBody, wireVoicePosture, type CompanionApiEnv } from './companion-shared'
 
 const NAME_MAX = 30
 const ADDRESS_STYLE_MAX = 30
@@ -67,6 +67,7 @@ export async function handleCompanionSetup(
       address_style: companion.address_style,
       voice_id: companion.voice_id,
       profile_enabled: companion.profile_enabled === 1,
+      voice_posture: wireVoicePosture(companion),
       created_at: companion.created_at,
     },
   }

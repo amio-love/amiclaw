@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 26 active flows <-> 26 journey
-# scenarios, the regression size budget is 52 (2026-07-07, after the
-# leaderboard date-navigation flow was added as a @playwright journey).
+# 2 x the journey-scenario count. With 28 active flows <-> 28 journey
+# scenarios, the regression size budget is 56 (2026-07-08, after the companion
+# dock presence + co-play entry flows landed as @playwright journeys).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -290,6 +290,57 @@ flows:
       existing companion instead of the setup form — no second-companion path
       exists anywhere on the platform (a second POST is rejected with 409).
     steps: [signed-in, companion-onboarding, companion-readback, one-companion-invariant]
+    status: active
+
+  - id: companion-dock-presence
+    name: Companion dock presence and posture memory
+    description: >-
+      A signed-in player with a companion sees the persistent 伙伴坞 (companion
+      dock) above the tab bar on the platform shell: name + breathing pulse dot
+      + text region + mic button. Opening the homepage fires the arrival
+      greeting beat (节拍 1 — template-filled from real data; the harness's
+      empty album renders the honest no-episode variant) as a text bubble that
+      collapses into the dock line. While the lobby-voice capability flag is
+      off, the lobby NEVER requests the mic — the mic button carries the
+      honest note pointing at the in-game voice channel. Muting from the dock's
+      control menu freezes proactive beats, lands the dock in its 静音 state,
+      and persists the quiet-remembered posture to the account
+      (PUT /api/companion/settings) — future visits land quiet. The anonymous
+      no-dock state is pinned by the CompanionDock unit tests.
+    steps:
+      [
+        signed-in-companion,
+        dock-visible,
+        arrival-greeting,
+        honest-voice-note,
+        dock-mute,
+        posture-persisted,
+      ]
+    status: active
+
+  - id: companion-coplay-entry
+    name: Companion co-play daily entry default
+    description: >-
+      A signed-in player WITH a companion entering the daily challenge gets the
+      companion co-play path (mode②, the platform voice partner) as the DEFAULT:
+      the connect page replaces the two-step manual handoff with a one-tap
+      「和 X 一起进入」 that navigates straight to the run carrying
+      ?partner=platform (the manual rides the voice session's create message),
+      while the BYO manual handoff stays visible as the explicit alternative.
+      Anonymous and companion-less players keep the original two-step BYO flow
+      unchanged (covered by landing-to-daily). The in-game voice panel connects
+      over the stubbed /ai-ws/* bridge and the AI greets first, proving the
+      co-play wire end to end.
+    steps:
+      [
+        signed-in-companion,
+        bombsquad-landing,
+        cta-daily,
+        coplay-default,
+        byo-alternative,
+        mode2-run,
+        voice-connected,
+      ]
     status: active
 
   - id: companion-memory-album

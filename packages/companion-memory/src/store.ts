@@ -64,6 +64,23 @@ export async function createCompanion(
   return getCompanion(db, input.userId)
 }
 
+/**
+ * Persist the remembered auto-voice posture (presence layer; the caller has
+ * already narrowed the value to the `VoicePosture` enum — the column CHECK is
+ * the last line of defence). Returns false when no companion.
+ */
+export async function setVoicePosture(
+  db: CompanionDb,
+  userId: string,
+  posture: string
+): Promise<boolean> {
+  const result = await db
+    .prepare('UPDATE companion SET voice_posture = ? WHERE user_id = ?')
+    .bind(posture, userId)
+    .run()
+  return result.meta.changes > 0
+}
+
 /** Flip the profile (understanding layer) switch. Returns false when no companion. */
 export async function setProfileEnabled(
   db: CompanionDb,

@@ -1,11 +1,18 @@
-/** mode② companion onboarding steps — the /me/companion setup flow.
+/** mode② companion steps — the /me/companion setup flow, the persistent
+    companion dock (伙伴坞), and the daily co-play entry default.
     Auth + the /api/companion* control plane are route-mocked in fixtures.ts
-    (world.signIn + world.companion), so this journey runs against the static
-    build with no Workers runtime, exactly like the magic-link auth journey. */
-import { expect } from '@playwright/test'
+    (world.signIn + world.companion + the settings PUT capture), so these
+    journeys run against the static build with no Workers runtime, exactly
+    like the magic-link auth journey. */
+import { expect, type Locator, type Page } from '@playwright/test'
 import { Given, When, Then } from './fixtures'
 
 const TEST_EMAIL = 'nova@amio.fans'
+
+/** The dock — `<aside aria-label="伙伴坞">` renders as a complementary region. */
+function companionDock(page: Page): Locator {
+  return page.getByRole('complementary', { name: '伙伴坞' })
+}
 
 Given('I am a signed-in player without a companion', async ({ world }) => {
   // signIn() must precede navigation so the first session read is authenticated;
@@ -13,6 +20,116 @@ Given('I am a signed-in player without a companion', async ({ world }) => {
   world.signIn({ user_id: 'e2e-user', email: TEST_EMAIL })
   world.companion = null
 })
+
+Given(
+  'I am a signed-in player with a companion named {string}',
+  async ({ world }, name: string) => {
+    // signIn() + a pre-existing companion BEFORE the first navigation, so the
+    // dock renders from the first page load. voice-default = the auto-voice
+    // login sequence runs (the fake-media flags auto-grant the mic request).
+    world.signIn({ user_id: 'e2e-user', email: TEST_EMAIL })
+    world.companion = {
+      name,
+      address_style: '',
+      voice_id: 'companion-warm',
+      profile_enabled: true,
+      voice_posture: 'voice-default',
+      created_at: '2026-06-30T00:00:00.000Z',
+    }
+  }
+)
+
+// --- Companion dock (伙伴坞) ---------------------------------------------------
+
+Then(
+  'the companion dock shows {string} with the arrival greeting',
+  async ({ page }, name: string) => {
+    const dock = companionDock(page)
+    await expect(dock).toBeVisible()
+    await expect(dock.getByText(name).first()).toBeVisible()
+    // Fresh harness profile = never played → the greeting's no-episode variant
+    // (an honest template fill; no fabricated episode reference). It lands in
+    // the floating bubble AND collapses into the dock's one-line text region.
+    await expect(page.getByText('我在这。今天的每日挑战等你。').first()).toBeVisible()
+  }
+)
+
+Then('the dock offers a mic button', async ({ page }) => {
+  // While lobby voice is behind its capability flag the mic button carries
+  // the honest note affordance (语音陪伴说明) — tapping it surfaces where
+  // voice genuinely runs (the in-game co-play channel) and never triggers a
+  // permission prompt.
+  const micButton = companionDock(page).getByRole('button', { name: '语音陪伴说明' })
+  await expect(micButton).toBeVisible()
+  await micButton.click()
+  await expect(page.getByText('语音陪伴在拆弹局内可用，进入每日挑战开启。')).toBeVisible()
+})
+
+When('I mute the companion from the dock control menu', async ({ page, world }) => {
+  await companionDock(page)
+    .getByRole('button', { name: `${world.companion?.name} 控制菜单` })
+    .click()
+  await page.getByRole('menuitem', { name: '静音' }).click()
+})
+
+Then(
+  'the dock lands muted and quiet-remembered is persisted to the account',
+  async ({ page, world }) => {
+    const name = world.companion?.name ?? ''
+    await expect(companionDock(page).getByText(`${name}在这（静音中）`)).toBeVisible()
+    // The posture write reached the account control plane (PUT captured).
+    await expect
+      .poll(() => world.companionSettingsPuts.at(-1)?.voice_posture)
+      .toBe('quiet-remembered')
+  }
+)
+
+// --- Companion co-play entry (daily challenge default) --------------------------
+
+When('I enter the daily challenge from the BombSquad landing', async ({ page, world }) => {
+  // Signed-in homepage: the WelcomeStrip's 开始玩 CTA (no arrow — the anonymous
+  // hero's 开始玩 → belongs to the signed-out variant) crosses into the
+  // BombSquad SPA, then the landing's 每日挑战 CTA opens the connect flow.
+  await page.getByRole('button', { name: '开始玩', exact: true }).click()
+  await page.waitForURL((url) => new URL(url).pathname.replace(/\/$/, '') === '/bombsquad', {
+    timeout: 12_000,
+  })
+  await world.openConnect('daily')
+})
+
+Then(
+  'the co-play entry is the default and the BYO handoff stays visible',
+  async ({ page, world }) => {
+    const name = world.companion?.name ?? ''
+    // The co-play chooser is the default surface — no manual-copy step 1.
+    await expect(page.getByRole('button', { name: `和 ${name} 一起进入 →` })).toBeVisible()
+    await expect(page.getByText('第 1/2 步')).toHaveCount(0)
+    // The BYO manual handoff remains the visible alternative.
+    await expect(page.getByRole('button', { name: '自带 AI，手动对接' })).toBeVisible()
+  }
+)
+
+When('I start the run together with {string}', async ({ page, world }, name: string) => {
+  // Re-pin the clock to the seed instant before the run navigation, mirroring
+  // finishConnectFlow(): GamePage's getRunSeed reads Date.now() on mount.
+  await page.clock.setSystemTime(world.seedT)
+  await page.getByRole('button', { name: `和 ${name} 一起进入 →` }).click()
+  await page.waitForURL((url) => new URL(url).pathname === '/bombsquad/run', { timeout: 12_000 })
+})
+
+Then(
+  'the run starts in mode② with the platform voice partner connected',
+  async ({ page, world }) => {
+    // partner=platform rode the handoff URL — the mode② opt-in signal.
+    expect(new URL(page.url()).searchParams.get('partner')).toBe('platform')
+    await world.waitForRunStarted()
+    // The in-game voice panel mounted and its stubbed session produced the
+    // AI-first greeting — the proof the co-play wire is live end to end.
+    const panel = page.getByRole('region', { name: 'AI 语音伙伴' })
+    await expect(panel).toBeVisible()
+    await expect(panel.getByText(world.voice.reply)).toBeVisible()
+  }
+)
 
 When('I open the companion onboarding page', async ({ world }) => {
   await world.openPath('/me/companion')

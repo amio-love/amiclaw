@@ -1,0 +1,42 @@
+# Companion presence layer (伙伴坞) — the persistent companion dock on the
+# platform shell, and the companion co-play default entry into the daily
+# challenge (companion-presence-design.md minimal slice).
+#
+# Deterministic + hermetic: auth and the /api/companion* control plane are
+# route-mocked in fixtures.ts (world.signIn + world.companion + the settings
+# PUT capture); the memory album is an honest empty default, so the arrival
+# greeting renders its no-episode variant. While the lobby-voice capability
+# flag is off the lobby never touches mic / permission APIs — the mic button
+# surfaces the honest in-game-voice note instead (the full auto-voice
+# permission sequence is pinned flag-on by CompanionDock.lobby-voice.test.tsx);
+# the anonymous no-dock state is pinned by the CompanionDock unit tests (the
+# dock renders nothing without a session).
+
+Feature: Companion presence dock and co-play entry
+  As a signed-in player with a companion
+  I want my companion present on every platform page and one tap into
+  playing together
+  So that the companion is an ambient presence, not a buried feature
+
+  Background:
+    Given I am a signed-in player with a companion named "阿澈"
+
+  # Source: companion-dock-presence
+  @playwright
+  Scenario: The dock greets on arrival and remembers a mute across the menu
+    When I open /
+    Then the companion dock shows "阿澈" with the arrival greeting
+    And the dock offers a mic button
+
+    When I mute the companion from the dock control menu
+    Then the dock lands muted and quiet-remembered is persisted to the account
+
+  # Source: companion-coplay-entry
+  @playwright
+  Scenario: A companion user enters the daily challenge with co-play by default
+    Given I open /
+    When I enter the daily challenge from the BombSquad landing
+    Then the co-play entry is the default and the BYO handoff stays visible
+
+    When I start the run together with "阿澈"
+    Then the run starts in mode② with the platform voice partner connected

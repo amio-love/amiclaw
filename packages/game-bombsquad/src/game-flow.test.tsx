@@ -58,6 +58,13 @@ vi.mock('@shared/leaderboard-api', () => ({
   fetchLeaderboard: vi.fn().mockResolvedValue({ date: '2026-03-16', entries: [] }),
 }))
 
+// These flows cover the anonymous BYO path; pin the companion co-play gate to
+// `unavailable` so the daily connect page renders the classic two-step flow
+// (the co-play entry has its own tests in ConnectPage.companion.test.tsx).
+vi.mock('@/hooks/useCompanionPartner', () => ({
+  useCompanionPartner: () => ({ status: 'unavailable' }),
+}))
+
 vi.mock('./utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))

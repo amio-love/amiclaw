@@ -1,8 +1,16 @@
-import { memo, useImperativeHandle, forwardRef } from 'react'
+import { memo, useImperativeHandle, forwardRef, useEffect } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
 import { useVoiceSession } from './useVoiceSession'
 import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
+
+/** Live companion utterance, reported upward for the top subtitle strip. */
+export interface VoiceUtterance {
+  /** The AI's streamed reply text for the current turn ('' between turns). */
+  text: string
+  /** True while the reply is audibly playing (TTS frames scheduled). */
+  speaking: boolean
+}
 
 interface VoicePanelProps {
   /** Stable per-run join key shared by voice summary and score settlement. */
@@ -13,6 +21,13 @@ interface VoicePanelProps {
   gameState: GameState
   /** Platform game id; defaults to `'bombsquad'` inside the hook. */
   gameId?: string
+  /**
+   * Observer for the live utterance (text + speaking), so GamePage can render
+   * the top-of-screen companion subtitle strip without lifting the whole
+   * voice-session hook out of the panel. Called from an effect on every
+   * utterance change; must be reference-stable (GamePage memoizes it).
+   */
+  onUtterance?: (utterance: VoiceUtterance) => void
 }
 
 /**
@@ -67,7 +82,7 @@ function placeholderFor(status: VoiceStatus, phase: ConversationPhase): string {
 }
 
 function VoicePanelImpl(
-  { gameRunId, manualData, gameState, gameId }: VoicePanelProps,
+  { gameRunId, manualData, gameState, gameId, onUtterance }: VoicePanelProps,
   ref: React.ForwardedRef<VoicePanelHandle>
 ) {
   const {
@@ -86,6 +101,15 @@ function VoicePanelImpl(
   })
 
   useImperativeHandle(ref, () => ({ requestClosing }), [requestClosing])
+
+  // Report the live utterance for the top subtitle strip. Cleared on unmount
+  // so the strip vanishes with the session (run exit / navigation).
+  useEffect(() => {
+    onUtterance?.({ text: aiText, speaking: isAiSpeaking })
+  }, [onUtterance, aiText, isAiSpeaking])
+  useEffect(() => {
+    return () => onUtterance?.({ text: '', speaking: false })
+  }, [onUtterance])
 
   const isLive = status === 'ready'
   // While live, the prominent indicator is the conversation phase; before that

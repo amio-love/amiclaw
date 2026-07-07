@@ -21,6 +21,7 @@ import { API_BASE } from '@shared/api-base'
 import type {
   CompanionIdentity,
   CompanionResponse,
+  CompanionSettingsBody,
   CompanionSetupBody,
   CompanionSetupResponse,
   MemoriesResponse,
@@ -28,6 +29,7 @@ import type {
   ProfileClaimView,
   ProfileCorrectionResponse,
   ProfileResponse,
+  VoicePosture,
 } from '@shared/companion-types'
 import {
   companionSeedEnabled,
@@ -273,6 +275,29 @@ export async function setProfileEnabled(enabled: boolean): Promise<ProfileToggle
     })
     if (!res.ok) return { kind: 'error' }
     return { kind: 'ok', profileEnabled: enabled }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+// --- Presence settings (voice posture) ----------------------------------------
+
+/**
+ * Persist the remembered auto-voice posture (`PUT /api/companion/settings`).
+ * Fire-and-forget from the dock's point of view: the localStorage cache is
+ * written first (the client's fast path), this call syncs the account SSOT.
+ */
+export async function putVoicePosture(posture: VoicePosture): Promise<MutationResult> {
+  if (companionSeedEnabled()) return { kind: 'ok' }
+  try {
+    const body: CompanionSettingsBody = { voice_posture: posture }
+    const res = await fetch(`${BASE}/settings`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+    return res.ok ? { kind: 'ok' } : { kind: 'error' }
   } catch {
     return { kind: 'error' }
   }

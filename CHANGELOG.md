@@ -5,6 +5,20 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Your companion now lives on the platform** - Feature. Signed-in players with
+a companion get a persistent companion dock above the tab bar on every platform
+page: the companion's name, a breathing status dot, its latest line, and a
+control menu. Coming back after half a day away lands a short text greeting
+built only from real play history (your latest memory and streak — nothing
+invented), capped per day; one tap mutes it and the choice is remembered on
+your account across devices. Entering the daily challenge now defaults
+companion owners into playing WITH their companion — the in-game voice partner
+connects in one tap, live subtitles ride the top of the game screen, and the
+result page carries a factual post-game line — while bring-your-own-AI stays
+one tap away. Voice on the platform pages themselves ships next: until then
+the dock is honestly text-only and never asks for the microphone outside a
+run.
+
 **Practice mode rotates its puzzle** - Change. Every practice run now draws a
 fresh random bomb within the unchanged practice manual's rules, so replaying
 practice is real practice instead of answer recall. The manual players hand

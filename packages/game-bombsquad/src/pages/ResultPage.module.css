@@ -160,6 +160,30 @@
   letter-spacing: 0.02em;
 }
 
+/* ----------  companion post-game reaction (节拍 3, mode② only)  ---------- */
+.companionReaction {
+  margin-top: 10px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 229, 62, 0.22);
+  border-radius: 12px;
+  background: rgba(10, 10, 26, 0.72);
+  text-align: left;
+}
+
+.companionReactionName {
+  font: 600 11px var(--font-body);
+  color: var(--y);
+}
+
+.companionReactionText {
+  font: 400 13px/1.5 var(--font-body);
+  color: #fff;
+}
+
 /* ----------  ranking card (success · daily defuse only)  ---------- */
 .rankCard {
   margin-top: 8px;

@@ -52,6 +52,7 @@ function stubServer(options: ServerOptions = {}) {
             address_style: '',
             voice_id: 'companion-bright',
             profile_enabled: true,
+            voice_posture: 'voice-default',
             created_at: '2026-06-01T00:00:00.000Z',
           }
           return Promise.resolve(json({ error: 'companion already exists' }, 409))
@@ -61,6 +62,7 @@ function stubServer(options: ServerOptions = {}) {
           address_style: body.address_style ?? '',
           voice_id: body.voice_id,
           profile_enabled: true,
+          voice_posture: 'voice-default',
           created_at: '2026-06-30T00:00:00.000Z',
         }
         return Promise.resolve(json({ companion }, 201))
@@ -119,6 +121,7 @@ describe('CompanionOnboardingPage /me/companion', () => {
         address_style: '队长',
         voice_id: 'companion-warm',
         profile_enabled: true,
+        voice_posture: 'voice-default',
         created_at: '2026-05-30T09:12:00.000Z',
       },
     })

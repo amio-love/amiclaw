@@ -16,6 +16,7 @@ import {
   listActiveClaimsWithEvidence,
   listMemories,
   setProfileEnabled,
+  setVoicePosture,
 } from './store'
 import { createTestDb } from './test-support/sqlite-db'
 import type { ProfileClaimRecord } from './types'
@@ -234,5 +235,41 @@ describe('setProfileEnabled', () => {
     expect(await setProfileEnabled(db, 'user-a', false)).toBe(true)
     expect((await getCompanion(db, 'user-a'))?.profile_enabled).toBe(0)
     expect(await setProfileEnabled(db, 'nobody', false)).toBe(false)
+  })
+})
+
+describe('setVoicePosture', () => {
+  it('defaults to voice-default and persists each remembered posture', async () => {
+    const db = createTestDb()
+    await createCompanion(
+      db,
+      { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' },
+      testDeps()
+    )
+    // Migration 0004 default: every companion starts on auto-voice.
+    expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('voice-default')
+
+    expect(await setVoicePosture(db, 'user-a', 'quiet-remembered')).toBe(true)
+    expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('quiet-remembered')
+
+    expect(await setVoicePosture(db, 'user-a', 'denied-remembered')).toBe(true)
+    expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('denied-remembered')
+
+    expect(await setVoicePosture(db, 'user-a', 'voice-default')).toBe(true)
+    expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('voice-default')
+  })
+
+  it('reports a missing companion and rejects a non-enum value at the schema', async () => {
+    const db = createTestDb()
+    expect(await setVoicePosture(db, 'nobody', 'quiet-remembered')).toBe(false)
+
+    await createCompanion(
+      db,
+      { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' },
+      testDeps()
+    )
+    // The column CHECK is the last line of defence below the handler's guard.
+    await expect(setVoicePosture(db, 'user-a', 'shouting')).rejects.toThrow()
+    expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('voice-default')
   })
 })

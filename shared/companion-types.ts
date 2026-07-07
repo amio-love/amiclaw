@@ -4,7 +4,8 @@
  * SSOT for the companion wire contract: the platform-neutral voice catalog and
  * every JSON shape that crosses the `/api/companion/*` HTTP boundary — the
  * setup body/response, the identity read, the profile claims + evidence views,
- * the memory-album page, and the four control-plane mutation bodies.
+ * the memory-album page, and the control-plane mutation bodies (profile switch,
+ * correction, voice-posture settings).
  *
  * Lives in `shared/` alongside `auth-types.ts` so ONE definition is consumed by
  * both the Workers handlers (`packages/api`, via `packages/companion-memory`
@@ -46,6 +47,31 @@ export function isPlatformVoiceId(value: unknown): value is PlatformVoiceId {
   return typeof value === 'string' && (PLATFORM_VOICE_IDS as readonly string[]).includes(value)
 }
 
+// --- Voice posture (companion presence layer) ---------------------------------
+
+/**
+ * The three remembered voice postures of the companion presence layer
+ * (companion-presence-design §姿态记忆模型):
+ *
+ *  - `voice-default`     auto-voice on login (a new companion's initial posture)
+ *  - `quiet-remembered`  the player muted / downgraded voice — future visits
+ *                        land quiet, mic button elevates per-session
+ *  - `denied-remembered` the browser mic permission was denied — never
+ *                        auto-re-prompt; the mic button is the only retry path
+ *
+ * Account-level SSOT is the companion row's `voice_posture` column
+ * (`PUT /api/companion/settings`); a localStorage cache
+ * (`amio_companion_voice_posture`) covers the pre-API-roundtrip read on page
+ * load. Transition rules live in `shared/companion-presence.ts`.
+ */
+export const VOICE_POSTURES = ['voice-default', 'quiet-remembered', 'denied-remembered'] as const
+
+export type VoicePosture = (typeof VOICE_POSTURES)[number]
+
+export function isVoicePosture(value: unknown): value is VoicePosture {
+  return typeof value === 'string' && (VOICE_POSTURES as readonly string[]).includes(value)
+}
+
 // --- Companion identity (Variant 3 read path) --------------------------------
 
 /**
@@ -58,6 +84,8 @@ export interface CompanionIdentity {
   address_style: string
   voice_id: string
   profile_enabled: boolean
+  /** Remembered auto-voice posture (account-level; cross-device). */
+  voice_posture: VoicePosture
   created_at: string
 }
 
@@ -112,6 +140,18 @@ export interface ProfileResponse {
 /** Body of `PUT /api/companion/profile` (the profile switch). */
 export interface ProfileSettingsBody {
   profile_enabled: boolean
+}
+
+// --- Companion settings (presence-layer control plane) ------------------------
+
+/** Body of `PUT /api/companion/settings` (the voice-posture write). */
+export interface CompanionSettingsBody {
+  voice_posture: VoicePosture
+}
+
+/** Response of `PUT /api/companion/settings` — echoes the persisted value. */
+export interface CompanionSettingsResponse {
+  voice_posture: VoicePosture
 }
 
 /** Body of `POST /api/companion/profile/<id>/correction`. */

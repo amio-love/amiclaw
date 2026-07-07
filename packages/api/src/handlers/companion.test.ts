@@ -21,6 +21,7 @@ import {
   handleGetProfile,
   handlePutProfileSettings,
 } from './companion-profile'
+import { handlePutCompanionSettings } from './companion-settings'
 import { handleClaimCorrection, handleClaimDelete } from './companion-profile-claim'
 import { handleGetMemories, handleMemoryDelete } from './companion-memories'
 import type { CompanionApiEnv } from './companion-shared'
@@ -117,6 +118,10 @@ describe('require-session gate (every endpoint, unauthenticated -> 401)', () => 
       handleGetMemories(anonRequest('/api/companion/memories'), env),
       handleMemoryDelete(anonRequest('/api/companion/memories/x', { method: 'DELETE' }), env, 'x'),
       handleGetCompanion(anonRequest('/api/companion'), env),
+      handlePutCompanionSettings(
+        anonRequest('/api/companion/settings', { method: 'PUT', body: '{}' }),
+        env
+      ),
     ])
     for (const response of responses) {
       expect(response.status).toBe(401)
@@ -148,6 +153,8 @@ describe('GET /api/companion (identity read)', () => {
       address_style: 'captain',
       voice_id: 'companion-warm',
       profile_enabled: true,
+      // Presence layer: every companion starts on auto-voice (migration 0004).
+      voice_posture: 'voice-default',
     })
     expect(typeof body.created_at).toBe('string')
   })
@@ -252,6 +259,50 @@ describe('PUT /api/companion/profile (the switch)', () => {
       env
     )
     expect(response.status).toBe(422)
+  })
+})
+
+describe('PUT /api/companion/settings (voice posture)', () => {
+  it('rejects a non-enum posture with 422 and a missing companion with 404', async () => {
+    const { env } = await makeEnv()
+    const invalid = await handlePutCompanionSettings(
+      authedRequest('/api/companion/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ voice_posture: 'shouting' }),
+      }),
+      env
+    )
+    expect(invalid.status).toBe(422)
+
+    const noCompanion = await handlePutCompanionSettings(
+      authedRequest('/api/companion/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ voice_posture: 'quiet-remembered' }),
+      }),
+      env
+    )
+    expect(noCompanion.status).toBe(404)
+  })
+
+  it('persists the posture for the session user and the identity read reflects it', async () => {
+    const { env } = await makeEnv()
+    await setupCompanion(env)
+
+    const response = await handlePutCompanionSettings(
+      authedRequest('/api/companion/settings', {
+        method: 'PUT',
+        // A smuggled owner id is ignored by construction — the session wins.
+        body: JSON.stringify({ voice_posture: 'denied-remembered', user_id: 'user-b' }),
+      }),
+      env
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ voice_posture: 'denied-remembered' })
+
+    const read = await handleGetCompanion(authedRequest('/api/companion'), env)
+    expect(((await read.json()) as { voice_posture: string }).voice_posture).toBe(
+      'denied-remembered'
+    )
   })
 })
 

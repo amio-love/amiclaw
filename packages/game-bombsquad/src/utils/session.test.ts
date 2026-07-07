@@ -93,6 +93,7 @@ describe('session utilities', () => {
         mode: 'practice',
         manualUrl: 'https://claw.amio.fans/manual/practice',
         manualHandoffComplete: true,
+        platformPartner: false,
       },
       storage
     )
@@ -101,7 +102,40 @@ describe('session utilities', () => {
       mode: 'practice',
       manualUrl: 'https://claw.amio.fans/manual/practice',
       manualHandoffComplete: true,
+      platformPartner: false,
     })
+  })
+
+  it('defaults platformPartner to false for pre-flag recovery state', () => {
+    const storage = createStorageStub({
+      'bombsquad:entry-recovery': JSON.stringify({
+        mode: 'daily',
+        manualUrl: 'https://claw.amio.fans/manual/2026-07-08',
+        manualHandoffComplete: true,
+      }),
+    })
+
+    expect(readEntryRecoveryState(storage)).toEqual({
+      mode: 'daily',
+      manualUrl: 'https://claw.amio.fans/manual/2026-07-08',
+      manualHandoffComplete: true,
+      platformPartner: false,
+    })
+  })
+
+  it('preserves platformPartner for a mode② run', () => {
+    const storage = createStorageStub()
+    saveEntryRecoveryState(
+      {
+        mode: 'daily',
+        manualUrl: 'https://claw.amio.fans/manual/2026-07-08',
+        manualHandoffComplete: true,
+        platformPartner: true,
+      },
+      storage
+    )
+
+    expect(readEntryRecoveryState(storage)?.platformPartner).toBe(true)
   })
 
   it('ignores invalid entry recovery state', () => {
