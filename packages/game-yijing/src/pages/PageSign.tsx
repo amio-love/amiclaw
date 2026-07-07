@@ -7,6 +7,7 @@ import {
   recordOracleLocalSign,
 } from '@amiclaw/arcade-profile/local'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
+import { getTodayString, toChineseDateString } from '@shared/date'
 import { Hexagram } from '../glyphs'
 import {
   changedValues,
@@ -28,11 +29,6 @@ import styles from './PageSign.module.css'
 type SaveState = 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
 type ShareState = 'idle' | 'shared' | 'copied' | 'error'
 
-function todayCN(): string {
-  const d = new Date()
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
-
 export function PageSign() {
   const { yaoValues } = useSession()
   if (yaoValues === null) return <Navigate to="/home" replace />
@@ -45,6 +41,11 @@ function SignCard({ values }: { values: YaoSextet }) {
   const [saveState, setSaveState] = useState<SaveState>('saving')
   const [shareState, setShareState] = useState<ShareState>('idle')
 
+  /* The sign's product day (UTC date, shared with the arcade shell): the
+     cast timestamp when present. Both the Gregorian date and the 干支 seal
+     derive from it, so the card can never show one day's date with another
+     day's 干支. */
+  const signDate = castCreatedAt?.slice(0, 10) ?? getTodayString()
   const changed = changedValues(values) as unknown as YaoSextet
   const [benNumber, benCn] = hexagramFromBinary(values)
   const [, bianCn] = hexagramFromBinary(changed)
@@ -174,7 +175,7 @@ function SignCard({ values }: { values: YaoSextet }) {
         <div className={styles.card}>
           <div className={styles.cardHead}>
             <span className={styles.cardLbl}>AMIO 游乐场 · 卦签</span>
-            <span className={styles.cardDate}>{todayCN()}</span>
+            <span className={styles.cardDate}>{toChineseDateString(signDate)}</span>
           </div>
 
           <div className={styles.hexRow}>
@@ -201,7 +202,7 @@ function SignCard({ values }: { values: YaoSextet }) {
             <div className={styles.footUrl}>claw.amio.fans/oracle</div>
             <div className={styles.seal}>
               <span className={styles.sealL1}>{benCn}</span>
-              <span className={styles.sealL2}>{ganzhi()}</span>
+              <span className={styles.sealL2}>{ganzhi(signDate)}</span>
             </div>
           </div>
         </div>

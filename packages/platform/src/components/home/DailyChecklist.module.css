@@ -137,6 +137,12 @@
   font: 400 12px var(--font-body);
 }
 
+.hint {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.38);
+  font: 400 12px var(--font-body);
+}
+
 @media (max-width: 768px) {
   .section {
     padding: 22px;

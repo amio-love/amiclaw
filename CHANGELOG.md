@@ -52,6 +52,20 @@ cast a「真实卦签」— the per-day check-in act stays real, the sign conten
 declared demo. Real random casting stays off until the manual carries all 64
 hexagram texts; the current data covers 3 of 64.
 
+**The daily reset rule is now stated where "today" appears** - Change. Daily
+content follows the UTC date, so for Beijing players "today" rolls over at
+08:00 local time — but the site never said so. The homepage checklist, the
+BombSquad overview and landing daily card, the leaderboard, and the Oracle
+home now carry a compact hint stating the rule, with the rollover moment
+rendered in the viewer's own timezone.
+
+**Oracle and the arcade now agree on what day it is** - Fix. The Oracle home
+and sign card used the device's local calendar date while the 干支 seal and
+every other daily surface followed the UTC product day, so a sign cast before
+the daily reset could show one day's date with another day's 干支. Both the
+Gregorian date and the 干支 now derive from the same shared product day as the
+rest of the arcade, and the sign card dates itself from the cast timestamp.
+
 **Daily Arcade loop and streaks** - New. The homepage now shows a real daily
 checklist for BombSquad and Oracle, result pages show profile-save and share
 feedback, and the leaderboard now includes a public streak board for claimed

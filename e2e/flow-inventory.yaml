@@ -176,8 +176,10 @@ flows:
     name: Daily countdown display
     description: >-
       The homepage featured BombSquad overview shows a live 时 / 分 / 秒
-      countdown ticking toward the next daily reset.
-    steps: [landing, featured-bombsquad-overview, countdown-tick]
+      countdown ticking toward the next daily reset, plus a day-boundary hint
+      stating that daily content follows the UTC date and rolls over at the
+      viewer's localized wall-clock time (08:00 for Beijing users).
+    steps: [landing, featured-bombsquad-overview, countdown-tick, reset-rule-hint]
     status: active
 
   - id: bombsquad-zone-styling

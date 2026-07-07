@@ -1,7 +1,7 @@
 import { EyebrowTag } from '@amiclaw/ui'
 import DailyLeaderboardList from '@/components/leaderboard/DailyLeaderboardList'
 import StreakLeaderboardList from '@/components/leaderboard/StreakLeaderboardList'
-import { toChineseDateString } from '@shared/date'
+import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import styles from './LeaderboardPage.module.css'
 
 /* Leaderboard page — BombSquad's daily time board remains the KV-backed daily
@@ -14,7 +14,9 @@ export default function LeaderboardPage() {
       <h2 className={styles.title}>
         Arcade · <span className={styles.accent}>每日</span>
       </h2>
-      <p className={styles.lead}>{toChineseDateString()} · 每日 UTC 0 点重置。</p>
+      <p className={styles.lead}>
+        {toChineseDateString()} · {getDailyResetHint()}
+      </p>
 
       <div className={styles.boardGrid}>
         <section className={styles.boardSection}>
