@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getDailyResetHint,
   getLocalRolloverTime,
+  getProductDaysEndingAt,
+  getRecentProductDays,
   getTodayString,
   toChineseDateString,
 } from '@shared/date'
@@ -28,6 +30,31 @@ describe('getTodayString — UTC product day', () => {
   it('rolls over exactly at UTC midnight', () => {
     expect(getTodayString(new Date('2026-07-06T23:59:59.999Z'))).toBe('2026-07-06')
     expect(getTodayString(new Date('2026-07-07T00:00:00.000Z'))).toBe('2026-07-07')
+  })
+})
+
+describe('getProductDaysEndingAt — the single day-window derivation', () => {
+  it('walks back from a product-day string, newest first, across month boundaries', () => {
+    expect(getProductDaysEndingAt('2026-07-01', 3)).toEqual([
+      '2026-07-01',
+      '2026-06-30',
+      '2026-06-29',
+    ])
+  })
+})
+
+describe('getRecentProductDays', () => {
+  it('walks back from the UTC product day, today first', () => {
+    expect(getRecentProductDays(3, new Date('2026-07-01T00:30:00Z'))).toEqual([
+      '2026-07-01',
+      '2026-06-30',
+      '2026-06-29',
+    ])
+  })
+
+  it('agrees with getTodayString on the first entry at a day boundary', () => {
+    const now = new Date('2026-07-06T23:59:59Z')
+    expect(getRecentProductDays(1, now)[0]).toBe(getTodayString(now))
   })
 })
 

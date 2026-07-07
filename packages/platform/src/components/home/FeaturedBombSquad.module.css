@@ -24,17 +24,41 @@
 .art {
   position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  gap: 28px;
+  align-items: stretch;
   min-height: 360px;
   padding: 40px;
   overflow: hidden;
   /* Warm-cosmic atmosphere behind the white+yellow wordmark — yellow core
      glow + violet accent over the dark cosmic base, matching the hero orb.
-     No cyan (DesignSystem.md §Brand / Hard Prohibition #1). */
+     No cyan chrome (DesignSystem.md §Brand / Hard Prohibition #1) — the cyan
+     inside the gameplay screenshot is wire-module game content. */
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 229, 62, 0.25), transparent 55%),
     radial-gradient(circle at 70% 80%, rgba(180, 120, 255, 0.15), transparent 55%), #050511;
+}
+
+/* Copy column — carries the original top/meta stack. */
+.artContent {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Real mid-defuse gameplay screenshot (portrait phone capture). The fixed
+   width + the intrinsic width/height attributes reserve the box up front, so
+   the lazy image never shifts layout. */
+.artShot {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  width: 168px;
+  height: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
 }
 
 /* 3px equidistant scanline overlay */
@@ -126,6 +150,10 @@
     min-height: 340px;
     padding: 30px;
   }
+
+  .artShot {
+    width: 148px;
+  }
 }
 
 /* ----------  responsive: mobile  ---------- */
@@ -141,6 +169,15 @@
   .art {
     min-height: 260px;
     padding: 28px;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* Stack the screenshot under the copy at phone widths — the copy column
+     needs the full row for the hero wordmark. */
+  .artShot {
+    align-self: flex-start;
+    width: min(200px, 60%);
   }
 
   .side {

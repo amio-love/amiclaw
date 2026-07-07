@@ -98,6 +98,7 @@ const EMPTY_ARCADE_PROFILE = {
       last_active_date: null,
     },
   },
+  history: [],
 }
 
 const ACCOUNT_ARCADE_PROFILE = {
@@ -156,6 +157,64 @@ const ACCOUNT_ARCADE_PROFILE = {
       last_active_date: '2026-07-06',
     },
   },
+  // Last-7-days record view (today first). The history section labels rows by
+  // array index (今天 / 昨天 / …), so fixed dates are fine here.
+  history: [
+    {
+      date: '2026-07-06',
+      bombsquad_daily_completed: true,
+      oracle_signed: true,
+      runs: 1,
+      best_daily: {
+        source_key: 'bombsquad:account-run',
+        run_id: 'account-run',
+        mode: 'daily',
+        outcome: 'defused',
+        duration_ms: 65_000,
+        attempt_number: 1,
+        module_count: 4,
+        completed_modules: 4,
+        strike_count: 0,
+        finished_at: '2026-07-06T08:00:00.000Z',
+      },
+      sign: {
+        source_key: 'oracle:2026-07-06:oracle-1',
+        session_id: 'oracle-1',
+        sign_date: '2026-07-06',
+        ben: '乾',
+        bian: '坤',
+        yao_values: [7, 8, 7, 8, 7, 8],
+        created_at: '2026-07-06T09:00:00.000Z',
+      },
+    },
+    {
+      date: '2026-07-05',
+      bombsquad_daily_completed: true,
+      oracle_signed: false,
+      runs: 2,
+      best_daily: {
+        source_key: 'bombsquad:yesterday-run',
+        run_id: 'yesterday-run',
+        mode: 'daily',
+        outcome: 'defused',
+        duration_ms: 83_000,
+        attempt_number: 2,
+        module_count: 4,
+        completed_modules: 4,
+        strike_count: 1,
+        finished_at: '2026-07-05T08:00:00.000Z',
+      },
+      sign: null,
+    },
+    ...['2026-07-04', '2026-07-03', '2026-07-02', '2026-07-01', '2026-06-30'].map((date) => ({
+      date,
+      bombsquad_daily_completed: false,
+      oracle_signed: false,
+      runs: 0,
+      best_daily: null,
+      sign: null,
+    })),
+  ],
 }
 
 function installFakeLocalStorage() {
@@ -247,6 +306,57 @@ describe('AccountPage /me', () => {
     expect(screen.queryByText('勋章', { exact: true })).not.toBeInTheDocument()
   })
 
+  it("keeps yesterday's device records visible in the 最近 7 天 history", async () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString()
+    const yesterdayDate = yesterday.slice(0, 10)
+    localStore.set(
+      ARCADE_LOCAL_PROFILE_KEY,
+      JSON.stringify({
+        version: 1,
+        profile_id: 'local-profile',
+        created_at: yesterday,
+        updated_at: yesterday,
+        last_seen_at: yesterday,
+        claimed_source_keys: [],
+        bombsquad_runs: [
+          {
+            source_key: 'bombsquad:yesterday-run',
+            run_id: 'yesterday-run',
+            mode: 'daily',
+            outcome: 'defused',
+            duration_ms: 78_000,
+            attempt_number: 1,
+            module_count: 4,
+            completed_modules: 4,
+            strike_count: 0,
+            finished_at: yesterday,
+          },
+        ],
+        oracle_signs: [
+          {
+            source_key: `oracle:${yesterdayDate}:oracle-1`,
+            session_id: 'oracle-1',
+            sign_date: yesterdayDate,
+            ben: '乾',
+            bian: '坤',
+            yao_values: [7, 8, 7, 8, 7, 8],
+            created_at: yesterday,
+          },
+        ],
+      })
+    )
+    stubApi({ session: ANON })
+    renderAccount('/me')
+
+    expect(await screen.findByText('最近 7 天')).toBeInTheDocument()
+    const yesterdayRows = screen
+      .getAllByRole('row')
+      .filter((row) => row.textContent?.includes('昨天'))
+    expect(yesterdayRows).toHaveLength(1)
+    expect(yesterdayRows[0]).toHaveTextContent('✓ 01:18')
+    expect(yesterdayRows[0]).toHaveTextContent('乾 → 坤')
+  })
+
   it('navigates to /login when the signed-out CTA is clicked', async () => {
     stubApi({ session: ANON })
     renderAccount('/me')
@@ -275,8 +385,15 @@ describe('AccountPage /me', () => {
     expect(await screen.findByText('账号记录')).toBeInTheDocument()
     expect(await screen.findByText('1 天')).toBeInTheDocument()
     expect(screen.getByText('每日挑战 · 01:05 · 最快 01:05')).toBeInTheDocument()
-    expect(screen.getByText('乾 → 坤')).toBeInTheDocument()
+    expect(screen.getAllByText('乾 → 坤').length).toBeGreaterThan(0)
     expect(screen.getByText('上榜名：Player 8F3A')).toBeInTheDocument()
+    // The last-7-days history keeps yesterday's records visible after rollover.
+    expect(screen.getByText('最近 7 天')).toBeInTheDocument()
+    const historyRows = screen
+      .getAllByRole('row')
+      .filter((row) => row.textContent?.includes('昨天'))
+    expect(historyRows).toHaveLength(1)
+    expect(historyRows[0]).toHaveTextContent('✓ 01:23')
     // The retired mock stats / runs / badges must be absent.
     expect(screen.queryByText('林星海')).not.toBeInTheDocument()
     expect(screen.queryByText('42')).not.toBeInTheDocument()

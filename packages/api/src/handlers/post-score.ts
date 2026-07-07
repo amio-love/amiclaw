@@ -1,4 +1,8 @@
-import type { ScoreSubmission, ScoreSubmissionResponse } from '../../../../shared/leaderboard-types'
+import {
+  LEADERBOARD_RETENTION_DAYS,
+  type ScoreSubmission,
+  type ScoreSubmissionResponse,
+} from '../../../../shared/leaderboard-types'
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
 import { captureSettlementEvent } from '../../../companion-memory/src/capture'
 import type { CompanionDb } from '../../../companion-memory/src/db'
@@ -14,7 +18,9 @@ import {
 
 const RATE_LIMIT_MS = 10_000
 const MAX_ENTRIES = 100
-const KV_TTL_SECONDS = 48 * 60 * 60 // 48 hours
+// Derived from the shared retention contract (2 days -> 48h) so the frontend
+// date-switcher window and this TTL cannot drift apart.
+const KV_TTL_SECONDS = LEADERBOARD_RETENTION_DAYS * 24 * 60 * 60
 
 export interface PostScoreOptions {
   auth?: KVNamespace

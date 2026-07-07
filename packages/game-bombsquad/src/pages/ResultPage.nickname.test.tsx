@@ -316,6 +316,7 @@ describe('ResultPage nickname gate', () => {
           last_active_date: '2023-11-14',
         },
       },
+      history: [],
     }
     mockedProfileSubmit.mockResolvedValue({
       kind: 'ok',

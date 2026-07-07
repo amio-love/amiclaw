@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeDailyLoop } from './summary'
+import { HISTORY_WINDOW_DAYS, summarizeArcadeProfile, summarizeDailyLoop } from './summary'
 import type { BombSquadProfileRun, OracleProfileSign } from './types'
 
 function run(
@@ -91,5 +91,82 @@ describe('daily loop summary', () => {
     expect(summary.checklist.oracle_sign.completed).toBe(false)
     expect(summary.streak.today_completed).toBe(false)
     expect(summary.streak.current_days).toBe(0)
+  })
+})
+
+describe('recent history — the /me 7-day record view', () => {
+  it('covers the last 7 product days, today first, across a month boundary', () => {
+    const summary = summarizeArcadeProfile({
+      today: '2026-07-03',
+      bombsquadRuns: [],
+      oracleSigns: [],
+    })
+
+    expect(summary.history).toHaveLength(HISTORY_WINDOW_DAYS)
+    expect(summary.history.map((day) => day.date)).toEqual([
+      '2026-07-03',
+      '2026-07-02',
+      '2026-07-01',
+      '2026-06-30',
+      '2026-06-29',
+      '2026-06-28',
+      '2026-06-27',
+    ])
+  })
+
+  it("surfaces yesterday's records — check-ins, best daily time, and the sign", () => {
+    const fastRun = { ...run('daily-fast', '2026-07-05'), duration_ms: 45_000 }
+    const summary = summarizeArcadeProfile({
+      today: '2026-07-06',
+      bombsquadRuns: [
+        run('daily-slow', '2026-07-05'),
+        fastRun,
+        run('failed', '2026-07-05', 'exploded'),
+      ],
+      oracleSigns: [sign('oracle-1', '2026-07-05')],
+    })
+
+    const yesterday = summary.history[1]
+    expect(yesterday.date).toBe('2026-07-05')
+    expect(yesterday.bombsquad_daily_completed).toBe(true)
+    expect(yesterday.oracle_signed).toBe(true)
+    expect(yesterday.runs).toBe(3)
+    expect(yesterday.best_daily?.run_id).toBe('daily-fast')
+    expect(yesterday.sign?.ben).toBe('乾')
+
+    const today = summary.history[0]
+    expect(today.bombsquad_daily_completed).toBe(false)
+    expect(today.runs).toBe(0)
+    expect(today.best_daily).toBeNull()
+    expect(today.sign).toBeNull()
+  })
+
+  it('keys signs on sign_date but qualifies check-ins on same-day creation', () => {
+    // A sign for 07-05 that was actually created on 07-06 still DISPLAYS under
+    // 07-05 (that is the day it is for), but does not count as a 07-05 打卡.
+    const summary = summarizeArcadeProfile({
+      today: '2026-07-06',
+      bombsquadRuns: [],
+      oracleSigns: [staleSign('oracle-1', '2026-07-05', '2026-07-06')],
+    })
+
+    const day = summary.history[1]
+    expect(day.date).toBe('2026-07-05')
+    expect(day.sign?.session_id).toBe('oracle-1')
+    expect(day.oracle_signed).toBe(false)
+  })
+
+  it('counts practice-only days as runs without a daily check-in', () => {
+    const summary = summarizeArcadeProfile({
+      today: '2026-07-06',
+      bombsquadRuns: [run('p1', '2026-07-04', 'practice-cleared', 'practice')],
+      oracleSigns: [],
+    })
+
+    const day = summary.history[2]
+    expect(day.date).toBe('2026-07-04')
+    expect(day.runs).toBe(1)
+    expect(day.bombsquad_daily_completed).toBe(false)
+    expect(day.best_daily).toBeNull()
   })
 })

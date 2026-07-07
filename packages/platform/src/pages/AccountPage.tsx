@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import type {
   ArcadeLocalProfile,
+  ArcadeProfileHistoryDay,
   ArcadeProfileSummary,
   ArcadePublicProfileStatus,
 } from '@amiclaw/arcade-profile/types'
@@ -16,6 +17,7 @@ import { claimArcadeProfile, fetchArcadeProfile } from '@amiclaw/arcade-profile/
 import { formatMs } from '@shared/format-time'
 import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
+import { boardDayLabel } from '@/lib/board-dates'
 import CompanionCard from '@/components/companion/CompanionCard'
 import { companionSeedEnabled } from '@/lib/companion-seed'
 import styles from './AccountPage.module.css'
@@ -183,6 +185,10 @@ function SignedInProfile({
             )}
           </section>
 
+          {accountProfile.status === 'ok' && (
+            <ArcadeHistorySection history={accountProfile.profile.history} />
+          )}
+
           <ClaimLocalProfileCard
             localProfile={localProfile}
             localSummary={localSummary}
@@ -219,8 +225,59 @@ function SignedOutGuide({ localSummary }: { localSummary: ArcadeProfileSummary }
           </Link>
         </GlassCard>
       </div>
+
+      <ArcadeHistorySection history={localSummary.history} />
     </>
   )
+}
+
+/* Per-day record view over the last 7 product days — the「昨天可见」surface.
+   Reads the summary's `history` (same product-day source as the checklist),
+   so yesterday's 打卡 / 成绩 / 卦签 stay visible after the daily rollover.
+   Hidden while the whole window is empty: the stats card already carries the
+   honest empty state and play CTA. */
+function ArcadeHistorySection({ history }: { history?: ArcadeProfileHistoryDay[] }) {
+  const days = history ?? []
+  const hasAnyRecord = days.some(
+    (day) => day.runs > 0 || day.sign !== null || day.bombsquad_daily_completed || day.oracle_signed
+  )
+  if (!hasAnyRecord) return null
+
+  return (
+    <section className={styles.section}>
+      <h3 className={styles.sectionTitle}>最近 7 天</h3>
+      <GlassCard radius="2xl" className={styles.historyCard}>
+        <div className={styles.historyList} role="table" aria-label="最近 7 天记录">
+          <div className={styles.historyHeadRow} role="row">
+            <span role="columnheader">日期</span>
+            <span role="columnheader">每日拆弹</span>
+            <span role="columnheader">卦签</span>
+          </div>
+          {days.map((day, offset) => (
+            <div key={day.date} className={styles.historyRow} role="row">
+              <span className={styles.historyDate} role="cell">
+                {boardDayLabel(day.date, offset)}
+              </span>
+              <span className={styles.historyCell} role="cell">
+                {bombsquadDayText(day)}
+              </span>
+              <span className={styles.historyCell} role="cell">
+                {day.sign ? `${day.sign.ben} → ${day.sign.bian}` : '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+    </section>
+  )
+}
+
+function bombsquadDayText(day: ArcadeProfileHistoryDay): string {
+  if (day.best_daily) return `✓ ${formatMs(day.best_daily.duration_ms)}`
+  // Qualified beyond the capped recent-run window (account records past 100).
+  if (day.bombsquad_daily_completed) return '✓ 已拆除'
+  if (day.runs > 0) return `${day.runs} 局`
+  return '—'
 }
 
 function ClaimLocalProfileCard({

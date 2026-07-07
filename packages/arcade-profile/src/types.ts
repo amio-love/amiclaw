@@ -82,6 +82,21 @@ export interface ArcadeDailyLoopSummary {
   streak: ArcadeStreakSummary
 }
 
+/* One product day in the recent-history window. Checklist booleans use the
+   same qualification rules as the streak (daily defused / same-day sign);
+   `best_daily` and `sign` carry that day's showable records for the /me view. */
+export interface ArcadeProfileHistoryDay {
+  date: string
+  bombsquad_daily_completed: boolean
+  oracle_signed: boolean
+  /** BombSquad runs (any mode / outcome) finished on this product day. */
+  runs: number
+  /** Fastest defused daily run of the day, or null. */
+  best_daily: BombSquadProfileRun | null
+  /** The day's Oracle sign (latest by created_at when re-cast), or null. */
+  sign: OracleProfileSign | null
+}
+
 export interface ArcadeProfileSummary {
   profile_id?: string
   last_activity_at: string | null
@@ -93,6 +108,8 @@ export interface ArcadeProfileSummary {
   bombsquad: BombSquadProfileSummary
   oracle: OracleProfileSummary
   daily_loop: ArcadeDailyLoopSummary
+  /** The last 7 product days (today first) — the /me recent-record view. */
+  history: ArcadeProfileHistoryDay[]
 }
 
 export interface ArcadePublicProfileStatus {

@@ -11,6 +11,25 @@ practice is real practice instead of answer recall. The manual players hand
 their AI stays exactly the same; solvability guarantees match the daily
 generator.
 
+**Yesterday no longer vanishes at the daily reset** - Feature. The daily
+leaderboard now carries a compact date switcher back to yesterday's board —
+the full window the board storage actually retains (daily boards are kept 2
+days; the switcher window and the storage TTL now derive from one shared
+constant, and the boundary is stated honestly under the board instead of
+rendering expired days as false empty boards). The /me page gains a 最近 7 天
+per-day history — 打卡 marks, the day's best daily time, and the day's 卦签 —
+for both the signed-in account and the anonymous device profile, backed by the
+durable per-account / per-device records, so completing a run before the UTC
+rollover no longer means the record disappears from the UI the next morning.
+
+**The homepage now shows the games, not just their names** - Change. 「语音拆弹」
+was a pictureless word for new visitors. The featured BombSquad card now carries
+a real mid-defuse screenshot of a live daily run (timer, strike dots, the 光弦
+module), and the 易经签卜 tile shows the actual coin-cast moment — both captured
+from the production product at a phone viewport, honestly presented as real UI
+with no mockup dressing, sized to load light (≈19 KB WebP each) and reserved in
+layout so nothing shifts while they load.
+
 **First daily win celebrates before it asks** - Change. Defusing the daily bomb
 now lands on the result celebration directly: the nickname / AI-partner modal no
 longer auto-opens over the screen. The rank card states honestly that the run is

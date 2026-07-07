@@ -40,6 +40,20 @@
   margin-bottom: 14px;
 }
 
+/* Daily-board head row: title block left, date switcher right; wraps on
+   narrow viewports instead of overflowing. */
+.sectionHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sectionHeadText {
+  min-width: 0;
+}
+
 .sectionTitle {
   margin: 0;
   color: var(--text-1);
@@ -61,6 +75,14 @@
   background: var(--glass-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+/* Honest retention-boundary note under the daily board card. */
+.boardNote {
+  margin: 10px 4px 0;
+  font: 400 12px var(--font-body);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.42);
 }
 
 @media (max-width: 960px) {

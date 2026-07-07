@@ -309,6 +309,54 @@
   color: rgba(255, 255, 255, 0.64);
 }
 
+/* ----------  最近 7 天 — per-day record view  ----------
+   A compact grid-row table (ARIA table roles, mirroring the leaderboard
+   list markup) inside a glass card. Follows the signed-out grid on the
+   anonymous page, hence the explicit sibling spacing rule. */
+.signedOutGrid + .section {
+  margin-top: 28px;
+}
+
+.historyCard {
+  padding: 18px 22px;
+}
+
+.historyList {
+  width: 100%;
+}
+
+.historyHeadRow,
+.historyRow {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 6px;
+}
+
+.historyHeadRow {
+  font: 600 11px var(--font-body);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.historyRow {
+  border-top: 1px solid var(--border-hairline);
+}
+
+.historyDate {
+  font: 500 13px var(--font-body);
+  color: rgba(255, 255, 255, 0.58);
+  font-variant-numeric: tabular-nums;
+}
+
+.historyCell {
+  font: 500 14px var(--font-body);
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1080px) {
   .statGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

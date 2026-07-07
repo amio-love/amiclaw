@@ -162,6 +162,10 @@ interface LeaderboardState {
   postResponse: SubmitResponse
   abortPost: boolean
   submissions: Record<string, unknown>[]
+  /** Per-date GET boards for the date-navigation journey. When set, a GET with
+   *  `?date=D` resolves to `boardsByDate[D]` (missing dates -> empty board);
+   *  when null (the default) every GET returns `getResponse` unchanged. */
+  boardsByDate: Record<string, LeaderboardEntry[]> | null
 }
 
 // --- World -------------------------------------------------------------------
@@ -204,6 +208,7 @@ export class World {
       postResponse: structuredClone(LEADERBOARD_DEFAULT.post),
       abortPost: false,
       submissions: [],
+      boardsByDate: null,
     }
   }
 
@@ -680,10 +685,20 @@ export const test = base.extend<{ world: World }>({
           })
           return
         }
+        // Date-navigation journeys seed per-day boards; every other scenario
+        // keeps the single default GET response regardless of `?date=`.
+        const requestedDate = new URL(request.url()).searchParams.get('date')
+        const body =
+          world.leaderboard.boardsByDate && requestedDate
+            ? {
+                date: requestedDate,
+                entries: world.leaderboard.boardsByDate[requestedDate] ?? [],
+              }
+            : world.leaderboard.getResponse
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(world.leaderboard.getResponse),
+          body: JSON.stringify(body),
         })
       })
 
