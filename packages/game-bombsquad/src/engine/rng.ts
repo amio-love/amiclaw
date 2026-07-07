@@ -1,6 +1,7 @@
 /**
  * Seeded PRNG using mulberry32 algorithm.
- * Practice mode: use seed 42. Daily challenge: use Date.now() at game start.
+ * Both modes seed with Date.now() at run start (utils/session.ts getRunSeed):
+ * the manual stays fixed while every run draws a fresh puzzle instance.
  */
 export function createRng(seed: number) {
   let s = seed >>> 0

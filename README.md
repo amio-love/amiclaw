@@ -45,7 +45,7 @@ You (browser) <-> voice <-> AI (reads manual URL)
 ## MVP Features
 
 - Four puzzle modules: Wire Routing, Symbol Dial, Button, and Keypad
-- Practice mode with a fixed puzzle and no leaderboard
+- Practice mode with a fresh random puzzle each run (stable practice manual) and no leaderboard
 - Daily challenge mode with random puzzles and a global leaderboard
 - Anti-human manual rendering, with clear YAML for AI and obfuscated rendering for humans
 - A post-run summary for AI-assisted debriefing

@@ -2,7 +2,6 @@ import { getTodayString } from '@shared/date'
 
 export type SessionMode = 'practice' | 'daily'
 
-export const PRACTICE_SEED = 42
 const ENTRY_RECOVERY_KEY = 'bombsquad:entry-recovery'
 
 export interface EntryRecoveryState {
@@ -11,8 +10,18 @@ export interface EntryRecoveryState {
   manualHandoffComplete: boolean
 }
 
-export function getRunSeed(mode: SessionMode, now = Date.now()): number {
-  return mode === 'practice' ? PRACTICE_SEED : now
+/**
+ * Every run — practice and daily alike — draws a fresh wall-clock seed, so
+ * each run generates a fresh puzzle instance within its manual's fixed rule
+ * space. Practice used to pin a constant seed (42) "so the puzzle is
+ * reproducible", but that froze the practice bomb to one eternal instance:
+ * the second play becomes answer recall and practice stops teaching. The
+ * practice MANUAL stays permanently stable (it is the learning reference the
+ * player hands their AI); only the drawn instance rotates — exactly the
+ * daily-challenge split of fixed manual vs per-run random instance.
+ */
+export function getRunSeed(now = Date.now()): number {
+  return now
 }
 
 export function createGameRunId(): string {

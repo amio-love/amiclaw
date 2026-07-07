@@ -371,7 +371,7 @@ export default function GamePage() {
       return
     }
 
-    const seed = getRunSeed(mode)
+    const seed = getRunSeed()
     const rng = createRng(seed)
 
     // Always derive the manual URL from the current origin so whichever

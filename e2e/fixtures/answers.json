@@ -76,19 +76,11 @@
   },
   "practice": {
     "scene": {
-      "sceneTongueTwister": "吃葡萄不吐葡萄皮",
+      "sceneTongueTwister": "黑化肥发灰会挥发",
       "batteryCount": 2,
       "indicators": [
         {
           "label": "SND",
-          "lit": true
-        },
-        {
-          "label": "FRK",
-          "lit": false
-        },
-        {
-          "label": "TRN",
           "lit": false
         }
       ]
@@ -98,7 +90,7 @@
         "kind": "wire",
         "answer": {
           "type": "wire",
-          "cutPosition": 1
+          "cutPosition": 2
         }
       },
       {
@@ -106,10 +98,10 @@
         "answer": {
           "type": "keypad",
           "sequence": [
-            1,
-            3,
+            2,
             0,
-            2
+            1,
+            3
           ]
         }
       }
