@@ -3,8 +3,10 @@
  *
  * Covers the unified post-game modal that composes an optional nickname
  * section and an optional 4-question survey section into a single dialog —
- * never two stacked. Three shapes are exercised: survey-only (dismissable),
- * nickname-only (non-dismissable), and the merged nickname+survey modal.
+ * never two stacked. Three shapes are exercised: survey-only, nickname-only,
+ * and the merged nickname+survey modal. Every shape is dismissable — skipping
+ * the leaderboard gate defers the submission (the caller re-offers it), while
+ * skipping the survey retires it for the device.
  *
  * Note on localStorage: jsdom's `localStorage` in this workspace is a
  * method-less stub (see `nickname.test.ts`). The modal's nickname section
@@ -252,7 +254,7 @@ describe('PostGameModal', () => {
   })
 
   describe('nickname-only modal', () => {
-    it('renders the nickname gate, no survey, and is non-dismissable', () => {
+    it('renders the nickname gate, no survey, and a defer affordance', () => {
       render(
         <PostGameModal open showNickname showSurvey={false} onConfirm={vi.fn()} onSkip={vi.fn()} />
       )
@@ -260,20 +262,30 @@ describe('PostGameModal', () => {
       expect(screen.getByRole('dialog', { name: /给自己起个名字/ })).toBeInTheDocument()
       expect(screen.getByLabelText(/昵称/)).toBeInTheDocument()
       expect(screen.queryByText('你这局用的是哪个 AI 工具？')).not.toBeInTheDocument()
-      // Non-dismissable: no skip / close affordance.
-      expect(screen.queryByRole('button', { name: '跳过' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: '跳过问卷' })).not.toBeInTheDocument()
+      // Dismissable (audit F1): the gate defers instead of blocking — a skip
+      // button, a close affordance, and the honest not-on-board note.
+      expect(screen.getByRole('button', { name: '稍后再说' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument()
+      expect(screen.getByText(/成绩暂不上榜，稍后可在结果页补填/)).toBeInTheDocument()
     })
 
-    it('Escape and backdrop clicks do not dismiss the nickname gate', () => {
+    it('skip, Escape, and backdrop clicks all defer the nickname gate via onSkip', () => {
+      const onConfirm = vi.fn()
       const onSkip = vi.fn()
       render(
-        <PostGameModal open showNickname showSurvey={false} onConfirm={vi.fn()} onSkip={onSkip} />
+        <PostGameModal open showNickname showSurvey={false} onConfirm={onConfirm} onSkip={onSkip} />
       )
 
+      fireEvent.click(screen.getByRole('button', { name: '稍后再说' }))
+      expect(onSkip).toHaveBeenCalledTimes(1)
+
       fireEvent.keyDown(window, { key: 'Escape' })
+      expect(onSkip).toHaveBeenCalledTimes(2)
+
       fireEvent.click(screen.getByRole('dialog').parentElement as HTMLElement)
-      expect(onSkip).not.toHaveBeenCalled()
+      expect(onSkip).toHaveBeenCalledTimes(3)
+
+      expect(onConfirm).not.toHaveBeenCalled()
     })
 
     it('confirm emits only the nickname once a valid value is typed', () => {
@@ -310,7 +322,9 @@ describe('PostGameModal', () => {
       expect(screen.getAllByRole('dialog')).toHaveLength(1)
       expect(screen.getByLabelText(/昵称/)).toBeInTheDocument()
       expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
-      // No standalone skip control — but the survey optionality is made plain.
+      // The gate defers with 稍后再说 (not the survey's 跳过 wording), and the
+      // survey optionality is made plain.
+      expect(screen.getByRole('button', { name: '稍后再说' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '跳过' })).not.toBeInTheDocument()
       expect(screen.getByText(/问卷选填/)).toBeInTheDocument()
     })

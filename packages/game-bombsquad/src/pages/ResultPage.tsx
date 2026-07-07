@@ -199,18 +199,22 @@ export default function ResultPage() {
     () => getStoredLeaderboardPlayerMetadata()
   )
 
-  // The post-game modal has two separate purposes. The leaderboard gate can
-  // open immediately when a first daily defuse needs a nickname / AI metadata
-  // before score submission. The once-per-device survey waits until after the
-  // result feedback has had time to land, so a first win is not covered by a
-  // questionnaire before the player can read it.
+  // The post-game modal has two separate purposes. The leaderboard gate NEVER
+  // auto-opens (audit F1): the celebration and rank reveal own the first beat,
+  // and the rank card's 上榜 CTA opens the gate on demand — skippable, and
+  // re-openable later from the same card (deferred fill). The once-per-device
+  // survey waits until the celebration beat has settled, so it can never stack
+  // over the rank reveal.
   const [needNickname] = useState(() => hasFinishedDailyRun && nickname === null)
   const [needLeaderboardMetadata] = useState(
     () => hasFinishedDailyRun && leaderboardMetadata === null
   )
   const [needSurvey] = useState(() => !hasAnsweredSurvey())
-  const needsLeaderboardGate = needNickname || needLeaderboardMetadata
-  const [leaderboardGateOpen, setLeaderboardGateOpen] = useState(needsLeaderboardGate)
+  const [leaderboardGateOpen, setLeaderboardGateOpen] = useState(false)
+  // Live, not mount-frozen: flips false the moment a confirm stores both
+  // values, which swaps the rank card's CTA for the submitting → rank states.
+  const needsSubmissionInput =
+    hasFinishedDailyRun && (nickname === null || leaderboardMetadata === null)
   const [surveyReady, setSurveyReady] = useState(false)
   const [surveyRetired, setSurveyRetired] = useState(false)
   const surveyOpen = needSurvey && !surveyRetired && surveyReady && !leaderboardGateOpen
@@ -237,15 +241,17 @@ export default function ResultPage() {
   // second layer of protection.
   const submittedRef = useRef<'idle' | 'in-flight' | 'done'>('idle')
 
-  // The daily score is still gated while the modal is open with a leaderboard
-  // submission section present.
-  const leaderboardGatePending = modalPurpose === 'leaderboard'
-
+  // The survey delay counts from when the celebration beat settles, not from
+  // mount (audit F13): a daily defused run settles when its rank outcome
+  // arrives (rank revealed, or the submission failed); any other run settles
+  // on mount. A first win whose leaderboard gate stays unfilled never settles
+  // this session — the once-per-device survey simply waits for a later one.
+  const celebrationSettled = !hasFinishedDailyRun || rankResult !== null || submitFailed
   useEffect(() => {
-    if (!needSurvey || noRunData) return
+    if (!needSurvey || noRunData || !celebrationSettled) return
     const id = setTimeout(() => setSurveyReady(true), RESULT_FEEDBACK_SURVEY_DELAY_MS)
     return () => clearTimeout(id)
-  }, [needSurvey, noRunData])
+  }, [needSurvey, noRunData, celebrationSettled])
 
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
@@ -610,9 +616,23 @@ export default function ResultPage() {
               ) : (
                 <div className={styles.rankCell}>
                   <div className={styles.rankPending}>
-                    {leaderboardGatePending && '提交前请填写昵称和 AI 搭档'}
-                    {!leaderboardGatePending && submitting && '提交成绩中…'}
-                    {!leaderboardGatePending &&
+                    {needsSubmissionInput && (
+                      // Honest not-on-board state (audit F1): the run is NOT
+                      // on the leaderboard until the player fills the gate.
+                      // The CTA re-opens the modal at any time — the deferred
+                      // fill path after a skip.
+                      <>
+                        这局成绩还没上榜。填写昵称和 AI 搭档后，即可上榜并查看全球排名。
+                        <button
+                          className={styles.boardCta}
+                          onClick={() => setLeaderboardGateOpen(true)}
+                        >
+                          填写并上榜
+                        </button>
+                      </>
+                    )}
+                    {!needsSubmissionInput && submitting && '提交成绩中…'}
+                    {!needsSubmissionInput &&
                       !submitting &&
                       submitFailed &&
                       (submitFailKind === 'rejected' ? (

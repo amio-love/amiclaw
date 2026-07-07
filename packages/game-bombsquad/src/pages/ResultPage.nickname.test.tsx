@@ -1,14 +1,18 @@
 /**
  * ResultPage nickname-gate integration tests.
  *
- * Covers the three branches of the daily-mode submission flow:
- *   1. First-visit daily run, localStorage empty → PostGameModal renders the
- *      nickname section, the score is NOT submitted, and submission only fires
- *      after the player types a valid nickname, chooses an AI tool, and
- *      confirms.
- *   2. Returning daily run, localStorage already has nickname + AI metadata
+ * Covers the branches of the daily-mode submission flow:
+ *   1. First-visit daily run, localStorage empty → the celebration renders
+ *      FIRST with no auto-opened modal (rank-reveal-first ordering, audit F1);
+ *      the rank card states the honest not-on-board fact and its CTA opens the
+ *      deferrable gate; submission only fires after the player confirms.
+ *   2. Skip path → deferring the gate keeps the run off the board, with the
+ *      CTA still offered for a later fill.
+ *   3. Deferred-fill path → reopening the gate after a skip still submits and
+ *      reveals the rank.
+ *   4. Returning daily run, localStorage already has nickname + AI metadata
  *      → no modal, the score is submitted immediately with cached values.
- *   3. Practice mode → no modal, no submit (practice never posts a score).
+ *   5. Practice mode → no modal, no submit (practice never posts a score).
  *
  * Setup mirrors `ResultPage.test.tsx`: pre-seed sessionStorage with a finished
  * game state so `GameProvider`'s lazy initializer hydrates straight into a
@@ -147,14 +151,22 @@ describe('ResultPage nickname gate', () => {
     sessionStorage.clear()
   })
 
-  it('first-visit daily run: shows modal, blocks submit until the player confirms', async () => {
+  it('first-visit daily run: celebration first, gate opens via the rank-card CTA', async () => {
     sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
 
     renderResultPage()
 
-    // Modal is visible and blocks submission.
-    expect(screen.getByRole('dialog', { name: /给自己起个名字/ })).toBeInTheDocument()
+    // Rank-reveal-first ordering (audit F1): the celebration renders
+    // unobstructed — no auto-opened modal — and the rank card states the
+    // honest not-on-board fact. No submission fires without the gate.
+    expect(screen.getByText('拆弹成功')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText(/这局成绩还没上榜/)).toBeInTheDocument()
     expect(mockedSubmit).not.toHaveBeenCalled()
+
+    // The CTA opens the gate on demand.
+    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
+    expect(screen.getByRole('dialog', { name: /给自己起个名字/ })).toBeInTheDocument()
 
     // The confirm button is disabled until a valid nickname and AI tool are set.
     const confirmBtn = screen.getByRole('button', { name: /^确认$/ })
@@ -180,9 +192,51 @@ describe('ResultPage nickname gate', () => {
       run_id: 'run-daily-result',
     })
 
-    // localStorage persisted the nickname; modal is gone.
+    // localStorage persisted the nickname; modal is gone; the rank reveals in
+    // place of the not-on-board notice.
     expect(localStorage.getItem(NICKNAME_KEY)).toBe('小明')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('全球排名')).toBeInTheDocument()
+  })
+
+  it('skip path: deferring the gate keeps the run off the board with the CTA still offered', async () => {
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '稍后再说' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // No submission fired; the honest notice + CTA remain for a later fill.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockedSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText(/这局成绩还没上榜/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '填写并上榜' })).toBeInTheDocument()
+  })
+
+  it('deferred-fill path: reopening the gate after a skip still submits and reveals the rank', async () => {
+    sessionStorage.setItem(PERSISTENCE_KEY, JSON.stringify(finishedDailyState()))
+
+    renderResultPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
+    fireEvent.click(screen.getByRole('button', { name: '稍后再说' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
+    fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小明' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
+    fireEvent.click(screen.getByRole('button', { name: /^确认$/ }))
+
+    await waitFor(() => expect(mockedSubmit).toHaveBeenCalledTimes(1))
+    expect(mockedSubmit.mock.calls[0][0]).toMatchObject({
+      nickname: '小明',
+      ai_tool: 'claude',
+      run_id: 'run-daily-result',
+    })
+    expect(await screen.findByText('全球排名')).toBeInTheDocument()
   })
 
   it('returning daily run: cached nickname and AI metadata → submit fires immediately', async () => {

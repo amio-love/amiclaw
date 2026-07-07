@@ -11,6 +11,8 @@
  * with zero configuration; production overrides them via Pages env / secrets.
  */
 
+import { MAGIC_LINK_TTL_MINUTES, MAGIC_LINK_HOURLY_SEND_LIMIT } from '../../../../shared/auth-types'
+
 export interface AuthEnv {
   /** `AUTH` KV namespace — token hashes, sessions, audit, rate-limit counters. */
   AUTH: KVNamespace
@@ -34,8 +36,9 @@ export interface AuthEnv {
 
 // --- Tunables (invariant-bearing) -----------------------------------------
 
-/** Magic-link token TTL — invariant ①: ≤ 15 minutes. */
-export const MAGIC_LINK_TTL_SECONDS = 15 * 60
+/** Magic-link token TTL — invariant ①: ≤ 15 minutes. Minutes SSOT lives in
+ *  shared/auth-types.ts so the login-page copy can never drift from this TTL. */
+export const MAGIC_LINK_TTL_SECONDS = MAGIC_LINK_TTL_MINUTES * 60
 
 /** Opaque session lifetime. No sliding renewal in this round (Open Question). */
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 days
@@ -43,8 +46,9 @@ export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 days
 /** Audit-log retention. */
 export const AUDIT_TTL_SECONDS = 90 * 24 * 60 * 60 // 90 days
 
-/** Invariant ③ — per-email send cap within the window. */
-export const EMAIL_SEND_LIMIT = 5
+/** Invariant ③ — per-email send cap within the window. Cap SSOT lives in
+ *  shared/auth-types.ts so the login-page resend copy states the real limit. */
+export const EMAIL_SEND_LIMIT = MAGIC_LINK_HOURLY_SEND_LIMIT
 export const EMAIL_SEND_WINDOW_SECONDS = 60 * 60 // 1 hour
 
 /** Invariant ③ — global verify-endpoint cap within the window. */

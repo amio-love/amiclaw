@@ -31,6 +31,10 @@ Given(
 Given('any required leaderboard gate is completed before the survey', async ({ page, world }) => {
   if (world.runMode !== 'daily') return
 
+  // The gate no longer auto-opens (rank-reveal-first) — open it from the
+  // rank card's CTA, then fill and confirm. The survey delay only starts
+  // once the rank outcome has settled, i.e. after this submission lands.
+  await page.getByRole('button', { name: '填写并上榜' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toHaveCount(1)
   await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)

@@ -17,10 +17,10 @@ Feature: Leaderboard AI metadata
     Given I have just defused the bomb in a daily run and the result page is open
     And no nickname is stored on this device
     And no leaderboard AI metadata is stored on this device
-    Then the NicknameModal is open and covers the screen
-    And the NicknameModal has no close button and cannot be dismissed by tapping the backdrop
+    Then the result page shows the honest not-on-board notice
 
-    When I type the Chinese nickname "小明" into the NicknameModal input
+    When I open the leaderboard submission modal
+    And I type the Chinese nickname "小明" into the NicknameModal input
     And I choose AI assistant "Claude"
     And I type AI model "Claude Sonnet 4.5"
     And I tap "确认"

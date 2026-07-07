@@ -1,7 +1,11 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, EyebrowTag, GlassCard } from '@amiclaw/ui'
-import type { MagicLinkRequestBody } from '@shared/auth-types'
+import {
+  MAGIC_LINK_TTL_MINUTES,
+  MAGIC_LINK_HOURLY_SEND_LIMIT,
+  type MagicLinkRequestBody,
+} from '@shared/auth-types'
 import { API_BASE } from '@shared/api-base'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
 import styles from './LoginPage.module.css'
@@ -14,6 +18,35 @@ const GOOGLE_START_URL = `${API_BASE}/api/auth/google/start`
    the same message is shown whether or not the email is known, so the page
    never reveals which addresses can sign in. */
 const UNIFIED_CONFIRMATION = '如果该邮箱可用，你会收到一封登录邮件。'
+
+/* Client-side resend cooldown. A UX pace-keeper only — the real abuse cap is
+   the backend's per-email hourly limit, which the copy below states honestly
+   (the unified response makes an over-cap send indistinguishable client-side). */
+const RESEND_COOLDOWN_SECONDS = 60
+
+/* Copy for every `?error=` value the auth backend 302s to /login with.
+   Sources: magic-link verify (invalid / rate_limited), Google OAuth start
+   (google_unavailable) and callback (google_denied / invalid_state / invalid /
+   google_failed / email_unverified). Each entry says what happened and what to
+   do next; the form below stays ready so the player can act immediately. */
+const LOGIN_ERROR_COPY: Record<string, string> = {
+  invalid: `登录链接已失效或已被使用。链接只能使用一次、${MAGIC_LINK_TTL_MINUTES} 分钟内有效 —— 在下方重新输入邮箱，获取一封新的登录邮件。`,
+  rate_limited: '登录验证请求过于频繁，系统暂时限流。请稍等几分钟，再重新获取登录链接。',
+  google_unavailable: 'Google 登录暂未开放。请先用下方邮箱获取登录链接。',
+  google_denied: 'Google 登录已取消。可以重新点击 Google 登录，或改用邮箱获取登录链接。',
+  invalid_state: 'Google 登录会话已过期，请重新发起一次 Google 登录。',
+  google_failed: 'Google 登录没有完成，请重试；也可以改用邮箱获取登录链接。',
+  email_unverified: '这个 Google 账号的邮箱尚未通过 Google 验证，请改用下方邮箱获取登录链接。',
+}
+
+/* Backends may add error values; an unknown value still deserves an honest
+   explanation instead of a silent dead end. */
+const LOGIN_ERROR_FALLBACK = '登录没有完成。请在下方重新输入邮箱，获取一封新的登录邮件。'
+
+function loginErrorText(error: string | null): string | null {
+  if (!error) return null
+  return LOGIN_ERROR_COPY[error] ?? LOGIN_ERROR_FALLBACK
+}
 
 type Phase = 'idle' | 'submitting' | 'sent' | 'error'
 
@@ -35,26 +68,64 @@ function startWithOwnAI() {
    Platform chrome — brand yellow, dark-only, CSS-only transitions. */
 export default function LoginPage() {
   const { status, user, logout } = useAuth()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resending, setResending] = useState(false)
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (phase === 'submitting') return
-    setPhase('submitting')
+  // The verify / OAuth endpoints land their failures here as ?error=<value>.
+  // Rendered until a send succeeds — the form stays ready right below it.
+  const errorParam = loginErrorText(searchParams.get('error'))
 
+  // Tick the resend cooldown down once per second while the sent panel shows.
+  // setState fires only inside the timeout callback, never synchronously in
+  // the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    if (phase !== 'sent' || resendCooldown <= 0) return
+    const id = setTimeout(() => setResendCooldown((s) => s - 1), 1000)
+    return () => clearTimeout(id)
+  }, [phase, resendCooldown])
+
+  // POST the magic-link request. Any completed request — known, unknown,
+  // malformed, or rate-limited — resolves to the same unified confirmation
+  // (anti-enumeration). Only a true network failure returns false.
+  async function sendRequest(): Promise<boolean> {
     const body: MagicLinkRequestBody = { email }
     try {
-      // Any completed request — known, unknown, malformed, or rate-limited —
-      // resolves to the same unified confirmation (anti-enumeration). Only a
-      // true network failure surfaces a retry.
       await fetch(`${API_BASE}/api/auth/magic-link/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      setPhase('sent')
+      return true
     } catch {
+      return false
+    }
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (phase === 'submitting') return
+    setPhase('submitting')
+    if (await sendRequest()) {
+      setPhase('sent')
+      setResendCooldown(RESEND_COOLDOWN_SECONDS)
+    } else {
+      setPhase('error')
+    }
+  }
+
+  // Resend keeps the sent panel in place (no flip back to the form while in
+  // flight); a network failure drops back to the form with the retry line.
+  async function onResend() {
+    if (resending || resendCooldown > 0) return
+    setResending(true)
+    const ok = await sendRequest()
+    setResending(false)
+    if (ok) {
+      setResendCooldown(RESEND_COOLDOWN_SECONDS)
+    } else {
       setPhase('error')
     }
   }
@@ -77,11 +148,38 @@ export default function LoginPage() {
 
       <GlassCard radius="2xl" className={styles.card}>
         {phase === 'sent' ? (
-          <p className={styles.confirmation} role="status">
-            {UNIFIED_CONFIRMATION}
-          </p>
+          <div className={styles.sentPanel}>
+            <p className={styles.confirmation} role="status">
+              {UNIFIED_CONFIRMATION}
+            </p>
+            {/* Echo of the player's own typed address — leaks nothing the
+                player didn't already know, and catches typos early. */}
+            <p className={styles.sentEmail}>{email}</p>
+            <ul className={styles.sentHints}>
+              <li>登录链接 {MAGIC_LINK_TTL_MINUTES} 分钟内有效，且只能使用一次。</li>
+              <li>没收到？看看垃圾邮件或推广分类，也可能晚到一两分钟。</li>
+            </ul>
+            <Button variant="ghost" onClick={onResend} disabled={resending || resendCooldown > 0}>
+              {resending
+                ? '发送中…'
+                : resendCooldown > 0
+                  ? `重新发送（${resendCooldown} 秒后可用）`
+                  : '重新发送登录邮件'}
+            </Button>
+            <p className={styles.sentRateNote}>
+              同一邮箱一小时内最多发送 {MAGIC_LINK_HOURLY_SEND_LIMIT} 封登录邮件。
+            </p>
+            <button type="button" className={styles.switchEmail} onClick={() => setPhase('idle')}>
+              换一个邮箱
+            </button>
+          </div>
         ) : (
           <>
+            {errorParam && (
+              <p className={styles.errorBanner} role="alert">
+                {errorParam}
+              </p>
+            )}
             <form className={styles.form} onSubmit={onSubmit}>
               <label className={styles.label} htmlFor="login-email">
                 邮箱

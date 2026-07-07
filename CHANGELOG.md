@@ -5,6 +5,27 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**First daily win celebrates before it asks** - Change. Defusing the daily bomb
+now lands on the result celebration directly: the nickname / AI-partner modal no
+longer auto-opens over the screen. The rank card states honestly that the run is
+not on the board yet, and its 填写并上榜 button opens the gate on demand — the
+gate is now skippable (稍后再说, Esc, backdrop) and re-openable later from the
+same card. The endgame survey now waits until the rank outcome has settled, so
+it can never stack over the rank reveal; if the gate is skipped, the survey
+simply waits for a later session.
+
+**A failed login link now explains itself** - Fix. Opening an expired, used, or
+otherwise invalid magic link (or a failed Google sign-in) previously landed on a
+login page that looked untouched. The page now reads the error and shows a clear
+Chinese explanation — what happened and what to do — for every error the auth
+backend emits, with the sign-in form ready right below.
+
+**Sending a login link now gives real feedback** - Change. After requesting a
+magic link, the login page now echoes the address it was sent to, states the
+real 15-minute single-use validity, hints at the spam folder, and offers a
+cooldown-gated resend button plus an honest note of the 5-per-hour send cap. A
+换一个邮箱 link returns to the form to fix a typo.
+
 **Daily Arcade loop and streaks** - New. The homepage now shows a real daily
 checklist for BombSquad and Oracle, result pages show profile-save and share
 feedback, and the leaderboard now includes a public streak board for claimed

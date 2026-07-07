@@ -16,9 +16,15 @@
  *   4. an already-authenticated visitor sees their identity and the continue /
  *      sign-out actions instead of the bare form; signing out POSTs
  *      /api/auth/logout and returns the site to the anonymous state.
+ *   5. a failed verify / OAuth round-trip lands on /login?error=<value> and the
+ *      page renders a clear Chinese explanation for every backend error value
+ *      (plus an honest fallback), keeping the form ready below it.
+ *   6. the post-send state echoes the typed email, states the real 15-minute
+ *      validity and the spam-folder hint, and offers a cooldown-gated resend
+ *      that honestly states the backend's 5-per-hour cap.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { SessionResponse } from '@shared/auth-types'
 import LoginPage from './LoginPage'
@@ -44,9 +50,9 @@ function stubSession(session: SessionResponse) {
   )
 }
 
-function renderLogin() {
+function renderLogin(entry = '/login') {
   return render(
-    <MemoryRouter initialEntries={['/login']}>
+    <MemoryRouter initialEntries={[entry]}>
       <LoginPage />
     </MemoryRouter>
   )
@@ -129,6 +135,106 @@ describe('LoginPage /login', () => {
     expect(magicCalls).toHaveLength(1)
     const [, init] = magicCalls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ email: 'nova@amio.fans' })
+  })
+
+  it('renders a clear error state for an expired or used magic link (?error=invalid)', () => {
+    renderLogin('/login?error=invalid')
+
+    // What happened + what to do, in one honest banner.
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('登录链接已失效或已被使用')
+    expect(alert.textContent).toContain('15 分钟')
+    expect(alert.textContent).toContain('重新输入邮箱')
+    // The form stays ready right below the explanation.
+    expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '发送登录链接' })).toBeInTheDocument()
+  })
+
+  it('renders a distinct message for every backend error value, with an honest fallback', () => {
+    // The full enum the auth backend 302s to /login with: magic-link verify
+    // (invalid / rate_limited), Google start (google_unavailable) and callback
+    // (google_denied / invalid_state / google_failed / email_unverified).
+    const cases: Array<[string, RegExp]> = [
+      ['rate_limited', /过于频繁/],
+      ['google_unavailable', /Google 登录暂未开放/],
+      ['google_denied', /Google 登录已取消/],
+      ['invalid_state', /会话已过期/],
+      ['google_failed', /Google 登录没有完成/],
+      ['email_unverified', /尚未通过 Google 验证/],
+      // Unknown future values still get an explanation, never a silent form.
+      ['some_future_error', /登录没有完成/],
+    ]
+    for (const [error, expected] of cases) {
+      const { unmount } = renderLogin(`/login?error=${error}`)
+      expect(screen.getByRole('alert').textContent).toMatch(expected)
+      unmount()
+    }
+  })
+
+  it('shows no error banner without the error param', () => {
+    renderLogin()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('after sending: echoes the email, states validity + spam hints, and gates resend on a cooldown', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+        if (urlOf(input).includes('/api/auth/session')) {
+          return Promise.resolve(new Response(JSON.stringify(ANON), { status: 200 }))
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, message: 'x' }), { status: 200 })
+        )
+      })
+      vi.stubGlobal('fetch', fetchSpy)
+      renderLogin()
+
+      fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'nova@amio.fans' } })
+      fireEvent.click(screen.getByRole('button', { name: '发送登录链接' }))
+      await act(async () => {})
+
+      // Unified confirmation + the player's own typed address echoed back.
+      expect(screen.getByText('如果该邮箱可用，你会收到一封登录邮件。')).toBeInTheDocument()
+      expect(screen.getByText('nova@amio.fans')).toBeInTheDocument()
+      // Real validity period (shared/auth-types SSOT) + spam-folder hint.
+      expect(screen.getByText(/15 分钟内有效/)).toBeInTheDocument()
+      expect(screen.getByText(/垃圾邮件/)).toBeInTheDocument()
+      // Honest rate-limit note mirroring the backend's real per-hour cap.
+      expect(screen.getByText(/最多发送 5 封/)).toBeInTheDocument()
+
+      // Resend is cooldown-gated: disabled with a countdown, then enabled.
+      expect(screen.getByRole('button', { name: /重新发送（60 秒后可用）/ })).toBeDisabled()
+      for (let i = 0; i < 60; i++) {
+        await act(async () => {
+          vi.advanceTimersByTime(1000)
+        })
+      }
+      const resend = screen.getByRole('button', { name: '重新发送登录邮件' })
+      expect(resend).toBeEnabled()
+
+      // A resend fires a second POST and re-arms the cooldown in place — the
+      // sent panel never flips back to the form.
+      fireEvent.click(resend)
+      await act(async () => {})
+      const magicCalls = fetchSpy.mock.calls.filter(([input]) =>
+        urlOf(input as RequestInfo | URL).includes('/api/auth/magic-link/request')
+      )
+      expect(magicCalls).toHaveLength(2)
+      expect(screen.getByRole('button', { name: /重新发送（60 秒后可用）/ })).toBeDisabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('offers a way back to the form to fix a typoed address', async () => {
+    renderLogin()
+
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'nova@amio.fans' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送登录链接' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: '换一个邮箱' }))
+    expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
   })
 
   it('surfaces a retry message on a network failure', async () => {

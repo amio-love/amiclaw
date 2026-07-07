@@ -86,6 +86,70 @@
   text-align: center;
 }
 
+/* ----------  post-send state (email echo, validity, resend)  ---------- */
+.sentPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+/* Echo of the address the player typed — prominent so a typo is caught. */
+.sentEmail {
+  margin: 0;
+  font: 500 18px var(--font-body);
+  color: var(--amio-yellow);
+  word-break: break-all;
+}
+
+.sentHints {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 400 13px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sentRateNote {
+  margin: 0;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Back to the form to fix a typoed address. Mirrors the escape-link style. */
+.switchEmail {
+  align-self: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  font: 400 13px var(--font-body);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-hairline);
+  transition:
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.switchEmail:hover {
+  color: var(--text-1);
+  border-bottom-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ----------  ?error= banner (failed magic-link verify / OAuth)  ---------- */
+.errorBanner {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 138, 138, 0.35);
+  background: rgba(255, 138, 138, 0.08);
+  font: 400 14px/1.6 var(--font-body);
+  color: #ff8a8a;
+}
+
 /* ----------  signed-in notice (an authenticated visitor on /login)  ---------- */
 .identityLabel {
   margin: 0;

@@ -1,8 +1,9 @@
 # Result-page endgame survey — the once-per-device PostGameModal survey shown
-# after any game outcome. The survey waits until after the result feedback has
-# had time to land. On a first daily win, the leaderboard nickname / AI metadata
-# gate can still open immediately before score submission; the survey follows
-# later as a separate dialog. Submitting posts a `survey_submit` event to
+# after any game outcome. The survey delay starts only once the celebration
+# beat has settled: on a first daily win that means after the deferred
+# leaderboard gate (opened from the rank-card CTA) is filled and the rank
+# outcome arrives — the survey can never stack over the rank reveal. It then
+# follows as a separate dialog. Submitting posts a `survey_submit` event to
 # /api/events; submitting or skipping both retire the survey for the device.
 #
 # Gated by localStorage['bombsquad-survey-answered'] (packages/game-bombsquad/src/utils/
