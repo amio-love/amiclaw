@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '@amiclaw/ui'
 import { Hexagram } from '../glyphs'
 import { changedValues, changingLines, hexagramFromBinary, type YaoSextet } from '../glyphs/utils'
@@ -17,17 +17,17 @@ import styles from './PageReading.module.css'
      stage 1  — + 变爻 爻辞                     (继续 → reveals more)
      stage 2  — + 变卦 卦辞, CTA → 生成今日卦签
 
-   Casts without changing lines skip stage 1 (no 变爻 to read). */
-
-// Fallback sextet for direct /reading navigation when the session has no
-// cast result yet. Matches PageCasting's DEMO_VALUES (天火同人 → 天雷无妄).
-const DEMO_FALLBACK: YaoSextet = [7, 8, 9, 7, 7, 7]
+   Casts without changing lines skip stage 1 (no 变爻 to read). Direct
+   navigation without a cast redirects home — there is no demo fallback:
+   a reading only exists for a cast the visitor actually made. */
 
 export function PageReading() {
   const { stage, setStage, yaoValues } = useSession()
   const navigate = useNavigate()
 
-  const benValues: YaoSextet = yaoValues ?? DEMO_FALLBACK
+  if (yaoValues === null) return <Navigate to="/home" replace />
+
+  const benValues: YaoSextet = yaoValues
   const bianValues = changedValues(benValues) as unknown as YaoSextet
   const [benNumber, benName] = hexagramFromBinary(benValues)
   const [bianNumber, bianName] = hexagramFromBinary(bianValues)
@@ -35,16 +35,20 @@ export function PageReading() {
   const benEntry = hexagramByNumber(benNumber)
   const bianEntry = hexagramByNumber(bianNumber)
   const changing = changingLines(benValues)
-  const changingEntries: HexagramLine[] = benEntry
-    ? changing
-        .map((idx) => benEntry.lines.find((line) => line.position === idx + 1))
-        .filter((line): line is HexagramLine => line !== undefined)
-    : []
+  // Canonical rule: an all-six-changing cast in 乾/坤 reads 用九/用六 in place
+  // of the six individual 爻辞.
+  const extraLine = changing.length === 6 ? benEntry?.extra_line : undefined
+  const changingEntries: HexagramLine[] =
+    benEntry && !extraLine
+      ? changing
+          .map((idx) => benEntry.lines.find((line) => line.position === idx + 1))
+          .filter((line): line is HexagramLine => line !== undefined)
+      : []
 
   const done = stage >= 2
   const advance = () => {
-    // Skip the 变爻 stage when the cast has no changing lines to read.
-    if (stage === 0) setStage(changingEntries.length > 0 ? 1 : 2)
+    // Skip the 变爻 stage when the cast has no changing-line text to read.
+    if (stage === 0) setStage(changingEntries.length > 0 || extraLine ? 1 : 2)
     else if (stage === 1) setStage(2)
   }
 
@@ -67,7 +71,7 @@ export function PageReading() {
         <div className={styles.title}>解卦</div>
         <div className={styles.meta}>
           <div className={styles.metaLead}>第 3 步 / 3</div>
-          <div className={styles.metaSub}>经典卦辞 · 卦例演示</div>
+          <div className={styles.metaSub}>经典卦辞</div>
         </div>
       </header>
 
@@ -120,7 +124,24 @@ export function PageReading() {
             </div>
           )}
 
-          {/* stage ≥ 1 — changing-line texts */}
+          {/* stage ≥ 1 — changing-line texts (用九/用六 replaces all six 爻辞
+              on an all-six-changing 乾/坤 cast) */}
+          {stage >= 1 && extraLine && (
+            <div className={`${styles.block} ${styles.blockQuote}`}>
+              <div className={`${styles.blockLabel} ${styles.labelQuote}`}>
+                变爻 · {extraLine.label}
+              </div>
+              <div className={`${styles.blockBody} ${styles.bodyClassical}`}>
+                {extraLine.classical}
+              </div>
+              <div className={`${styles.blockBody} ${styles.bodyGloss}`}>
+                {extraLine.modern_interpretation}
+              </div>
+              <div className={`${styles.blockBody} ${styles.bodyGloss}`}>
+                {extraLine.changing_guidance}
+              </div>
+            </div>
+          )}
           {stage >= 1 &&
             changingEntries.map((line) => (
               <div key={line.position} className={`${styles.block} ${styles.blockQuote}`}>

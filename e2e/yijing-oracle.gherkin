@@ -1,22 +1,25 @@
 # Yijing Oracle — the /oracle/ hash-routed SPA (home → projection → casting →
-# reading → sign). The flow is an honest ritual after the F24/F25 rework: the
-# cast is a FIXED demo example declared to the player as 卦例演示, every
-# reading text is classical manual data, and no screen claims AI, voice, or
-# mind-reading involvement. The coin-flip animation runs on a 850ms timer, so
-# the throw step drives the harness's controlled clock between taps.
+# reading → sign). The cast is a REAL three-coin cast (crypto.getRandomValues,
+# full 64-hexagram manual); the harness rigs the randomness source to the
+# classic 同人→无妄 cast so the journey stays deterministic, mirroring the
+# controlled-clock pattern. Every reading text is classical manual data and no
+# screen claims AI, voice, or mind-reading involvement (audit F24/F25 rework).
+# The coin-flip animation runs on a 850ms timer, so the throw step drives the
+# harness's controlled clock between taps.
 
-Feature: Yijing Oracle honest demo ritual
+Feature: Yijing Oracle honest coin-cast ritual
   As a visitor to claw.amio.fans/oracle
-  I want to walk the full oracle session under honest labeling
-  So that I experience the divination ritual without being told an AI is reading my mind
+  I want to walk the full oracle session with a real coin cast
+  So that I experience the divination ritual without fabricated claims
 
   # Source: oracle-honest-session
   @playwright
-  Scenario: A visitor completes the oracle ritual and gets an honestly labeled sign card
-    Given I open /oracle/
+  Scenario: A visitor casts the coins and gets an honestly labeled sign card
+    Given the oracle cast is rigged to land 同人之九三
+    And I open /oracle/
     Then the oracle route is "/home"
     And the oracle page makes no AI, voice, or mind-reading claim
-    And I see the tip "卦例演示"
+    And I see the tip "投一次硬币，读一卦"
 
     When I tap "开始问卦 →"
     Then the oracle route is "/projection"
@@ -27,7 +30,7 @@ Feature: Yijing Oracle honest demo ritual
     Then the oracle route is "/casting"
 
     When I complete the six coin throws
-    Then I see the tip "卦例演示 · 本卦 #13 · 变卦 #25 · 变爻在九三"
+    Then I see the tip "本卦 #13 · 变卦 #25 · 变爻在九三"
     And the oracle page makes no AI, voice, or mind-reading claim
 
     When I tap "继续 · 读卦辞 →"

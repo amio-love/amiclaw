@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { Button, Scenery } from '@amiclaw/ui'
 import {
   markArcadeProfileEventsClaimed,
@@ -22,14 +22,10 @@ import styles from './PageSign.module.css'
 /* Sign — handoff §6.5. Shareable oracle card with header / hex row /
    judgment / divider / takeaway / vermilion seal foot. Every text on the
    card is manual data for the cast hexagrams (classical judgment + its
-   modern gloss) — no AI-attributed content. Demo data falls back to
-   同人 #13 → 无妄 #25 when the session hasn't cast yet (e.g. direct
-   navigation, Phase-1 persistence is sessionStorage-only). */
+   modern gloss) — no AI-attributed content. Direct navigation without a
+   cast redirects home: a sign only exists for a cast the visitor made. */
 
-/* Fallback to the canonical demo cast result (handoff prototype). */
-const DEMO_YAO: YaoSextet = [7, 8, 9, 7, 7, 7]
-
-type SaveState = 'demo' | 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
+type SaveState = 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
 type ShareState = 'idle' | 'shared' | 'copied' | 'error'
 
 function todayCN(): string {
@@ -38,35 +34,42 @@ function todayCN(): string {
 }
 
 export function PageSign() {
+  const { yaoValues } = useSession()
+  if (yaoValues === null) return <Navigate to="/home" replace />
+  return <SignCard values={yaoValues} />
+}
+
+function SignCard({ values }: { values: YaoSextet }) {
   const navigate = useNavigate()
-  const { sessionId, yaoValues, castCreatedAt } = useSession()
-  const [saveState, setSaveState] = useState<SaveState>(yaoValues === null ? 'demo' : 'saving')
+  const { sessionId, castCreatedAt } = useSession()
+  const [saveState, setSaveState] = useState<SaveState>('saving')
   const [shareState, setShareState] = useState<ShareState>('idle')
 
-  const values: YaoSextet = yaoValues ?? DEMO_YAO
   const changed = changedValues(values) as unknown as YaoSextet
   const [benNumber, benCn] = hexagramFromBinary(values)
   const [, bianCn] = hexagramFromBinary(changed)
 
   // Card texts are manual data for the cast hexagram: the classical judgment,
   // plus the first changing line's modern gloss as the takeaway (falling back
-  // to the judgment gloss when the cast has no changing lines).
+  // to the judgment gloss when the cast has no changing lines). An all-six-
+  // changing 乾/坤 cast reads 用九/用六 instead, per the canonical rule.
   const benEntry = hexagramByNumber(benNumber)
   const judgment = benEntry?.judgment.classical ?? ''
+  const changing = changingLines(values)
+  const extraLine = changing.length === 6 ? benEntry?.extra_line : undefined
   const firstChangingLine = (() => {
     if (!benEntry) return undefined
-    const position = changingLines(values)[0]
+    const position = changing[0]
     if (position === undefined) return undefined
     return benEntry.lines.find((line) => line.position === position + 1)
   })()
   const takeaway =
-    firstChangingLine?.modern_interpretation ?? benEntry?.judgment.modern_interpretation ?? ''
+    extraLine?.modern_interpretation ??
+    firstChangingLine?.modern_interpretation ??
+    benEntry?.judgment.modern_interpretation ??
+    ''
 
   useEffect(() => {
-    if (yaoValues === null) {
-      queueMicrotask(() => setSaveState('demo'))
-      return
-    }
     if (castCreatedAt === null) {
       queueMicrotask(() => setSaveState('unavailable'))
       return
@@ -76,7 +79,7 @@ export function PageSign() {
       signDate: castCreatedAt.slice(0, 10),
       ben: benCn,
       bian: bianCn,
-      yaoValues: [...yaoValues] as [number, number, number, number, number, number],
+      yaoValues: [...values] as [number, number, number, number, number, number],
       createdAt: castCreatedAt,
     })
     if (!event || event.kind !== 'oracle_sign') {
@@ -98,7 +101,7 @@ export function PageSign() {
         setSaveState(localSaved ? 'account-error' : 'unavailable')
       }
     })
-  }, [bianCn, benCn, castCreatedAt, sessionId, yaoValues])
+  }, [bianCn, benCn, castCreatedAt, sessionId, values])
 
   const shareText = useCallback(
     () =>
@@ -210,9 +213,7 @@ export function PageSign() {
             <span className={styles.feedbackMeta}>
               {saveState === 'unavailable'
                 ? '本次卦签没有写入档案；请重新问卦后再试。'
-                : yaoValues === null
-                  ? 'Demo 卦签不会写入档案。'
-                  : '本次卦签已计入今日清单。'}
+                : '本次卦签已计入今日清单。'}
             </span>
             {shareState !== 'idle' && (
               <span className={styles.feedbackMeta}>{shareStatusText(shareState)}</span>
@@ -276,10 +277,8 @@ function saveStatusText(state: SaveState): string {
       return '本设备已保存，账号同步失败'
     case 'unavailable':
       return '本次卦签暂未写入档案'
-    case 'saving':
-      return '保存中…'
     default:
-      return '尚未起卦'
+      return '保存中…'
   }
 }
 

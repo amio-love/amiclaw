@@ -330,18 +330,19 @@ flows:
 
   # === Yijing Oracle flows ====================================================
   # The /oracle/ hash-routed SPA. The flow is an honest ritual: the cast is a
-  # FIXED demo example declared to the player as 卦例演示 (real randomness is
-  # blocked on the full 64-hexagram judgment dataset), every reading text is
-  # classical manual data, and no screen claims AI, voice, or mind-reading
-  # involvement (audit F24/F25 rework).
+  # REAL three-coin cast (crypto randomness, full 64-hexagram manual — the
+  # harness rigs the randomness source for journey determinism), every reading
+  # text is classical manual data, and no screen claims AI, voice, or
+  # mind-reading involvement (audit F24/F25 rework).
 
   - id: oracle-honest-session
-    name: Yijing Oracle honest demo ritual
+    name: Yijing Oracle honest coin-cast ritual
     description: >-
       A visitor walks the full oracle session — home → 2-pick projection →
-      six coin throws (fixed demo cast, labeled 卦例演示) → staged classical
-      reading (本卦 卦辞 → 变爻 爻辞 → 变卦 卦辞, no fabricated dialogue) →
-      sign card with 今日提点 — and no screen in the flow renders an AI /
-      voice / mind-reading claim.
-    steps: [oracle-home, projection-picks, demo-cast, classical-reading, sign-card]
+      six real three-coin throws (crypto randomness; harness-rigged to the
+      classic 同人→无妄 cast) → staged classical reading (本卦 卦辞 → 变爻
+      爻辞 → 变卦 卦辞, no fabricated dialogue) → sign card with 今日提点 —
+      and no screen in the flow renders an AI / voice / mind-reading or
+      demo-label claim.
+    steps: [oracle-home, projection-picks, coin-cast, classical-reading, sign-card]
     status: active

@@ -1,11 +1,13 @@
-/** Yijing Oracle steps — the /oracle/ hash-routed SPA (honest demo ritual). */
+/** Yijing Oracle steps — the /oracle/ hash-routed SPA (honest coin-cast ritual). */
 import { expect } from '@playwright/test'
-import { Then, When } from './fixtures'
+import { Given, Then, When } from './fixtures'
 
 /** Strings the F24/F25 honesty rework removed from the oracle flow. None of
  *  them may render anywhere on any oracle screen while the flow stays a pure
- *  frontend ritual (zero model / voice API calls). 「真实卦签」 additionally
- *  guards the demo cast from being re-declared as a real sign (fix-round F1). */
+ *  frontend ritual (zero model / voice API calls). 「真实卦签」 guards the old
+ *  overclaim; the demo-era interim markers (卦例演示 / 固定卦例 / 样例) joined
+ *  the ban when real three-coin randomness + the full 64-hexagram manual
+ *  landed — the cast is real now, so demo labeling would itself be a lie. */
 const BANNED_CLAIMS = [
   'AI',
   'Claude',
@@ -15,7 +17,33 @@ const BANNED_CLAIMS = [
   '听你说',
   '随时打断',
   '真实卦签',
+  '卦例演示',
+  '固定卦例',
+  '样例',
 ] as const
+
+Given('the oracle cast is rigged to land 同人之九三', async ({ page }) => {
+  // PageCasting draws ONE byte per throw (crypto.getRandomValues on a
+  // Uint8Array(1); low 3 bits = the three coins, heads count = value - 6).
+  // Rig the six casting bytes [1, 3, 7, 1, 1, 1] → yao values [7,8,9,7,7,7]
+  // bottom-up = 同人 #13 with 九三 changing → 无妄 #25, the classic journey
+  // cast. Queue-then-passthrough keeps every other getRandomValues caller on
+  // real randomness. Mirrors the harness's controlled-clock pattern: rig the
+  // nondeterminism source, keep the product code untouched.
+  await page.addInitScript(() => {
+    const queue = [1, 3, 7, 1, 1, 1]
+    const original = crypto.getRandomValues.bind(crypto)
+    crypto.getRandomValues = function riggedGetRandomValues<T extends ArrayBufferView | null>(
+      array: T
+    ): T {
+      if (array instanceof Uint8Array && array.length === 1 && queue.length > 0) {
+        array[0] = queue.shift() ?? 0
+        return array
+      }
+      return original(array)
+    }
+  })
+})
 
 Then('the oracle route is {string}', async ({ page }, route: string) => {
   await expect.poll(() => new URL(page.url()).hash).toBe(`#${route}`)

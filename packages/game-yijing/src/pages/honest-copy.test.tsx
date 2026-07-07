@@ -34,7 +34,10 @@ function memoryStorage(): Storage {
 /* Honesty regression — the oracle flow makes zero model / voice API calls, so
    no screen may claim AI, voice, or mind-reading involvement. These strings
    were removed by the 诚实仪式 rework (audit F24/F25) and must never render
-   again while the flow stays a pure frontend ritual. */
+   again while the flow stays a pure frontend ritual. The demo-era interim
+   markers (卦例演示 / 固定卦例 / 样例) joined the ban when real three-coin
+   randomness + the full 64-hexagram manual landed: the cast is real now, so
+   demo labeling would itself be a false claim. */
 
 const BANNED_STRINGS = [
   'AI',
@@ -48,10 +51,12 @@ const BANNED_STRINGS = [
   // regression canary for the fake-conversation mechanic as a whole.
   '不太对',
   '差不多',
-  // The fixed demo cast must never be re-declared as a「真实」sign anywhere
-  // in the flow (verify finding F1) — the check-in ACT is real, the sign
-  // CONTENT is a demo until the full 64-hexagram dataset lands.
+  // The fixed demo cast era is over — neither the old「真实卦签」overclaim nor
+  // the demo-era interim markers may render anywhere in the flow.
   '真实卦签',
+  '卦例演示',
+  '固定卦例',
+  '样例',
 ] as const
 
 const PAGES = [
@@ -63,14 +68,18 @@ const PAGES = [
 ] as const
 
 // Matches SessionProvider's StoredSession shape — seeds a cast-completed
-// session so PageSign renders its save/check-in branch instead of the
-// empty-session demo branch.
+// session so PageReading / PageSign render their real content branch instead
+// of redirecting home (they carry no demo fallback any more).
 const CAST_COMPLETED_SESSION = {
   picked: ['a', 'b'],
   yaoValues: [7, 8, 9, 7, 7, 7],
   castCreatedAt: '2026-07-07T08:00:00.000Z',
   stage: 2,
   sessionId: 'honesty-scan-session',
+}
+
+function seedCastCompletedSession() {
+  sessionStorage.setItem('amiclaw-yijing-session-v1', JSON.stringify(CAST_COMPLETED_SESSION))
 }
 
 function renderPage(Page: (typeof PAGES)[number][1]) {
@@ -90,7 +99,7 @@ function expectNoBannedStrings(container: HTMLElement) {
   }
 }
 
-describe('oracle honesty — no AI / voice / mind-reading claims', () => {
+describe('oracle honesty — no AI / voice / mind-reading / demo-label claims', () => {
   beforeEach(() => {
     sessionStorage.clear()
     vi.stubGlobal('localStorage', memoryStorage())
@@ -101,14 +110,15 @@ describe('oracle honesty — no AI / voice / mind-reading claims', () => {
   })
 
   it.each(PAGES)('%s renders none of the banned claim strings', (_name, Page) => {
+    // Cast-completed session: PageReading / PageSign render their full content
+    // branch (empty sessions would redirect and scan an empty container).
+    seedCastCompletedSession()
     const { container } = renderPage(Page)
     expectNoBannedStrings(container)
   })
 
   it('PageSign with a completed cast scans clean on the save/check-in branch too', async () => {
-    // The empty-session it.each render lands on the demo branch; this seeded
-    // render exercises the save path whose copy once claimed「真实卦签」.
-    sessionStorage.setItem('amiclaw-yijing-session-v1', JSON.stringify(CAST_COMPLETED_SESSION))
+    seedCastCompletedSession()
     const { container } = renderPage(PageSign)
 
     expect(await screen.findByText('已保存到本设备')).toBeTruthy()
@@ -116,14 +126,9 @@ describe('oracle honesty — no AI / voice / mind-reading claims', () => {
     expectNoBannedStrings(container)
   })
 
-  it('PageHome declares the fixed demo cast instead of implying a daily draw', () => {
+  it('PageHome presents the real coin cast without any demo caveat', () => {
     const { container } = renderPage(PageHome)
-    expect(container.textContent).toContain('卦例演示')
-    expect(container.textContent).toContain('固定卦例')
-  })
-
-  it('PageHome labels the sample signs as 样例, not as play history', () => {
-    const { getAllByText } = renderPage(PageHome)
-    expect(getAllByText('样例').length).toBe(3)
+    expect(container.textContent).toContain('投一次硬币，读一卦')
+    expect(container.textContent).toContain('三枚硬币起卦')
   })
 })

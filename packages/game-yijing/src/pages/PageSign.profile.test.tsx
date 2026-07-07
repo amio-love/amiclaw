@@ -53,13 +53,14 @@ describe('PageSign arcade profile write', () => {
     vi.unstubAllGlobals()
   })
 
-  it('does not save the demo fallback sign', async () => {
+  it('redirects home without a cast and saves nothing', async () => {
     renderPage()
     await Promise.resolve()
 
     expect(mocks.recordOracleLocalSign).not.toHaveBeenCalled()
     expect(mocks.submitArcadeProfileEvent).not.toHaveBeenCalled()
-    expect(screen.getByText('尚未起卦')).toBeTruthy()
+    // No demo fallback card — the page renders nothing but the redirect.
+    expect(screen.queryByText('今日卦签')).toBeNull()
   })
 
   it('saves a real cast sign locally and submits it for logged-in accounts', async () => {
@@ -110,6 +111,8 @@ describe('PageSign arcade profile write', () => {
   })
 
   it('copies the share text with visible feedback', async () => {
+    mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
+    mocks.session.castCreatedAt = '2026-07-06T08:00:00.000Z'
     const writeText = vi.fn((_: string) => Promise.resolve())
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     renderPage()
