@@ -44,6 +44,14 @@ vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
+// These tests cover the anonymous / companion-less flow, which must stay
+// byte-identical to the pre-companion-entry behaviour: pin the co-play gate to
+// `unavailable`. The companion default entry has its own test file
+// (ConnectPage.companion.test.tsx).
+vi.mock('@/hooks/useCompanionPartner', () => ({
+  useCompanionPartner: () => ({ status: 'unavailable' }),
+}))
+
 // The 进入游戏 tap unlocks the shared AudioContext inside the user gesture (iOS
 // Safari needs the gesture). Mock the singleton so the test can assert the call
 // without a real Web Audio context in jsdom.

@@ -26,6 +26,15 @@ import {
 } from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import { readEntryRecoveryState } from '@/utils/session'
+import { useCompanionPartner } from '@/hooks/useCompanionPartner'
+import {
+  buildPostGameReaction,
+  canFirePostGameBeat,
+  readBeatLog,
+  readCachedVoicePosture,
+  recordBeatFired,
+  writeBeatLog,
+} from '@shared/companion-presence'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
@@ -123,6 +132,48 @@ export default function ResultPage() {
     state.totalStartTime !== null && state.totalEndTime !== null
       ? state.totalEndTime - state.totalStartTime
       : null
+
+  // --- Companion post-game reaction (节拍 3, mode② settlements only) ----------
+  // Template-filled from the run's real facts (companion-presence-design
+  // register: factual, relaxed on a clear, never consoling). Computed once in
+  // the initializer (pure — no writes); the beat-log recording side effect
+  // lives in the mount effect below, which is StrictMode/refresh idempotent
+  // via the per-run `lastPostGameRunId` dedupe. A quiet/denied remembered
+  // posture freezes all proactive beats, this one included. The posture read
+  // is cache-first by design; the cache refreshes on every companion identity
+  // read (the connect-page co-play gate and this page's partner read both
+  // sync it via useCompanionPartner), so a cross-device mute can lag at most
+  // one settlement on a deep-linked run — an accepted cache-first trade-off.
+  const companionRunId = entryRecovery?.platformPartner === true ? state.gameRunId : null
+  const [companionReaction] = useState<string | null>(() => {
+    if (noRunData || companionRunId === null || state.outcome === null) return null
+    const posture = readCachedVoicePosture()
+    const muted = posture === 'quiet-remembered' || posture === 'denied-remembered'
+    const log = readBeatLog(getTodayString())
+    const alreadyReacted = log.lastPostGameRunId === companionRunId
+    if (!alreadyReacted && !canFirePostGameBeat({ log, gameRunId: companionRunId, muted })) {
+      return null
+    }
+    return buildPostGameReaction({
+      outcome: state.outcome,
+      durationMs: totalMs,
+      moduleCount: state.moduleSequence.length,
+      completedModules: state.moduleStats.length,
+      strikeCount: state.strikeCount,
+    })
+  })
+  // The companion identity read powers the speaker label; a failed read keeps
+  // the line with the generic label rather than dropping the reaction.
+  const companionPartner = useCompanionPartner(companionReaction !== null)
+  useEffect(() => {
+    if (companionReaction === null || companionRunId === null) return
+    const log = readBeatLog(getTodayString())
+    if (log.lastPostGameRunId !== companionRunId) {
+      writeBeatLog(recordBeatFired(log, { kind: 'post-game', gameRunId: companionRunId }))
+    }
+    // Mount-once recording; the dedupe above absorbs StrictMode's double run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (noRunData) return
@@ -478,7 +529,12 @@ export default function ResultPage() {
       attemptNumber: state.attemptNumber,
     })
     dispatch({ type: 'RESET' })
-    navigate(`/bombsquad/run?mode=${state.mode}`)
+    // A mode② run replays as mode②: the player never handed a manual to their
+    // own AI, so dropping the partner param would strand the next run in mode①
+    // with no partner connected at all.
+    const partnerParam =
+      state.mode === 'daily' && entryRecovery?.platformPartner === true ? '&partner=platform' : ''
+    navigate(`/bombsquad/run?mode=${state.mode}${partnerParam}`)
   }
 
   // No game in memory at all — distinct from a finished run that solved zero
@@ -492,11 +548,12 @@ export default function ResultPage() {
   if (noRunData) {
     const recoveryMode = entryRecovery?.mode ?? 'daily'
     const manualHandoffComplete = entryRecovery?.manualHandoffComplete === true
+    const recoveryPartner = entryRecovery?.platformPartner === true ? '&partner=platform' : ''
     const recoveryRunTarget =
       recoveryMode === 'daily'
         ? `/bombsquad/run?mode=daily${
             entryRecovery?.manualUrl ? `&url=${encodeURIComponent(entryRecovery.manualUrl)}` : ''
-          }`
+          }${recoveryPartner}`
         : '/bombsquad/run?mode=practice'
     const recoveryConnectTarget = `/bombsquad/connect?mode=${recoveryMode}`
     const recoveryTitle =
@@ -601,6 +658,15 @@ export default function ResultPage() {
           {totalMs !== null && <div className={styles.totalTime}>{formatMs(totalMs)}</div>}
 
           <p className={styles.subtitle}>{subtitle}</p>
+
+          {companionReaction !== null && (
+            <div className={styles.companionReaction} role="status" aria-label="伙伴的反应">
+              <span className={styles.companionReactionName}>
+                {companionPartner.status === 'available' ? companionPartner.name : '伙伴'}
+              </span>
+              <span className={styles.companionReactionText}>{companionReaction}</span>
+            </div>
+          )}
 
           {showRankCard && (
             <div className={styles.rankCard}>

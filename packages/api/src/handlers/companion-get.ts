@@ -16,7 +16,7 @@ import type { CompanionResponse } from '../../../companion-memory/src/types'
 import { getCompanion } from '../../../companion-memory/src/store'
 import { requireSession } from '../auth/require-session'
 import { jsonResponse } from '../auth/respond'
-import type { CompanionApiEnv } from './companion-shared'
+import { wireVoicePosture, type CompanionApiEnv } from './companion-shared'
 
 export async function handleGetCompanion(
   request: Request,
@@ -35,6 +35,7 @@ export async function handleGetCompanion(
     address_style: companion.address_style,
     voice_id: companion.voice_id,
     profile_enabled: companion.profile_enabled === 1,
+    voice_posture: wireVoicePosture(companion),
     created_at: companion.created_at,
   }
   return jsonResponse(body, 200, { 'Cache-Control': 'no-store' })

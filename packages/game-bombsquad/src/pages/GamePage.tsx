@@ -38,9 +38,12 @@ import {
   createGameRunId,
   getAttemptNumberForMode,
   getRunSeed,
+  readEntryRecoveryState,
+  saveEntryRecoveryState,
 } from '@/utils/session'
 import { getAudioContext, setSfxSuppressed } from '@/audio/audio-context'
-import VoicePanel, { type VoicePanelHandle } from '@/voice/VoicePanel'
+import VoicePanel, { type VoicePanelHandle, type VoiceUtterance } from '@/voice/VoicePanel'
+import CompanionSubtitleStrip from '@/voice/CompanionSubtitleStrip'
 import { deriveVoicePanelInputs, isPlatformVoicePartner } from '@/voice/voice-panel-inputs'
 import styles from './GamePage.module.css'
 
@@ -214,6 +217,32 @@ export default function GamePage() {
   // run stay mode① (BYO-AI) and never mount the panel. Additive — derives from
   // game state only, never alters game logic.
   const usePlatformVoice = isPlatformVoicePartner(mode, searchParams.get('partner'))
+
+  // Record the platform-partner flag on the entry-recovery state so replay /
+  // recovery paths preserve mode②. Covers the deep-link entry too (a mode② run
+  // reached by URL never passed through the connect page's co-play save); a
+  // mode① run leaves whatever the connect flow wrote untouched.
+  useEffect(() => {
+    if (!usePlatformVoice) return
+    const recovery = readEntryRecoveryState()
+    if (recovery && recovery.platformPartner) return
+    saveEntryRecoveryState({
+      mode: 'daily',
+      manualUrl: recovery?.manualUrl || customUrl || '',
+      manualHandoffComplete: true,
+      platformPartner: true,
+    })
+  }, [usePlatformVoice, customUrl])
+
+  // Live companion utterance from the voice panel, driving the top-of-screen
+  // subtitle strip (visible only while the companion is audibly speaking).
+  const [companionUtterance, setCompanionUtterance] = useState<VoiceUtterance>({
+    text: '',
+    speaking: false,
+  })
+  const handleUtterance = useCallback((utterance: VoiceUtterance) => {
+    setCompanionUtterance(utterance)
+  }, [])
 
   // Ref to the mounted VoicePanel — used to call requestClosing() imperatively
   // on a successful daily defuse before navigating to the results screen.
@@ -739,6 +768,13 @@ export default function GamePage() {
         </div>
       </div>
 
+      {/* Companion subtitle strip (mode② only) — top of the game screen, in
+          flow under the top bar so it never covers the stopwatch. Visible only
+          while the companion is audibly speaking; gone the moment voice ends. */}
+      {usePlatformVoice && companionUtterance.speaking && (
+        <CompanionSubtitleStrip text={companionUtterance.text} />
+      )}
+
       <div className={styles.moduleArea}>
         <div className={styles.modulePanel}>
           <div className={styles.modLabelRow}>
@@ -763,6 +799,7 @@ export default function GamePage() {
           manualData={voiceInputs.manualData}
           gameState={voiceInputs.gameState}
           gameRunId={voiceInputs.gameRunId}
+          onUtterance={handleUtterance}
         />
       )}
 

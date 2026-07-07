@@ -185,14 +185,18 @@ export class World {
   /** Captured POST /api/auth/magic-link/request bodies for assertions. */
   readonly magicLinkRequests: Record<string, unknown>[] = []
   /** The route-mocked companion identity, or null for "not set up yet". POST
-   *  /api/companion/setup creates it; GET /api/companion reflects it. */
+   *  /api/companion/setup creates it; GET /api/companion reflects it; PUT
+   *  /api/companion/settings mutates `voice_posture` in place. */
   companion: {
     name: string
     address_style: string
     voice_id: string
     profile_enabled: boolean
+    voice_posture: string
     created_at: string
   } | null = null
+  /** Captured PUT /api/companion/settings bodies (voice-posture writes). */
+  readonly companionSettingsPuts: Record<string, unknown>[] = []
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
@@ -351,15 +355,15 @@ export class World {
   }
 
   /**
-   * Enter a mode② daily run with the platform voice partner. The voice panel
-   * mounts only on a daily run opted in via `?partner=platform` (there is no
-   * connect-flow affordance for it yet — it is a pure URL signal), so the run is
-   * reached by a direct deep-link goto. The seed-pinning clock installed by the
-   * preceding `I open /` step stays frozen across this navigation, so GamePage
-   * mounts under the pinned daily seed exactly as a connect-flow entry would,
-   * and the route-mocked manual loads the same fixture. PLAYING (the visible
-   * stopwatch) implies the manual loaded, so the VoicePanel is mounted and its
-   * `/ai-ws/*` socket — stubbed in the fixture wiring — is connecting.
+   * Enter a mode② daily run with the platform voice partner by a direct
+   * deep-link goto (the URL signal predates the connect-flow co-play entry and
+   * must keep working; the connect-flow default for companion users is covered
+   * by the companion-coplay-entry journey). The seed-pinning clock installed by
+   * the preceding `I open /` step stays frozen across this navigation, so
+   * GamePage mounts under the pinned daily seed exactly as a connect-flow entry
+   * would, and the route-mocked manual loads the same fixture. PLAYING (the
+   * visible stopwatch) implies the manual loaded, so the VoicePanel is mounted
+   * and its `/ai-ws/*` socket — stubbed in the fixture wiring — is connecting.
    */
   async startPlatformVoiceDailyRun(): Promise<void> {
     this.runMode = 'daily'
@@ -589,12 +593,55 @@ export const test = base.extend<{ world: World }>({
           address_style: body.address_style ?? '',
           voice_id: body.voice_id,
           profile_enabled: true,
+          voice_posture: 'voice-default',
           created_at: '2026-06-30T00:00:00.000Z',
         }
         await route.fulfill({
           status: 201,
           contentType: 'application/json',
           body: JSON.stringify({ companion: world.companion }),
+        })
+      })
+
+      // Companion presence settings (PUT /api/companion/settings) — the dock's
+      // voice-posture writes. Captures each body and mutates the mocked
+      // identity in place, mirroring the real handler's semantics.
+      await page.route('**/api/companion/settings', async (route) => {
+        const request = route.request()
+        if (request.method() !== 'PUT') {
+          await route.fulfill({ status: 405, body: 'Method Not Allowed' })
+          return
+        }
+        if (world.companion === null) {
+          await route.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'no companion set up' }),
+          })
+          return
+        }
+        const body = request.postDataJSON() as { voice_posture?: string }
+        world.companionSettingsPuts.push(body)
+        if (typeof body.voice_posture === 'string') {
+          world.companion.voice_posture = body.voice_posture
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ voice_posture: world.companion.voice_posture }),
+        })
+      })
+
+      // Companion memory album (GET /api/companion/memories) — the dock's
+      // arrival greeting reads the most recent episode. The static harness has
+      // no capture pipeline, so an honest empty album is the default; the
+      // greeting then renders its no-episode variant.
+      await page.route('**/api/companion/memories**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({ memories: [] }),
         })
       })
 

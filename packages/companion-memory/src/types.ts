@@ -34,6 +34,11 @@ export {
   PLATFORM_VOICE_IDS,
   isPlatformVoiceId,
   type PlatformVoiceId,
+  VOICE_POSTURES,
+  isVoicePosture,
+  type VoicePosture,
+  type CompanionSettingsBody,
+  type CompanionSettingsResponse,
   type CompanionIdentity,
   type CompanionResponse,
   type CompanionSetupBody,
@@ -60,6 +65,12 @@ export interface CompanionRecord {
   voice_id: string
   /** SQLite boolean: 0 | 1. */
   profile_enabled: number
+  /**
+   * Remembered auto-voice posture (presence layer; migration 0004). One of
+   * `voice-default` / `quiet-remembered` / `denied-remembered` — the CHECK
+   * constraint enforces the enum; wire readers still narrow via `isVoicePosture`.
+   */
+  voice_posture: string
   /**
    * Bulk profile-delete watermark (ISO 8601, `null` = never bulk-deleted).
    * Consolidation skips claim production for events captured at-or-before it.

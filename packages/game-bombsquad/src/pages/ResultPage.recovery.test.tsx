@@ -135,6 +135,7 @@ describe('ResultPage no-run-data recovery', () => {
       mode: 'daily',
       manualUrl,
       manualHandoffComplete: true,
+      platformPartner: false,
     })
     renderRecovery()
 
@@ -153,6 +154,7 @@ describe('ResultPage no-run-data recovery', () => {
       mode: 'practice',
       manualUrl: 'https://claw.amio.fans/manual/practice',
       manualHandoffComplete: true,
+      platformPartner: false,
     })
     renderRecovery()
 

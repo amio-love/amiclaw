@@ -9,6 +9,11 @@
  */
 
 import type { CompanionDb } from '../../../companion-memory/src/db'
+import {
+  isVoicePosture,
+  type CompanionRecord,
+  type VoicePosture,
+} from '../../../companion-memory/src/types'
 
 /** Bindings the companion control plane needs (Pages dashboard-configured). */
 export interface CompanionApiEnv {
@@ -25,4 +30,13 @@ export async function parseJsonBody(request: Request): Promise<unknown | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * Narrow a companion row's `voice_posture` to the wire enum. The column CHECK
+ * already enforces the enum in D1; this guards hand-edited rows and keeps the
+ * wire type honest, degrading to the design's initial posture.
+ */
+export function wireVoicePosture(companion: Pick<CompanionRecord, 'voice_posture'>): VoicePosture {
+  return isVoicePosture(companion.voice_posture) ? companion.voice_posture : 'voice-default'
 }

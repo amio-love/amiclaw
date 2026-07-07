@@ -88,6 +88,7 @@ export const SEED_COMPANION: CompanionIdentity = {
   address_style: '队长',
   voice_id: 'companion-warm',
   profile_enabled: true,
+  voice_posture: 'voice-default',
   created_at: '2026-05-30T09:12:00.000Z',
 }
 

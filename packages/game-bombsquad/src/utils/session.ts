@@ -8,6 +8,13 @@ export interface EntryRecoveryState {
   mode: SessionMode
   manualUrl: string
   manualHandoffComplete: boolean
+  /**
+   * True when the run used the platform voice partner (mode②,
+   * `?partner=platform`). Replay / recovery paths must preserve it: a mode②
+   * player never completed the manual handoff, so dropping the flag would
+   * route their next run into mode① with no AI partner connected.
+   */
+  platformPartner: boolean
 }
 
 /**
@@ -141,6 +148,7 @@ export function readEntryRecoveryState(
       mode: parsed.mode,
       manualUrl: parsed.manualUrl,
       manualHandoffComplete: parsed.manualHandoffComplete === true,
+      platformPartner: parsed.platformPartner === true,
     }
   } catch {
     return null
