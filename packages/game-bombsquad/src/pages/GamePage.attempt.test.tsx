@@ -49,7 +49,7 @@ vi.mock('@/modules/keypad/KeypadModule', () => ({
 
 import GamePage from './GamePage'
 import { GameProvider } from '@/store/game-context'
-import { getDailyAttemptKey } from '@/utils/session'
+import { getDailyAttemptKey, getDailyAttemptStorage } from '@/utils/session'
 
 const MINIMAL_MANUAL = {
   modules: {
@@ -71,8 +71,11 @@ function renderDailyRun() {
 }
 
 describe('GamePage daily attempt persistence', () => {
+  // Attempt counts live in the daily-attempt storage (localStorage in real
+  // browsers, in-memory fallback in this jsdom env) — reset it between tests.
   beforeEach(() => {
     sessionStorage.clear()
+    getDailyAttemptStorage().removeItem(getDailyAttemptKey())
     loadManualMock.mockReset()
     generateWireMock.mockClear()
     generateDialMock.mockClear()
@@ -82,6 +85,7 @@ describe('GamePage daily attempt persistence', () => {
 
   afterEach(() => {
     sessionStorage.clear()
+    getDailyAttemptStorage().removeItem(getDailyAttemptKey())
   })
 
   it('does not persist a daily attempt when manual loading fails before the first module', async () => {
@@ -93,7 +97,7 @@ describe('GamePage daily attempt persistence', () => {
       expect(screen.getByText(/加载失败/)).toBeInTheDocument()
     })
 
-    expect(sessionStorage.getItem(getDailyAttemptKey())).toBeNull()
+    expect(getDailyAttemptStorage().getItem(getDailyAttemptKey())).toBeNull()
   })
 
   it('persists the previewed daily attempt only once the run reaches the first module', async () => {
@@ -105,6 +109,6 @@ describe('GamePage daily attempt persistence', () => {
       expect(screen.getByTestId('wire-module')).toBeInTheDocument()
     })
 
-    expect(sessionStorage.getItem(getDailyAttemptKey())).toBe('1')
+    expect(getDailyAttemptStorage().getItem(getDailyAttemptKey())).toBe('1')
   })
 })

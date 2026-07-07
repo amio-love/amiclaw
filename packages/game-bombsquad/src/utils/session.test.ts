@@ -5,6 +5,7 @@ import {
   commitDailyAttemptNumber,
   createGameRunId,
   getAttemptNumberForMode,
+  getDailyAttemptStorage,
   getRunSeed,
   readEntryRecoveryState,
   readDailyAttemptCount,
@@ -40,6 +41,19 @@ describe('session utilities', () => {
     expect(reserveDailyAttempt(storage, '2026-03-27')).toBe(1)
     expect(reserveDailyAttempt(storage, '2026-03-27')).toBe(2)
     expect(readDailyAttemptCount(storage, '2026-03-27')).toBe(2)
+  })
+
+  it('provides a working daily-attempt storage even without localStorage', () => {
+    // This jsdom env has no localStorage, so the accessor must hand back the
+    // in-memory fallback — and it must round-trip like real storage so the
+    // per-day cumulative attempt count survives within the app lifetime.
+    const storage = getDailyAttemptStorage()
+    storage.removeItem('attempt-2026-03-27')
+    expect(readDailyAttemptCount(storage, '2026-03-27')).toBe(0)
+    expect(reserveDailyAttempt(storage, '2026-03-27')).toBe(1)
+    expect(readDailyAttemptCount(storage, '2026-03-27')).toBe(1)
+    storage.removeItem('attempt-2026-03-27')
+    expect(readDailyAttemptCount(storage, '2026-03-27')).toBe(0)
   })
 
   it('returns mode-specific preview attempt numbers without reserving daily storage', () => {

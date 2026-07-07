@@ -39,8 +39,10 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
       <div className={styles.headRow} role="row">
         <span role="columnheader">名次</span>
         <span role="columnheader">玩家</span>
+        {/* attempt_number is which daily attempt set this time — it is NOT a
+            mistake count, so the header must not say 失误. */}
         <span className={styles.headScore} role="columnheader">
-          用时 · 失误
+          用时 · 尝试
         </span>
       </div>
       {entries.map((row) => {
@@ -68,7 +70,7 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
               {aiMetadata && <span className={styles.aiMeta}>{aiMetadata}</span>}
             </span>
             <span className={styles.score} role="cell">
-              {formatMs(row.time_ms)} · {row.attempt_number} 次
+              {formatMs(row.time_ms)} · 第 {row.attempt_number} 次
             </span>
           </div>
         )

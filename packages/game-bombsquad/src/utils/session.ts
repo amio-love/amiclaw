@@ -26,8 +26,40 @@ export function getDailyAttemptKey(date = getTodayString()): string {
   return `attempt-${date}`
 }
 
+export type DailyAttemptStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+
+const memoryAttemptStore = new Map<string, string>()
+const memoryAttemptStorage: DailyAttemptStorage = {
+  getItem: (key) => memoryAttemptStore.get(key) ?? null,
+  setItem: (key, value) => {
+    memoryAttemptStore.set(key, value)
+  },
+  removeItem: (key) => {
+    memoryAttemptStore.delete(key)
+  },
+}
+
+/**
+ * Daily attempt counts live in localStorage so the count is cumulative for
+ * the whole day: sessionStorage reset the counter on every new tab/session,
+ * letting any run present itself as "attempt 1". localStorage also keeps the
+ * counter aligned with the player identity — the device UUID and nickname
+ * live there too, so clearing it resets all three together. Falls back to an
+ * in-memory store when localStorage is unavailable (private browsing,
+ * restricted embeds, jsdom).
+ */
+export function getDailyAttemptStorage(): DailyAttemptStorage {
+  try {
+    const storage = globalThis.localStorage
+    if (storage) return storage
+  } catch {
+    // SecurityError in restricted contexts — fall through to memory.
+  }
+  return memoryAttemptStorage
+}
+
 export function readDailyAttemptCount(
-  storage: Pick<Storage, 'getItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   const rawValue = storage.getItem(getDailyAttemptKey(date))
@@ -36,7 +68,7 @@ export function readDailyAttemptCount(
 }
 
 export function reserveDailyAttempt(
-  storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem' | 'setItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   const nextAttempt = readDailyAttemptCount(storage, date) + 1
@@ -45,7 +77,7 @@ export function reserveDailyAttempt(
 }
 
 export function previewDailyAttemptNumber(
-  storage: Pick<Storage, 'getItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   return readDailyAttemptCount(storage, date) + 1
@@ -53,7 +85,7 @@ export function previewDailyAttemptNumber(
 
 export function commitDailyAttemptNumber(
   attemptNumber: number,
-  storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem' | 'setItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   const safeAttemptNumber = Number.isFinite(attemptNumber) && attemptNumber > 0 ? attemptNumber : 1
@@ -65,7 +97,7 @@ export function commitDailyAttemptNumber(
 
 export function getAttemptNumberForMode(
   mode: SessionMode,
-  storage: Pick<Storage, 'getItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   return mode === 'daily' ? previewDailyAttemptNumber(storage, date) : 1
@@ -74,7 +106,7 @@ export function getAttemptNumberForMode(
 export function commitAttemptNumberForMode(
   mode: SessionMode,
   attemptNumber: number,
-  storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
+  storage: Pick<Storage, 'getItem' | 'setItem'> = getDailyAttemptStorage(),
   date = getTodayString()
 ): number {
   return mode === 'daily' ? commitDailyAttemptNumber(attemptNumber, storage, date) : 1

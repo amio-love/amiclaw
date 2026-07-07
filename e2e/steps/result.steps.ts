@@ -287,13 +287,14 @@ Then('the rendered table width does not exceed the 320px viewport', async ({ pag
 })
 
 Then(
-  'the "用时 · 失误" column header and every time and attempt value stay fully visible',
+  'the "用时 · 尝试" column header and every time and attempt value stay fully visible',
   async ({ page }) => {
     const table = page.getByRole('table')
     await expect(table).toBeVisible()
-    // The Atlas rebuild merged time + 失误/attempt into one composite column;
-    // assert that header is present by its real text.
-    await expect(table.getByRole('columnheader', { name: '用时 · 失误' })).toBeVisible()
+    // The Atlas rebuild merged time + attempt into one composite column;
+    // assert that header is present by its real text (relabeled from the
+    // misleading 失误 — the value is the daily attempt number, not mistakes).
+    await expect(table.getByRole('columnheader', { name: '用时 · 尝试' })).toBeVisible()
     // The genuine L5-1 invariant: nothing is clipped at the 320px viewport.
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth

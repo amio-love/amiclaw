@@ -1,8 +1,5 @@
 import type { LeaderboardEntry, LeaderboardResponse } from '../../../../shared/leaderboard-types'
-
-// Internal KV shape includes the dedup key; it must be stripped before the
-// public GET response so run_id is never exposed to leaderboard readers.
-type StoredEntry = LeaderboardEntry & { run_id?: string }
+import { dedupeStoredEntries, type StoredEntry } from '../leaderboard-entries'
 
 export async function handleGetLeaderboard(request: Request, kv: KVNamespace): Promise<Response> {
   const url = new URL(request.url)
@@ -16,11 +13,15 @@ export async function handleGetLeaderboard(request: Request, kv: KVNamespace): P
   }
 
   const raw = ((await kv.get(`leaderboard:${date}`, 'json')) as StoredEntry[] | null) ?? []
-  // Strip the internal run_id from every entry — it is a backend dedup key,
-  // not part of the public leaderboard contract.
-  const entries: LeaderboardEntry[] = raw.map((e) => {
+  // Read-time dedup: rows written before write-time per-player dedup shipped
+  // can still contain duplicates (same player, multiple runs). Collapsing at
+  // read keeps historical boards honest until they age out of the 48h KV TTL.
+  // Then strip the internal keys — run_id (per-run idempotency) and device_id
+  // (per-player dedup) are backend keys, not part of the public contract.
+  const entries: LeaderboardEntry[] = dedupeStoredEntries(raw).map((e) => {
     const entry = { ...e } as Partial<StoredEntry>
     delete entry.run_id
+    delete entry.device_id
     return entry as LeaderboardEntry
   })
 

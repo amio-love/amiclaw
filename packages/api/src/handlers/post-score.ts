@@ -1,12 +1,9 @@
-import type {
-  ScoreSubmission,
-  LeaderboardEntry,
-  ScoreSubmissionResponse,
-} from '../../../../shared/leaderboard-types'
+import type { ScoreSubmission, ScoreSubmissionResponse } from '../../../../shared/leaderboard-types'
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
 import { captureSettlementEvent } from '../../../companion-memory/src/capture'
 import type { CompanionDb } from '../../../companion-memory/src/db'
 import { readSessionFromRequest } from '../auth/session'
+import { dedupeStoredEntries, type StoredEntry } from '../leaderboard-entries'
 import {
   MAX_AI_MODEL_LEN,
   MAX_AI_TOOL_LEN,
@@ -14,10 +11,6 @@ import {
   sanitizeNickname,
   validateSubmission,
 } from '../validation'
-
-// Internal KV shape: LeaderboardEntry plus the dedup key, which is never
-// exposed through the public GET response (stripped in get-leaderboard.ts).
-type StoredEntry = LeaderboardEntry & { run_id?: string }
 
 const RATE_LIMIT_MS = 10_000
 const MAX_ENTRIES = 100
@@ -77,6 +70,7 @@ export async function handlePostScore(
     time_ms: body.time_ms,
     attempt_number: body.attempt_number,
     ai_tool: sanitizeLeaderboardText(body.ai_tool, MAX_AI_TOOL_LEN),
+    device_id: body.device_id,
     ...(body.run_id ? { run_id: body.run_id } : {}),
   }
   const aiModel = body.ai_model
@@ -89,17 +83,25 @@ export async function handlePostScore(
   // the same run (e.g. page refresh or KV race) produce exactly one row.
   const base = body.run_id ? existing.filter((e) => e.run_id !== body.run_id) : existing
 
-  const updated = [...base, newEntry]
-    .sort((a, b) => a.time_ms - b.time_ms)
-    .slice(0, MAX_ENTRIES)
-    .map((entry, idx) => ({ ...entry, rank: idx + 1 }))
+  // One row per player per day: dedupeStoredEntries keeps each player's best
+  // time (keyed on device_id, nickname fallback for legacy rows), sorts, and
+  // reassigns ranks. A resubmission slower than the player's existing best is
+  // therefore dropped here — the board always shows the day's best run.
+  const updated = dedupeStoredEntries([...base, newEntry]).slice(0, MAX_ENTRIES)
 
   await kv.put(leaderboardKey, JSON.stringify(updated), {
     expirationTtl: KV_TTL_SECONDS,
   })
 
-  const rank =
-    updated.findIndex((e) => e.nickname === newEntry.nickname && e.time_ms === newEntry.time_ms) + 1
+  // The player's board rank is their kept (best) row — not necessarily the
+  // run just submitted. Fall back to the legacy nickname+time match for rows
+  // that predate device_id storage.
+  let rank = updated.findIndex((e) => e.device_id === body.device_id) + 1
+  if (rank === 0) {
+    rank =
+      updated.findIndex((e) => e.nickname === newEntry.nickname && e.time_ms === newEntry.time_ms) +
+      1
+  }
 
   const response: ScoreSubmissionResponse = {
     rank: rank > 0 ? rank : updated.length + 1,

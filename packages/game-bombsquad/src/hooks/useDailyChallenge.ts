@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { getTodayString } from '@shared/date'
-import { readDailyAttemptCount, reserveDailyAttempt } from '@/utils/session'
+import { getDailyAttemptStorage, readDailyAttemptCount, reserveDailyAttempt } from '@/utils/session'
 
 /**
  * Pick the origin that the AI partner should fetch the manual from.
@@ -27,7 +27,8 @@ function getOrigin(): string {
 
 /**
  * Returns manual URLs for today's daily challenge and the practice mode.
- * Tracks attempt number per day in sessionStorage.
+ * Tracks attempt number per day in localStorage (via getDailyAttemptStorage)
+ * so the count is cumulative across tabs and browser restarts within a day.
  */
 export function useDailyChallenge(): {
   practiceUrl: string
@@ -41,11 +42,11 @@ export function useDailyChallenge(): {
   const practiceUrl = `${origin}/manual/practice`
 
   const [attemptNumber, setAttemptNumber] = useState(() =>
-    readDailyAttemptCount(sessionStorage, today)
+    readDailyAttemptCount(getDailyAttemptStorage(), today)
   )
 
   const incrementAttempt = useCallback(() => {
-    setAttemptNumber(reserveDailyAttempt(sessionStorage, today))
+    setAttemptNumber(reserveDailyAttempt(getDailyAttemptStorage(), today))
   }, [today])
 
   return { practiceUrl, dailyUrl, attemptNumber, incrementAttempt }
