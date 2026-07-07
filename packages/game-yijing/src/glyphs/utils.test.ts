@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { getTodayString } from '@shared/date'
 import {
   coinsToYao,
   binaryKey,
   hexagramFromBinary,
   changedValues,
   changingLines,
+  ganzhi,
   yaoLabel,
   yaoShort,
   type YaoValue,
@@ -134,5 +136,38 @@ describe('KW_LOOKUP completeness', () => {
     expect(numbers.size).toBe(64)
     expect(Math.min(...numbers)).toBe(1)
     expect(Math.max(...numbers)).toBe(64)
+  })
+})
+
+describe('ganzhi — derives from the UTC product day', () => {
+  it('returns 甲子 for the 1984-02-02 epoch day', () => {
+    expect(ganzhi('1984-02-02')).toBe('甲子')
+  })
+
+  it('advances one cycle position per product day', () => {
+    expect(ganzhi('1984-02-03')).toBe('乙丑')
+  })
+
+  it('returns the previous position for the day before the epoch', () => {
+    expect(ganzhi('1984-02-01')).toBe('癸亥')
+  })
+
+  it('wraps the 60-day cycle (甲子 again 60 days after the epoch)', () => {
+    expect(ganzhi('1984-04-02')).toBe('甲子')
+  })
+
+  it('agrees for every instant of the same product day', () => {
+    // Start and end of the same UTC day must map to the same 干支.
+    const early = ganzhi(getTodayString(new Date('2026-07-07T00:01:00Z')))
+    const late = ganzhi(getTodayString(new Date('2026-07-07T23:59:00Z')))
+    expect(early).toBe(late)
+  })
+
+  it('differs across a UTC-midnight boundary even when the Beijing calendar date is unchanged', () => {
+    // 2026-07-07 07:59 Beijing == 2026-07-06T23:59Z (previous product day);
+    // 2026-07-07 08:01 Beijing == 2026-07-07T00:01Z (new product day).
+    const beforeRollover = ganzhi(getTodayString(new Date('2026-07-06T23:59:00Z')))
+    const afterRollover = ganzhi(getTodayString(new Date('2026-07-07T00:01:00Z')))
+    expect(beforeRollover).not.toBe(afterRollover)
   })
 })

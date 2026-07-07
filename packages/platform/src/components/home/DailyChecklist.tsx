@@ -1,5 +1,5 @@
 import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
-import { toChineseDateString } from '@shared/date'
+import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import styles from './DailyChecklist.module.css'
 
 interface DailyChecklistProps {
@@ -72,6 +72,7 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
           ? '正在读取账号记录；暂时显示这台设备上的状态。'
           : `最长连续 ${loop.streak.longest_days} 天。匿名状态只代表这台设备。`}
       </p>
+      <p className={styles.hint}>{getDailyResetHint()}</p>
     </section>
   )
 }

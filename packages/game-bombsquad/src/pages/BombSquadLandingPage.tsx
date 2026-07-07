@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { AiToolList, BombSquadWordmark, DailyCountdown, Scenery } from '@amiclaw/ui'
+import { getDailyResetHint } from '@shared/date'
 import { formatMs } from '@shared/format-time'
 import Eyebrow from '@/components/bombsquad/Eyebrow'
 import Button from '@/components/bombsquad/Button'
@@ -90,6 +91,7 @@ export default function BombSquadLandingPage() {
               <div>
                 <div className={styles.dailyLabel}>今日挑战 · 重置</div>
                 <DailyCountdown size="sm" className={styles.countdown} />
+                <div className={styles.dailyHint}>{getDailyResetHint()}</div>
               </div>
               <div className={styles.dailyRight}>
                 <div className={styles.dailyRank}>

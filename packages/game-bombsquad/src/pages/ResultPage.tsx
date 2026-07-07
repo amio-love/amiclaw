@@ -13,7 +13,7 @@ import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
 import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
-import { getTodayString } from '@shared/date'
+import { getDailyResetHint, getTodayString } from '@shared/date'
 import { getDeviceId } from '@/utils/device-fingerprint'
 import { logEvent } from '@/utils/event-log'
 import { formatMs } from '@shared/format-time'
@@ -696,6 +696,7 @@ export default function ResultPage() {
                 {shareState !== 'idle' && (
                   <p className={styles.shareStatus}>{shareStatusText(shareState)}</p>
                 )}
+                <p className={styles.loopHint}>{getDailyResetHint()}</p>
               </div>
               <div className={styles.loopActions}>
                 <button type="button" className={styles.loopAction} onClick={handleShareResult}>

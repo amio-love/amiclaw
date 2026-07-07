@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Button, EyebrowTag, Scenery } from '@amiclaw/ui'
+import { getDailyResetHint, getTodayString, toChineseDateString } from '@shared/date'
 import { Hexagram, TaijiFrame } from '../glyphs'
 import { ganzhi, type YaoSextet } from '../glyphs/utils'
 import styles from './PageHome.module.css'
@@ -12,14 +13,12 @@ import styles from './PageHome.module.css'
 /* Mini icon on the draw-card — 6-yao mix used by the handoff prototype. */
 const DRAW_PREVIEW: YaoSextet = [7, 8, 7, 6, 7, 8]
 
-function todayCN(): string {
-  const d = new Date()
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
-
 export function PageHome() {
   const navigate = useNavigate()
-  const gz = ganzhi()
+  /* Today = the shared UTC product day, so the date, the 干支 stamp and the
+     daily checklist all roll over together at the shell's daily reset. */
+  const today = getTodayString()
+  const gz = ganzhi(today)
 
   return (
     <main className={styles.page}>
@@ -44,7 +43,8 @@ export function PageHome() {
             <div className={styles.todayStamp}>{gz}</div>
             <div className={styles.todayL}>
               <div className={styles.todayLbl}>今日 · {gz}日</div>
-              <div className={styles.todayCd}>{todayCN()}</div>
+              <div className={styles.todayCd}>{toChineseDateString(today)}</div>
+              <div className={styles.todayHint}>{getDailyResetHint()}</div>
             </div>
             {/* No ask-count stats here: Yijing has no counter backend, so any
                 「已问卦 / 你 第 N 次」number would be fabricated. */}

@@ -209,6 +209,19 @@ Then('the countdown counts down toward the next UTC 00:00 reset', async ({ world
   expect(after).toBeLessThan(before)
 })
 
+Then(
+  'the overview states the daily reset rule with a localized rollover time',
+  async ({ page }) => {
+    // The hint states the honest day-boundary rule (product day = UTC date)
+    // and renders the rollover moment in the viewer's local wall-clock time,
+    // so the exact HH:MM depends on the browser timezone — assert the shape.
+    const featured = page.locator('#featured')
+    await expect(
+      featured.getByText(/每日内容按 UTC 日期刷新 · 本地时间每天 \d{2}:\d{2}/)
+    ).toBeVisible()
+  }
+)
+
 Then('I see the welcome strip greeting me by name', async ({ page }) => {
   await expect(page.getByText('你好，', { exact: false })).toBeVisible()
   // The display name is the session email local-part (nova@... -> nova).

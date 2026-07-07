@@ -61,6 +61,7 @@ Feature: AMIO Arcade platform homepage
     Given I am on the homepage
     Then the BombSquad overview shows a countdown in 时 / 分 / 秒
     And the countdown counts down toward the next UTC 00:00 reset
+    And the overview states the daily reset rule with a localized rollover time
 
   # Source: home-signed-in-welcome
   @playwright

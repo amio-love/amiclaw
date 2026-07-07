@@ -14,7 +14,7 @@ import {
 } from '@amiclaw/arcade-profile/local'
 import { claimArcadeProfile, fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
 import { formatMs } from '@shared/format-time'
-import { toChineseDateString } from '@shared/date'
+import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
 import CompanionCard from '@/components/companion/CompanionCard'
 import { companionSeedEnabled } from '@/lib/companion-seed'
@@ -330,6 +330,7 @@ function ArcadeStatsCard({
           }
         />
       </div>
+      <p className={styles.statsHint}>{getDailyResetHint()}</p>
       {!hasAnyRecord && (
         <a className={styles.emptyCta} href={emptyCtaHref}>
           开始玩

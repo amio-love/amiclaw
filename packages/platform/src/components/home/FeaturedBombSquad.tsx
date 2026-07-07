@@ -1,4 +1,5 @@
 import { AiToolList, BombSquadWordmark, DailyCountdown } from '@amiclaw/ui'
+import { getDailyResetHint } from '@shared/date'
 import styles from './FeaturedBombSquad.module.css'
 
 /* Featured BombSquad section — handoff §6.4. The left art panel is the
@@ -26,6 +27,7 @@ export default function FeaturedBombSquad() {
           <div className={styles.dailyPanel}>
             <h3 className={styles.sideTitle}>今日挑战</h3>
             <DailyCountdown size="lg" className={styles.countdown} />
+            <p className={styles.resetHint}>{getDailyResetHint()}</p>
           </div>
         </div>
       </div>

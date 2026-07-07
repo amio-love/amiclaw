@@ -4,6 +4,7 @@
 // / window.yaoShort). `ganzhi` is a Phase-1 placeholder per handoff §9 — the
 // production build should swap in a real lunar / 甲子 library.
 
+import { getTodayString } from '@shared/date'
 import { KW_LOOKUP, type HexEntry } from './kw-lookup'
 
 /** Yao 爻 value space: 6 老阴, 7 少阳, 8 少阴, 9 老阳. */
@@ -64,15 +65,19 @@ const TIANGAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', 
 const DIZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'] as const
 
 /**
- * Placeholder 干支 (sexagenary cycle) for a given date.
+ * Placeholder 干支 (sexagenary cycle) label for a product day.
  *
- * Per handoff §9: "production should swap in a real lunar / 甲子 library."
- * This naive offset against the 1984-02-02 甲子 epoch is accurate enough for
- * scaffold display but must not be used for actual divination logic.
+ * Takes the shared `YYYY-MM-DD` product-day string (the UTC date — see
+ * `@shared/date`), so the label always agrees with the arcade shell's daily
+ * reset and with the Gregorian date shown next to it. Per handoff §9:
+ * "production should swap in a real lunar / 甲子 library" — this naive offset
+ * against the 1984-02-02 甲子 epoch is accurate enough for scaffold display
+ * but must not be used for actual divination logic.
  */
-export function ganzhi(date: Date = new Date()): string {
+export function ganzhi(isoDate: string = getTodayString()): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
   const epoch = Date.UTC(1984, 1, 2) // 1984-02-02 = 甲子
-  const day = Math.floor((date.getTime() - epoch) / 86_400_000)
+  const day = Math.round((Date.UTC(y, m - 1, d) - epoch) / 86_400_000)
   const idx = ((day % 60) + 60) % 60
   return `${TIANGAN[idx % 10]}${DIZHI[idx % 12]}`
 }

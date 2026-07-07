@@ -293,6 +293,13 @@
   color: var(--y);
 }
 
+/* Day-boundary hint under the daily-loop status text. */
+.loopHint {
+  margin: 8px 0 0;
+  font: 400 11px / 1.4 var(--font-body);
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .loopActions {
   display: flex;
   flex: 0 0 132px;
