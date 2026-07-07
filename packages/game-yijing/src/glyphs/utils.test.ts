@@ -10,6 +10,7 @@ import {
   type YaoValue,
   type CoinSide,
 } from './utils'
+import { KW_LOOKUP } from './kw-lookup'
 
 describe('coinsToYao', () => {
   it('three heads sum to 9 (老阳)', () => {
@@ -113,5 +114,25 @@ describe('yaoShort', () => {
 
   it('returns the static-yang glyph for 7', () => {
     expect(yaoShort(7)).toBe('⚊')
+  })
+})
+
+/* All-64 lookup safety: a genuinely random three-coin cast can produce any of
+   the 2^6 = 64 binary keys, so the King Wen table must resolve every one of
+   them — no cast outcome may fall through to the `[0, '?', 'Unknown']`
+   fallback. */
+describe('KW_LOOKUP completeness', () => {
+  it('covers every possible 6-line cast outcome (all 64 binary keys)', () => {
+    for (let i = 0; i < 64; i++) {
+      const key = i.toString(2).padStart(6, '0')
+      expect(KW_LOOKUP[key]).toBeDefined()
+    }
+  })
+
+  it('maps the 64 keys onto the 64 distinct King Wen numbers', () => {
+    const numbers = new Set(Object.values(KW_LOOKUP).map(([n]) => n))
+    expect(numbers.size).toBe(64)
+    expect(Math.min(...numbers)).toBe(1)
+    expect(Math.max(...numbers)).toBe(64)
   })
 })

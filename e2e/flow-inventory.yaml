@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 24 active flows <-> 24 journey
-# scenarios, the regression size budget is 48 (2026-06-28, after the mode②
-# in-game voice-panel flow was added as a @playwright journey).
+# 2 x the journey-scenario count. With 25 active flows <-> 25 journey
+# scenarios, the regression size budget is 50 (2026-07-07, after the Yijing
+# Oracle honest-ritual flow was added as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -326,4 +326,22 @@ flows:
         settle-listening,
         session-teardown,
       ]
+    status: active
+
+  # === Yijing Oracle flows ====================================================
+  # The /oracle/ hash-routed SPA. The flow is an honest ritual: the cast is a
+  # FIXED demo example declared to the player as 卦例演示 (real randomness is
+  # blocked on the full 64-hexagram judgment dataset), every reading text is
+  # classical manual data, and no screen claims AI, voice, or mind-reading
+  # involvement (audit F24/F25 rework).
+
+  - id: oracle-honest-session
+    name: Yijing Oracle honest demo ritual
+    description: >-
+      A visitor walks the full oracle session — home → 2-pick projection →
+      six coin throws (fixed demo cast, labeled 卦例演示) → staged classical
+      reading (本卦 卦辞 → 变爻 爻辞 → 变卦 卦辞, no fabricated dialogue) →
+      sign card with 今日提点 — and no screen in the flow renders an AI /
+      voice / mind-reading claim.
+    steps: [oracle-home, projection-picks, demo-cast, classical-reading, sign-card]
     status: active

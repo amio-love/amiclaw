@@ -38,6 +38,20 @@ column previously labeled 失误 (mistakes) actually shows which attempt of the
 day set the time — a flawless first-try win read as "1 mistake". The column is
 now labeled 用时 · 尝试 and each row reads 第 N 次.
 
+**The Oracle now tells the truth about itself** - Change. The Yijing Oracle
+flow made zero AI or voice calls while labeling its reading「Claude · 中文」and
+showing「AI 读心 / 语音对话中 / 正在说话」, and its「不太对」branch fabricated a
+player quote that was never spoken. All AI, voice, and mind-reading claims are
+removed: the reading screen is now a paced reveal of the classical texts
+themselves (本卦 卦辞 → 变爻 爻辞 → 变卦 卦辞), the sign card's「AI 洞见」became
+今日提点 sourced from the classical gloss, and the fixed demo cast is declared
+as 卦例演示 on every screen that shows it — including the coin screen's replay
+button and the homepage sample signs, which no longer masquerade as play
+history. The daily checklist and sign-save feedback no longer call the demo
+cast a「真实卦签」— the per-day check-in act stays real, the sign content is a
+declared demo. Real random casting stays off until the manual carries all 64
+hexagram texts; the current data covers 3 of 64.
+
 **Daily Arcade loop and streaks** - New. The homepage now shows a real daily
 checklist for BombSquad and Oracle, result pages show profile-save and share
 feedback, and the leaderboard now includes a public streak board for claimed

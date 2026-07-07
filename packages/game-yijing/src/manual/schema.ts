@@ -102,12 +102,15 @@ export interface CastingGuideValues {
 export interface CastingGuide {
   method: 'three-coin'
   values: CastingGuideValues
-  /** Ordered prose steps the AI follows when interpreting a cast. */
+  /** Ordered prose interpretation steps — Phase-2 oracle-ai-engine contract.
+   *  Unconsumed by the current no-AI flow: PageReading hardcodes its own
+   *  stage order (卦辞+卦象 → 变爻 → 变卦), which happens to match. */
   interpretation_order: string[]
 }
 
 export interface ProjectionGuide {
-  /** Multi-paragraph instruction the AI reads when fusing image signals. */
+  /** Multi-paragraph image-signal fusion instruction — Phase-2
+   *  oracle-ai-engine contract; unconsumed while the flow makes no AI calls. */
   instruction: string
   dimension_labels: {
     relationship: string

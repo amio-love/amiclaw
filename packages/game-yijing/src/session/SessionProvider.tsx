@@ -6,7 +6,7 @@
 
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { YaoSextet } from '../glyphs/utils'
-import type { ColdReadingPhase, ProjArtId, SessionContextValue, VoiceState } from './types'
+import type { ProjArtId, RevealStage, SessionContextValue } from './types'
 
 export const SessionContext = createContext<SessionContextValue | null>(null)
 
@@ -16,8 +16,7 @@ interface StoredSession {
   picked: ProjArtId[]
   yaoValues: YaoSextet | null
   castCreatedAt?: string | null
-  phase: ColdReadingPhase
-  voiceState: VoiceState
+  stage?: RevealStage
   sessionId: string
 }
 
@@ -49,10 +48,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const [castCreatedAt, setCastCreatedAt] = useState<string | null>(
     () => loadStored()?.castCreatedAt ?? null
   )
-  const [phase, setPhaseState] = useState<ColdReadingPhase>(() => loadStored()?.phase ?? 0)
-  const [voiceState, setVoiceStateState] = useState<VoiceState>(
-    () => loadStored()?.voiceState ?? 'idle'
-  )
+  const [stage, setStageState] = useState<RevealStage>(() => loadStored()?.stage ?? 0)
   const [sessionId, setSessionId] = useState<string>(
     () => loadStored()?.sessionId ?? crypto.randomUUID()
   )
@@ -68,12 +64,8 @@ export function SessionProvider({ children }: SessionProviderProps) {
     setCastCreatedAt(new Date().toISOString())
   }, [])
 
-  const setPhase = useCallback((next: ColdReadingPhase) => {
-    setPhaseState(next)
-  }, [])
-
-  const setVoiceState = useCallback((next: VoiceState) => {
-    setVoiceStateState(next)
+  const setStage = useCallback((next: RevealStage) => {
+    setStageState(next)
   }, [])
 
   const reset = useCallback(() => {
@@ -90,8 +82,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     setPicked([])
     setYaoValuesState(null)
     setCastCreatedAt(null)
-    setPhaseState(0)
-    setVoiceStateState('idle')
+    setStageState(0)
     setSessionId(crypto.randomUUID())
   }, [])
 
@@ -103,43 +94,38 @@ export function SessionProvider({ children }: SessionProviderProps) {
         picked,
         yaoValues,
         castCreatedAt,
-        phase,
-        voiceState,
+        stage,
         sessionId,
       }
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
     } catch {
       // Swallow — full quota, disabled storage, serialization failure.
     }
-  }, [picked, yaoValues, castCreatedAt, phase, voiceState, sessionId])
+  }, [picked, yaoValues, castCreatedAt, stage, sessionId])
 
   const value = useMemo<SessionContextValue>(
     () => ({
       picked,
       yaoValues,
       castCreatedAt,
-      phase,
-      voiceState,
+      stage,
       sessionId,
       pickImage,
       clearPicks,
       setYaoValues,
-      setPhase,
-      setVoiceState,
+      setStage,
       reset,
     }),
     [
       picked,
       yaoValues,
       castCreatedAt,
-      phase,
-      voiceState,
+      stage,
       sessionId,
       pickImage,
       clearPicks,
       setYaoValues,
-      setPhase,
-      setVoiceState,
+      setStage,
       reset,
     ]
   )

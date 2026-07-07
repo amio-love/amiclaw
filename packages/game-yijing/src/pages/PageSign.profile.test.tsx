@@ -59,7 +59,7 @@ describe('PageSign arcade profile write', () => {
 
     expect(mocks.recordOracleLocalSign).not.toHaveBeenCalled()
     expect(mocks.submitArcadeProfileEvent).not.toHaveBeenCalled()
-    expect(screen.getByText('等待真实卦签')).toBeTruthy()
+    expect(screen.getByText('尚未起卦')).toBeTruthy()
   })
 
   it('saves a real cast sign locally and submits it for logged-in accounts', async () => {

@@ -8,21 +8,27 @@ import {
 } from '@amiclaw/arcade-profile/local'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
 import { Hexagram } from '../glyphs'
-import { changedValues, ganzhi, hexagramFromBinary, type YaoSextet } from '../glyphs/utils'
+import {
+  changedValues,
+  changingLines,
+  ganzhi,
+  hexagramFromBinary,
+  type YaoSextet,
+} from '../glyphs/utils'
+import { hexagramByNumber } from '../manual'
 import { useSession } from '../session'
 import styles from './PageSign.module.css'
 
 /* Sign — handoff §6.5. Shareable oracle card with header / hex row /
-   judgment / divider / insight / vermilion seal foot. Demo data falls back
-   to 同人 #13 → 无妄 #25 when the session hasn't cast yet (e.g. direct
+   judgment / divider / takeaway / vermilion seal foot. Every text on the
+   card is manual data for the cast hexagrams (classical judgment + its
+   modern gloss) — no AI-attributed content. Demo data falls back to
+   同人 #13 → 无妄 #25 when the session hasn't cast yet (e.g. direct
    navigation, Phase-1 persistence is sessionStorage-only). */
 
 /* Fallback to the canonical demo cast result (handoff prototype). */
 const DEMO_YAO: YaoSextet = [7, 8, 9, 7, 7, 7]
 
-const JUDGMENT = '同人于野，亨。利涉大川，利君子贞。'
-const INSIGHT =
-  '在协同与方向之间，你正寻求一致。占据更高视角，便能看见同心而异轨者亦可同人——主动停一停，不是放弃，是让真正的同行人显形。'
 type SaveState = 'demo' | 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
 type ShareState = 'idle' | 'shared' | 'copied' | 'error'
 
@@ -39,8 +45,22 @@ export function PageSign() {
 
   const values: YaoSextet = yaoValues ?? DEMO_YAO
   const changed = changedValues(values) as unknown as YaoSextet
-  const [, benCn] = hexagramFromBinary(values)
+  const [benNumber, benCn] = hexagramFromBinary(values)
   const [, bianCn] = hexagramFromBinary(changed)
+
+  // Card texts are manual data for the cast hexagram: the classical judgment,
+  // plus the first changing line's modern gloss as the takeaway (falling back
+  // to the judgment gloss when the cast has no changing lines).
+  const benEntry = hexagramByNumber(benNumber)
+  const judgment = benEntry?.judgment.classical ?? ''
+  const firstChangingLine = (() => {
+    if (!benEntry) return undefined
+    const position = changingLines(values)[0]
+    if (position === undefined) return undefined
+    return benEntry.lines.find((line) => line.position === position + 1)
+  })()
+  const takeaway =
+    firstChangingLine?.modern_interpretation ?? benEntry?.judgment.modern_interpretation ?? ''
 
   useEffect(() => {
     if (yaoValues === null) {
@@ -81,8 +101,9 @@ export function PageSign() {
   }, [bianCn, benCn, castCreatedAt, sessionId, yaoValues])
 
   const shareText = useCallback(
-    () => `AMIO 游乐场今日卦签：${benCn} → ${bianCn}。${INSIGHT} ${window.location.origin}/oracle/`,
-    [benCn, bianCn]
+    () =>
+      `AMIO 游乐场今日卦签：${benCn} → ${bianCn}。${takeaway} ${window.location.origin}/oracle/`,
+    [benCn, bianCn, takeaway]
   )
 
   const handleShare = useCallback(async () => {
@@ -167,11 +188,11 @@ export function PageSign() {
             </div>
           </div>
 
-          <div className={styles.judgment}>{JUDGMENT}</div>
+          <div className={styles.judgment}>{judgment}</div>
 
-          <div className={styles.divider}>AI 洞见</div>
+          <div className={styles.divider}>今日提点</div>
 
-          <div className={styles.insight}>{INSIGHT}</div>
+          <div className={styles.insight}>{takeaway}</div>
 
           <div className={styles.foot}>
             <div className={styles.footUrl}>claw.amio.fans/oracle</div>
@@ -191,7 +212,7 @@ export function PageSign() {
                 ? '本次卦签没有写入档案；请重新问卦后再试。'
                 : yaoValues === null
                   ? 'Demo 卦签不会写入档案。'
-                  : '真实卦签已计入今日清单。'}
+                  : '本次卦签已计入今日清单。'}
             </span>
             {shareState !== 'idle' && (
               <span className={styles.feedbackMeta}>{shareStatusText(shareState)}</span>
@@ -258,7 +279,7 @@ function saveStatusText(state: SaveState): string {
     case 'saving':
       return '保存中…'
     default:
-      return '等待真实卦签'
+      return '尚未起卦'
   }
 }
 

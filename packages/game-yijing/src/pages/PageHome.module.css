@@ -170,6 +170,7 @@
   gap: 10px;
   align-items: stretch;
 }
+/* Display-only sample tile — deliberately no cursor/hover affordance. */
 .pastCard {
   flex: 1;
   padding: 12px 14px;
@@ -179,14 +180,6 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-decoration: none;
-  color: inherit;
-}
-.pastCard:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.15);
 }
 .pastD {
   font: 500 10px var(--amio-font-mono);
