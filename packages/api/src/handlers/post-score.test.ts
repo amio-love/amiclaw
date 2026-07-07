@@ -215,7 +215,7 @@ describe('handlePostScore — run_id idempotency', () => {
     expect(entries?.[0]).toMatchObject({ rank: 1, time_ms: 130_000, run_id: 'run-x' })
   })
 
-  it('appends runs that carry distinct run_ids', async () => {
+  it('appends runs that carry distinct run_ids from different devices', async () => {
     const kv = new FakeKV()
     const date = new Date().toISOString().slice(0, 10)
     await kv.put(
@@ -233,5 +233,143 @@ describe('handlePostScore — run_id idempotency', () => {
     expect(response.status).toBe(200)
     const entries = (await kv.get(`leaderboard:${date}`, 'json')) as LeaderboardEntry[] | null
     expect(entries).toHaveLength(2)
+  })
+})
+
+describe('handlePostScore — one row per player per day', () => {
+  type StoredRow = LeaderboardEntry & { run_id?: string; device_id?: string }
+  const date = new Date().toISOString().slice(0, 10)
+
+  it('replaces the player row when a new run beats their existing best', async () => {
+    const kv = new FakeKV()
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        {
+          rank: 1,
+          nickname: '小明',
+          time_ms: 150_000,
+          attempt_number: 1,
+          device_id: VALID_DEVICE_ID,
+          run_id: 'run-1',
+        },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(submission({ time_ms: 130_000, attempt_number: 2, run_id: 'run-2' })),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const entries = (await kv.get(`leaderboard:${date}`, 'json')) as StoredRow[] | null
+    expect(entries).toHaveLength(1)
+    expect(entries?.[0]).toMatchObject({ rank: 1, time_ms: 130_000, attempt_number: 2 })
+  })
+
+  it('keeps the existing best and ranks it when a new run is slower', async () => {
+    const kv = new FakeKV()
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        {
+          rank: 1,
+          nickname: '小红',
+          time_ms: 100_000,
+          attempt_number: 1,
+          device_id: 'cccccccc-dddd-4eee-9fff-000000000000',
+          run_id: 'run-other',
+        },
+        {
+          rank: 2,
+          nickname: '小明',
+          time_ms: 120_000,
+          attempt_number: 1,
+          device_id: VALID_DEVICE_ID,
+          run_id: 'run-1',
+        },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(
+        submission({
+          time_ms: 150_000,
+          module_times: [45_000, 40_000, 35_000, 29_000],
+          attempt_number: 2,
+          run_id: 'run-2',
+        })
+      ),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const entries = (await kv.get(`leaderboard:${date}`, 'json')) as StoredRow[] | null
+    // The slower retry did not create a second row for the player.
+    expect(entries).toHaveLength(2)
+    expect(entries?.[1]).toMatchObject({ rank: 2, time_ms: 120_000, attempt_number: 1 })
+    // The response rank points at the player's kept (best) row.
+    const body = (await response.json()) as { rank: number; total_players: number }
+    expect(body.rank).toBe(2)
+    expect(body.total_players).toBe(2)
+  })
+
+  it('keeps same-nickname submissions from different devices as separate rows', async () => {
+    const kv = new FakeKV()
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        {
+          rank: 1,
+          nickname: '小明',
+          time_ms: 120_000,
+          attempt_number: 1,
+          device_id: 'cccccccc-dddd-4eee-9fff-000000000000',
+          run_id: 'run-other',
+        },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(submission({ time_ms: 130_000, run_id: 'run-mine' })),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const entries = (await kv.get(`leaderboard:${date}`, 'json')) as StoredRow[] | null
+    expect(entries).toHaveLength(2)
+  })
+
+  it('keeps per-day boards independent — a submission never touches another day', async () => {
+    const kv = new FakeKV()
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    await kv.put(
+      `leaderboard:${yesterday}`,
+      JSON.stringify([
+        {
+          rank: 1,
+          nickname: '小明',
+          time_ms: 150_000,
+          attempt_number: 1,
+          device_id: VALID_DEVICE_ID,
+          run_id: 'run-old',
+        },
+      ])
+    )
+
+    const response = await handlePostScore(
+      request(submission({ time_ms: 130_000, run_id: 'run-new' })),
+      kv as unknown as KVNamespace
+    )
+
+    expect(response.status).toBe(200)
+    const todayEntries = (await kv.get(`leaderboard:${date}`, 'json')) as StoredRow[] | null
+    const yesterdayEntries = (await kv.get(`leaderboard:${yesterday}`, 'json')) as
+      | StoredRow[]
+      | null
+    expect(todayEntries).toHaveLength(1)
+    expect(todayEntries?.[0]).toMatchObject({ time_ms: 130_000 })
+    expect(yesterdayEntries).toHaveLength(1)
+    expect(yesterdayEntries?.[0]).toMatchObject({ time_ms: 150_000 })
   })
 })

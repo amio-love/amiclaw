@@ -37,7 +37,7 @@ Feature: Mobile internal-beta layout regression guards
     When I open /leaderboard
     Then the nickname wraps onto multiple lines inside the "玩家" column
     And the rendered table width does not exceed the 320px viewport
-    And the "用时 · 失误" column header and every time and attempt value stay fully visible
+    And the "用时 · 尝试" column header and every time and attempt value stay fully visible
     And no horizontal scrolling and no silently clipped column occurs
 
   # bug: L3-1 — WireModule's transparent .wire-hit-target click proxy had

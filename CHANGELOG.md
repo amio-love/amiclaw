@@ -26,6 +26,18 @@ real 15-minute single-use validity, hints at the spam folder, and offers a
 cooldown-gated resend button plus an honest note of the 5-per-hour send cap. A
 换一个邮箱 link returns to the form to fix a typo.
 
+**One leaderboard row per player per day** - Fix. Replaying the daily challenge
+no longer stacks duplicate rows on the leaderboard: each player keeps a single
+row showing their best time of the day, and slower retries never displace it.
+Older duplicate rows are also collapsed when the board is read. The attempt
+counter now accumulates across tabs and browser restarts within the same day,
+so a retry can no longer present itself as a first attempt.
+
+**Honest attempt column on the daily leaderboard** - Fix. The daily leaderboard
+column previously labeled 失误 (mistakes) actually shows which attempt of the
+day set the time — a flawless first-try win read as "1 mistake". The column is
+now labeled 用时 · 尝试 and each row reads 第 N 次.
+
 **Daily Arcade loop and streaks** - New. The homepage now shows a real daily
 checklist for BombSquad and Oracle, result pages show profile-save and share
 feedback, and the leaderboard now includes a public streak board for claimed

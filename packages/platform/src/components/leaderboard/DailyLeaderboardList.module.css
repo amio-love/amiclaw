@@ -14,7 +14,7 @@
 /* Column grid is shared by the header and every row. Fixed track widths
    (not the prototype's 36px / 70px) keep the header and rows aligned: each
    row is its own grid container, so the rank track must fit a #1402-scale
-   rank and the score track the widest「用时 · 失误」value. */
+   rank and the score track the widest「用时 · 尝试」value. */
 .headRow,
 .row {
   display: grid;

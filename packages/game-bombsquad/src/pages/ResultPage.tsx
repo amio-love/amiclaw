@@ -302,7 +302,16 @@ export default function ResultPage() {
         setSubmitFailKind(null)
         setSubmitFailMessage(null)
         setRankResult(result.data)
-        recordOptimistic(submission, result.data)
+        // The board keeps one row per player — the day's best. Only seed an
+        // optimistic entry when this run IS the personal best; a slower retry
+        // never appears on the board, so an optimistic copy of it would show
+        // the player a phantom second row next to their real best.
+        if (
+          result.data.personal_best_ms === undefined ||
+          submission.time_ms <= result.data.personal_best_ms
+        ) {
+          recordOptimistic(submission, result.data)
+        }
         try {
           sessionStorage.removeItem(`pending-score:${submission.date}`)
         } catch {
