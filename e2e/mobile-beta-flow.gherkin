@@ -1,8 +1,10 @@
 # Mobile internal-beta — the daily win-to-leaderboard path a friend follows on
-# their phone: a defused daily run -> /bombsquad/result recap -> PostGameModal
-# nickname + AI metadata gate -> score submission -> /leaderboard ranking.
-# Daily mode is used deliberately so the modal and the leaderboard segment are
-# exercised.
+# their phone: a defused daily run -> /bombsquad/result celebration (rank-
+# reveal-first, no auto-opened modal) -> honest not-on-board notice -> the
+# rank-card CTA opens the deferrable nickname + AI metadata gate -> score
+# submission -> /leaderboard ranking. Daily mode is used deliberately so the
+# gate and the leaderboard segment are exercised, including the skip-and-
+# reopen (deferred fill) beat.
 #
 # Restructured for the e2e harness: each scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
@@ -30,14 +32,16 @@ Feature: Mobile internal-beta daily win to leaderboard
 
   # Source: daily-win-to-leaderboard
   @playwright
-  Scenario: A first daily win collects a nickname, posts the score, and shows my leaderboard row
+  Scenario: A first daily win celebrates first, then collects a nickname on demand and shows my leaderboard row
     Given I have just defused the bomb in a daily run and the result page is open
     And no nickname is stored on this device
     Then I see the heading "拆弹成功"
     And I see the total run time
     And the module breakdown lists all 4 modules without horizontal overflow
-    And the NicknameModal is open and covers the screen
-    And the NicknameModal has no close button and cannot be dismissed by tapping the backdrop
+    And the result page shows the honest not-on-board notice
+
+    When I open the leaderboard submission modal
+    Then the leaderboard modal can be deferred and reopened
 
     When I type a nickname into the NicknameModal input
     And I choose AI assistant "Claude"

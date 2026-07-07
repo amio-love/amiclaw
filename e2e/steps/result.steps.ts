@@ -72,22 +72,31 @@ Then('the module breakdown lists all 4 modules without horizontal overflow', asy
   expect(overflow).toBeLessThanOrEqual(1)
 })
 
-Then('the NicknameModal is open and covers the screen', async ({ page }) => {
+Then('the result page shows the honest not-on-board notice', async ({ page }) => {
+  // Rank-reveal-first (audit F1): no auto-opened modal over the celebration;
+  // the rank card states the run is not on the board and offers the fill CTA.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText('这局成绩还没上榜')).toBeVisible()
+  await expect(page.getByRole('button', { name: '填写并上榜' })).toBeVisible()
+})
+
+When('I open the leaderboard submission modal', async ({ page }) => {
+  await page.getByRole('button', { name: '填写并上榜' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText('给自己起个名字')).toBeVisible()
 })
 
-Then(
-  'the NicknameModal has no close button and cannot be dismissed by tapping the backdrop',
-  async ({ page }) => {
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('button', { name: '关闭' })).toHaveCount(0)
-    // Tap the backdrop (top-left corner, outside the centered dialog panel).
-    await page.mouse.click(8, 8)
-    await expect(dialog).toBeVisible()
-  }
-)
+Then('the leaderboard modal can be deferred and reopened', async ({ page }) => {
+  // Skip path: 稍后再说 closes the gate, the run stays off the board with the
+  // CTA still offered; deferred-fill path: the CTA reopens the same gate.
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: '稍后再说', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText('这局成绩还没上榜')).toBeVisible()
+  await page.getByRole('button', { name: '填写并上榜' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+})
 
 When('I type a nickname into the NicknameModal input', async ({ page }) => {
   await page.getByRole('dialog').getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
@@ -142,12 +151,17 @@ Then(
 // --- Leaderboard submission assertion (shared by mobile-beta + game-modes) ----
 
 Then('the leaderboard submission carries a plausible time', async ({ world, page }) => {
-  // A daily-win submission only fires once the NicknameModal is confirmed.
-  // Scenarios that do not walk the modal explicitly (e.g. game-modes "defuse
-  // all four modules") still need the POST to have happened — confirm a
-  // pending modal here so the captured body can be asserted.
+  // A first daily-win submission only fires once the deferred leaderboard
+  // gate is filled. Scenarios that do not walk the gate explicitly (e.g.
+  // game-modes "defuse all four modules") still need the POST to have
+  // happened — open the gate from the rank-card CTA when it is not already
+  // open, then confirm it, so the captured body can be asserted.
   if (world.leaderboard.submissions.length === 0) {
     const dialog = page.getByRole('dialog')
+    if ((await dialog.count()) === 0) {
+      const cta = page.getByRole('button', { name: '填写并上榜' })
+      if ((await cta.count()) > 0) await cta.click()
+    }
     if ((await dialog.count()) > 0 && (await dialog.getByRole('textbox').count()) > 0) {
       await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
       const assistant = dialog.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true })

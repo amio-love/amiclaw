@@ -49,8 +49,9 @@ interface PostGameModalProps {
   open: boolean
   /**
    * Render the nickname section. When true the section is required and gates
-   * confirm — the modal also becomes non-dismissable (no Esc / backdrop / skip)
-   * because a daily score cannot post without a nickname.
+   * confirm — but the modal stays dismissable: skipping defers the leaderboard
+   * submission (the run is simply not on the board yet) rather than blocking
+   * the result screen.
    */
   showNickname: boolean
   /**
@@ -66,7 +67,7 @@ interface PostGameModalProps {
    * `survey_submit` event when `result.survey` is set.
    */
   onConfirm: (result: PostGameModalResult) => void
-  /** Fired when a survey-only modal is dismissed without submitting. */
+  /** Fired when the modal is dismissed without submitting (skip / Esc / backdrop). */
   onSkip: () => void
 }
 
@@ -74,13 +75,14 @@ interface PostGameModalProps {
  * Unified post-game modal — never two stacked dialogs.
  *
  * Composes two optional sections:
- *  - Nickname: required first-submission gate for the daily leaderboard.
+ *  - Nickname / AI metadata: the leaderboard submission gate for a first
+ *    daily win. Deferrable — skipping keeps the run off the board and the
+ *    caller re-offers the gate later (the result page's 上榜 CTA).
  *  - Survey: a 4-question endgame survey, shown once per device.
  *
- * The modal opens when EITHER section is needed. Dismissability is
- * conditional: with the nickname section present the modal is non-dismissable
- * (no close affordance, Esc / backdrop inert); when only the survey shows it
- * is dismissable via the skip button, Esc, or a backdrop click.
+ * Every shape is dismissable via the skip button, Esc, or a backdrop click;
+ * only the skip semantics differ (the caller retires a skipped survey but
+ * keeps a skipped leaderboard gate re-openable).
  *
  * Styled in the Atlas star-chart visual language — a glass-card dialog on a
  * dimmed cosmic backdrop with the AMIO-yellow accent (docs/DesignSystem.md).
@@ -115,19 +117,20 @@ export default function PostGameModal({
   const q3Id = `${baseId}-q3`
   const q4Id = `${baseId}-q4`
 
-  // Non-dismissable whenever a leaderboard submission gate is present.
-  const dismissable = showSurvey && !showNickname && !showLeaderboardMetadata
+  // The survey-only shape keeps its stricter submit gating and its 跳过
+  // wording; leaderboard shapes defer with 稍后再说 instead.
+  const surveyOnly = showSurvey && !showNickname && !showLeaderboardMetadata
 
-  // Esc closes a survey-only modal. Registered before the early return so the
+  // Esc dismisses every shape. Registered before the early return so the
   // hook order stays stable across renders.
   useEffect(() => {
-    if (!open || !dismissable) return
+    if (!open) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onSkip()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, dismissable, onSkip])
+  }, [open, onSkip])
 
   if (!open) return null
 
@@ -148,7 +151,7 @@ export default function PostGameModal({
   // the survey-only modal — which always offers a separate skip affordance
   // anyway. Whenever the nickname section is present, confirm needs only a
   // valid nickname; a partially-filled survey is dropped silently on confirm.
-  const canConfirm = nicknameOk && leaderboardMetadataOk && (dismissable ? surveyComplete : true)
+  const canConfirm = nicknameOk && leaderboardMetadataOk && (surveyOnly ? surveyComplete : true)
 
   const handleConfirm = () => {
     if (!canConfirm) return
@@ -203,7 +206,7 @@ export default function PostGameModal({
   }
 
   return (
-    <div className={styles.overlay} role="presentation" onClick={dismissable ? onSkip : undefined}>
+    <div className={styles.overlay} role="presentation" onClick={onSkip}>
       <div
         className={styles.dialog}
         role="dialog"
@@ -212,11 +215,14 @@ export default function PostGameModal({
         aria-describedby={showNickname ? nicknameTipId : undefined}
         onClick={(event) => event.stopPropagation()}
       >
-        {dismissable && (
-          <button type="button" className={styles.closeBtn} onClick={onSkip} aria-label="跳过问卷">
-            ✕
-          </button>
-        )}
+        <button
+          type="button"
+          className={styles.closeBtn}
+          onClick={onSkip}
+          aria-label={surveyOnly ? '跳过问卷' : '关闭'}
+        >
+          ✕
+        </button>
 
         <h2 id={titleId} className={styles.title}>
           {showNickname
@@ -440,15 +446,19 @@ export default function PostGameModal({
             </section>
           )}
 
+          {!surveyOnly && (
+            // Honest deferral note for the leaderboard gate: skipping keeps
+            // the run off the board, and the result page re-offers the fill.
+            <p className={styles.tip}>现在跳过也可以 —— 成绩暂不上榜，稍后可在结果页补填。</p>
+          )}
+
           <div className={styles.actions}>
             <Button variant="primary" type="submit" full disabled={!canConfirm}>
               {showNickname ? '确认' : '提交'}
             </Button>
-            {dismissable && (
-              <Button variant="ghost" full onClick={onSkip}>
-                跳过
-              </Button>
-            )}
+            <Button variant="ghost" full onClick={onSkip}>
+              {surveyOnly ? '跳过' : '稍后再说'}
+            </Button>
           </div>
         </form>
       </div>

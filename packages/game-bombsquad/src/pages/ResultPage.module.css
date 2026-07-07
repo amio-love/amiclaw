@@ -206,8 +206,35 @@
 }
 
 .rankPending {
-  font: 400 13px var(--font-body);
+  font: 400 13px/1.6 var(--font-body);
   color: var(--soft);
+}
+
+/* The deferred leaderboard-gate CTA inside the rank card — the fill-and-rank
+   entry a first-win player uses after (or instead of) skipping the modal. */
+.boardCta {
+  display: block;
+  margin: 10px auto 0;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 229, 62, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 229, 62, 0.1);
+  color: var(--y);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.boardCta:hover {
+  background: rgba(255, 229, 62, 0.18);
+  border-color: var(--y);
+}
+
+.boardCta:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
 }
 
 .retryBtn {
