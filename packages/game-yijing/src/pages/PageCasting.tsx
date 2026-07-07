@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@amiclaw/ui'
+import { castThrow, type CoinThrow } from '../casting'
 import { CoinTrio, Hexagram, Yao } from '../glyphs'
 import {
   changedValues,
+  changingLines,
   hexagramFromBinary,
   yaoLabel,
   type CoinSide,
@@ -16,32 +18,14 @@ import styles from './PageCasting.module.css'
 
 /* PageCasting — handoff §6.3 起卦.
 
-   Six coin throws deterministically resolve to DEMO_VALUES = [7, 8, 9, 7, 7, 7]
-   (bottom-up), producing 天火同人 #13 with one changing line at 九三 → 天雷无妄
-   #25. The fixed cast is DECLARED to the player as a 卦例演示 (demo example) —
-   the UI must never present it as a random cast. Real randomness
-   (crypto.getRandomValues per three-coin throw) is blocked on content: the
-   manual carries judgment/line texts for only 3 of 64 hexagrams, and shipping
-   a random cast whose reading text exists for 3/64 outcomes would be a worse
-   lie than the labeled demo. Swap in real randomness only together with the
-   full 64-hexagram manual dataset. */
+   Every tap performs a REAL three-coin throw (crypto.getRandomValues, see
+   src/casting.ts): yao values 6/7/8/9 land with the canonical
+   1/8 · 3/8 · 3/8 · 1/8 odds. Six throws build the 本卦 bottom-up; changing
+   lines (6/9) derive the 变卦. The ghost CTA discards the throws and starts a
+   fresh cast (重新起卦). */
 
-const DEMO_VALUES: YaoSextet = [7, 8, 9, 7, 7, 7]
 const FLIP_MS = 850
 const STEP_LABEL = ['初', '二', '三', '四', '五', '上']
-
-/** Map a yao value back to canonical coin sides for visual continuity. */
-function sidesFor(v: YaoValue): readonly CoinSide[] {
-  // 3 heads → 9, 2 heads → 8, 1 head → 7, 0 heads → 6.
-  return (
-    {
-      6: ['tails', 'tails', 'tails'],
-      7: ['heads', 'tails', 'tails'],
-      8: ['heads', 'heads', 'tails'],
-      9: ['heads', 'heads', 'heads'],
-    } as const
-  )[v]
-}
 
 /** Fill the unfinished hexagram with placeholder yang so Hexagram can
  *  still receive a fixed-shape sextet; `drawn={N}` hides the unset rows. */
@@ -54,48 +38,66 @@ export function PageCasting() {
   const { setYaoValues } = useSession()
   const navigate = useNavigate()
 
-  const [throwIdx, setThrowIdx] = useState(0) // 0..6 — number of throws completed
+  const [throws, setThrows] = useState<CoinThrow[]>([])
   const [flipping, setFlipping] = useState(false)
   const [sides, setSides] = useState<readonly CoinSide[]>(['heads', 'heads', 'tails'])
 
-  const valuesSoFar = DEMO_VALUES.slice(0, throwIdx)
+  const valuesSoFar = throws.map((t) => t.value)
   const lastValue = valuesSoFar[valuesSoFar.length - 1] as YaoValue | undefined
-  const done = throwIdx >= 6
+  const done = throws.length >= 6
 
   // Push the final sextet into the session as soon as the 6th throw lands so
   // /reading and /sign can rely on yaoValues being set.
   useEffect(() => {
-    if (done) setYaoValues(DEMO_VALUES)
-  }, [done, setYaoValues])
+    if (throws.length === 6) {
+      setYaoValues(throws.map((t) => t.value) as unknown as YaoSextet)
+    }
+  }, [throws, setYaoValues])
 
   const doThrow = () => {
     if (done) {
       navigate('/reading')
       return
     }
+    const next = castThrow()
     setFlipping(true)
-    const nextV = DEMO_VALUES[throwIdx] as YaoValue
     window.setTimeout(() => {
-      setSides(sidesFor(nextV))
+      setSides(next.sides)
       setFlipping(false)
-      setThrowIdx((i) => i + 1)
+      setThrows((prev) => (prev.length >= 6 ? prev : [...prev, next]))
     }, FLIP_MS)
   }
 
   const reset = () => {
-    setThrowIdx(0)
+    setThrows([])
     setSides(['heads', 'heads', 'tails'])
     setFlipping(false)
   }
 
-  const [benNumber, benName] = hexagramFromBinary(DEMO_VALUES)
-  const variantValues = changedValues(DEMO_VALUES) as unknown as YaoSextet
-  const [bianNumber, bianName] = hexagramFromBinary(variantValues)
-  const benJudgment = hexagramByNumber(benNumber)?.judgment.classical
+  // Reveal-panel derivations — meaningful only once all six throws landed.
+  const castValues = done ? (valuesSoFar as unknown as YaoSextet) : null
+  const [benNumber, benName] = castValues ? hexagramFromBinary(castValues) : [0, '']
+  const variantValues = castValues ? (changedValues(castValues) as unknown as YaoSextet) : null
+  const [bianNumber, bianName] = variantValues ? hexagramFromBinary(variantValues) : [0, '']
+  const benEntry = castValues ? hexagramByNumber(benNumber) : undefined
+  const benJudgment = benEntry?.judgment.classical
+  const changingNames = castValues
+    ? changingLines(castValues).map(
+        (idx) => benEntry?.lines.find((line) => line.position === idx + 1)?.name ?? ''
+      )
+    : []
+  const changingLabel =
+    changingNames.length === 6
+      ? benEntry?.extra_line
+        ? `六爻皆变 · 读${benEntry.extra_line.label}`
+        : '六爻皆变'
+      : changingNames.length > 0
+        ? `变爻在${changingNames.join('、')}`
+        : '无变爻'
 
   // Progress index for the run-header step pill — current throw is N+1
   // until done.
-  const stepIndex = done ? 6 : Math.min(throwIdx + 1, 6)
+  const stepIndex = done ? 6 : Math.min(throws.length + 1, 6)
 
   const resultPill = (() => {
     if (done) return null
@@ -121,9 +123,9 @@ export function PageCasting() {
     ? '继续 · 读卦辞 →'
     : flipping
       ? '投掷中…'
-      : throwIdx === 0
+      : throws.length === 0
         ? '投币 →'
-        : `投第 ${throwIdx + 1} 爻 →`
+        : `投第 ${throws.length + 1} 爻 →`
 
   return (
     <main className={styles.page}>
@@ -144,7 +146,7 @@ export function PageCasting() {
         <div className={styles.title}>起卦</div>
         <div className={styles.meta}>
           <div className={styles.metaLead}>{done ? '完成' : `第 ${stepIndex} / 6 次`}</div>
-          <div className={styles.metaSub}>投币 · 第 2 步 · 卦例演示</div>
+          <div className={styles.metaSub}>投币 · 第 2 步 · 三枚硬币</div>
         </div>
       </header>
 
@@ -154,8 +156,8 @@ export function PageCasting() {
           {Array.from({ length: 6 }).map((_, i) => {
             const cls = [
               styles.seg,
-              i < throwIdx && styles.segDone,
-              i === throwIdx && !done && styles.segActive,
+              i < throws.length && styles.segDone,
+              i === throws.length && !done && styles.segActive,
             ]
               .filter(Boolean)
               .join(' ')
@@ -169,12 +171,12 @@ export function PageCasting() {
         </div>
 
         {/* result pill OR reveal panel */}
-        {!done ? (
+        {!castValues || !variantValues ? (
           <div className={styles.result}>{resultPill}</div>
         ) : (
           <div className={styles.reveal}>
             <div className={styles.revealHexRow}>
-              <Hexagram values={DEMO_VALUES} size={88} lineH={11} gap={5} />
+              <Hexagram values={castValues} size={88} lineH={11} gap={5} />
               <div className={styles.revealArrow}>→</div>
               <Hexagram values={variantValues} size={88} lineH={11} gap={5} />
             </div>
@@ -184,7 +186,7 @@ export function PageCasting() {
               <span className={styles.revealNameBian}>{bianName}</span>
             </div>
             <div className={styles.revealMeta}>
-              卦例演示 · 本卦 #{benNumber} · 变卦 #{bianNumber} · 变爻在九三
+              本卦 #{benNumber} · 变卦 #{bianNumber} · {changingLabel}
             </div>
             {benJudgment && <div className={styles.revealJudgment}>「{benJudgment}」</div>}
           </div>
@@ -195,7 +197,7 @@ export function PageCasting() {
           <div className={styles.hexCard}>
             <div className={styles.hexHead}>
               <span className={styles.hexLabel}>本卦 · 构建中</span>
-              <span className={styles.hexCount}>{throwIdx} / 6 爻</span>
+              <span className={styles.hexCount}>{throws.length} / 6 爻</span>
             </div>
             <div className={styles.hexBody}>
               <div className={styles.hexNumbers}>
@@ -217,11 +219,11 @@ export function PageCasting() {
                   )
                 })}
               </div>
-              {/* Re-key on throwIdx so `drawn-grow` replays each throw. */}
-              <div key={throwIdx} className={styles.hexAnim}>
+              {/* Re-key on throw count so `drawn-grow` replays each throw. */}
+              <div key={throws.length} className={styles.hexAnim}>
                 <Hexagram
                   values={pad(valuesSoFar)}
-                  drawn={throwIdx}
+                  drawn={throws.length}
                   size={108}
                   lineH={12}
                   gap={6}
@@ -231,11 +233,11 @@ export function PageCasting() {
           </div>
         )}
 
-        {/* CTA row — the ghost button replays the SAME fixed demo cast, so it
-            is labeled as a replay, never as a re-randomization. */}
+        {/* CTA row — the ghost button discards the current throws and starts a
+            fresh random cast. */}
         <div className={styles.cta}>
           <Button variant="ghost" onClick={reset} className={styles.ctaFull}>
-            重看演示
+            重新起卦
           </Button>
           <Button
             variant="primary"

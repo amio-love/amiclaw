@@ -1,9 +1,9 @@
 // Manual YAML schema — TypeScript mirror of yijing-oracle-design.md §卦辞手册结构.
 // Single source of truth for the YAML shape consumed by oracle-ai-engine + game-yijing.
 //
-// Phase 1 (this scaffold): `demo-data.ts` provides one demo hexagram against this schema.
-// Phase 2 (sibling 2 / later): full 64-hex YAML, projection image catalog,
-// daily-manual derivation, and (probably) a js-yaml loader pipeline.
+// `data.ts` provides the full 64-hexagram base manual against this schema
+// (hexagram content in `hexagrams/`). Still open for a later phase:
+// curated projection image catalog + daily-manual derivation.
 
 export interface ManualMetadata {
   type: 'yijing-oracle'
@@ -59,12 +59,23 @@ export interface HexagramImage {
   modern_interpretation: string
 }
 
-/** A single yao entry (one of the six lines, plus optional 用九 / 用六 in 乾 / 坤). */
+/** A single yao entry — one of the six positioned lines. 用九 / 用六 live in
+ *  `HexagramEntry.extra_line`, not here. */
 export interface HexagramLine {
   /** Bottom-up position, 1..6. */
   position: 1 | 2 | 3 | 4 | 5 | 6
   /** Chinese line name, e.g. `初九`, `九二`, ..., `上九` / `上六`. */
   name: string
+  classical: string
+  modern_interpretation: string
+  changing_guidance: string
+}
+
+/** 乾/坤-only special line (用九 / 用六). Canonical reading rule: when a cast
+ *  in 乾 or 坤 has ALL SIX lines changing, the reading uses this text in
+ *  place of the six individual 爻辞. */
+export interface HexagramExtraLine {
+  label: '用九' | '用六'
   classical: string
   modern_interpretation: string
   changing_guidance: string
@@ -88,6 +99,8 @@ export interface HexagramEntry {
   image: HexagramImage
   /** Six entries, ordered by `position` 1..6. */
   lines: HexagramLine[]
+  /** Present only on 乾 #1 (用九) and 坤 #2 (用六). */
+  extra_line?: HexagramExtraLine
   relationships?: HexagramRelationships
 }
 

@@ -5,23 +5,9 @@ import { ganzhi, type YaoSextet } from '../glyphs/utils'
 import styles from './PageHome.module.css'
 
 /* Home — handoff §6.1. Cosmic stage + Scenery backdrop, taiji hero, today
-   strip, draw-card CTA, sample-sign row, BombSquad cross-link.
-   The sample row shows OTHER hexagrams as visual examples and is labeled
-   样例 — it must never masquerade as the visitor's own play history
-   (historical persistence is Phase-2 work). */
-
-interface SampleEntry {
-  name: string
-  values: YaoSextet
-  hex: number
-}
-
-/* Three sample hexagrams so first-time visitors see what a sign looks like. */
-const SAMPLE_ENTRIES: SampleEntry[] = [
-  { name: '水风井', values: [8, 7, 7, 8, 7, 8], hex: 48 },
-  { name: '山泽损', values: [7, 7, 8, 7, 7, 8], hex: 41 },
-  { name: '火天大有', values: [7, 7, 7, 7, 8, 7], hex: 14 },
-]
+   strip, draw-card CTA, BombSquad cross-link. The cast is a real three-coin
+   random cast (crypto randomness, full 64-hexagram manual), so the draw card
+   carries no demo caveat. */
 
 /* Mini icon on the draw-card — 6-yao mix used by the handoff prototype. */
 const DRAW_PREVIEW: YaoSextet = [7, 8, 7, 6, 7, 8]
@@ -66,9 +52,9 @@ export function PageHome() {
 
           <div className={styles.drawCard}>
             <div className={styles.drawL}>
-              <div className={styles.drawLbl}>卦例演示</div>
+              <div className={styles.drawLbl}>今日卦签</div>
               <div className={styles.drawTtl}>投一次硬币，读一卦</div>
-              <div className={styles.drawSub}>2–3 分钟 · 当前为固定卦例 · 生成一张卦签</div>
+              <div className={styles.drawSub}>2–3 分钟 · 三枚硬币起卦 · 生成一张卦签</div>
             </div>
             <div className={styles.drawR}>
               <Hexagram values={DRAW_PREVIEW} size={36} lineH={5} gap={3} />
@@ -78,18 +64,6 @@ export function PageHome() {
                 开始问卦 →
               </Button>
             </div>
-          </div>
-
-          {/* Display-only samples — not links: tapping one used to open the
-              /sign demo card showing a DIFFERENT hexagram than the tile. */}
-          <div className={styles.pastRow}>
-            {SAMPLE_ENTRIES.map((p) => (
-              <div key={p.hex} className={styles.pastCard}>
-                <div className={styles.pastD}>样例</div>
-                <div className={styles.pastN}>{p.name}</div>
-                <Hexagram values={p.values} size={28} lineH={4} gap={2} />
-              </div>
-            ))}
           </div>
 
           <a

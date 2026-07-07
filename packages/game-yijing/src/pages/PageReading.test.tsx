@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SessionProvider } from '../session'
 import { PageReading } from './PageReading'
@@ -10,13 +10,27 @@ import { PageReading } from './PageReading'
    tapped「不太对」, a user-voice line the player never spoke. The rework
    replaced that with a paced reveal of manual data only:
      stage 0 — 本卦 卦辞 + 卦象
-     stage 1 — + 变爻 爻辞 (demo cast: 九三)
+     stage 1 — + 变爻 爻辞 (this cast: 九三)
      stage 2 — + 变卦 卦辞 + sign CTA
-   The demo fallback cast is 同人 #13 → 无妄 #25 with 九三 changing. */
+   The screen reads the session's cast; without one it redirects home (no
+   demo fallback). Tests seed 同人 #13 → 无妄 #25 with 九三 changing. */
 
 // The fabricated user-voice line that the ✗ branch used to inject — must
 // never render anywhere in the flow again.
 const FABRICATED_USER_LINE = '「不是关系本身，而是『要不要继续往前走』。」'
+
+// Matches SessionProvider's StoredSession shape.
+const CAST_SESSION = {
+  picked: ['a', 'b'],
+  yaoValues: [7, 8, 9, 7, 7, 7],
+  castCreatedAt: '2026-07-07T08:00:00.000Z',
+  stage: 0,
+  sessionId: 'reading-test-session',
+}
+
+function seedCastSession() {
+  sessionStorage.setItem('amiclaw-yijing-session-v1', JSON.stringify(CAST_SESSION))
+}
 
 function renderPage() {
   return render(
@@ -31,8 +45,28 @@ function renderPage() {
 const advance = () => fireEvent.click(screen.getByRole('button', { name: '继续 · 往下读 →' }))
 
 describe('PageReading staged reveal', () => {
-  beforeEach(() => sessionStorage.clear())
+  beforeEach(() => {
+    sessionStorage.clear()
+    seedCastSession()
+  })
   afterEach(cleanup)
+
+  it('redirects home when the session has no cast', () => {
+    sessionStorage.clear()
+    render(
+      <SessionProvider>
+        <MemoryRouter initialEntries={['/reading']}>
+          <Routes>
+            <Route path="/home" element={<div>HOME-LANDING</div>} />
+            <Route path="/reading" element={<PageReading />} />
+          </Routes>
+        </MemoryRouter>
+      </SessionProvider>
+    )
+
+    expect(screen.getByText('HOME-LANDING')).toBeTruthy()
+    expect(screen.queryByText('解卦')).toBeNull()
+  })
 
   it('stage 0 shows the 本卦 judgment and image, nothing beyond', () => {
     renderPage()

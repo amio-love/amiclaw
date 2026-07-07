@@ -63,7 +63,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ───── right column (today / draw / past / cross-link) ───── */
+/* ───── right column (today / draw / cross-link) ───── */
 .rightCol {
   display: flex;
   flex-direction: column;
@@ -162,33 +162,6 @@
   width: 100%;
   padding: 14px 20px;
   font-size: 14px;
-}
-
-/* ───── past row ───── */
-.pastRow {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
-}
-/* Display-only sample tile — deliberately no cursor/hover affordance. */
-.pastCard {
-  flex: 1;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--hairline);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.pastD {
-  font: 500 10px var(--amio-font-mono);
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.12em;
-}
-.pastN {
-  font: 400 14px var(--font-display);
-  color: #fff;
 }
 
 /* ───── cross-link (dashed BombSquad pointer) ───── */

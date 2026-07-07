@@ -1,13 +1,17 @@
 import type { HexagramEntry } from './schema'
-import { demoManual } from './demo-data'
+import { manual } from './data'
 
 export type * from './schema'
-export { demoManual, demoHexagram } from './demo-data'
+export { manual } from './data'
+export { HEXAGRAMS } from './hexagrams'
+
+const byNumber = new Map<number, HexagramEntry>(
+  manual.hexagrams.map((entry) => [entry.number, entry])
+)
 
 /** Look up a hexagram's manual entry by its King Wen number.
- *  Returns undefined when the manual does not carry that hexagram — the
- *  current demo manual covers only 乾 #1 / 同人 #13 / 无妄 #25, so callers
- *  MUST handle the miss instead of assuming full 64-hexagram coverage. */
+ *  The manual carries the full 64-hexagram dataset, so every valid King Wen
+ *  number (1..64) resolves; `undefined` only for out-of-range input. */
 export function hexagramByNumber(kingWenNumber: number): HexagramEntry | undefined {
-  return demoManual.hexagrams.find((entry) => entry.number === kingWenNumber)
+  return byNumber.get(kingWenNumber)
 }
