@@ -52,7 +52,9 @@ export function PageProjection() {
               不用说出口，选两张此刻最有感觉的图。
             </p>
           </div>
-          <p className={styles.hint}>没有对错。它们是你的影子，AI 稍后会从中读你的心。</p>
+          <p className={styles.hint}>
+            没有对错。选图只是仪式的一部分，帮你把心里那件事想得更清楚。
+          </p>
         </div>
 
         <div className={styles.grid}>

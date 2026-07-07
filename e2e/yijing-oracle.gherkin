@@ -1,0 +1,48 @@
+# Yijing Oracle — the /oracle/ hash-routed SPA (home → projection → casting →
+# reading → sign). The flow is an honest ritual after the F24/F25 rework: the
+# cast is a FIXED demo example declared to the player as 卦例演示, every
+# reading text is classical manual data, and no screen claims AI, voice, or
+# mind-reading involvement. The coin-flip animation runs on a 850ms timer, so
+# the throw step drives the harness's controlled clock between taps.
+
+Feature: Yijing Oracle honest demo ritual
+  As a visitor to claw.amio.fans/oracle
+  I want to walk the full oracle session under honest labeling
+  So that I experience the divination ritual without being told an AI is reading my mind
+
+  # Source: oracle-honest-session
+  @playwright
+  Scenario: A visitor completes the oracle ritual and gets an honestly labeled sign card
+    Given I open /oracle/
+    Then the oracle route is "/home"
+    And the oracle page makes no AI, voice, or mind-reading claim
+    And I see the tip "卦例演示"
+
+    When I tap "开始问卦 →"
+    Then the oracle route is "/projection"
+    And the oracle page makes no AI, voice, or mind-reading claim
+
+    When I pick 2 projection images
+    And I tap "确认 · 开始投币 →"
+    Then the oracle route is "/casting"
+
+    When I complete the six coin throws
+    Then I see the tip "卦例演示 · 本卦 #13 · 变卦 #25 · 变爻在九三"
+    And the oracle page makes no AI, voice, or mind-reading claim
+
+    When I tap "继续 · 读卦辞 →"
+    Then the oracle route is "/reading"
+    And I see the tip "同人于野，亨。利涉大川，利君子贞。"
+    And the oracle page makes no AI, voice, or mind-reading claim
+
+    When I tap "继续 · 往下读 →"
+    Then I see the tip "伏戎于莽，升其高陵，三岁不兴。"
+
+    When I tap "继续 · 往下读 →"
+    Then I see the tip "无妄，元亨，利贞。其匪正有眚，不利有攸往。"
+
+    When I tap "生成今日卦签 →"
+    Then the oracle route is "/sign"
+    And I see the tip "今日提点"
+    And I see the tip "已保存到本设备"
+    And the oracle page makes no AI, voice, or mind-reading claim

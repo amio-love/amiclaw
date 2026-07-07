@@ -1,18 +1,15 @@
 // Session state shape for the yijing-oracle 5-screen flow.
-// Sibling 1 scaffold — sibling 2 wires real interactions into the actions.
-// Phase mapping per handoff §8 + design doc §AI 融合推测流程.
+// The reading screen is a staged classical-text reveal (no AI, no voice):
+// `stage` tracks how much of the reading has been revealed.
 
 import type { YaoSextet } from '../glyphs/utils'
 
 /** Stable identifiers for the 6 projection images (handoff §6.2). */
 export type ProjArtId = 'a' | 'b' | 'c' | 'd' | 'e' | 'f'
 
-/** Cold-reading sub-phase during the reading screen.
- *  0 = initial AI guess, 1 = after player correction, 2 = deep interpretation. */
-export type ColdReadingPhase = 0 | 1 | 2
-
-/** Voice I/O visual state used by the reading screen mic indicator. */
-export type VoiceState = 'speaking' | 'listening' | 'idle'
+/** Staged-reveal progress on the reading screen.
+ *  0 = 本卦 judgment, 1 = + changing-line texts, 2 = + 变卦 judgment (complete). */
+export type RevealStage = 0 | 1 | 2
 
 export interface SessionState {
   /** Player's projection choices — FIFO, max length 2 (handoff §8 / §6.2). */
@@ -24,11 +21,8 @@ export interface SessionState {
   /** ISO timestamp for the cast that produced `yaoValues`; null until cast completes. */
   castCreatedAt: string | null
 
-  /** Cold-reading sub-phase on the reading screen. */
-  phase: ColdReadingPhase
-
-  /** Voice indicator state. */
-  voiceState: VoiceState
+  /** Staged-reveal progress on the reading screen. */
+  stage: RevealStage
 
   /** Per-session identifier; new value each `reset()` (used by sign-generator). */
   sessionId: string
@@ -41,10 +35,8 @@ export interface SessionActions {
   clearPicks: () => void
   /** Record the cast result. */
   setYaoValues: (values: YaoSextet) => void
-  /** Advance / set the cold-reading sub-phase. */
-  setPhase: (phase: ColdReadingPhase) => void
-  /** Update the voice indicator state. */
-  setVoiceState: (state: VoiceState) => void
+  /** Advance / set the reading reveal stage. */
+  setStage: (stage: RevealStage) => void
   /** Wipe all session state and mint a fresh sessionId — used by "再问一次". */
   reset: () => void
 }

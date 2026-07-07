@@ -23,7 +23,7 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
     {
       id: 'oracle',
       title: 'Oracle 今日卦签',
-      detail: '完成真实卦签计入连续打卡',
+      detail: '走完起卦流程才计入连续打卡',
       href: '/oracle/#/home',
       completed: loop.checklist.oracle_sign.completed,
       completedAt: loop.checklist.oracle_sign.completed_at,

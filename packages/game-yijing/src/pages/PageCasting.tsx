@@ -10,6 +10,7 @@ import {
   type YaoSextet,
   type YaoValue,
 } from '../glyphs/utils'
+import { hexagramByNumber } from '../manual'
 import { useSession } from '../session'
 import styles from './PageCasting.module.css'
 
@@ -17,9 +18,13 @@ import styles from './PageCasting.module.css'
 
    Six coin throws deterministically resolve to DEMO_VALUES = [7, 8, 9, 7, 7, 7]
    (bottom-up), producing 天火同人 #13 with one changing line at 九三 → 天雷无妄
-   #25. Deterministic so the visual reveal is identical run-over-run during
-   Phase 1 sibling-2 stub work. TODO sibling-3 or Phase 2: swap to real random
-   three-coin sums + computed variant. */
+   #25. The fixed cast is DECLARED to the player as a 卦例演示 (demo example) —
+   the UI must never present it as a random cast. Real randomness
+   (crypto.getRandomValues per three-coin throw) is blocked on content: the
+   manual carries judgment/line texts for only 3 of 64 hexagrams, and shipping
+   a random cast whose reading text exists for 3/64 outcomes would be a worse
+   lie than the labeled demo. Swap in real randomness only together with the
+   full 64-hexagram manual dataset. */
 
 const DEMO_VALUES: YaoSextet = [7, 8, 9, 7, 7, 7]
 const FLIP_MS = 850
@@ -86,6 +91,7 @@ export function PageCasting() {
   const [benNumber, benName] = hexagramFromBinary(DEMO_VALUES)
   const variantValues = changedValues(DEMO_VALUES) as unknown as YaoSextet
   const [bianNumber, bianName] = hexagramFromBinary(variantValues)
+  const benJudgment = hexagramByNumber(benNumber)?.judgment.classical
 
   // Progress index for the run-header step pill — current throw is N+1
   // until done.
@@ -112,7 +118,7 @@ export function PageCasting() {
   })()
 
   const primaryLabel = done
-    ? '继续 · 让 AI 解读 →'
+    ? '继续 · 读卦辞 →'
     : flipping
       ? '投掷中…'
       : throwIdx === 0
@@ -138,7 +144,7 @@ export function PageCasting() {
         <div className={styles.title}>起卦</div>
         <div className={styles.meta}>
           <div className={styles.metaLead}>{done ? '完成' : `第 ${stepIndex} / 6 次`}</div>
-          <div className={styles.metaSub}>投币 · 第 2 步</div>
+          <div className={styles.metaSub}>投币 · 第 2 步 · 卦例演示</div>
         </div>
       </header>
 
@@ -178,9 +184,9 @@ export function PageCasting() {
               <span className={styles.revealNameBian}>{bianName}</span>
             </div>
             <div className={styles.revealMeta}>
-              本卦 #{benNumber} · 变卦 #{bianNumber} · 变爻在九三
+              卦例演示 · 本卦 #{benNumber} · 变卦 #{bianNumber} · 变爻在九三
             </div>
-            <div className={styles.revealJudgment}>「同人于野，亨。利涉大川，利君子贞。」</div>
+            {benJudgment && <div className={styles.revealJudgment}>「{benJudgment}」</div>}
           </div>
         )}
 
@@ -225,10 +231,11 @@ export function PageCasting() {
           </div>
         )}
 
-        {/* CTA row */}
+        {/* CTA row — the ghost button replays the SAME fixed demo cast, so it
+            is labeled as a replay, never as a re-randomization. */}
         <div className={styles.cta}>
           <Button variant="ghost" onClick={reset} className={styles.ctaFull}>
-            重新投
+            重看演示
           </Button>
           <Button
             variant="primary"

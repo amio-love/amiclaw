@@ -4,7 +4,7 @@
    on the right.
 
    Ports prototype/yijing/styles.css `.yj-cast*` sections verbatim. The
-   `coinFlip` / `barPulse` / `drawn-grow` @keyframes live in
+   `coinFlip` / `drawn-grow` @keyframes live in
    packages/game-yijing/src/styles/animations.css (yijing-wide).
 
    Local CSS variables avoid touching the global tokens.css. */
