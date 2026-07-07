@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 25 active flows <-> 25 journey
-# scenarios, the regression size budget is 50 (2026-07-07, after the Yijing
-# Oracle honest-ritual flow was added as a @playwright journey).
+# 2 x the journey-scenario count. With 26 active flows <-> 26 journey
+# scenarios, the regression size budget is 52 (2026-07-07, after the
+# leaderboard date-navigation flow was added as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -190,6 +190,21 @@ flows:
     steps: [landing, homepage-no-cyan, featured-bombsquad-yellow]
     status: active
 
+  - id: leaderboard-history-navigation
+    name: Leaderboard date navigation
+    description: >-
+      From the leaderboard page the player walks the daily time board back to
+      yesterday with the compact date switcher — exactly the window the KV
+      board retention guarantees (LEADERBOARD_RETENTION_DAYS = 2; the backend
+      TTL and the switcher window derive from the same shared constant).
+      前一天 loads yesterday's board from the same `?date=` API, both bounds
+      disable their arrow, and the retention boundary is stated honestly
+      under the board (更早的日榜未保存; durable personal records live in the
+      /me 7-day history) — an expired day is never rendered as a false empty
+      board.
+    steps: [leaderboard, date-switcher, yesterday-board, retention-boundary, back-to-today]
+    status: active
+
   - id: footer-to-privacy-policy
     name: Footer privacy policy navigation
     description: >-
@@ -249,6 +264,9 @@ flows:
       A signed-in visitor opens /me and sees the real-identity profile — the
       display name derived from the session email plus the email — and the
       honest empty stats state (没有成绩 + a play CTA), not fabricated numbers.
+      Accounts with records additionally get the 最近 7 天 per-day history
+      (打卡 / best daily time / 卦签), so yesterday's records stay visible
+      after the daily rollover; the empty account hides that section.
     steps: [account-page-signed-in, real-identity, honest-empty-stats]
     status: active
 

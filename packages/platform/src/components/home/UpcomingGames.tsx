@@ -38,6 +38,19 @@ function TileBody({ game, discordCue = false }: { game: UpcomingGame; discordCue
   return (
     <>
       <div className={`${styles.art} ${styles[game.artVariant]}`}>
+        {game.preview && (
+          /* Real gameplay capture behind the label; the gradient placeholder
+             stays underneath as the loading backdrop. Explicit dimensions +
+             the fixed panel height mean no layout shift. */
+          <img
+            className={styles.artShot}
+            src={game.preview.src}
+            width={game.preview.width}
+            height={game.preview.height}
+            loading="lazy"
+            alt={game.preview.alt}
+          />
+        )}
         <div className={artLabelClass}>{artLabel}</div>
       </div>
       <h5 className={styles.name}>

@@ -81,13 +81,19 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
 
 /* 每日 tab — the real leaderboard API. Lifts the fetch + optimistic
    merge/clear flow verbatim from the pre-Atlas LeaderboardPage so the
-   daily behavior carries zero regression. */
-export default function DailyLeaderboardList() {
-  const today = getTodayString()
+   daily behavior carries zero regression.
+
+   `date` selects which product day's board to show (defaults to today).
+   Optimistic entries are persisted per-date by the result page, so past
+   boards simply never find one. Callers that switch dates re-mount this
+   component (`key={date}`) so each board starts from a clean loading state. */
+export default function DailyLeaderboardList({ date }: { date?: string } = {}) {
+  const boardDate = date ?? getTodayString()
+  const isToday = boardDate === getTodayString()
   // Seed from any optimistic entry persisted by the result page so the player
   // sees their freshly-submitted row before the GET resolves.
   const [entries, setEntries] = useState<LeaderboardEntry[]>(() => {
-    const optimistic = loadOptimisticEntry(today)
+    const optimistic = loadOptimisticEntry(boardDate)
     return optimistic ? [optimistic] : []
   })
   const [loading, setLoading] = useState(true)
@@ -99,7 +105,7 @@ export default function DailyLeaderboardList() {
   // the mount path relies on the initial `loading: true` / `error: false` state,
   // and the retry handler resets both before calling this.
   const fetchEntries = useCallback(() => {
-    fetchLeaderboard(today).then((data) => {
+    fetchLeaderboard(boardDate).then((data) => {
       setLoading(false)
       if (data) {
         // Server response is authoritative. If an optimistic entry is still
@@ -107,18 +113,18 @@ export default function DailyLeaderboardList() {
         // flipped), splice it in at its claimed rank so the player still sees
         // it. Once the cache flips and the GET contains the real row, drop the
         // optimistic copy and let the server response stand on its own.
-        const optimistic = loadOptimisticEntry(today)
+        const optimistic = loadOptimisticEntry(boardDate)
         if (optimistic && !entriesContainOptimistic(data.entries, optimistic)) {
           setEntries(mergeOptimisticEntry(data.entries, optimistic))
         } else {
-          if (optimistic) clearOptimisticEntry(today)
+          if (optimistic) clearOptimisticEntry(boardDate)
           setEntries(data.entries)
         }
       } else {
         setError(true)
       }
     })
-  }, [today])
+  }, [boardDate])
 
   useEffect(() => {
     fetchEntries()
@@ -142,8 +148,13 @@ export default function DailyLeaderboardList() {
           <p className={styles.statusMuted}>若一直无法访问，可邮件 byheaven0912@gmail.com 反馈</p>
         </div>
       )}
+      {/* Callers never navigate past LEADERBOARD_RETENTION_DAYS, so an empty
+          board here genuinely means nobody made the board that day — never
+          that the day's data expired. */}
       {!loading && !error && entries.length === 0 && (
-        <p className={styles.status}>今日还没有成绩，来抢第一！</p>
+        <p className={styles.status}>
+          {isToday ? '今日还没有成绩，来抢第一！' : '这一天没有人上榜。'}
+        </p>
       )}
       {entries.length > 0 && <LeaderboardRows entries={entries} />}
     </>

@@ -1,5 +1,7 @@
+import { getProductDaysEndingAt } from '../../../shared/date'
 import type {
   ArcadeDailyLoopSummary,
+  ArcadeProfileHistoryDay,
   ArcadeProfileSummary,
   ArcadeStreakSummary,
   BombSquadProfileRun,
@@ -136,6 +138,45 @@ export function summarizeDailyLoop(input: {
   }
 }
 
+export const HISTORY_WINDOW_DAYS = 7
+
+/* Per-day record view over the last `HISTORY_WINDOW_DAYS` product days (today
+   first; the day window comes from the shared getProductDaysEndingAt so every
+   history surface derives its days from one source). Checklist booleans come
+   from the qualified activity dates — the same rules the streak uses — while
+   the showable records (best daily run, the day's sign) come from the run /
+   sign arrays. Callers with authoritative qualified dates beyond the capped
+   arrays (the D1 store) pass them in. */
+export function summarizeArcadeHistory(input: {
+  bombsquadRuns: BombSquadProfileRun[]
+  oracleSigns: OracleProfileSign[]
+  today: string
+  qualifiedBombSquadDates: QualifiedActivityDate[]
+  qualifiedOracleDates: QualifiedActivityDate[]
+}): ArcadeProfileHistoryDay[] {
+  const bombsquadDays = new Set(input.qualifiedBombSquadDates.map((item) => item.date))
+  const oracleDays = new Set(input.qualifiedOracleDates.map((item) => item.date))
+
+  return getProductDaysEndingAt(input.today, HISTORY_WINDOW_DAYS).map((date) => {
+    const dayRuns = input.bombsquadRuns.filter((run) => run.finished_at.slice(0, 10) === date)
+    return {
+      date,
+      bombsquad_daily_completed: bombsquadDays.has(date),
+      oracle_signed: oracleDays.has(date),
+      runs: dayRuns.length,
+      best_daily: bestRun(
+        dayRuns.filter((run) => run.mode === 'daily' && run.outcome === 'defused')
+      ),
+      // Signs key on sign_date (the day the sign is FOR); the newest created_at
+      // wins when a day was re-cast.
+      sign:
+        [...input.oracleSigns]
+          .filter((sign) => sign.sign_date === date)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null,
+    }
+  })
+}
+
 export function summarizeArcadeProfile(input: {
   profileId?: string
   bombsquadRuns: BombSquadProfileRun[]
@@ -150,12 +191,22 @@ export function summarizeArcadeProfile(input: {
 }): ArcadeProfileSummary {
   const bombsquadRuns = newerFirst(input.bombsquadRuns, (run) => run.finished_at)
   const oracleSigns = newerFirst(input.oracleSigns, (sign) => sign.created_at)
+  const qualifiedBombSquadDates =
+    input.qualifiedBombSquadDates ??
+    bombsquadRuns
+      .map(qualifiedBombSquadRunDate)
+      .filter((item): item is QualifiedActivityDate => item !== null)
+  const qualifiedOracleDates =
+    input.qualifiedOracleDates ??
+    oracleSigns
+      .map(qualifiedOracleSignDate)
+      .filter((item): item is QualifiedActivityDate => item !== null)
   const dailyLoop = summarizeDailyLoop({
     bombsquadRuns,
     oracleSigns,
     today: input.today,
-    qualifiedBombSquadDates: input.qualifiedBombSquadDates,
-    qualifiedOracleDates: input.qualifiedOracleDates,
+    qualifiedBombSquadDates,
+    qualifiedOracleDates,
   })
   const recentRun = bombsquadRuns[0] ?? null
   const recentSign = oracleSigns[0] ?? null
@@ -188,5 +239,12 @@ export function summarizeArcadeProfile(input: {
       recent: recentSign,
     },
     daily_loop: dailyLoop,
+    history: summarizeArcadeHistory({
+      bombsquadRuns,
+      oracleSigns,
+      today: input.today,
+      qualifiedBombSquadDates,
+      qualifiedOracleDates,
+    }),
   }
 }

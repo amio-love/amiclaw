@@ -1,3 +1,17 @@
+/* How many product days a daily board is retained, INCLUDING the board's own
+   day — the single source for both sides of the retention contract:
+   - backend: post-score derives the leaderboard KV TTL from it
+     (RETENTION_DAYS * 24h, refreshed per write), so a board written on day D
+     is guaranteed readable through all of day D+1 and expires during D+2;
+   - frontend: the leaderboard date switcher must not navigate past it —
+     rendering an expired day would show a false「无人上榜」for a board whose
+     data simply was not retained.
+   Older per-player records live durably in the arcade profile (D1 /
+   localStorage) and stay visible via the /me 7-day history; they cannot
+   reconstruct the public board (anonymous submissions never reach D1, and
+   account rows carry no public nickname). */
+export const LEADERBOARD_RETENTION_DAYS = 2
+
 export interface ScoreSubmission {
   date: string // YYYY-MM-DD
   nickname: string // max 20 chars, sanitized server-side

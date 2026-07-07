@@ -17,6 +17,9 @@ export interface UpcomingGame {
      /oracle/ for the Yijing Oracle build merged into game/dist/oracle/).
      'soon' / 'dev' tiles leave this undefined and stay non-clickable. */
   href?: string
+  /* Real gameplay screenshot filling the art panel (playable games only —
+     honest UI, no mockups). Unset tiles keep their gradient placeholder. */
+  preview?: { src: string; width: number; height: number; alt: string }
 }
 
 export const upcomingGames: UpcomingGame[] = [
@@ -27,6 +30,13 @@ export const upcomingGames: UpcomingGame[] = [
     status: 'preview',
     artVariant: 'oracle',
     href: '/oracle/',
+    preview: {
+      // Live-product capture: the 起卦 coin-cast moment, hexagram half built.
+      src: '/previews/oracle-cast.webp',
+      width: 480,
+      height: 1039,
+      alt: '易经签卜实拍：三枚硬币投掷起卦中',
+    },
   },
   {
     id: 'echo',

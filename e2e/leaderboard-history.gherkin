@@ -1,0 +1,34 @@
+# Daily leaderboard date navigation — the compact date switcher on the
+# BombSquad daily time board walks exactly the days the board storage retains
+# (LEADERBOARD_RETENTION_DAYS = 2: today + yesterday; daily boards live in KV
+# with a retention-derived TTL, so older boards expire and must NOT be
+# navigable — rendering one would show a false「无人上榜」). The retention
+# boundary is stated honestly under the board. Past boards read from the same
+# `?date=` leaderboard API; the harness route mock answers per-date once a
+# scenario seeds per-day boards.
+
+Feature: Daily leaderboard history navigation
+  As a player who missed yesterday's board before the daily rollover
+  I want to browse yesterday's leaderboard
+  So that yesterday's ranks stay reachable instead of vanishing at reset
+
+  Background:
+    Given I open /
+
+  # Source: leaderboard-history-navigation
+  @playwright
+  Scenario: Browsing yesterday's daily board and returning to today
+    Given today's daily board has entries and yesterday's board has one entry
+    When I open the leaderboard page
+    Then the daily board shows today's entries
+    And the 后一天 control is disabled
+    And the daily board states its retention boundary honestly
+
+    When I switch the daily board to 前一天
+    Then the daily board shows yesterday's entry
+    And the daily board date label reads 昨天
+    And the 前一天 control is disabled
+
+    When I switch the daily board to 后一天
+    Then the daily board shows today's entries
+    And the daily board date label reads 今天

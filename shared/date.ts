@@ -5,6 +5,24 @@ export function getTodayString(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10) // YYYY-MM-DD (UTC product day)
 }
 
+/* The `count` product days ending at the `today` product day (inclusive),
+   newest first. The SINGLE derivation source for every recent-history day
+   window — the /me history summary, the leaderboard date switcher — so the
+   surfaces cannot drift apart on day boundaries. */
+export function getProductDaysEndingAt(today: string, count: number): string[] {
+  const [year, month, day] = today.split('-').map(Number)
+  const anchor = Date.UTC(year, month - 1, day)
+  return Array.from({ length: count }, (_, offset) =>
+    new Date(anchor - offset * 86_400_000).toISOString().slice(0, 10)
+  )
+}
+
+/* The most recent `count` product days, today first, anchored on the same UTC
+   product-day source as getTodayString. */
+export function getRecentProductDays(count: number, now: Date = new Date()): string[] {
+  return getProductDaysEndingAt(getTodayString(now), count)
+}
+
 /* Render a `YYYY-MM-DD` string as the Chinese date form
    `YYYY 年 M 月 D 日`, stripping leading zeros from month and day.
    Defaults to today when no argument is given. */

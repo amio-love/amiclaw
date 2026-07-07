@@ -50,6 +50,7 @@
 }
 
 .art {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,6 +58,19 @@
   margin-bottom: 16px;
   border-radius: var(--radius-lg);
   overflow: hidden;
+}
+
+/* Real gameplay screenshot filling the art panel. `object-position` pins the
+   upper band of the portrait capture (the coins / board), and the fixed panel
+   height keeps the tile CLS-free while the lazy image loads over the
+   gradient backdrop. */
+.artShot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
 }
 
 .echo {
@@ -87,10 +101,13 @@
 }
 
 .artLabel {
+  /* Sits above the (optional) .artShot gameplay capture. */
+  position: relative;
   font: 600 22px var(--font-display);
   letter-spacing: 0.04em;
   color: #fff;
   mix-blend-mode: screen;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
 }
 
 .artLabelCn {
