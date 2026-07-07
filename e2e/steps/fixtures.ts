@@ -6,8 +6,9 @@
  *
  *  1. Controlled clock — `pinClockOnLanding` runs the canonical
  *     `clock.install({time:T-BUF})` -> `goto('/')` -> `clock.pauseAt(T)`
- *     recipe so the daily run-seed (`getRunSeed('daily')` === `Date.now()`)
- *     is pinned to exactly `T`. The seed-reading `/bombsquad/run` route is
+ *     recipe so the run-seed (`getRunSeed()` === `Date.now()`, both daily and
+ *     practice — practice re-randomizes per run under its fixed manual) is
+ *     pinned to exactly `T`. The seed-reading `/bombsquad/run` route is
  *     reached by in-app client-side navigation, so `GamePage` mounts under an
  *     already-frozen clock. `advance` / `fastForwardPast` step the clock.
  *  2. Route mocking — the manual, leaderboard and events network routes are
@@ -301,7 +302,7 @@ export class World {
    * advance(700); that also pushes Date.now() to seedT+700, so re-pin the clock
    * back to seedT with setSystemTime (which fires no timers and keeps the clock
    * paused) before the run navigation — otherwise GamePage's getRunSeed reads a
-   * shifted Date.now() and generates a daily puzzle that no longer matches
+   * shifted Date.now() and generates a puzzle that no longer matches
    * answers.json. Step 2 ends with a plain 进入游戏 navigation; the run then
    * auto-starts on the GamePage side (no separate 开始 gate any more). Assumes
    * the manual link is already copied.

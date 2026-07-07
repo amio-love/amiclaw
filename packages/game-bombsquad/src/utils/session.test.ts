@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PRACTICE_SEED,
   commitAttemptNumberForMode,
   commitDailyAttemptNumber,
   createGameRunId,
@@ -26,9 +25,12 @@ function createStorageStub(initialEntries: Record<string, string> = {}) {
 }
 
 describe('session utilities', () => {
-  it('uses a fixed seed for practice mode', () => {
-    expect(getRunSeed('practice')).toBe(PRACTICE_SEED)
-    expect(getRunSeed('daily', 123456)).toBe(123456)
+  it('draws a fresh wall-clock seed for every run — practice included', () => {
+    expect(getRunSeed(123456)).toBe(123456)
+    const before = Date.now()
+    const seed = getRunSeed()
+    expect(seed).toBeGreaterThanOrEqual(before)
+    expect(seed).toBeLessThanOrEqual(Date.now())
   })
 
   it('creates a non-empty run identity', () => {

@@ -5,6 +5,12 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Practice mode rotates its puzzle** - Change. Every practice run now draws a
+fresh random bomb within the unchanged practice manual's rules, so replaying
+practice is real practice instead of answer recall. The manual players hand
+their AI stays exactly the same; solvability guarantees match the daily
+generator.
+
 **First daily win celebrates before it asks** - Change. Defusing the daily bomb
 now lands on the result celebration directly: the nickname / AI-partner modal no
 longer auto-opens over the screen. The rank card states honestly that the run is
