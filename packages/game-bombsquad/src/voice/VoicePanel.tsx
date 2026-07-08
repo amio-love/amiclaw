@@ -42,6 +42,14 @@ export interface VoicePanelHandle {
    * contract.
    */
   requestClosing: (outcome?: RecapOutcome) => Promise<void>
+  /**
+   * End the session cleanly: send `{type:'end'}` exactly once so the server
+   * hands the session summary to the consolidator (companion-memory capture).
+   * Called on settlement, AFTER the closing recap drains, so the finished
+   * co-play run becomes a memory. The abrupt unmount-close remains the
+   * crash / network fallback (no capture). See `useVoiceSession.endSession`.
+   */
+  endSession: () => void
 }
 
 /**
@@ -94,6 +102,7 @@ function VoicePanelImpl(
     isAiSpeaking,
     error,
     requestClosing,
+    endSession,
   } = useVoiceSession({
     gameRunId,
     manualData,
@@ -101,7 +110,7 @@ function VoicePanelImpl(
     gameId,
   })
 
-  useImperativeHandle(ref, () => ({ requestClosing }), [requestClosing])
+  useImperativeHandle(ref, () => ({ requestClosing, endSession }), [requestClosing, endSession])
 
   // Report the live utterance for the top subtitle strip. Cleared on unmount
   // so the strip vanishes with the session (run exit / navigation).

@@ -576,7 +576,18 @@ export default function GamePage() {
       return
     }
 
-    panel.requestClosing(recapOutcome).then(doNavigate, doNavigate)
+    panel.requestClosing(recapOutcome).then(() => {
+      // Clean session conclusion: the closing recap drained. Send `{type:'end'}`
+      // (exactly once, guarded in the hook) so the server hands this co-play
+      // run's summary to the companion consolidator — this is the seam that
+      // turns a finished game into a memory. THEN navigate; the panel unmounts
+      // on navigation and its cleanup does an abrupt `ws.close()`, which without
+      // the `end` above would skip the capture entirely. The reject / hard-max
+      // timeout paths fall through to `doNavigate` with NO `end` — an abrupt
+      // close there loses the capture, which is acceptable on a degraded path.
+      panel.endSession()
+      doNavigate()
+    }, doNavigate)
 
     return () => {
       settled = true

@@ -66,8 +66,15 @@ vi.mock('./voice/VoicePanel', async () => {
   return {
     __esModule: true,
     default: React.forwardRef(
-      (_props: unknown, ref: React.Ref<{ requestClosing: () => Promise<void> }>) => {
-        React.useImperativeHandle(ref, () => ({ requestClosing: () => closing.promise }))
+      (
+        _props: unknown,
+        ref: React.Ref<{ requestClosing: () => Promise<void>; endSession: () => void }>
+      ) => {
+        React.useImperativeHandle(ref, () => ({
+          requestClosing: () => closing.promise,
+          // GamePage calls this on the clean recap-drained settlement path.
+          endSession: () => {},
+        }))
         return React.createElement('div', { 'data-testid': 'mock-voice-panel' })
       }
     ),

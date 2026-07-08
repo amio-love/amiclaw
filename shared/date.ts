@@ -23,6 +23,21 @@ export function getRecentProductDays(count: number, now: Date = new Date()): str
   return getProductDaysEndingAt(getTodayString(now), count)
 }
 
+/* Whole product days (UTC dates) from `fromIso` up to `now`: the number of
+   UTC-midnight (08:00 Beijing) rollovers crossed between the two instants. Both
+   ends are anchored to their product day FIRST, so this counts CALENDAR
+   product-day boundaries, not elapsed 24h periods — a companion met at 23:48
+   Beijing is 1 product day old the very next morning, not a full day later.
+   Negative if `fromIso` is in the future; `NaN` for an unparseable `fromIso`.
+   The day-age source for companion presence: 认识第 N 天 == this delta + 1. */
+export function productDayDelta(fromIso: string, now: Date = new Date()): number {
+  const fromMs = Date.parse(fromIso)
+  if (Number.isNaN(fromMs)) return NaN
+  const [fy, fm, fd] = getTodayString(new Date(fromMs)).split('-').map(Number)
+  const [ty, tm, td] = getTodayString(now).split('-').map(Number)
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000)
+}
+
 /* Render a `YYYY-MM-DD` string as the Chinese date form
    `YYYY 年 M 月 D 日`, stripping leading zeros from month and day.
    Defaults to today when no argument is given. */
