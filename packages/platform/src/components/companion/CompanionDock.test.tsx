@@ -44,6 +44,16 @@ vi.mock('@/lib/companion-api', () => ({
   fetchMemories: apiMocks.fetchMemories,
   putVoicePosture: apiMocks.putVoicePosture,
 }))
+// Pin the flag OFF for this file: it is the flag-OFF honesty suite (the lobby
+// NEVER touches the mic, the button carries the honest in-game-voice note). That
+// code path is still live and must stay pinned even though the SHIPPED flag is
+// now true — the flag-ON auto-voice sequence is pinned separately in
+// CompanionDock.lobby-voice.test.tsx (which mocks the flag on). Mocking the flag
+// per file makes each suite test its own path independent of the shipped value.
+vi.mock('./lobby-voice', () => ({
+  LOBBY_VOICE_CAPABLE: false,
+  LOBBY_VOICE_NOTE: '语音陪伴在拆弹局内可用，进入每日挑战开启。',
+}))
 
 import CompanionDock from './CompanionDock'
 

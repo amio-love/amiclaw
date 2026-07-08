@@ -137,6 +137,8 @@ function emptyArcadeProfile(profileId?: string) {
 // observable, then short enough that its `onended` lets the panel settle back to
 // "聆听中" (listening) well within the assertion window.
 const VOICE_REPLY_TEXT = '把红色的线接到第三个接线柱，先别动其它线。'
+/** The lobby (homepage) companion greeting — a social hello, not a defuse line. */
+const VOICE_LOBBY_REPLY_TEXT = '嘿，你回来啦。今天想不想再拆一颗？'
 /** PCM16 mono @16 kHz; the hook plays it back to set the "speaking" indicator. */
 const VOICE_AUDIO_SECONDS = 3
 const VOICE_AUDIO_BASE64 = Buffer.alloc(16_000 * VOICE_AUDIO_SECONDS * 2).toString('base64')
@@ -144,6 +146,8 @@ const VOICE_AUDIO_BASE64 = Buffer.alloc(16_000 * VOICE_AUDIO_SECONDS * 2).toStri
 interface VoiceMockState {
   /** The AI's stubbed text reply rendered by the panel for the opening greeting. */
   reply: string
+  /** The lobby (homepage) companion greeting — sent for `lobby-*` WS sessions. */
+  lobbyReply: string
   /** Base64 PCM16 16 kHz mono TTS payload streamed as the turn's audio. */
   audioBase64: string
   /** Captured client->server JSON frames (create / turn / end) for assertions. */
@@ -200,6 +204,7 @@ export class World {
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
+    lobbyReply: VOICE_LOBBY_REPLY_TEXT,
     audioBase64: VOICE_AUDIO_BASE64,
     clientFrames: [],
   }
@@ -677,11 +682,14 @@ export const test = base.extend<{ world: World }>({
           world.voice.clientFrames.push(frame as Record<string, unknown>)
           if (frame.type === 'create') {
             // AI-first: `created`, then the opening greeting (text then audio,
-            // `done` on the audio) with no client turn.
+            // `done` on the audio) with no client turn. A `lobby-*` session name
+            // (the homepage companion channel) gets the social lobby greeting; a
+            // `bombsquad-*` in-game session gets the defuse reply.
+            const greeting = ws.url().includes('/ai-ws/lobby-')
+              ? world.voice.lobbyReply
+              : world.voice.reply
             ws.send(JSON.stringify({ type: 'created', sessionId: 'e2e-voice-session' }))
-            ws.send(
-              JSON.stringify({ type: 'chunk', kind: 'text', text: world.voice.reply, done: false })
-            )
+            ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: greeting, done: false }))
             ws.send(
               JSON.stringify({
                 type: 'chunk',

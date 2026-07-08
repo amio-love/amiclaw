@@ -1,16 +1,20 @@
 # Companion presence layer (伙伴坞) — the persistent companion dock on the
 # platform shell, and the companion co-play default entry into the daily
-# challenge (companion-presence-design.md minimal slice).
+# challenge (companion-presence-design.md auto-voice-on-login sequence).
 #
 # Deterministic + hermetic: auth and the /api/companion* control plane are
 # route-mocked in fixtures.ts (world.signIn + world.companion + the settings
 # PUT capture); the memory album is an honest empty default, so the arrival
-# greeting renders its no-episode variant. While the lobby-voice capability
-# flag is off the lobby never touches mic / permission APIs — the mic button
-# surfaces the honest in-game-voice note instead (the full auto-voice
-# permission sequence is pinned flag-on by CompanionDock.lobby-voice.test.tsx);
-# the anonymous no-dock state is pinned by the CompanionDock unit tests (the
-# dock renders nothing without a session).
+# greeting renders its no-episode variant. The lobby-voice capability flag is
+# ON, so the ratified auto-voice-on-login sequence runs: the arrival greeting
+# TEXT lands first, then the microphone is requested, then — on grant — the
+# companion greets by VOICE with the streamed greeting as its live subtitle, or
+# — on denial — it lands as a quiet text presence and remembers the denial. The
+# microphone outcome is pinned deterministically per scenario (a getUserMedia
+# hook grants or denies, and records that the greeting text was on screen BEFORE
+# the request — the text-first invariant). The stubbed `/ai-ws/*` bridge answers
+# the homepage `lobby-*` session with the social lobby greeting. The anonymous
+# no-dock state is pinned by the CompanionDock unit tests.
 
 Feature: Companion presence dock and co-play entry
   As a signed-in player with a companion
@@ -23,13 +27,20 @@ Feature: Companion presence dock and co-play entry
 
   # Source: companion-dock-presence
   @playwright
-  Scenario: The dock greets on arrival and remembers a mute across the menu
-    When I open /
-    Then the companion dock shows "阿澈" with the arrival greeting
-    And the dock offers a mic button
+  Scenario: The companion greets by voice on arrival, then remembers a mute
+    When I open the homepage with the microphone granted
+    Then the arrival greeting text lands before the microphone is requested
+    And the companion greets by voice with the streamed greeting as its live subtitle
 
     When I mute the companion from the dock control menu
     Then the dock lands muted and quiet-remembered is persisted to the account
+
+  # Source: companion-dock-denied-voice
+  @playwright
+  Scenario: A denied microphone lands the companion as a quiet text presence
+    When I open the homepage with the microphone denied
+    Then the arrival greeting text lands before the microphone is requested
+    And the companion stays a quiet text presence and denied-remembered is persisted
 
   # Source: companion-coplay-entry
   @playwright

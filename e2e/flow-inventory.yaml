@@ -293,28 +293,51 @@ flows:
     status: active
 
   - id: companion-dock-presence
-    name: Companion dock presence and posture memory
+    name: Companion dock voice greeting and mute memory
     description: >-
       A signed-in player with a companion sees the persistent 伙伴坞 (companion
-      dock) above the tab bar on the platform shell: name + breathing pulse dot
-      + text region + mic button. Opening the homepage fires the arrival
-      greeting beat (节拍 1 — template-filled from real data; the harness's
-      empty album renders the honest no-episode variant) as a text bubble that
-      collapses into the dock line. While the lobby-voice capability flag is
-      off, the lobby NEVER requests the mic — the mic button carries the
-      honest note pointing at the in-game voice channel. Muting from the dock's
-      control menu freezes proactive beats, lands the dock in its 静音 state,
-      and persists the quiet-remembered posture to the account
-      (PUT /api/companion/settings) — future visits land quiet. The anonymous
-      no-dock state is pinned by the CompanionDock unit tests.
+      dock) on the platform shell. With lobby voice enabled, opening the homepage
+      runs the ratified auto-voice-on-login sequence: the arrival greeting TEXT
+      lands first (节拍 1 — template-filled from real data; the harness's empty
+      album renders the honest no-episode variant), THEN the microphone is
+      requested (the text-first invariant is pinned — the greeting was on screen
+      before the request), THEN on GRANT the lobby voice session opens over the
+      stubbed /ai-ws/lobby-* bridge and the streamed greeting becomes the dock
+      bubble's live subtitle (design Option B). Muting from the dock's control
+      menu closes the live channel, lands the dock in its 静音 state, and persists
+      the quiet-remembered posture to the account (PUT /api/companion/settings) —
+      future visits land quiet. The anonymous no-dock state is pinned by the
+      CompanionDock unit tests.
     steps:
       [
         signed-in-companion,
-        dock-visible,
-        arrival-greeting,
-        honest-voice-note,
+        arrival-greeting-text-first,
+        mic-granted,
+        voice-greeting-subtitle,
         dock-mute,
         posture-persisted,
+      ]
+    status: active
+
+  - id: companion-dock-denied-voice
+    name: Companion dock denied-microphone quiet presence
+    description: >-
+      A signed-in player with a companion whose microphone is DENIED during the
+      auto-voice-on-login sequence: the arrival greeting TEXT still lands first
+      (the text-first invariant holds — the greeting was on screen before the
+      permission request), but the request is refused, so no voice channel opens.
+      The companion lands as a quiet text presence (the dock's 静音 state), never
+      auto-requests the mic again, and the denial is persisted to the account
+      (denied-remembered posture via PUT /api/companion/settings) so future visits
+      stay quiet. The mic-button manual-retry path is pinned by
+      CompanionDock.lobby-voice.test.tsx.
+    steps:
+      [
+        signed-in-companion,
+        arrival-greeting-text-first,
+        mic-denied,
+        quiet-text-presence,
+        denied-remembered-persisted,
       ]
     status: active
 
