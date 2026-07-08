@@ -209,9 +209,13 @@ export default function ConnectPage() {
               <Button variant="primary" full onClick={confirmCompanionStart}>
                 和 {partner.name} 一起进入 →
               </Button>
-              <Button variant="ghost" full onClick={() => setByoChosen(true)}>
-                自带 AI，手动对接
-              </Button>
+              {/* BYO (mode①) is demoted to a low-key secondary link: a logged-in
+                  companion owner defaults straight into co-play and no longer
+                  sees a co-equal platform-AI-vs-BYO chooser (owner ruling).
+                  Bring-your-own-AI stays one tap away for those who want it. */}
+              <button type="button" className={styles.byoLink} onClick={() => setByoChosen(true)}>
+                自带 AI 手动对接
+              </button>
             </div>
           </div>
         )}

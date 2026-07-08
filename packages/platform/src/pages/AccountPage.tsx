@@ -14,6 +14,7 @@ import {
   summarizeArcadeLocalProfile,
 } from '@amiclaw/arcade-profile/local'
 import { claimArcadeProfile, fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
+import { readChosenArcadeNickname } from '@/lib/arcade-nickname'
 import { formatMs } from '@shared/format-time'
 import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
@@ -298,9 +299,14 @@ function ClaimLocalProfileCard({
 
   const handleClaim = async () => {
     setStatus('claiming')
+    // Adopt the player's chosen daily nickname as the public streak-board label
+    // so a logged-in player surfaces their name, not a generated placeholder.
+    // Omitted when unset — the server then derives from the account email.
+    const chosenLabel = readChosenArcadeNickname()
     const result = await claimArcadeProfile({
       profile_id: localProfile.profile_id,
       events: claimableEvents,
+      ...(chosenLabel ? { public_label: chosenLabel } : {}),
     })
     if (result.kind !== 'ok') {
       setStatus('error')
@@ -415,9 +421,13 @@ function PublicProfileCard({
   const handleEnable = async () => {
     if (!profile.profile_id) return
     setStatus('saving')
+    // Adopt the chosen daily nickname as the public label (server falls back to
+    // the account email when it is unset) — never the generated placeholder.
+    const chosenLabel = readChosenArcadeNickname()
     const result = await claimArcadeProfile({
       profile_id: profile.profile_id,
       events: [],
+      ...(chosenLabel ? { public_label: chosenLabel } : {}),
     })
     if (result.kind !== 'ok') {
       setStatus('error')

@@ -12,7 +12,7 @@ import {
   upsertArcadePublicProfile,
 } from '@amiclaw/arcade-profile/store'
 import {
-  sanitizeArcadePublicLabel,
+  resolveArcadePublicLabel,
   parseArcadeProfileClaimBody,
   parseArcadeProfileEvent,
 } from '@amiclaw/arcade-profile/validation'
@@ -84,12 +84,15 @@ export async function handlePostArcadeProfileClaim(
     env.COMPANION_DB,
     auth.session.user_id
   )
-  const publicLabel =
-    claim.public_label === undefined &&
-    existingPublicProfile.claimed &&
-    existingPublicProfile.public_label
-      ? existingPublicProfile.public_label
-      : sanitizeArcadePublicLabel(claim.public_label, auth.session.user_id)
+  // Honest label precedence: chosen nickname (client) > existing real name >
+  // account email local-part > anonymous placeholder. A logged-in user never
+  // lands on `Player XXXX`, and an existing placeholder row is upgraded here.
+  const publicLabel = resolveArcadePublicLabel({
+    clientLabel: claim.public_label,
+    existingLabel: existingPublicProfile.claimed ? existingPublicProfile.public_label : null,
+    email: auth.session.email,
+    userId: auth.session.user_id,
+  })
   const publicProfile = await upsertArcadePublicProfile(env.COMPANION_DB, auth.session.user_id, {
     profileId: claim.profile_id,
     publicLabel,

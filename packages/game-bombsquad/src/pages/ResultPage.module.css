@@ -317,6 +317,31 @@
   color: var(--y);
 }
 
+/* Terminal share fallback: a selectable, read-only field the player copies by
+   hand when neither native share nor the clipboard is available. */
+.shareManual {
+  margin-top: 8px;
+}
+
+.shareManualText {
+  margin-top: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md, 10px);
+  color: #fff;
+  font: 400 12px / 1.5 var(--font-body);
+  resize: none;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.shareManualText:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
 /* Day-boundary hint under the daily-loop status text. */
 .loopHint {
   margin: 8px 0 0;

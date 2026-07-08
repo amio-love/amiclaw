@@ -42,6 +42,62 @@ export function defaultArcadePublicLabel(userId: string): string {
   return `Player ${((hash >>> 0) & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`
 }
 
+/** Shape of the anonymous `defaultArcadePublicLabel` output: `Player <4-hex>`. */
+const GENERATED_LABEL_PATTERN = /^Player [0-9A-F]{4}$/
+
+/**
+ * True when `label` is the anonymous generated placeholder (`Player 53CD`) and
+ * carries no real name signal. Used so a real name never gets overwritten AND a
+ * stale placeholder can be upgraded once a better signal (chosen nickname or
+ * account email) is available.
+ */
+export function isGeneratedArcadePublicLabel(label: string): boolean {
+  return GENERATED_LABEL_PATTERN.test(label)
+}
+
+/**
+ * Account-derived default label: the email local-part, sanitized as a public
+ * label. Falls back to the anonymous `Player <hex>` placeholder only when the
+ * local-part sanitizes to nothing (no usable name signal at all).
+ */
+export function accountDerivedPublicLabel(email: string, userId: string): string {
+  const localPart = email.split('@')[0] ?? ''
+  return sanitizeArcadePublicLabel(localPart, userId)
+}
+
+/**
+ * Resolve the public label to store for a claim, by honest precedence:
+ *
+ *   1. client-provided label (the player's chosen nickname) when it sanitizes
+ *      to a real name — NOT to the generated placeholder;
+ *   2. an existing stored label that is already a real name (never clobber a
+ *      name the user set);
+ *   3. the account-derived default (email local-part);
+ *   4. the anonymous `Player <hex>` placeholder (last resort — only when there
+ *      is no email signal, which should not happen for a logged-in user).
+ *
+ * A logged-in user with any real name signal therefore never lands on
+ * `Player XXXX`, and an existing placeholder row is upgraded on the next claim.
+ */
+export function resolveArcadePublicLabel(input: {
+  clientLabel?: string
+  existingLabel: string | null
+  email: string
+  userId: string
+}): string {
+  if (typeof input.clientLabel === 'string' && input.clientLabel.trim().length > 0) {
+    const sanitized = sanitizeArcadePublicLabel(input.clientLabel, input.userId)
+    // A client label that survives sanitization as a real name wins. If it
+    // sanitizes down to the generated placeholder (only illegal chars), fall
+    // through to the account-derived default rather than storing `Player XXXX`.
+    if (!isGeneratedArcadePublicLabel(sanitized)) return sanitized
+  }
+  if (input.existingLabel && !isGeneratedArcadePublicLabel(input.existingLabel)) {
+    return input.existingLabel
+  }
+  return accountDerivedPublicLabel(input.email, input.userId)
+}
+
 export function sanitizeArcadePublicLabel(value: unknown, userId: string): string {
   if (typeof value !== 'string') return defaultArcadePublicLabel(userId)
   const trimmed = value.trim().replace(/\s+/g, ' ')

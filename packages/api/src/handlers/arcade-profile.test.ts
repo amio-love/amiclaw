@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ArcadeStreakLeaderboardResponse } from '@amiclaw/arcade-profile/types'
 import { createTestDb } from '../../../arcade-profile/src/test-support/sqlite-db'
 import { FakeKV } from '../auth/fake-kv'
@@ -68,6 +68,20 @@ function getRequest(url: string, cookie = SESSION_COOKIE): Request {
 }
 
 describe('arcade profile handlers', () => {
+  // The bombsquad fixture run finished on 2026-07-06; pin "today" to that day
+  // (only `Date` is faked, so async D1 work is unaffected) so the account-read
+  // streak assertion (current_days: 1 = active today) is date-stable instead of
+  // depending on the real wall clock. The streak-board tests already fix the
+  // "as of" day via `?date=2026-07-06`.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-06T08:00:00.000Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('requires a session for account profile reads', async () => {
     const response = await handleGetArcadeProfile(request(undefined, ''), await env())
 
@@ -86,8 +100,11 @@ describe('arcade profile handlers', () => {
       inserted: 1,
       source_keys: ['bombsquad:run-1'],
       public_profile: {
+        // F-C: with no client nickname, the label derives from the account
+        // email local-part ('a@example.com' -> 'a'), NOT a Player XXXX
+        // placeholder — a logged-in user always has a real name signal.
         claimed: true,
-        public_label: expect.stringMatching(/^Player [0-9A-F]{4}$/),
+        public_label: 'a',
       },
     })
     expect(await replay.json()).toMatchObject({ inserted: 0, source_keys: ['bombsquad:run-1'] })
@@ -156,6 +173,9 @@ describe('arcade profile handlers', () => {
   it('returns public streak entries without private identity fields', async () => {
     const testEnv = await env()
 
+    // An email-shaped client label is rejected (never stored raw) and falls
+    // through to the account-derived default (local-part) — the full address
+    // and domain never leak onto the public board.
     await handlePostArcadeProfileClaim(
       request({ ...CLAIM_BODY, public_label: 'a@example.com' }),
       testEnv
@@ -169,12 +189,32 @@ describe('arcade profile handlers', () => {
 
     expect(response.status).toBe(200)
     expect(body.entries).toHaveLength(1)
-    expect(body.entries[0].public_label).toMatch(/^Player [0-9A-F]{4}$/)
+    expect(body.entries[0].public_label).toBe('a')
     expect(serialized).not.toContain('user-a')
     expect(serialized).not.toContain('a@example.com')
     expect(serialized).not.toContain('example.com')
     expect(serialized).not.toContain('local-profile')
     expect(serialized).not.toContain('profile_id')
     expect(serialized).not.toContain('user_id')
+  })
+
+  it('surfaces the chosen nickname on the public board when the claim carries one', async () => {
+    const testEnv = await env()
+
+    // A logged-in player who supplies their chosen nickname surfaces it on the
+    // streak board — never the generated placeholder (F-C).
+    await handlePostArcadeProfileClaim(
+      request({ ...CLAIM_BODY, public_label: '海阔天空' }),
+      testEnv
+    )
+    const response = await handleGetArcadeStreakLeaderboard(
+      getRequest('https://claw.amio.fans/api/arcade/streaks?date=2026-07-06'),
+      testEnv
+    )
+    const body = (await response.json()) as ArcadeStreakLeaderboardResponse
+
+    expect(response.status).toBe(200)
+    expect(body.entries).toHaveLength(1)
+    expect(body.entries[0].public_label).toBe('海阔天空')
   })
 })

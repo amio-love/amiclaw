@@ -83,9 +83,29 @@ describe('VoicePanel — live 3-state conversation phase', () => {
 })
 
 describe('VoicePanel — cues and content', () => {
-  it('renders the accumulated AI text', () => {
-    renderPanel({ aiText: 'Hold the button.' })
-    expect(screen.getByText('Hold the button.')).toBeInTheDocument()
+  it('does NOT render the AI utterance text (the top subtitle strip owns it)', () => {
+    // One utterance = one surface. In-game the companion's spoken sentence
+    // renders only in GamePage's top subtitle strip (fed via `onUtterance`);
+    // the panel must not duplicate it as a second subtitle. It keeps only the
+    // status line (聆听中/思考中/说话中 + placeholder).
+    renderPanel({ aiText: 'Hold the button.', conversationPhase: 'speaking', isAiSpeaking: true })
+    expect(screen.queryByText('Hold the button.')).not.toBeInTheDocument()
+    // The status placeholder still shows so the panel never looks dead.
+    expect(screen.getByText('AI 正在回应…')).toBeInTheDocument()
+  })
+
+  it('reports the live utterance upward for the top subtitle strip', () => {
+    const onUtterance = vi.fn()
+    mockHook.mockReturnValue(hookState({ aiText: 'Hold the button.', isAiSpeaking: true }))
+    render(
+      <VoicePanel
+        gameRunId={gameRunId}
+        manualData={manualData}
+        gameState={gameState}
+        onUtterance={onUtterance}
+      />
+    )
+    expect(onUtterance).toHaveBeenCalledWith({ text: 'Hold the button.', speaking: true })
   })
 
   it('renders the player subtitle (their own recognized speech) labeled 你：', () => {
