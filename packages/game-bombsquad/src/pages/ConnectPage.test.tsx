@@ -44,6 +44,14 @@ vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
+// These tests cover the connect STEPS, not the first-run primer (F1) — pin the
+// device as having already seen the intro so the BYO steps render immediately.
+// The primer's own gating has its own file (ConnectPage.intro.test.tsx).
+vi.mock('@/utils/connect-intro', () => ({
+  hasSeenConnectIntro: () => true,
+  markConnectIntroSeen: vi.fn(),
+}))
+
 // These tests cover the anonymous / companion-less flow, which must stay
 // byte-identical to the pre-companion-entry behaviour: pin the co-play gate to
 // `unavailable`. The companion default entry has its own test file

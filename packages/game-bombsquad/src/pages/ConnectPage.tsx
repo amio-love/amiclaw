@@ -6,6 +6,7 @@ import Button from '@/components/bombsquad/Button'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { useCompanionPartner } from '@/hooks/useCompanionPartner'
 import { copyToClipboard } from '@/utils/clipboard'
+import { hasSeenConnectIntro, markConnectIntroSeen } from '@/utils/connect-intro'
 import { getAudioContext } from '@/audio/audio-context'
 import { useGame } from '@/store/game-context'
 import { clearPersistedState } from '@/store/persistence'
@@ -49,6 +50,30 @@ export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2>(1)
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
+
+  // First-run primer (F1) — a brand-new anonymous player reaching the BYO flow
+  // gets one honest「怎么玩」screen ONCE per device (dismissible, never again
+  // after). It only fronts the BYO flow (practice / anonymous / companion-less);
+  // a signed-in companion owner who taps「自带 AI」(byoChosen) already knows the
+  // premise, so they never see it. `introSeen` is read once at mount (a live
+  // read would flip mid-session the moment we mark it).
+  const [introSeen] = useState(() => hasSeenConnectIntro())
+  const [introDismissed, setIntroDismissed] = useState(false)
+  const introEligible = mode === 'practice' || partner.status === 'unavailable'
+  const showIntro = introEligible && !introSeen && !introDismissed
+
+  const dismissIntro = () => {
+    markConnectIntroSeen()
+    setIntroDismissed(true)
+  }
+
+  // The no-AI path: the platform voice companion lives behind login on the
+  // separate platform SPA, so this is a full-page navigation, not a router push.
+  // Mark seen first so a return trip does not replay the primer.
+  const goToPlatformCompanion = () => {
+    markConnectIntroSeen()
+    window.location.assign('/login')
+  }
 
   useEffect(() => {
     saveEntryRecoveryState({
@@ -220,7 +245,61 @@ export default function ConnectPage() {
           </div>
         )}
 
-        {(mode === 'practice' || partner.status === 'unavailable' || byoChosen) && (
+        {/* First-run primer (F1) — bridges the unconventional「自带语音 AI +
+            人机分持信息」premise before the player hits「把手册发给 AI」. Shown
+            in place of the BYO steps on the first anonymous entry only; the
+            primary CTA dismisses it into the same steps (skippable, one tap). */}
+        {showIntro && (
+          <div className={`${styles.connect} ${styles.intro}`}>
+            <Eyebrow dot color="var(--y)">
+              开始之前
+            </Eyebrow>
+
+            <h2 className={styles.title}>
+              先弄清<span className={styles.titleAccent}>怎么玩</span>。
+            </h2>
+
+            <ol className={styles.introList}>
+              <li className={styles.introItem}>
+                <span className={styles.introNum} aria-hidden="true">
+                  1
+                </span>
+                <span className={styles.introText}>
+                  你和一个<strong>语音 AI 搭档</strong>一起拆弹：你看得到炸弹面板但查不了资料，AI
+                  拿着手册却看不到炸弹，全靠语音配合。
+                </span>
+              </li>
+              <li className={styles.introItem}>
+                <span className={styles.introNum} aria-hidden="true">
+                  2
+                </span>
+                <span className={styles.introText}>
+                  手边有能语音对话的 AI（Claude、ChatGPT、Gemini
+                  等）：把手册链接发给它，让它读完，就能开始。
+                </span>
+              </li>
+              <li className={styles.introItem}>
+                <span className={styles.introNum} aria-hidden="true">
+                  3
+                </span>
+                <span className={styles.introText}>
+                  没有现成的 AI？登录后可以让平台的语音伙伴用语音陪你拆，一样能玩。
+                </span>
+              </li>
+            </ol>
+
+            <div className={styles.cta}>
+              <Button variant="primary" full onClick={dismissIntro}>
+                知道了，开始对接 →
+              </Button>
+              <button type="button" className={styles.byoLink} onClick={goToPlatformCompanion}>
+                没有 AI？登录用平台伙伴 →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!showIntro && (mode === 'practice' || partner.status === 'unavailable' || byoChosen) && (
           <div className={styles.connect}>
             <Eyebrow dot color="var(--y)">
               第 {step}/2 步

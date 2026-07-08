@@ -32,6 +32,13 @@ vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
+// The first-run primer (F1) fronts the BYO flow; pin it as already seen so these
+// companion-entry / BYO-secondary tests render their target views directly.
+vi.mock('@/utils/connect-intro', () => ({
+  hasSeenConnectIntro: () => true,
+  markConnectIntroSeen: vi.fn(),
+}))
+
 vi.mock('@/audio/audio-context', () => ({
   getAudioContext: vi.fn().mockReturnValue(null),
 }))

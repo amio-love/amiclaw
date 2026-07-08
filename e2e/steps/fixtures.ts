@@ -503,6 +503,24 @@ export const test = base.extend<{ world: World }>({
         })
       }
 
+      // First-run connect primer gating (F1). ConnectPage shows a once-per-device
+      //「怎么玩」screen on the first BYO connect entry, gated by the
+      // `bombsquad-connect-intro-seen` localStorage flag (exact key from
+      // packages/game-bombsquad/src/utils/connect-intro.ts). Every journey that
+      // walks the connect flow would otherwise trip the primer instead of the BYO
+      // steps, so it is seeded as already-seen by default. The dedicated
+      // bombsquad-first-run-intro scenario carries @connect-intro-fresh to opt out
+      // of the seed so the primer actually appears for it.
+      if (!testInfo.tags.includes('@connect-intro-fresh')) {
+        await page.addInitScript(() => {
+          try {
+            window.localStorage.setItem('bombsquad-connect-intro-seen', 'true')
+          } catch {
+            /* localStorage unavailable (private mode) — primer may show; rare in e2e */
+          }
+        })
+      }
+
       // Auth session read (useAuth). Returns the authenticated identity once a
       // scenario calls world.signIn(...), else the anonymous 200. The real
       // backend always answers 200 (asking "am I logged in?" is legal), so the

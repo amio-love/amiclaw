@@ -24,7 +24,12 @@ import { MODULE_ADVANCE_DELAY_MS } from '../../../shared/game-timing'
 // reached the board and ~3x below the fastest genuine human run observed
 // (3:02), leaving ample headroom for a skilled human+AI pair while rejecting
 // automation. Raise it as real human-run data accumulates.
-const MIN_GAME_TIME_MS = 60_000 // 60 seconds minimum — the collaborative-loop plausibility floor
+// Exported so the leaderboard READ path (get-leaderboard.ts) can apply the same
+// floor as this WRITE-time validation: an integrity sweep that hides any row
+// below the floor at display time (legacy sub-floor junk written before the
+// floor shipped, still inside the 48h KV TTL), without hard-deleting data. One
+// SSOT for the number so the write gate and the read filter can never drift.
+export const MIN_GAME_TIME_MS = 60_000 // 60 seconds minimum — the collaborative-loop plausibility floor
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max
 // Structural per-module floor: no single module can be honestly solved faster
 // than one read→relay-to-AI→execute round-trip. A sub-floor module time means a

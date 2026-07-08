@@ -106,6 +106,51 @@
   font-style: italic;
 }
 
+/* ----------  first-run primer (F1)  ----------
+   A once-per-device「怎么玩」screen fronting the BYO flow. Fluid layout: the
+   numbered rows are flex with min-width:0 so the text wraps cleanly at 360px
+   (no horizontal overflow), and the shared .cta pins the buttons to the bottom. */
+.introList {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.introItem {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.introNum {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 229, 62, 0.12);
+  border: 1px solid rgba(255, 229, 62, 0.35);
+  color: var(--y);
+  font: 600 13px var(--amio-font-mono);
+}
+
+.introText {
+  flex: 1;
+  min-width: 0;
+  font: 400 15px/1.6 var(--font-body);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.introText strong {
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ----------  player ↔ AI visualization  ---------- */
 .vis {
   margin: 14px 0;
