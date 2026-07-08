@@ -19,6 +19,13 @@
  * an injectable `Pick<Storage, ...>` like `arcade-profile/local.ts`.
  */
 
+import {
+  milestoneLabel,
+  tierUsesAddressPrefix,
+  MILESTONE_STREAK_DAYS,
+  type FamiliarityTier,
+  type MilestoneStreakDay,
+} from './companion-familiarity'
 import { isVoicePosture, type VoicePosture } from './companion-types'
 
 // --- Voice-posture cache -------------------------------------------------------
@@ -283,9 +290,15 @@ export function canFirePostGameBeat(input: PostGameBeatInput): boolean {
 /** Fold a fired beat into the log (caller persists via `writeBeatLog`). */
 export function recordBeatFired(
   log: CompanionBeatLog,
-  beat: { kind: 'arrival'; now: number } | { kind: 'post-game'; gameRunId: string }
+  beat:
+    | { kind: 'arrival'; now: number }
+    | { kind: 'milestone'; now: number }
+    | { kind: 'post-game'; gameRunId: string }
 ): CompanionBeatLog {
-  if (beat.kind === 'arrival') {
+  // A milestone rides the arrival moment (both land on homepage entry), so it
+  // also stamps `lastArrivalAt` — the 5-minute re-open window then suppresses a
+  // plain arrival greeting stacking on top within the same visit.
+  if (beat.kind === 'arrival' || beat.kind === 'milestone') {
     return { ...log, count: log.count + 1, lastArrivalAt: beat.now }
   }
   return { ...log, count: log.count + 1, lastPostGameRunId: beat.gameRunId }
@@ -315,16 +328,24 @@ export interface ArrivalGreetingInput {
   streakDays: number
   /** Whether any local play record exists at all. */
   hasPlayedBefore: boolean
+  /**
+   * Familiarity tier (B9a 称呼): the newcomer tier keeps the fuller address; the
+   * warmer tiers drop it for a closer register. Omitted → base tier (fuller
+   * address), so a caller that does not pass a tier gets the pre-B9 behaviour.
+   */
+  tier?: FamiliarityTier
 }
 
 /**
  * 节拍 1 template fill (design 文案示例 register: cite one concrete thing from
  * the last episode, then the streak — factual, no profile-layer reference, no
  * kitsch). Every clause is backed by real data; missing data drops the clause
- * instead of inventing one.
+ * instead of inventing one. The familiarity tier modulates the address register
+ * (B9a) — a closer relationship drops the explicit name.
  */
 export function buildArrivalGreeting(input: ArrivalGreetingInput): string {
-  const address = input.addressStyle.trim()
+  const useAddress = input.tier === undefined || tierUsesAddressPrefix(input.tier)
+  const address = useAddress ? input.addressStyle.trim() : ''
   const prefix = address.length > 0 ? `${address}，` : ''
   const streakLine = input.streakDays >= 2 ? `今天第 ${input.streakDays + 1} 天了。` : ''
 
@@ -368,4 +389,94 @@ export function buildPostGameReaction(input: PostGameReactionInput): string {
     case 'daily-timeout':
       return `时间用完，停在第 ${stoppedAt} 个模块。`
   }
+}
+
+// --- Milestone beat (节拍 4 里程碑, B20) -------------------------------------------
+
+/**
+ * localStorage key for the once-per-milestone-FOR-LIFE dedup log. Separate from
+ * the per-day beat log (which resets each product day): a milestone is a
+ * relationship marker, said once and never repeated — even across a streak
+ * break and rebuild, "认识一周了" is not a thing to say twice.
+ */
+export const COMPANION_MILESTONE_LOG_KEY = 'amio_companion_milestone_log'
+
+/** Read the set of milestone thresholds already delivered (defensive parse). */
+export function readMilestoneLog(
+  storage: ReadableStorage | null = browserLocalStorage()
+): MilestoneStreakDay[] {
+  if (!storage) return []
+  try {
+    const raw = storage.getItem(COMPANION_MILESTONE_LOG_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    // Keep only recognized thresholds — tamper / schema-drift resistant.
+    return MILESTONE_STREAK_DAYS.filter((day) => parsed.includes(day))
+  } catch {
+    return []
+  }
+}
+
+/** Persist the delivered milestone thresholds (normalized + deduped). */
+export function writeMilestoneLog(
+  fired: readonly MilestoneStreakDay[],
+  storage: WritableStorage | null = browserLocalStorage()
+): void {
+  if (!storage) return
+  try {
+    const unique = MILESTONE_STREAK_DAYS.filter((day) => fired.includes(day))
+    storage.setItem(COMPANION_MILESTONE_LOG_KEY, JSON.stringify(unique))
+  } catch {
+    // Losing the log means at worst one milestone repeats — never fatal.
+  }
+}
+
+export interface MilestoneBeatInput {
+  log: CompanionBeatLog
+  /** Beats are frozen while muted (session or remembered posture). */
+  muted: boolean
+}
+
+/**
+ * Milestone-beat gate (节拍 4): fires deterministically when a milestone is
+ * reached — a defining relationship moment is never probabilistically dropped —
+ * subject only to the freeze-while-muted rule and the 标准 daily cap. Per the
+ * design's 节拍总量 the milestone COUNTS against the cap (the reserved 5th slot),
+ * so it does not bypass it. The once-per-milestone dedup is the caller's job via
+ * `readMilestoneLog` / `pickMilestone`.
+ */
+export function canFireMilestoneBeat(input: MilestoneBeatInput): boolean {
+  if (input.muted) return false
+  if (input.log.count >= STANDARD_PROACTIVITY_TIER.dailyCap) return false
+  return true
+}
+
+export interface MilestoneGreetingInput {
+  /** The milestone reached (its label opens the line). */
+  threshold: MilestoneStreakDay
+  /** The current streak in days (backs the "no missed day" fact). */
+  streakDays: number
+  /**
+   * An EARLY shared memory's title for the callback clause, or null. Kept real:
+   * when absent the line falls back to the honest streak fact instead of
+   * inventing an early episode.
+   */
+  earlyEpisodeTitle: string | null
+}
+
+/**
+ * 节拍 4 template fill (design 文案示例 register: a time-scale opener + one
+ * callback — no badge, no reward, no number worship). The opener is always real
+ * (a streak IS consecutive days); the callback cites a real early episode when
+ * one is supplied, else falls back to the honest "not one missed day" fact. No
+ * address prefix — the design's milestone examples carry the intimacy in the
+ * time-scale opener, not the name.
+ */
+export function buildMilestoneGreeting(input: MilestoneGreetingInput): string {
+  const head = `认识${milestoneLabel(input.threshold)}了。`
+  const tail = input.earlyEpisodeTitle
+    ? `你第一天${input.earlyEpisodeTitle}，我还记得。`
+    : `这 ${input.streakDays} 天，你一天没落。`
+  return `${head}${tail}`
 }

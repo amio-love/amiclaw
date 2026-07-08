@@ -1,5 +1,9 @@
-import { memo, useImperativeHandle, forwardRef, useEffect } from 'react'
+import { memo, useImperativeHandle, forwardRef, useEffect, useState } from 'react'
 import type { GameState, ManualData, RecapOutcome } from '@amiclaw/platform-ai/contract'
+import {
+  readCachedAccountStreak,
+  resolveAccountStreak,
+} from '@amiclaw/arcade-profile/companion-streak'
 import { useVoiceSession } from './useVoiceSession'
 import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
@@ -94,6 +98,25 @@ function VoicePanelImpl(
   { gameRunId, manualData, gameState, gameId, onUtterance }: VoicePanelProps,
   ref: React.ForwardedRef<VoicePanelHandle>
 ) {
+  // The player's ACCOUNT streak (B9): it rides the create message so the
+  // companion's tone follows the relationship's age. The relationship lives at
+  // the account, so this is account-anchored, not a per-device count. Seeded
+  // synchronously from the cache (warmed by the homepage presence layer) so the
+  // create message carries a value immediately, then refreshed from the account
+  // API — the fresh value wins for any later session.
+  const [streakDays, setStreakDays] = useState<number | undefined>(
+    () => readCachedAccountStreak() ?? undefined
+  )
+  useEffect(() => {
+    let active = true
+    void resolveAccountStreak().then((days) => {
+      if (active) setStreakDays(days)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const {
     status,
     conversationPhase,
@@ -108,6 +131,7 @@ function VoicePanelImpl(
     manualData,
     gameState,
     gameId,
+    streakDays,
   })
 
   useImperativeHandle(ref, () => ({ requestClosing, endSession }), [requestClosing, endSession])

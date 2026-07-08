@@ -82,6 +82,23 @@ describe('assembleLlmContext — companion injection', () => {
     const b = assembleLlmContext({ ...BASE_INPUT, companionContext: CONTEXT })
     expect(a).toEqual(b)
   })
+
+  it('injects no familiarity line when the context carries none (B9c — byte-identical below the first tier)', () => {
+    const content = assembleLlmContext({ ...BASE_INPUT, companionContext: CONTEXT })[0].content
+    expect(content).not.toContain('Familiarity:')
+  })
+
+  it('appends a streak-familiarity tone line, outside the data fence, when present (B9c)', () => {
+    const content = assembleLlmContext({
+      ...BASE_INPUT,
+      companionContext: { ...CONTEXT, familiarity: { streakDays: 12, tier: 'familiar' } },
+    })[0].content
+    expect(content).toContain('shown up together 12 days in a row')
+    expect(content).toContain('warmer, more familiar tone')
+    // The streak count is a platform fact, not player data → outside the fence.
+    const close = content.indexOf(COMPANION_DATA_FENCE_CLOSE)
+    expect(content.indexOf('Familiarity:')).toBeGreaterThan(close)
+  })
 })
 
 describe('assembleLlmContext — player-memory data fence', () => {

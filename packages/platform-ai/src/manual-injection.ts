@@ -19,6 +19,7 @@
  * model in the loop here.
  */
 
+import { familiarityRegisterHint } from '../../../shared/companion-familiarity'
 import type { CompanionContext } from '../../companion-memory/src/types'
 import type { GameState, ManualData } from './contract'
 import type { ChatMessage } from './providers/types'
@@ -134,7 +135,7 @@ function buildCompanionInjection(context: CompanionContext): string {
       )
     }
   }
-  return [
+  const blocks = [
     'Companion memory (platform-injected):',
     COMPANION_DATA_GUARD,
     COMPANION_DATA_FENCE_OPEN,
@@ -142,7 +143,21 @@ function buildCompanionInjection(context: CompanionContext): string {
     // markers — present fields or ones added later — can ever escape.
     neutralizeFenceMarkers(data.join('\n')),
     COMPANION_DATA_FENCE_CLOSE,
-  ].join('\n')
+  ]
+  // Streak familiarity (B9c): a trusted platform tone instruction OUTSIDE the
+  // data fence — `streakDays` is a platform-computed integer (not player free
+  // text) and the register hint is platform-authored, so neither is fenced
+  // player data. Present only when the resolver attached familiarity (>= the
+  // first tier), so a newcomer session's block is byte-identical to before.
+  if (context.familiarity !== undefined) {
+    const hint = familiarityRegisterHint(context.familiarity.tier)
+    blocks.push(
+      `Familiarity: you and the player have shown up together ${context.familiarity.streakDays} days in a row.${
+        hint ? ` ${hint}` : ''
+      }`
+    )
+  }
+  return blocks.join('\n')
 }
 
 /**

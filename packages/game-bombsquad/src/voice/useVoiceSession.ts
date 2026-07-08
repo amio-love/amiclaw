@@ -125,6 +125,13 @@ export interface UseVoiceSessionOptions {
   gameState: GameState
   /** Platform game id. Defaults to `'bombsquad'`. */
   gameId?: string
+  /**
+   * The player's current arcade streak in days (B9 叙事型成长). Rides the
+   * `create` message so the companion's tone follows the relationship's age
+   * (register + memory budget). Omitted / 0 leaves the session byte-identical to
+   * the pre-B9 behaviour.
+   */
+  streakDays?: number
 }
 
 export interface UseVoiceSessionResult {
@@ -167,7 +174,7 @@ export interface UseVoiceSessionResult {
  * and only after the session is `created`; an unchanged re-render sends nothing.
  */
 export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessionResult {
-  const { gameRunId, manualData, gameState, gameId = 'bombsquad' } = options
+  const { gameRunId, manualData, gameState, gameId = 'bombsquad', streakDays } = options
 
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
@@ -190,11 +197,13 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   const gameStateRef = useRef<GameState>(gameState)
   const gameIdRef = useRef<string>(gameId)
   const gameRunIdRef = useRef<string | undefined>(gameRunId)
+  const streakDaysRef = useRef<number | undefined>(streakDays)
   useEffect(() => {
     manualDataRef.current = manualData
     gameStateRef.current = gameState
     gameIdRef.current = gameId
     gameRunIdRef.current = gameRunId
+    streakDaysRef.current = streakDays
   })
 
   // Side-effect handles (never trigger re-render).
@@ -565,6 +574,12 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         manualData: manualDataRef.current,
         gameState: gameStateRef.current,
         ...(gameRunIdRef.current ? { gameRunId: gameRunIdRef.current } : {}),
+        // Only ride the streak when there IS one (>0): a fresh player's create
+        // stays byte-identical, and the server maps a sub-week streak to the
+        // newcomer tier (no tone change) regardless.
+        ...(streakDaysRef.current !== undefined && streakDaysRef.current > 0
+          ? { streakDays: streakDaysRef.current }
+          : {}),
       }
       try {
         ws.send(JSON.stringify(create))

@@ -29,6 +29,8 @@ const companionState = vi.hoisted(() => ({
 }))
 const apiMocks = vi.hoisted(() => ({
   fetchMemories: vi.fn(),
+  fetchAccountStreak: vi.fn(),
+  fetchEarliestMemoryTitle: vi.fn(),
   putVoicePosture: vi.fn(),
 }))
 // The lobby voice session is mocked: `open` / `close` are spies, and `current`
@@ -54,6 +56,8 @@ vi.mock('@/hooks/useCompanion', () => ({
 }))
 vi.mock('@/lib/companion-api', () => ({
   fetchMemories: apiMocks.fetchMemories,
+  fetchAccountStreak: apiMocks.fetchAccountStreak,
+  fetchEarliestMemoryTitle: apiMocks.fetchEarliestMemoryTitle,
   putVoicePosture: apiMocks.putVoicePosture,
 }))
 // Flip the capability: this file pins the sequence the next slice engages.
@@ -132,6 +136,10 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     companionState.current = { status: 'loading', companion: null }
     apiMocks.fetchMemories.mockReset()
     apiMocks.fetchMemories.mockResolvedValue({ kind: 'ok', memories: [] })
+    apiMocks.fetchAccountStreak.mockReset()
+    apiMocks.fetchAccountStreak.mockResolvedValue(0)
+    apiMocks.fetchEarliestMemoryTitle.mockReset()
+    apiMocks.fetchEarliestMemoryTitle.mockResolvedValue(null)
     apiMocks.putVoicePosture.mockReset()
     apiMocks.putVoicePosture.mockResolvedValue({ kind: 'ok' })
     lobbyMock.current = {

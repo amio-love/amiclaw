@@ -13,6 +13,7 @@ import {
   fetchCompanion,
   setupCompanion,
   fetchMemories,
+  fetchEarliestMemoryTitle,
   deleteMemory,
   fetchProfile,
   correctClaim,
@@ -124,6 +125,29 @@ describe('companion-api (real path)', () => {
 
     stubFetch(() => Promise.resolve(jsonResponse({ error: 'memory not found' }, 404)))
     expect(await deleteMemory('ep-1')).toEqual({ kind: 'error' })
+  })
+
+  it('fetchEarliestMemoryTitle queries oldest-first and returns the title, null when empty', async () => {
+    const fn = stubFetch(() =>
+      Promise.resolve(
+        jsonResponse(
+          {
+            memories: [
+              { id: 'ep-1', occurred_at: 'x', game_id: 'g', title: '第一颗炸弹', narrative: 'n' },
+            ],
+          },
+          200
+        )
+      )
+    )
+    expect(await fetchEarliestMemoryTitle()).toBe('第一颗炸弹')
+    expect(String(fn.mock.calls[0][0])).toContain('/api/companion/memories?order=oldest&limit=1')
+
+    stubFetch(() => Promise.resolve(jsonResponse({ memories: [] }, 200)))
+    expect(await fetchEarliestMemoryTitle()).toBeNull()
+
+    stubFetch(() => Promise.resolve(jsonResponse({}, 500)))
+    expect(await fetchEarliestMemoryTitle()).toBeNull()
   })
 
   it('fetchProfile maps 200 / 404 / error', async () => {

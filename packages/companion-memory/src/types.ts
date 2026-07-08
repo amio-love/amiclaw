@@ -55,6 +55,7 @@ export {
 } from '../../../shared/companion-types'
 
 import type { ProfileClaimStatus } from '../../../shared/companion-types'
+import type { FamiliarityTier } from '../../../shared/companion-familiarity'
 
 // --- Entity records (D1 row shapes) ------------------------------------------
 
@@ -210,4 +211,14 @@ export interface CompanionContext {
   }
   claims: CompanionContextClaim[]
   episodes: CompanionContextEpisode[]
+  /**
+   * Streak-derived familiarity (B9 叙事型成长). Present ONLY once the
+   * relationship has reached the first tier (a week's streak) and a streak was
+   * passed to the resolver; absent for a newcomer or a session that carries no
+   * streak, so the injected prompt stays byte-identical below the first tier.
+   */
+  familiarity?: {
+    streakDays: number
+    tier: FamiliarityTier
+  }
 }

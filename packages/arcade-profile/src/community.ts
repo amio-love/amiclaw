@@ -1,3 +1,4 @@
+import { MILESTONE_STREAK_DAYS } from '../../../shared/companion-familiarity'
 import { getProductDaysEndingAt } from '../../../shared/date'
 import {
   computeArcadeStreak,
@@ -13,14 +14,12 @@ import type { ArcadeCommunityFeedItem, ArcadeCommunityFeedTemplate } from './typ
    the window); only event EMISSION is capped to this recent window. */
 export const COMMUNITY_FEED_WINDOW_DAYS = 14
 
-/* Streak lengths that surface a milestone card.
-   SSOT NOTE: these thresholds must eventually come from the shared
-   companion-familiarity SSOT (a parallel worktree is landing
-   `shared/companion-familiarity.ts` with 7 / 14 / 30 / 60). That module is NOT
-   on this branch yet, so the thresholds live here in ONE clearly-named constant;
-   integration will reconcile this against the shared module. Until then this
-   mirrors the PRD streak-reward thresholds (7 / 14 / 30 / 60 days). */
-export const COMMUNITY_STREAK_MILESTONES: readonly number[] = [7, 14, 30, 60]
+/* Streak lengths that surface a milestone card — the SAME thresholds the
+   companion milestone beats use. One SSOT for 7 / 14 / 30 / 60 across the feed's
+   streak-milestone events and the companion's narrative milestone beats: the
+   shared `companion-familiarity.MILESTONE_STREAK_DAYS`. Widened to
+   `readonly number[]` so `.includes(<number>)` type-checks against a raw length. */
+export const COMMUNITY_STREAK_MILESTONES: readonly number[] = MILESTONE_STREAK_DAYS
 
 /**
  * Deterministic, opaque feed-event id derived ONLY from the anchor row's

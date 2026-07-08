@@ -15,8 +15,9 @@
  *                            (the companion exists from setup, memory or not)
  */
 
+import { deriveFamiliarityTier } from '../../../shared/companion-familiarity'
 import type { CompanionDb } from './db'
-import { resolveInjectionPolicy, type InjectionPolicy } from './injection-policy'
+import { resolveInjectionPolicyForStreak, type InjectionPolicy } from './injection-policy'
 import { getCompanion } from './store'
 import type { CompanionContext, CompanionContextEpisode } from './types'
 
@@ -32,11 +33,12 @@ export async function resolveCompanionContext(
   db: CompanionDb,
   userId: string,
   gameId?: string,
-  policyOverride?: InjectionPolicy
+  policyOverride?: InjectionPolicy,
+  streakDays?: number
 ): Promise<CompanionContext | null> {
   const companion = await getCompanion(db, userId)
   if (companion === null) return null
-  const policy = policyOverride ?? resolveInjectionPolicy(gameId)
+  const policy = policyOverride ?? resolveInjectionPolicyForStreak(gameId, streakDays ?? 0)
 
   // Claims: only while the profile switch is on, and only claims holding >=1
   // ACTIVE evidence episode (the no-black-box invariant, read-side).
@@ -95,6 +97,12 @@ export async function resolveCompanionContext(
     })
   }
 
+  // Familiarity (B9 叙事型成长): attach only once the relationship has reached
+  // the first tier AND a streak was supplied. Below the first tier — or with no
+  // streak passed — nothing is attached, so the injected prompt is byte-identical
+  // to the pre-B9 shape (a young relationship shapes no register).
+  const tier = deriveFamiliarityTier(streakDays ?? 0)
+
   return {
     companion: {
       name: companion.name,
@@ -103,5 +111,8 @@ export async function resolveCompanionContext(
     },
     claims,
     episodes,
+    ...(streakDays !== undefined && tier !== 'newcomer'
+      ? { familiarity: { streakDays, tier } }
+      : {}),
   }
 }

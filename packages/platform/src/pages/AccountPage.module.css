@@ -154,6 +154,13 @@
   color: rgba(255, 255, 255, 0.38);
 }
 
+.streakBreakNote {
+  margin: 0;
+  font: 400 12px var(--font-body);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .statBlock {
   min-width: 0;
   padding: 18px;

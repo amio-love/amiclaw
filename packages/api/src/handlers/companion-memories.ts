@@ -22,10 +22,14 @@ export async function handleGetMemories(request: Request, env: CompanionApiEnv):
   const limitRaw = url.searchParams.get('limit')
   const limit = limitRaw === null ? undefined : Number.parseInt(limitRaw, 10)
   const cursor = url.searchParams.get('cursor') ?? undefined
+  // `order=oldest` returns earliest-first (the milestone callback's earliest
+  // episode); any other value keeps the default newest-first album order.
+  const order = url.searchParams.get('order') === 'oldest' ? 'oldest' : undefined
 
   const page = await listMemories(env.COMPANION_DB, auth.session.user_id, {
     ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
     ...(cursor !== undefined ? { cursor } : {}),
+    ...(order !== undefined ? { order } : {}),
   })
   const body: MemoriesResponse = {
     memories: page.memories,

@@ -131,17 +131,25 @@ function decodeCursor(raw: string): MemoryCursor | null {
 }
 
 /**
- * Keyset-paginated active episodes, newest first (occurred_at DESC, id DESC
- * tiebreak). A malformed cursor is treated as "first page" rather than an
- * error — the cursor is opaque convenience state, not a correctness input.
+ * Keyset-paginated active episodes. `order` (default `'newest'`,
+ * occurred_at DESC) flips to oldest-first (`'oldest'`, occurred_at ASC) — the
+ * milestone-beat callback (B20) fetches the EARLIEST episode via
+ * `order=oldest&limit=1`. The keyset comparison flips with the order so cursor
+ * pagination stays valid in both directions. A malformed cursor is treated as
+ * "first page" rather than an error — the cursor is opaque convenience state.
  */
 export async function listMemories(
   db: CompanionDb,
   userId: string,
-  options: { limit?: number; cursor?: string } = {}
+  options: { limit?: number; cursor?: string; order?: 'newest' | 'oldest' } = {}
 ): Promise<MemoryPage> {
   const limit = Math.min(Math.max(options.limit ?? MEMORY_PAGE_DEFAULT, 1), MEMORY_PAGE_MAX)
   const cursor = options.cursor === undefined ? null : decodeCursor(options.cursor)
+  const oldest = options.order === 'oldest'
+  const orderClause = oldest
+    ? 'ORDER BY occurred_at ASC, id ASC'
+    : 'ORDER BY occurred_at DESC, id DESC'
+  const cmp = oldest ? '>' : '<'
 
   let statement: CompanionDbStatement
   if (cursor === null) {
@@ -150,7 +158,7 @@ export async function listMemories(
         `SELECT id, occurred_at, game_id, title, narrative
          FROM episode
          WHERE user_id = ? AND status = 'active'
-         ORDER BY occurred_at DESC, id DESC
+         ${orderClause}
          LIMIT ?`
       )
       .bind(userId, limit + 1)
@@ -160,8 +168,8 @@ export async function listMemories(
         `SELECT id, occurred_at, game_id, title, narrative
          FROM episode
          WHERE user_id = ? AND status = 'active'
-           AND (occurred_at < ? OR (occurred_at = ? AND id < ?))
-         ORDER BY occurred_at DESC, id DESC
+           AND (occurred_at ${cmp} ? OR (occurred_at = ? AND id ${cmp} ?))
+         ${orderClause}
          LIMIT ?`
       )
       .bind(userId, cursor.o, cursor.o, cursor.id, limit + 1)

@@ -5,7 +5,11 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CompanionDb } from './db'
-import { resolveInjectionPolicy } from './injection-policy'
+import {
+  DEFAULT_INJECTION_POLICY,
+  resolveInjectionPolicy,
+  resolveInjectionPolicyForStreak,
+} from './injection-policy'
 import { resolveCompanionContext } from './resolver'
 import { createTestDb } from './test-support/sqlite-db'
 
@@ -168,5 +172,68 @@ describe('resolveCompanionContext', () => {
 describe('resolveInjectionPolicy', () => {
   it('returns the global default for an unknown game', () => {
     expect(resolveInjectionPolicy('bombsquad')).toEqual(resolveInjectionPolicy())
+  })
+})
+
+describe('resolveInjectionPolicyForStreak (B9b — memory budget scales with streak)', () => {
+  it('is byte-identical to the base policy for a newcomer / no streak', () => {
+    expect(resolveInjectionPolicyForStreak(undefined, 0)).toEqual(DEFAULT_INJECTION_POLICY)
+    expect(resolveInjectionPolicyForStreak(undefined, 6)).toEqual(DEFAULT_INJECTION_POLICY)
+  })
+
+  it('adds recency depth + claim count at the familiar and close tiers', () => {
+    expect(resolveInjectionPolicyForStreak(undefined, 7)).toEqual({
+      ...DEFAULT_INJECTION_POLICY,
+      maxClaims: DEFAULT_INJECTION_POLICY.maxClaims + 1,
+      recentEpisodes: DEFAULT_INJECTION_POLICY.recentEpisodes + 1,
+    })
+    expect(resolveInjectionPolicyForStreak(undefined, 30)).toEqual({
+      ...DEFAULT_INJECTION_POLICY,
+      maxClaims: DEFAULT_INJECTION_POLICY.maxClaims + 2,
+      recentEpisodes: DEFAULT_INJECTION_POLICY.recentEpisodes + 2,
+    })
+  })
+
+  it('leaves the salience floor and high-salience slot untouched', () => {
+    const close = resolveInjectionPolicyForStreak(undefined, 60)
+    expect(close.salientEpisodes).toBe(DEFAULT_INJECTION_POLICY.salientEpisodes)
+    expect(close.minSalience).toBe(DEFAULT_INJECTION_POLICY.minSalience)
+  })
+})
+
+describe('resolveCompanionContext — streak familiarity (B9)', () => {
+  it('attaches no familiarity for a newcomer or a session with no streak', async () => {
+    const db = createTestDb()
+    await seedCompanion(db, 'user-a')
+    expect((await resolveCompanionContext(db, 'user-a'))?.familiarity).toBeUndefined()
+    expect(
+      (await resolveCompanionContext(db, 'user-a', undefined, undefined, 6))?.familiarity
+    ).toBeUndefined()
+  })
+
+  it('attaches the tier + streak once the relationship reaches the first tier', async () => {
+    const db = createTestDb()
+    await seedCompanion(db, 'user-a')
+    expect(
+      (await resolveCompanionContext(db, 'user-a', undefined, undefined, 7))?.familiarity
+    ).toEqual({ streakDays: 7, tier: 'familiar' })
+    expect(
+      (await resolveCompanionContext(db, 'user-a', undefined, undefined, 45))?.familiarity
+    ).toEqual({ streakDays: 45, tier: 'close' })
+  })
+
+  it('scales the injected recent-episode budget with the streak tier', async () => {
+    const db = createTestDb()
+    await seedCompanion(db, 'user-a', false) // profile off → episodes only
+    // Four episodes, newest first ep-4..ep-1 (all low salience).
+    for (let i = 1; i <= 4; i += 1) {
+      await seedEpisode(db, `ep-${i}`, 'user-a', `2026-06-0${i}T10:00:00.000Z`, 10)
+    }
+    // Newcomer: base recentEpisodes (3).
+    const newcomer = await resolveCompanionContext(db, 'user-a', undefined, undefined, 0)
+    expect(newcomer?.episodes).toHaveLength(DEFAULT_INJECTION_POLICY.recentEpisodes)
+    // Familiar: +1 recent episode injected (the memory reaches deeper).
+    const familiar = await resolveCompanionContext(db, 'user-a', undefined, undefined, 7)
+    expect(familiar?.episodes).toHaveLength(DEFAULT_INJECTION_POLICY.recentEpisodes + 1)
   })
 })
