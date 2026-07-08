@@ -12,7 +12,11 @@ const MIGRATIONS_DIR = join(
   'companion-memory',
   'migrations'
 )
-const ARCADE_MIGRATIONS = ['0002_arcade_profile.sql', '0003_arcade_public_profile.sql']
+const ARCADE_MIGRATIONS = [
+  '0002_arcade_profile.sql',
+  '0003_arcade_public_profile.sql',
+  '0005_arcade_community_like.sql',
+]
 
 class SqliteStatement implements ArcadeProfileDbStatement {
   private params: unknown[] = []

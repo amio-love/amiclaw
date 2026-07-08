@@ -1,0 +1,28 @@
+# Community feed — the real, derived player-activity stream (audit F4 rework).
+#
+# The community page replaced its fabricated static posts with a REAL event
+# stream synthesized from durable play events (daily defusals, streak-board
+# entries, streak milestones) of players who joined the public streak board.
+# The one interaction is a real, persistent like; liking is login-gated with an
+# honest one-line hint, and an empty window shows the honest quiet state rather
+# than padded fakes.
+#
+# Harness note: the static build has no D1, so GET /api/arcade/community/feed is
+# route-mocked with a real-shaped item (a defusal ~6 minutes before the pinned
+# clock). The relative-time label is rendered live off that real timestamp — the
+# fix for the F4 frozen「12 分钟前」anti-pattern.
+
+Feature: AMIO Arcade community feed
+  As a visitor to the AMIO Arcade community page
+  I want to see real player activity and like it
+  So that the community surface reflects who is actually playing, honestly
+
+  # Source: community-real-feed
+  @playwright
+  Scenario: The community page shows a real event stream with an honest like gate
+    Given I open /community
+    Then I see the subtitle "真实玩家动态：拆弹通关、上榜、连续打卡，都从真实战绩生成。"
+    And the community feed shows real player activity
+
+    When I try to like a community post
+    Then I am prompted to log in before liking

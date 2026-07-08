@@ -154,3 +154,45 @@ export interface ArcadeStreakLeaderboardResponse {
   date: string
   entries: ArcadeStreakLeaderboardEntry[]
 }
+
+/* The community feed is a REAL event stream — every item is synthesized from a
+   durable play event of a player who has claimed a public profile. There are
+   exactly three honest, timestamped templates:
+     - daily_clear      通关         a daily-challenge defusal
+     - leaderboard_entry 上榜        the day a player (re)entered the streak board
+     - streak_milestone 连续打卡里程碑 a streak reaching 7 / 14 / 30 / 60 days
+   No synthetic / demo events are ever produced. An empty window renders the
+   honest quiet state, never padded fakes. */
+export type ArcadeCommunityFeedTemplate = 'daily_clear' | 'leaderboard_entry' | 'streak_milestone'
+
+export interface ArcadeCommunityFeedItem {
+  /** Opaque, deterministic per underlying event (stable across template
+      reclassification); the like key. Never a raw run_id / source_key. */
+  id: string
+  template: ArcadeCommunityFeedTemplate
+  /** The privacy-vetted public label — the only identity the feed ever exposes. */
+  public_label: string
+  /** ISO timestamp of the real event (finished_at / created_at). Relative time
+      is rendered live from this on the client — never a frozen string. */
+  at: string
+  /** Defusal time in ms — present on daily_clear only. */
+  duration_ms?: number
+  /** Streak length in days — present on streak_milestone only. */
+  streak_days?: number
+  like_count: number
+  /** Whether the requesting viewer has liked this item (always false for anon). */
+  liked: boolean
+}
+
+export interface ArcadeCommunityFeedResponse {
+  items: ArcadeCommunityFeedItem[]
+  /** Cursor for the next page: the ISO `at` of the last item, or null when the
+      window is exhausted. A follow-up read passes it as `?before=`. */
+  next_before: string | null
+}
+
+export interface ArcadeCommunityLikeResponse {
+  event_id: string
+  like_count: number
+  liked: boolean
+}

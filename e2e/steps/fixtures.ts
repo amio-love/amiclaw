@@ -89,6 +89,21 @@ interface SubmitResponse {
   personal_best_attempt?: number
 }
 
+interface CommunityFeedItem {
+  id: string
+  template: 'daily_clear' | 'leaderboard_entry' | 'streak_milestone'
+  public_label: string
+  at: string
+  duration_ms?: number
+  streak_days?: number
+  like_count: number
+  liked: boolean
+}
+interface CommunityFeedResponse {
+  items: CommunityFeedItem[]
+  next_before: string | null
+}
+
 const FIXTURES_DIR = resolve(process.cwd(), 'e2e/fixtures')
 
 function readJson<T>(name: string): T {
@@ -101,6 +116,26 @@ const LEADERBOARD_DEFAULT = readJson<{ get: LeaderboardGetResponse; post: Submit
   'leaderboard-default.json'
 )
 const ARCADE_PROFILE_TODAY = new Date(ANSWERS.seed).toISOString().slice(0, 10)
+
+/* A real derived community item — a defusal ~6 minutes before the pinned seed
+   time, so the page renders a live「6 分钟前」relative label off the real `at`
+   (never the frozen fake string the old mock hardcoded). */
+function defaultCommunityFeed(): CommunityFeedResponse {
+  return {
+    items: [
+      {
+        id: 'e00000000000abcd',
+        template: 'daily_clear',
+        public_label: '林星海',
+        at: new Date(ANSWERS.seed - 6 * 60_000).toISOString(),
+        duration_ms: 131_000,
+        like_count: 12,
+        liked: false,
+      },
+    ],
+    next_before: null,
+  }
+}
 
 function emptyArcadeProfile(profileId?: string) {
   return {
@@ -201,6 +236,10 @@ export class World {
   } | null = null
   /** Captured PUT /api/companion/settings bodies (voice-posture writes). */
   readonly companionSettingsPuts: Record<string, unknown>[] = []
+  /** The route-mocked community feed (GET /api/arcade/community/feed). */
+  communityFeed: CommunityFeedResponse = defaultCommunityFeed()
+  /** Captured community like/unlike requests (POST/DELETE /likes). */
+  readonly communityLikes: { method: string; body: Record<string, unknown> }[] = []
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
@@ -547,6 +586,59 @@ export const test = base.extend<{ world: World }>({
           body: JSON.stringify({
             profile: emptyProfile,
             public_profile: { claimed: false, public_label: null },
+          }),
+        })
+      })
+
+      // Community feed (GET /api/arcade/community/feed) — the real derived event
+      // stream. The static build has no D1, so the feed is served from the
+      // route-mocked `world.communityFeed` (a real-shaped item, never the old
+      // fabricated posts).
+      await page.route('**/api/arcade/community/feed**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(world.communityFeed),
+        })
+      })
+
+      // Community likes (POST like / DELETE unlike). Login-gated exactly like
+      // production: an anonymous attempt gets the same 401 the real endpoint
+      // returns, so the honest login gate is exercised end to end. A signed-in
+      // request echoes the adjusted count.
+      await page.route('**/api/arcade/community/likes', async (route) => {
+        const request = route.request()
+        const method = request.method()
+        if (method === 'OPTIONS') {
+          await route.fulfill({ status: 204 })
+          return
+        }
+        let body: Record<string, unknown> = {}
+        try {
+          body = request.postDataJSON() as Record<string, unknown>
+        } catch {
+          /* body not JSON — ignore */
+        }
+        world.communityLikes.push({ method, body })
+        if (!world.authIdentity) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'authentication required' }),
+          })
+          return
+        }
+        const liked = method === 'POST'
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({
+            event_id: String(body.event_id ?? ''),
+            like_count: liked ? 13 : 12,
+            liked,
           }),
         })
       })
