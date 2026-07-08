@@ -25,7 +25,7 @@
  */
 
 import type { CompanionContext } from '../../companion-memory/src/types'
-import type { AiResponseChunk, AudioChunk } from './contract'
+import type { AiResponseChunk, AudioChunk, RecapOutcome } from './contract'
 import type {
   ChatMessage,
   LlmProvider,
@@ -680,26 +680,64 @@ export async function* runTurn(
 }
 
 /**
- * Server-side closing directive for the post-win recap turn.
+ * Server-side closing directives for the post-run recap turn, one per outcome.
  *
- * Seeded as a synthetic `user` message (like `OPENING_DIRECTIVE`) so the LLM
- * has a turn to respond to; NEVER client-provided and NEVER persisted into
- * history (the recap text it elicits is). The persona's own voice rule (spoken
- * Chinese, no brackets/markdown, etc.) governs the reply; this only constrains
- * LENGTH and INTENT so the recap stays short and warm.
+ * Seeded as a synthetic `user` message (like `OPENING_DIRECTIVE`) so the LLM has
+ * a turn to respond to; NEVER client-provided and NEVER persisted into history
+ * (the recap text it elicits is). The persona's own voice rule (spoken Chinese,
+ * no brackets/markdown, etc.) governs the reply; each directive constrains only
+ * LENGTH, INTENT, and REGISTER:
+ *  - `defused` — warm congratulation + ONE concrete callback to something that
+ *    actually happened in the run (a specific module / moment from the history).
+ *  - `exploded` / `timeout` — FACTS ONLY, no consolation or encouragement
+ *    (companion-presence-design §节拍 3: 「失败时不安慰，只说事实」), naming the
+ *    specific module / step reached.
+ *
+ * All three force one concrete callback so the recap reads as a real 复盘 of THIS
+ * run rather than a generic line.
  */
-export const CLOSING_DIRECTIVE =
-  '[game complete] The bomb has been fully defused. ' +
+export const CLOSING_DIRECTIVE_DEFUSED =
+  '[game complete: defused] The bomb has been fully defused. ' +
   'In the language you have been speaking (Chinese), congratulate the player warmly in ' +
-  'one short sentence, then give a one-sentence spoken recap of the defusal. ' +
-  'Two sentences total. Spoken naturally. No lists, no brackets, no markdown.'
+  'one short sentence, then recap ONE concrete thing that actually happened in THIS run — ' +
+  'name a specific module or moment from your conversation. Two sentences total. ' +
+  'Spoken naturally. No lists, no brackets, no markdown.'
+
+export const CLOSING_DIRECTIVE_EXPLODED =
+  '[game over: exploded] The bomb exploded — the player made too many mistakes and did not ' +
+  'defuse it. In the language you have been speaking (Chinese), say one or two short factual ' +
+  'sentences about where it went wrong — name the specific module or step from your ' +
+  'conversation. State facts only; do NOT console, reassure, or encourage. ' +
+  'Spoken naturally. No lists, no brackets, no markdown.'
+
+export const CLOSING_DIRECTIVE_TIMEOUT =
+  '[game over: time out] Time ran out before the bomb was defused. In the language you have ' +
+  'been speaking (Chinese), say one or two short factual sentences about where the player ' +
+  'stopped — name the specific module or step reached. State facts only; do NOT console or ' +
+  'encourage. Spoken naturally. No lists, no brackets, no markdown.'
+
+/** Back-compat alias: the pre-outcome single directive is the defused one. */
+export const CLOSING_DIRECTIVE = CLOSING_DIRECTIVE_DEFUSED
+
+/** Select the closing directive for a run outcome. Absent outcome ⇒ defused. */
+export function closingDirectiveFor(outcome: RecapOutcome = 'defused'): string {
+  switch (outcome) {
+    case 'exploded':
+      return CLOSING_DIRECTIVE_EXPLODED
+    case 'timeout':
+      return CLOSING_DIRECTIVE_TIMEOUT
+    case 'defused':
+      return CLOSING_DIRECTIVE_DEFUSED
+  }
+}
 
 /**
- * Run the closing-recap turn — an LLM+TTS-only turn the DO fires after the
- * player wins a daily defuse, with NO player-audio STT step. Mirrors
- * {@link runOpeningTurn}: the server-side {@link CLOSING_DIRECTIVE} stands in
- * for the (absent) player utterance so the LLM speaks a short warm recap before
- * the results screen appears.
+ * Run the closing-recap turn — an LLM+TTS-only turn the DO fires at settlement,
+ * with NO player-audio STT step. Mirrors {@link runOpeningTurn}: the server-side
+ * outcome-specific directive stands in for the (absent) player utterance so the
+ * LLM speaks a short recap in the right register before the results screen
+ * appears. `outcome` picks the directive (win congratulation vs facts-only
+ * failure recap); absent defaults to `defused`.
  *
  * The synthetic directive is NEVER persisted to history; only the recap text it
  * produces is. The recap does NOT count toward `turnCount` — it is not a player
@@ -709,10 +747,11 @@ export const CLOSING_DIRECTIVE =
  */
 export async function* runClosingTurn(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
-  state: SessionState
+  state: SessionState,
+  outcome: RecapOutcome = 'defused'
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
-  const userMessage: ChatMessage = { role: 'user', content: CLOSING_DIRECTIVE }
+  const userMessage: ChatMessage = { role: 'user', content: closingDirectiveFor(outcome) }
   const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
 
   const result = yield* streamLlmTts(

@@ -27,15 +27,15 @@ import {
 } from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import { readEntryRecoveryState } from '@/utils/session'
+import { wasClosingRecapFired } from '@/voice/closing-recap-log'
 import { useCompanionPartner } from '@/hooks/useCompanionPartner'
 import {
-  buildPostGameReaction,
-  canFirePostGameBeat,
   readBeatLog,
   readCachedVoicePosture,
   recordBeatFired,
   writeBeatLog,
 } from '@shared/companion-presence'
+import { deriveCompanionReaction } from './companion-reaction'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
 import styles from './ResultPage.module.css'
@@ -151,23 +151,28 @@ export default function ResultPage() {
   // sync it via useCompanionPartner), so a cross-device mute can lag at most
   // one settlement on a deep-linked run — an accepted cache-first trade-off.
   const companionRunId = entryRecovery?.platformPartner === true ? state.gameRunId : null
-  const [companionReaction] = useState<string | null>(() => {
-    if (noRunData || companionRunId === null || state.outcome === null) return null
-    const posture = readCachedVoicePosture()
-    const muted = posture === 'quiet-remembered' || posture === 'denied-remembered'
-    const log = readBeatLog(getTodayString())
-    const alreadyReacted = log.lastPostGameRunId === companionRunId
-    if (!alreadyReacted && !canFirePostGameBeat({ log, gameRunId: companionRunId, muted })) {
-      return null
-    }
-    return buildPostGameReaction({
+  const [companionReaction] = useState<string | null>(() =>
+    // Pure gate (both dedup directions + beat caps in `deriveCompanionReaction`);
+    // the impure reads (posture cache, beat log, closing-recap dedup flag) happen
+    // here and are passed in.
+    deriveCompanionReaction({
+      noRunData,
+      companionRunId,
       outcome: state.outcome,
-      durationMs: totalMs,
-      moduleCount: state.moduleSequence.length,
-      completedModules: state.moduleStats.length,
-      strikeCount: state.strikeCount,
+      // Dedup — one recap, not two: if the SPOKEN closing recap already fired for
+      // this run, the settlement is recapped by voice; suppress the text reaction.
+      recapAlreadyFired: wasClosingRecapFired(companionRunId),
+      posture: readCachedVoicePosture(),
+      log: readBeatLog(getTodayString()),
+      reactionFacts: {
+        outcome: state.outcome ?? 'defused',
+        durationMs: totalMs,
+        moduleCount: state.moduleSequence.length,
+        completedModules: state.moduleStats.length,
+        strikeCount: state.strikeCount,
+      },
     })
-  })
+  )
   // The companion identity read powers the speaker label; a failed read keeps
   // the line with the generic label rather than dropping the reaction.
   const companionPartner = useCompanionPartner(companionReaction !== null)

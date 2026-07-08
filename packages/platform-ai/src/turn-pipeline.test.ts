@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  CLOSING_DIRECTIVE_DEFUSED,
+  CLOSING_DIRECTIVE_EXPLODED,
+  CLOSING_DIRECTIVE_TIMEOUT,
+  closingDirectiveFor,
   OPENING_DIRECTIVE,
   runOpeningTurn,
   runTurn,
@@ -874,5 +878,34 @@ describe('runOpeningTurn', () => {
     // session's STT annotation is untouched (still its initial provider-reported).
     expect(state.usage.sttInputSeconds).toBe(0)
     expect(state.sttSource).toBe('provider-reported')
+  })
+})
+
+describe('closingDirectiveFor — outcome-aware recap register', () => {
+  it('defaults to the defused (warm) directive when no outcome is given', () => {
+    expect(closingDirectiveFor()).toBe(CLOSING_DIRECTIVE_DEFUSED)
+    expect(closingDirectiveFor('defused')).toBe(CLOSING_DIRECTIVE_DEFUSED)
+  })
+
+  it('selects the failure directives for exploded / timeout', () => {
+    expect(closingDirectiveFor('exploded')).toBe(CLOSING_DIRECTIVE_EXPLODED)
+    expect(closingDirectiveFor('timeout')).toBe(CLOSING_DIRECTIVE_TIMEOUT)
+  })
+
+  it('the defused directive congratulates; the failure ones forbid consolation', () => {
+    // Register contract (companion-presence-design §节拍 3): win = warm, failure =
+    // facts only. Asserted on the directive text so a reword that drops the
+    // "no console/encourage" clause is caught.
+    expect(CLOSING_DIRECTIVE_DEFUSED).toContain('congratulate')
+    expect(CLOSING_DIRECTIVE_EXPLODED).toMatch(/do NOT console/)
+    expect(CLOSING_DIRECTIVE_TIMEOUT).toMatch(/do NOT console/)
+    // All three force a concrete callback to THIS run.
+    for (const d of [
+      CLOSING_DIRECTIVE_DEFUSED,
+      CLOSING_DIRECTIVE_EXPLODED,
+      CLOSING_DIRECTIVE_TIMEOUT,
+    ]) {
+      expect(d).toMatch(/name (a |the )specific module/)
+    }
   })
 })

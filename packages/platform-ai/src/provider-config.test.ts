@@ -97,6 +97,35 @@ describe('resolveConfig — bombsquad', () => {
   })
 })
 
+describe('resolveConfig — companion-lobby', () => {
+  it('resolves the lobby companion persona: a home-lobby greeter with no game/manual', () => {
+    const resolved = resolveConfig('companion-lobby')
+    expect(resolved.gameId).toBe('companion-lobby')
+
+    const { role, ruleTemplate } = resolved.systemPromptConfig
+    // Persona marker: the companion on the home lobby, not a defuse expert.
+    expect(role.length).toBeGreaterThan(0)
+    expect(role).toContain('大厅')
+    expect(role).not.toContain('拆弹')
+
+    // The rules forbid inventing a game/manual (there is none here) and pin the
+    // brief, spoken-Chinese greeter register.
+    const joined = ruleTemplate.join('\n')
+    expect(joined).toContain('手册') // "…没有手册" — explicitly no manual
+    expect(joined).toContain('中文')
+  })
+
+  it('mirrors the verified DeepSeek v4 LLM + Volcengine voice stack', () => {
+    const { llm, stt, tts } = resolveConfig('companion-lobby')
+    expect(llm.provider).toBe('deepseek')
+    expect(llm.model).toBe('deepseek-v4-flash')
+    expect(stt.provider).toBe('volcengine')
+    expect(stt.model).toBe('bigmodel')
+    expect(tts.provider).toBe('volcengine')
+    expect(tts.model).toBe('')
+  })
+})
+
 describe('resolveConfig — miss', () => {
   it('throws an explicit error on an unregistered gameId (no silent fallback)', () => {
     expect(() => resolveConfig('not-a-real-game')).toThrowError(

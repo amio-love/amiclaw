@@ -41,12 +41,14 @@ import {
   writeBeatLog,
   writeCachedVoicePosture,
   type DockStatus,
+  type DockVoicePhase,
   type PostureEvent,
 } from '@shared/companion-presence'
 import { getTodayString } from '@shared/date'
 import { readArcadeLocalProfile, summarizeArcadeLocalProfile } from '@amiclaw/arcade-profile/local'
 import { fetchMemories, putVoicePosture } from '@/lib/companion-api'
 import { LOBBY_VOICE_CAPABLE, LOBBY_VOICE_NOTE } from './lobby-voice'
+import { useLobbyVoiceSession } from './useLobbyVoiceSession'
 
 /** Delay between the greeting text landing and the mic permission request. */
 const MIC_REQUEST_DELAY_MS = 300
@@ -92,25 +94,39 @@ function readLocalPlayContext(): {
 }
 
 /**
- * Request mic permission and immediately release the probe stream.
- * `unsupported` (no mediaDevices — insecure context, legacy browser) is NOT a
- * denial: it must never write `denied-remembered`.
+ * Request mic permission. On grant the probe stream is RETAINED and returned so
+ * the lobby voice session can reuse it (the browser is not prompted twice); the
+ * caller owns stopping it (handing it to `lobby.open(stream)`, or stopping it if
+ * it opens no session). `unsupported` (no mediaDevices — insecure context, legacy
+ * browser) is NOT a denial: it must never write `denied-remembered`.
  */
-async function probeMicPermission(): Promise<'granted' | 'denied' | 'unsupported'> {
+async function probeMicPermission(): Promise<{
+  outcome: 'granted' | 'denied' | 'unsupported'
+  stream: MediaStream | null
+}> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-    return 'unsupported'
+    return { outcome: 'unsupported', stream: null }
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    stream.getTracks().forEach((track) => track.stop())
-    return 'granted'
+    return { outcome: 'granted', stream }
   } catch {
-    return 'denied'
+    return { outcome: 'denied', stream: null }
   }
 }
 
 export function useCompanionPresence(companion: CompanionIdentity): CompanionPresence {
   const location = useLocation()
+  const onHomepage = location.pathname === '/'
+
+  // The manual-less lobby voice session (design step 4). Opened from the grant
+  // branch(es) below; its streamed greeting drives the dock subtitle (Option B)
+  // and its 3-state phase drives the live dock states. Only ever opened on the
+  // homepage this slice (lobby voice is homepage-scoped — teardown on nav away).
+  const lobby = useLobbyVoiceSession()
+  // Stable action handles (useCallback in the hook) — safe in effect / callback
+  // deps without recreating them every render.
+  const { open: openLobby, close: closeLobby } = lobby
 
   // Account posture is the SSOT; adopt it on mount and mirror it to the cache
   // (the cache exists for pre-API reads and stays in sync on every write).
@@ -173,7 +189,6 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
   }, [])
 
   // --- Arrival beat + auto-voice sequence (homepage only) ---------------------
-  const onHomepage = location.pathname === '/'
   useEffect(() => {
     if (!onHomepage) return
     // 静音回访 (design step 6): quiet/denied postures land muted — no bubble,
@@ -224,8 +239,15 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
       if (LOBBY_VOICE_CAPABLE) {
         schedule(() => {
           if (postureRef.current !== 'voice-default') return
-          void probeMicPermission().then((outcome) => {
-            if (outcome === 'denied') applyPostureEvent('permission-denied')
+          void probeMicPermission().then(({ outcome, stream }) => {
+            // Step 4 — GRANT: open the lobby voice session, reusing the granted
+            // stream so the browser is not prompted again. Its streamed greeting
+            // then drives the dock subtitle + 说话/倾听 states.
+            if (outcome === 'granted') openLobby(stream ?? undefined)
+            // Step 5 — DENIAL: persist denied-remembered (never auto-repeated).
+            else if (outcome === 'denied') applyPostureEvent('permission-denied')
+            // `unsupported` stops any stray track and writes nothing.
+            else stream?.getTracks().forEach((t) => t.stop())
           })
         }, MIC_REQUEST_DELAY_MS)
       }
@@ -245,6 +267,32 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onHomepage])
 
+  // --- Lobby voice channel ↔ dock wiring --------------------------------------
+
+  // Option B: once the voice channel is live, the server's memory-grounded
+  // streamed greeting replaces the instant client greeting as the bubble text —
+  // the bubble is the live subtitle of what the companion is saying (design §字幕).
+  // This is a pure "adjust state from a changing value" (React's documented
+  // set-state-during-render pattern, guarded by the last-seen text so it fires
+  // once per change), NOT an effect — syncing a streamed value into the bubble in
+  // an effect body trips the cascading-render lint and lands one frame late.
+  const [lastLobbyText, setLastLobbyText] = useState('')
+  if (lobby.live && lobby.aiText.length > 0 && lobby.aiText !== lastLobbyText) {
+    setLastLobbyText(lobby.aiText)
+    setBubble({ text: lobby.aiText, expanded: false })
+    setLastUtterance(lobby.aiText)
+  }
+  if (!lobby.live && lastLobbyText.length > 0) {
+    // Session ended — reset so the NEXT live greeting syncs again.
+    setLastLobbyText('')
+  }
+
+  // Homepage-scoped: leaving the homepage is a scene switch (design §降级触发 —
+  // no posture change), so the lobby channel tears down (abrupt close, no memory).
+  useEffect(() => {
+    if (!onHomepage) closeLobby('caller')
+  }, [onHomepage, closeLobby])
+
   // --- Controls ---------------------------------------------------------------
 
   const onMute = useCallback(() => {
@@ -252,8 +300,11 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     setSessionElevated(false)
     setBubble(null)
     setGreetingDwell(false)
+    // Muting closes the mouth AND any live lobby channel — abrupt close, no
+    // memory capture (design §控制面 / §成本姿态).
+    closeLobby('caller')
     applyPostureEvent('mute')
-  }, [applyPostureEvent])
+  }, [applyPostureEvent, closeLobby])
 
   const onRestoreVoice = useCallback(() => {
     setSessionMuted(false)
@@ -277,27 +328,37 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
         // Manual retry is the ONLY re-request path after a denial; the user
         // gesture lets the browser re-prompt. Grant corrects the old denial
         // back to voice-default; a second denial changes nothing.
-        void probeMicPermission().then((outcome) => {
+        void probeMicPermission().then(({ outcome, stream }) => {
           if (outcome === 'granted') {
             applyPostureEvent('manual-grant')
             setSessionMuted(false)
             setSessionElevated(true)
+            // Elevate into a live channel on the homepage; off-homepage this
+            // slice keeps voice homepage-scoped, so just release the stream.
+            if (onHomepage) openLobby(stream ?? undefined)
+            else stream?.getTracks().forEach((t) => t.stop())
+          } else {
+            stream?.getTracks().forEach((t) => t.stop())
           }
         })
         return
       }
       // quiet-remembered / session mute: elevate THIS visit only — an explicit
-      // mute is undone only by the explicit 恢复自动语音 (least surprise).
+      // mute is undone only by the explicit 恢复自动语音 (least surprise). The
+      // user gesture opens a live channel on the homepage (open() acquires the
+      // mic itself — the click is the permission gesture).
       setSessionMuted(false)
       setSessionElevated(true)
+      if (onHomepage) openLobby()
       return
     }
     // Voice nominally on → the mic button is the manual downgrade (design:
-    // 手动降级语音 → quiet-remembered).
+    // 手动降级语音 → quiet-remembered): close the live channel and mute.
     setSessionMuted(true)
     setSessionElevated(false)
+    closeLobby('caller')
     applyPostureEvent('mute')
-  }, [applyPostureEvent, sessionElevated])
+  }, [applyPostureEvent, sessionElevated, onHomepage, openLobby, closeLobby])
 
   const expandBubble = useCallback(() => {
     setBubble((current) => (current ? { ...current, expanded: true } : current))
@@ -312,15 +373,25 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     if (lastUtterance !== null) setBubble({ text: lastUtterance, expanded: true })
   }, [lastUtterance])
 
+  // Dock voice phase: a LIVE lobby channel drives the honest 3-state (speaking /
+  // listening / thinking→idle); before/without one, the instant greeting dwell is
+  // the one 说话 window the dock can honestly show.
+  const voicePhase: DockVoicePhase = lobby.live
+    ? lobby.conversationPhase === 'speaking'
+      ? 'speaking'
+      : lobby.conversationPhase === 'listening'
+        ? 'listening'
+        : 'idle' // 'thinking' — the dock has no thinking state; read as 在线
+    : greetingDwell && !sessionMuted
+      ? 'speaking'
+      : 'idle'
+
   const dockStatus = deriveDockStatus({
     signedInWithCompanion: true,
     posture,
     sessionMuted,
     sessionElevated,
-    // No live voice channel exists on platform pages in this slice; the
-    // greeting dwell is the one 说话 (speaking) window the dock can honestly
-    // show. 倾听 (listening) becomes reachable with the lobby voice session.
-    voicePhase: greetingDwell && !sessionMuted ? 'speaking' : 'idle',
+    voicePhase,
   })
 
   return {

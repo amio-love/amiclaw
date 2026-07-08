@@ -96,6 +96,19 @@ export interface ResolvedConfig extends ProviderConfig {
  * each module's concrete defuse logic lives in the injected per-module manual
  * `rule` (see `packages/manual/data/*.yaml`), so the prompt defers to it rather
  * than restating it.
+ *
+ * The `companion-lobby` entry backs the homepage/lobby companion voice greeting
+ * (NOT a game). It resolves like any other game id — but the session carries an
+ * EMPTY manual (`{version:'lobby', sections:{}}`, `relevantSections:[]`), so the
+ * manual-injection block is the benign "no relevant sections" placeholder and the
+ * only injected context is the companion-memory block (name / claims / episodes),
+ * resolved server-side from the auth cookie exactly as in-game. Its persona is the
+ * companion itself on the home lobby — warm, brief, memory-aware — and its rules
+ * forbid inventing a game or manual (there is none here). Same DeepSeek +
+ * Volcengine stack as `bombsquad`; the AI-first opening greeting is the whole
+ * point of the session, so it always fires. Cost is bounded client-side (silence
+ * timeout / turn cap / hard-max duration → abrupt close); the lobby session is a
+ * conversation, never background audio.
  */
 const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
   demo: {
@@ -187,16 +200,47 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
         '你的回复会被原样朗读给玩家，所以只输出纯口语：不要括号、方括号、星号或任何 markdown，不要把符号名或注释塞进括号里。要指明某个符号时，把它自然说进句子里（说「中间那个三叉戟的轮，往右按一次」，而不是「中间那个轮（三叉戟）按右箭头 1 次」）；次数、方向也用口语（说「按一次」「往右」，不用「1 次」「右箭头」这种书面写法）。',
         '始终用中文，口语、简洁、精确；冷静不慌、不说废话。',
         // Closing-recap instruction (separate concern — keeps the voice-output rule above intact).
-        // Fires when the server sends the synthetic [game complete] directive at the end of a
-        // successful daily defuse. The prompt directive already constrains length and intent;
-        // this rule reinforces the persona's voice contract for that edge case.
-        '炸弹完全拆除时，用一到两句口语中文热情祝贺玩家，简短温暖；不列清单、不用括号。',
+        // Fires when the server sends the synthetic [game complete/over] directive at settlement.
+        // The prompt directive already constrains length/intent per outcome; this rule reinforces
+        // the persona's register: warm on a win, facts-only (no consolation) on a failure.
+        '一局结束时按结果收尾：拆除成功就用一到两句口语中文热情祝贺，并点一件这局真实发生的事；失败或超时就只说事实（停在哪个模块、哪一步出的问题），不安慰、不打气、不列清单、不用括号。',
       ],
     },
     // Provider stack mirrors `demo` exactly — the verified DeepSeek + Volcengine
     // production stack. See the `demo` entry above for the per-layer rationale
     // (the `bigmodel` ASR wire model and the empty-string TTS resource-id-default
     // sentinel).
+    llm: {
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    },
+    stt: {
+      provider: 'volcengine',
+      model: 'bigmodel',
+    },
+    tts: {
+      provider: 'volcengine',
+      model: '',
+    },
+  },
+  'companion-lobby': {
+    systemPromptConfig: {
+      // Chinese, agent-voice: the companion itself on the home lobby. This is a
+      // brief social presence, NOT a game — there is no manual and no puzzle. The
+      // greeting + memory context are the whole session. Server-side config —
+      // never shipped to the client.
+      role: '你是玩家的 AI 伙伴，此刻在首页大厅遇到玩家。你有玩家的记忆（名字、你了解的事、一起经历过的时刻），但这里没有任何游戏或手册。你只是简短地打个招呼、寒暄两句，像一个偶尔说句话的朋友。',
+      ruleTemplate: [
+        '这里是大厅，不是拆弹局：没有炸弹、没有模块、没有手册。绝不假装有游戏要玩，绝不描述或询问设备、模块、指示灯这类游戏细节。',
+        '开场只说一到两句：自然地打个招呼，可以自然带出一件记忆里的真实小事（上次的经历、连续天数），但绝不编造没发生过的事；没有可引用的记忆就只是简单招呼。',
+        '你的回复会被原样朗读给玩家，所以只输出纯口语：不要括号、方括号、星号或任何 markdown，不要念字段名或注释。',
+        '简短、克制、温暖；说完自然停下，安静等玩家开口，绝不喋喋不休、不追问、不硬找话题。要玩游戏时引导玩家去每日挑战即可。',
+        '始终用中文，口语、自然、精确。',
+      ],
+    },
+    // Same verified DeepSeek + Volcengine stack as `bombsquad` / `demo` (see the
+    // `demo` entry for the per-layer rationale: the `bigmodel` ASR wire model and
+    // the empty-string TTS resource-id-default sentinel).
     llm: {
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
