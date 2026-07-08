@@ -41,6 +41,37 @@ export type UseAuthResult = AuthState & {
   logout: () => Promise<void>
 }
 
+/**
+ * Module-level dedup of the session read (F10). On any given page, TopNav +
+ * CompanionDock + the page component (and more) each call `useAuth`, and each
+ * used to fire its own `GET /api/auth/session` — ~11 requests across 4 pages.
+ * Consumers mounting in the same render commit now share ONE in-flight read.
+ *
+ * The promise is cleared the moment it settles, so the dedup only collapses the
+ * concurrent burst (where the redundancy was): each later client-side navigation
+ * still re-reads a fresh session, and a transient network failure never poisons
+ * a subsequent read.
+ */
+let sessionReadPromise: Promise<AuthState> | null = null
+
+function readSessionState(): Promise<AuthState> {
+  if (sessionReadPromise) return sessionReadPromise
+  const pending = fetch(`${API_BASE}/api/auth/session`, { credentials: 'include' })
+    .then((res) => (res.ok ? (res.json() as Promise<SessionResponse>) : null))
+    .then(
+      (body): AuthState =>
+        body?.authenticated && body.identity
+          ? { status: 'authed', user: deriveDisplayUser(body.identity) }
+          : { status: 'anon', user: null }
+    )
+    .catch((): AuthState => ({ status: 'anon', user: null }))
+    .finally(() => {
+      sessionReadPromise = null
+    })
+  sessionReadPromise = pending
+  return pending
+}
+
 function deriveDisplayUser(identity: AuthIdentity): DisplayUser {
   const localPart = identity.email.split('@')[0] ?? identity.email
   // Strip the +tag plus-addressing suffix so a plus-aliased address
@@ -105,19 +136,9 @@ export function useAuth(): UseAuthResult {
     if (bypass) return
 
     let active = true
-    fetch(`${API_BASE}/api/auth/session`, { credentials: 'include' })
-      .then((res) => (res.ok ? (res.json() as Promise<SessionResponse>) : null))
-      .then((body) => {
-        if (!active) return
-        if (body?.authenticated && body.identity) {
-          setState({ status: 'authed', user: deriveDisplayUser(body.identity) })
-        } else {
-          setState({ status: 'anon', user: null })
-        }
-      })
-      .catch(() => {
-        if (active) setState({ status: 'anon', user: null })
-      })
+    readSessionState().then((next) => {
+      if (active) setState(next)
+    })
     return () => {
       active = false
     }

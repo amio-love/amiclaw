@@ -326,8 +326,6 @@ export interface ArrivalGreetingInput {
   recentEpisodeTitle: string | null
   /** Current arcade streak in days (0 = no streak). */
   streakDays: number
-  /** Whether any local play record exists at all. */
-  hasPlayedBefore: boolean
   /**
    * Familiarity tier (B9a 称呼): the newcomer tier keeps the fuller address; the
    * warmer tiers drop it for a closer register. Omitted → base tier (fuller
@@ -342,6 +340,13 @@ export interface ArrivalGreetingInput {
  * kitsch). Every clause is backed by real data; missing data drops the clause
  * instead of inventing one. The familiarity tier modulates the address register
  * (B9a) — a closer relationship drops the explicit name.
+ *
+ * The welcome-back「回来了」only fires when there is real shared history the
+ * companion can point to — an episode to cite, or an ongoing streak (F6). A
+ * zero-episode, zero-streak account has no relationship yet, so it gets the
+ * neutral first-meeting line instead of a greeting that implies the companion
+ * remembers it. (Device-local play is deliberately NOT a trigger: playing solo
+ * on this device is not shared companion history.)
  */
 export function buildArrivalGreeting(input: ArrivalGreetingInput): string {
   const useAddress = input.tier === undefined || tierUsesAddressPrefix(input.tier)
@@ -352,7 +357,7 @@ export function buildArrivalGreeting(input: ArrivalGreetingInput): string {
   if (input.recentEpisodeTitle) {
     return `${prefix}上次${input.recentEpisodeTitle}，我还记着。${streakLine || '今天再来一局？'}`
   }
-  if (input.hasPlayedBefore) {
+  if (input.streakDays >= 1) {
     return `${prefix}回来了。${streakLine}今天的题目是新的。`
   }
   return `${prefix}我在这。今天的每日挑战等你。`

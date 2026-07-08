@@ -110,7 +110,7 @@ describe('PageSign arcade profile write', () => {
     expect(mocks.submitArcadeProfileEvent).not.toHaveBeenCalled()
   })
 
-  it('copies the share text with visible feedback', async () => {
+  it('copies the share text with copy-specific feedback, never a share failure (F3)', async () => {
     mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
     mocks.session.castCreatedAt = '2026-07-06T08:00:00.000Z'
     const writeText = vi.fn((_: string) => Promise.resolve())
@@ -121,6 +121,40 @@ describe('PageSign arcade profile write', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     expect(writeText.mock.calls[0][0]).toContain('AMIO 游乐场今日卦签')
-    expect(await screen.findByText('分享文案已复制。')).toBeTruthy()
+    expect(await screen.findByText('卦签文案已复制。')).toBeTruthy()
+    // A copy action must never report a share failure.
+    expect(screen.queryByText(/分享失败/)).toBeNull()
+  })
+
+  it('shares via clipboard when no Web Share API is present (F4 desktop)', async () => {
+    mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
+    mocks.session.castCreatedAt = '2026-07-06T08:00:00.000Z'
+    const writeText = vi.fn((_: string) => Promise.resolve())
+    // navigator.share is undefined (desktop / headless); clipboard is available.
+    vi.stubGlobal('navigator', { ...navigator, share: undefined, clipboard: { writeText } })
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '分享卦签' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('卦签文案已复制。')).toBeTruthy()
+    expect(screen.queryByText(/分享失败/)).toBeNull()
+  })
+
+  it('falls back to a select-to-copy field when clipboard is unavailable (F4)', async () => {
+    mocks.session.yaoValues = [7, 8, 9, 7, 7, 7]
+    mocks.session.castCreatedAt = '2026-07-06T08:00:00.000Z'
+    // No Web Share, no async clipboard, and execCommand copy fails.
+    vi.stubGlobal('navigator', { ...navigator, share: undefined, clipboard: undefined })
+    // jsdom does not implement execCommand; define it as a failing stub so the
+    // legacy clipboard path in copyToClipboard also fails on this device.
+    ;(document as unknown as { execCommand: () => boolean }).execCommand = () => false
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '复制卦签' }))
+
+    const field = (await screen.findByLabelText('卦签文案')) as HTMLTextAreaElement
+    expect(field.value).toContain('AMIO 游乐场今日卦签')
+    expect(screen.queryByText(/分享失败/)).toBeNull()
   })
 })

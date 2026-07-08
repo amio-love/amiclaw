@@ -2,8 +2,37 @@ import type { ScoreSubmission } from '../../../shared/leaderboard-types'
 import type { EventName, EventPayload } from '../../../shared/event-types'
 import { MODULE_ADVANCE_DELAY_MS } from '../../../shared/game-timing'
 
-const MIN_GAME_TIME_MS = 15_000 // 15 seconds minimum — reject obvious cheats
+// --- Plausibility floor (the daily time board's anti-cheat, F1) --------------
+// The daily leaderboard ranks by ascending wall-clock time, and the homepage
+// 「最快拆弹」 marketing stat reads the fastest board row — so an implausibly
+// fast entry both tops the board over real humans and poisons the homepage.
+//
+// These are PLAUSIBILITY floors, NOT tamper-proof anti-cheat. `time_ms` and
+// `module_times` are both client-reported (the run has no server-authoritative
+// timer, and `operations_hash` is still an 'mvp-placeholder'), so a determined
+// forger who submits a self-consistent but fabricated payload still passes.
+// True anti-cheat needs a server-timed session — an out-of-scope followup. What
+// these floors DO buy: they reject the fast automated / scripted runs that
+// actually reached the board (a ~36s full clear topped real 3:02 / 4:39 human
+// runs), and they heal the homepage stat that reads the same board.
+//
+// The floor is set toward the human+AI band, not at the slowest observed human:
+// a full clear requires a human to read all four modules aloud to an EXTERNAL
+// voice AI, hear each computed answer back, and physically execute it —
+// including the button module's hold-until-target-color wait, which has an
+// irreducible real-time cost. 60s sits ~1.7x above the automated 36s that
+// reached the board and ~3x below the fastest genuine human run observed
+// (3:02), leaving ample headroom for a skilled human+AI pair while rejecting
+// automation. Raise it as real human-run data accumulates.
+const MIN_GAME_TIME_MS = 60_000 // 60 seconds minimum — the collaborative-loop plausibility floor
 const MAX_GAME_TIME_MS = 3_600_000 // 1 hour max
+// Structural per-module floor: no single module can be honestly solved faster
+// than one read→relay-to-AI→execute round-trip. A sub-floor module time means a
+// scripted/replayed solve even when the reported total clears MIN_GAME_TIME_MS,
+// so it is rejected on top of the total floor and the module-sum consistency
+// check below. Kept conservative (well under the ~15s/module the 60s total
+// implies) so a genuinely fast module never false-positives.
+const MIN_MODULE_TIME_MS = 3_000 // 3 seconds minimum per module
 const MAX_NICKNAME_LEN = 20
 export const MAX_AI_TOOL_LEN = 40
 export const MAX_AI_MODEL_LEN = 80
@@ -59,7 +88,7 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
     return fail('Invalid run_id')
   }
 
-  if (submission.time_ms < MIN_GAME_TIME_MS) return fail('Time too short — minimum 15 seconds')
+  if (submission.time_ms < MIN_GAME_TIME_MS) return fail('Time too short — minimum 60 seconds')
   if (submission.time_ms > MAX_GAME_TIME_MS) return fail('Time exceeds maximum')
 
   // Date must be today or yesterday (allow timezone skew)
@@ -87,6 +116,12 @@ export function validateSubmission(submission: ScoreSubmission): ValidationResul
   // Boundaries stay strict (`diff` exactly at either bound still passes) and the
   // check still only runs for a length-4 module_times array.
   if (Array.isArray(submission.module_times) && submission.module_times.length === 4) {
+    // Per-module plausibility floor (F1): a single module solved faster than one
+    // read→relay→execute round-trip is not human play. Applied here, alongside
+    // the sum-consistency check, so a padded total cannot hide an instant module.
+    if (submission.module_times.some((t) => t < MIN_MODULE_TIME_MS)) {
+      return fail('Module solved implausibly fast')
+    }
     const moduleSum = submission.module_times.reduce((a, b) => a + b, 0)
     const diff = submission.time_ms - moduleSum
     const upperBound =

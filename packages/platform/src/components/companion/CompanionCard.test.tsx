@@ -1,7 +1,7 @@
 /**
  * CompanionCard stats-strip tests.
  *
- *   1. real mode: 「在一起 N 天」 is computed from the companion's real
+ *   1. real mode: 「相识 N 天」 is computed from the companion's real
  *      `created_at`, and the seed-only game stats (完成 / 成功) are hidden;
  *   2. seed mode: the full strip (在一起 + 完成 + 成功) shows, and the read
  *      never calls fetch (READ-ONLY seed).
@@ -40,7 +40,7 @@ describe('CompanionCard stats strip', () => {
     window.sessionStorage.clear()
   })
 
-  it('real mode: shows 在一起 N 天 from created_at plus honest-zero game stats', async () => {
+  it('real mode: shows 相识 N 天 from created_at plus honest-zero game stats', async () => {
     const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString()
     vi.stubGlobal(
       'fetch',
@@ -64,8 +64,8 @@ describe('CompanionCard stats strip', () => {
     renderCard()
 
     expect(await screen.findByText('小南')).toBeInTheDocument()
-    // The real days-together stat — number + unit in the value, clean label.
-    expect(within(pillByLabel('在一起')).getByText('5 天')).toBeInTheDocument()
+    // The real acquaintance-days stat — number + unit in the value, clean label.
+    expect(within(pillByLabel('相识')).getByText('5 天')).toBeInTheDocument()
     // The game stats are ALWAYS shown — an honest 0 in production, never hidden.
     expect(within(pillByLabel('完成')).getByText('0 局')).toBeInTheDocument()
     expect(within(pillByLabel('成功')).getByText('0 次')).toBeInTheDocument()
@@ -82,7 +82,7 @@ describe('CompanionCard stats strip', () => {
     expect(await screen.findByText('小南')).toBeInTheDocument()
     // A days-together pill is always present (exact copy depends on the clock vs
     // the seed's 2026-05-30 created_at, so assert either form).
-    expect(screen.queryByText('在一起') ?? screen.queryByText('认识你')).toBeInTheDocument()
+    expect(screen.queryByText('相识') ?? screen.queryByText('认识你')).toBeInTheDocument()
     // The illustrative seed counters.
     expect(within(pillByLabel('完成')).getByText('12 局')).toBeInTheDocument()
     expect(within(pillByLabel('成功')).getByText('9 次')).toBeInTheDocument()

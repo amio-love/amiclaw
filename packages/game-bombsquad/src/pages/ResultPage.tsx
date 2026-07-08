@@ -285,7 +285,14 @@ export default function ResultPage() {
     hasFinishedDailyRun && (nickname === null || leaderboardMetadata === null)
   const [surveyReady, setSurveyReady] = useState(false)
   const [surveyRetired, setSurveyRetired] = useState(false)
-  const surveyOpen = needSurvey && !surveyRetired && surveyReady && !leaderboardGateOpen
+  // A server rejection notice (成绩校验未通过) is rendered inline in the rank card
+  // and must be readable before the once-per-device survey opens over it — the
+  // same stacking guard as #209 deferring the survey behind the rank reveal
+  // (F8). A network failure is deliberately NOT gated: it invites an immediate
+  // retry and carries no board verdict the player must absorb first.
+  const rejectionShowing = submitFailed && submitFailKind === 'rejected'
+  const surveyOpen =
+    needSurvey && !surveyRetired && surveyReady && !leaderboardGateOpen && !rejectionShowing
   const modalPurpose: PostGameModalPurpose | null = leaderboardGateOpen
     ? 'leaderboard'
     : surveyOpen

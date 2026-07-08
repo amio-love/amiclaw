@@ -189,31 +189,32 @@ describe('copy builders', () => {
     expect(formatDurationSpeech(67_400)).toBe('1 分 7 秒')
   })
 
-  it('builds the arrival greeting from real data only', () => {
+  it('builds the arrival greeting from real data, no-history first-meeting for an empty relationship (F6)', () => {
+    // A cited episode → the memory line.
     expect(
       buildArrivalGreeting({
         addressStyle: '队长',
         recentEpisodeTitle: '最后三秒拆掉了炸弹',
         streakDays: 3,
-        hasPlayedBefore: true,
       })
     ).toBe('队长，上次最后三秒拆掉了炸弹，我还记着。今天第 4 天了。')
 
+    // No episode but a real ongoing streak → the welcome-back line.
     expect(
       buildArrivalGreeting({
         addressStyle: '',
         recentEpisodeTitle: null,
-        streakDays: 0,
-        hasPlayedBefore: true,
+        streakDays: 1,
       })
     ).toBe('回来了。今天的题目是新的。')
 
+    // No episode AND no streak (a zero-history account) → the first-meeting
+    // line, never a 「回来了」that implies the companion remembers it.
     expect(
       buildArrivalGreeting({
         addressStyle: '',
         recentEpisodeTitle: null,
         streakDays: 0,
-        hasPlayedBefore: false,
       })
     ).toBe('我在这。今天的每日挑战等你。')
   })
@@ -255,7 +256,6 @@ describe('copy builders', () => {
       addressStyle: '队长',
       recentEpisodeTitle: '最后三秒拆掉了炸弹',
       streakDays: 8,
-      hasPlayedBefore: true,
     }
     // Newcomer (default / explicit) keeps the fuller address.
     expect(buildArrivalGreeting(base)).toBe(

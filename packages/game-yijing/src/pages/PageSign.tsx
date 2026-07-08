@@ -7,6 +7,7 @@ import {
   recordOracleLocalSign,
 } from '@amiclaw/arcade-profile/local'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
+import { copyToClipboard } from '@shared/clipboard'
 import { getTodayString, toChineseDateString } from '@shared/date'
 import { Hexagram } from '../glyphs'
 import {
@@ -27,7 +28,11 @@ import styles from './PageSign.module.css'
    cast redirects home: a sign only exists for a cast the visitor made. */
 
 type SaveState = 'saving' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
-type ShareState = 'idle' | 'shared' | 'copied' | 'error'
+// `manual` is the terminal fallback (mirrors BombSquad's ResultPage share):
+// neither the Web Share API nor the clipboard was usable, so the text is
+// surfaced in a selectable field to copy by hand. No path dead-ends in a bare
+// 「分享失败」, and a copy action never reports a share failure (F3 / F4).
+type ShareState = 'idle' | 'shared' | 'copied' | 'manual'
 
 export function PageSign() {
   const { yaoValues } = useSession()
@@ -40,6 +45,8 @@ function SignCard({ values }: { values: YaoSextet }) {
   const { sessionId, castCreatedAt } = useSession()
   const [saveState, setSaveState] = useState<SaveState>('saving')
   const [shareState, setShareState] = useState<ShareState>('idle')
+  // Holds the share text for the terminal select-and-copy fallback (`manual`).
+  const [manualText, setManualText] = useState('')
 
   /* The sign's product day (UTC date, shared with the arcade shell): the
      cast timestamp when present. Both the Gregorian date and the 干支 seal
@@ -110,11 +117,15 @@ function SignCard({ values }: { values: YaoSextet }) {
     [benCn, bianCn, takeaway]
   )
 
+  // Robust share with graceful degradation (F4 — desktop / headless has no Web
+  // Share API): Web Share → clipboard → a select-to-copy field. A user-canceled
+  // native share (AbortError) is left untouched (no error copy); any real share
+  // error falls through to the clipboard path. No path dead-ends in 「分享失败」.
   const handleShare = useCallback(async () => {
     const text = shareText()
-    try {
-      const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
-      if (share) {
+    const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
+    if (share) {
+      try {
         await share({
           title: 'AMIO Arcade Oracle',
           text,
@@ -122,23 +133,29 @@ function SignCard({ values }: { values: YaoSextet }) {
         })
         setShareState('shared')
         return
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        // Any other share failure falls through to the clipboard path below.
       }
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
-      await navigator.clipboard.writeText(text)
-      setShareState('copied')
-    } catch {
-      setShareState('error')
     }
+    if (await copyToClipboard(text)) {
+      setShareState('copied')
+      return
+    }
+    setManualText(text)
+    setShareState('manual')
   }, [shareText])
 
+  // Copy is copy (F3): the robust clipboard path with copy-specific success
+  // feedback, degrading to the same select-to-copy field — never a 「分享失败」.
   const handleCopy = useCallback(async () => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
-      await navigator.clipboard.writeText(shareText())
+    const text = shareText()
+    if (await copyToClipboard(text)) {
       setShareState('copied')
-    } catch {
-      setShareState('error')
+      return
     }
+    setManualText(text)
+    setShareState('manual')
   }, [shareText])
 
   return (
@@ -216,8 +233,23 @@ function SignCard({ values }: { values: YaoSextet }) {
                 ? '本次卦签没有写入档案；请重新问卦后再试。'
                 : '本次卦签已计入今日清单。'}
             </span>
-            {shareState !== 'idle' && (
+            {shareState !== 'idle' && shareState !== 'manual' && (
               <span className={styles.feedbackMeta}>{shareStatusText(shareState)}</span>
+            )}
+            {shareState === 'manual' && (
+              <div className={styles.shareManual}>
+                <span className={styles.feedbackMeta}>
+                  这台设备不支持一键分享或复制，长按下面的文字复制：
+                </span>
+                <textarea
+                  className={styles.shareManualText}
+                  readOnly
+                  rows={3}
+                  value={manualText}
+                  aria-label="卦签文案"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
             )}
           </div>
           <Button variant="primary" onClick={handleShare}>
@@ -288,9 +320,7 @@ function shareStatusText(state: ShareState): string {
     case 'shared':
       return '已打开系统分享。'
     case 'copied':
-      return '分享文案已复制。'
-    case 'error':
-      return '分享失败，请稍后再试。'
+      return '卦签文案已复制。'
     default:
       return ''
   }

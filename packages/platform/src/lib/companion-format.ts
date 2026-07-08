@@ -21,14 +21,15 @@ export function gameLabel(gameId: string): string {
 }
 
 /**
- * Product-day age of a companion: how many CALENDAR product days (UTC dates,
- * rolling over at 08:00 Beijing) separate its `created_at` (ISO 8601) from
- * today, never negative. Derived from the product-day difference — NOT elapsed
- * 24h periods — so a companion met late at night is "1 天在一起" the next
- * morning rather than lagging a full calendar day (认识第 N 天 == this + 1).
- * Real data: `created_at` is returned by `GET /api/companion`, so this renders
- * in production too. Returns 0 for an unparseable or future-dated timestamp
- * (the card shows the "今天认识" copy for 0).
+ * Acquaintance age of a companion: how many CALENDAR product days (UTC dates,
+ * rolling over at 08:00 Beijing) separate its `created_at` (ISO 8601 —
+ * onboarding time) from today, never negative. This is 相识 (days KNOWN), NOT
+ * time played together — the card labels it 相识 accordingly (F6). Derived from
+ * the product-day difference — NOT elapsed 24h periods — so a companion met late
+ * at night is "相识 1 天" the next morning rather than lagging a full calendar
+ * day (认识第 N 天 == this + 1). Real data: `created_at` is returned by
+ * `GET /api/companion`, so this renders in production too. Returns 0 for an
+ * unparseable or future-dated timestamp (the card shows the "今天认识" copy for 0).
  */
 export function daysTogether(createdAt: string): number {
   const delta = productDayDelta(createdAt)

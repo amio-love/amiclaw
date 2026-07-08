@@ -5,6 +5,64 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The daily time board rejects clears no human could hit** - Fix. The board only
+blocked runs under 15 seconds, so a ~36-second automated clear could top it over
+real 3-to-5-minute human runs and feed the homepage 「最快拆弹」 stat. The
+plausibility floor is now 60 seconds, with a per-module sanity check, so
+automated and scripted runs are turned away while a fast human+AI pair still has
+room to spare. The homepage stat reads the same board, so it heals with it. This
+is a plausibility floor, not tamper-proof anti-cheat — a self-timed run has no
+server clock yet — but it ends the runs that actually reached the board.
+
+**Two players with the same nickname no longer look like a duplicate row** - Fix.
+The board keeps one row per device, so two different devices that both picked
+「审计员W4」 each kept a row — which read like a bug or a refresh dupe. Same-name
+rows now carry a muted 「· 同名 N」 marker so they read as the distinct players
+they are. Distinct devices' records are never merged.
+
+**The oracle sign's copy and share both work, and never mis-report** - Fix.
+Tapping 「复制卦签」 reused the share error path and reported 「分享失败」 even when
+the copy succeeded. Copy is now its own action with its own confirmation, and
+sharing degrades gracefully where the browser has no share sheet (desktop):
+share → clipboard → a select-to-copy field, never a dead-end failure line.
+
+**Your companion greets you by the same name on the homepage and in voice** - Fix.
+The lobby voice addressed you by the relationship name it knows (e.g. 白舟) while
+the homepage welcome strip used your board nickname — two names for one person.
+The homepage greeting now leads with the companion-known name, matching the
+voice; the leaderboard keeps your board nickname as your board identity.
+
+**A brand-new companion no longer implies a history it doesn't have** - Fix. With
+zero episodes the companion could still open with a welcome-back line, and the
+partner card's 「在一起 N 天」 counted account age rather than time played
+together. The greeting now uses a plain first-meeting line until there is real
+shared history, and the stat is labeled 「相识 N 天」 to match what it counts.
+
+**Logging in saves this device's records to your account automatically** - Fix. A
+signed-in account could look empty even after real play, because this device's
+records waited behind a manual 「保存到账号」 tap. Those records now save to the
+account on login; the manual button stays for the rare cases that need it.
+
+**A rejected score stays readable instead of being covered by the survey** - Fix.
+When a score failed the board's check, the 「聊聊这一局」 feedback survey could open
+on top of the rejection notice before you had read why nothing landed. The survey
+now waits until the rejection notice is cleared.
+
+**Oracle shows one honest status, not both live and coming-soon** - Fix. 易经签卜
+appeared as a playable daily item and, at the same time, under 「即将上线 · IN
+ORBIT」 with a 「预览体验」 badge. It is live and daily-checkable, so it no longer
+appears in the coming-soon section; it stays discoverable from the daily
+checklist.
+
+**Signed-in pages read your session once, not many times** - Fix. Every signed-in
+page fired several redundant 「/api/auth/session」 requests as its parts loaded
+independently. Components that load together now share a single session read.
+
+**Typing /manual/daily lands on today's manual instead of a blank page** - Fix.
+The literal /manual/daily path rendered blank — the product's own links use the
+dated form. It now redirects to today's dated manual (keeping 「?format=yaml」 for
+AI fetchers).
+
 **The homepage「开始玩」button works when you tap its middle** - Fix. On phones a
 decorative ring around the planet artwork sat invisibly over the primary
 「开始玩」call to action and swallowed taps on its center — only the button's

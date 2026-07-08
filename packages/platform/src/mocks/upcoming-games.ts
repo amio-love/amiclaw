@@ -22,22 +22,11 @@ export interface UpcomingGame {
   preview?: { src: string; width: number; height: number; alt: string }
 }
 
+// Oracle (易经签卜) is NOT listed here: it is live and daily-checkable (its own
+// 今日清单 item + streak counting), so listing it under「即将上线 · IN ORBIT」
+// with a「预览体验」badge contradicted its real status (F9). Discovery stays via
+// the daily checklist; this section is only the genuinely-upcoming games.
 export const upcomingGames: UpcomingGame[] = [
-  {
-    id: 'yijing',
-    name: '易经签卜',
-    blurb: '念问、投币、起卦、解读，体验版可试玩。',
-    status: 'preview',
-    artVariant: 'oracle',
-    href: '/oracle/',
-    preview: {
-      // Live-product capture: the 起卦 coin-cast moment, hexagram half built.
-      src: '/previews/oracle-cast.webp',
-      width: 480,
-      height: 1039,
-      alt: '易经签卜实拍：三枚硬币投掷起卦中',
-    },
-  },
   {
     id: 'echo',
     name: '星海回声',

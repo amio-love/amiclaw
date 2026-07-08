@@ -1,19 +1,4 @@
-export async function copyToClipboard(text: string): Promise<boolean> {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      /* fall through to legacy */
-    }
-  }
-  const el = document.createElement('textarea')
-  el.value = text
-  el.style.position = 'fixed'
-  el.style.opacity = '0'
-  document.body.appendChild(el)
-  el.select()
-  const ok = document.execCommand('copy')
-  document.body.removeChild(el)
-  return ok
-}
+// Robust text copy — single source of truth in `shared/clipboard.ts` so the
+// BombSquad and Oracle (yijing) share surfaces cannot drift. Re-exported here
+// to keep the existing `@/utils/clipboard` import path (and its test mocks).
+export { copyToClipboard } from '@shared/clipboard'
