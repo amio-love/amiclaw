@@ -6,8 +6,10 @@
  * are deliberately configuration, not code constants scattered through the
  * resolver: tuning how many claims / episodes are injected, or what counts as
  * "high salience", is an edit to this file's data — global default + per-game
- * override — never an architecture change.
+ * override + streak-tier bonus — never an architecture change.
  */
+
+import { deriveFamiliarityTier, type FamiliarityTier } from '../../../shared/companion-familiarity'
 
 export interface InjectionPolicy {
   /** Max active profile claims injected per session. */
@@ -38,4 +40,42 @@ export const GAME_INJECTION_OVERRIDES: Record<string, Partial<InjectionPolicy>> 
 export function resolveInjectionPolicy(gameId?: string): InjectionPolicy {
   const override = gameId === undefined ? undefined : GAME_INJECTION_OVERRIDES[gameId]
   return { ...DEFAULT_INJECTION_POLICY, ...override }
+}
+
+/**
+ * Per-tier additive bonus to the memory-injection budget (B9 叙事型成长 (b) —
+ * memory-reference frequency rises with the streak). Config-as-data on the same
+ * plane as `DEFAULT_INJECTION_POLICY`: raising how much a long-streak companion
+ * recalls is an edit to these numbers, never a resolver change. Restrained — the
+ * salience floor and the high-salience slot are untouched; only recency depth
+ * and claim count grow, so a familiar companion recalls MORE of the recent
+ * shared history, not more noise.
+ */
+export const STREAK_TIER_POLICY_BONUS: Record<
+  FamiliarityTier,
+  Pick<InjectionPolicy, 'maxClaims' | 'recentEpisodes'>
+> = {
+  newcomer: { maxClaims: 0, recentEpisodes: 0 },
+  familiar: { maxClaims: 1, recentEpisodes: 1 },
+  close: { maxClaims: 2, recentEpisodes: 2 },
+}
+
+/**
+ * Resolve the effective policy for a game AND the player's streak tier: the base
+ * policy (global default + per-game override) plus the streak-tier bonus. A
+ * newcomer (a sub-week streak, or a session that carries no streak) resolves to
+ * the EXACT base policy — the streak seam is byte-identical below the first tier,
+ * so it changes nothing until the relationship has actually accrued.
+ */
+export function resolveInjectionPolicyForStreak(
+  gameId: string | undefined,
+  streakDays: number
+): InjectionPolicy {
+  const base = resolveInjectionPolicy(gameId)
+  const bonus = STREAK_TIER_POLICY_BONUS[deriveFamiliarityTier(streakDays)]
+  return {
+    ...base,
+    maxClaims: base.maxClaims + bonus.maxClaims,
+    recentEpisodes: base.recentEpisodes + bonus.recentEpisodes,
+  }
 }

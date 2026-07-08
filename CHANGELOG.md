@@ -14,6 +14,22 @@ that public name. The times are real and stay correct as they age. You can like
 a post and the like sticks; liking asks you to sign in first. On a quiet day the
 page says it is quiet rather than padding the feed with fakes.
 
+**Your companion grows more familiar the longer your streak** - New. As your
+daily streak lengthens, your companion's manner shifts with it: a week in it
+warms up and drops the formal address for a closer tone, a month in it speaks
+with the ease of an old partner and leans on more of your shared history. There
+are no points, badges, or rewards — the growth shows only in how your companion
+talks to you.
+
+**Your companion marks the milestones out loud** - New. At 7, 14, 30, and 60
+days of an unbroken streak your companion says one short line — 「认识一周了。你第一
+天…，我还记得。」 — recalling something from your first day together, once per
+milestone, never repeated. No trophy, no popup: just a word that it noticed.
+
+**An honest note about breaking your streak** - New. The 我的 page now says, once
+and plainly, what happens if you miss a day: the streak count starts over, but
+your longest record and every saved result stay, and there is no penalty.
+
 **Finishing a co-play daily run no longer flashes a phantom fifth module** -
 Fix. Completing all four modules while playing WITH your companion briefly
 showed a 「模块 5/4」 counter over an empty panel while the AI wrapped up, instead

@@ -23,6 +23,15 @@ import CompanionCard from '@/components/companion/CompanionCard'
 import { companionSeedEnabled } from '@/lib/companion-seed'
 import styles from './AccountPage.module.css'
 
+/* B12 断签后果说明 — the honest streak-break line. Verified against
+   computeArcadeStreak (arcade-profile/summary): a missed product day breaks the
+   current run so `current_days` restarts from zero on the next qualifying day,
+   while `longest_days` and every stored record persist untouched (the companion
+   memory in COMPANION_DB is a separate store the streak never touches). Register
+   matches the presence design's「伙伴会想你，但不会惩罚你」— no punishment framing. */
+const STREAK_BREAK_NOTE =
+  '断一天，连续天数会从头算起。最长记录和已保存的成绩都还在，错过一天不会有惩罚。'
+
 /* Account page — handoff §6.11. Reads identity from useAuth():
      - loading → hold the page chrome only (no profile, no guide) so neither
        state flashes before the session resolves.
@@ -394,6 +403,11 @@ function ArcadeStatsCard({
         />
       </div>
       <p className={styles.statsHint}>{getDailyResetHint()}</p>
+      {/* B12 断签说明 — one honest line where the streak is visible. States the
+          truth of the implementation: a break restarts the count from zero, but
+          the longest record and every saved result stay, and there is no
+          penalty (companion-presence register:「不会惩罚你」). */}
+      <p className={styles.streakBreakNote}>{STREAK_BREAK_NOTE}</p>
       {!hasAnyRecord && (
         <a className={styles.emptyCta} href={emptyCtaHref}>
           开始玩

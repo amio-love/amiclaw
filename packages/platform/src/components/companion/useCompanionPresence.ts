@@ -32,21 +32,35 @@ import { useLocation } from 'react-router-dom'
 import type { CompanionIdentity, VoicePosture } from '@shared/companion-types'
 import {
   buildArrivalGreeting,
+  buildMilestoneGreeting,
   canFireArrivalBeat,
+  canFireMilestoneBeat,
   deriveDockStatus,
   readBeatLog,
   readCachedVoicePosture,
+  readMilestoneLog,
   recordBeatFired,
   transitionPosture,
   writeBeatLog,
   writeCachedVoicePosture,
+  writeMilestoneLog,
   type DockStatus,
   type DockVoicePhase,
   type PostureEvent,
 } from '@shared/companion-presence'
+import {
+  deriveFamiliarityTier,
+  pickMilestone,
+  MILESTONE_STREAK_DAYS,
+} from '@shared/companion-familiarity'
 import { getTodayString } from '@shared/date'
 import { readArcadeLocalProfile, summarizeArcadeLocalProfile } from '@amiclaw/arcade-profile/local'
-import { fetchMemories, putVoicePosture } from '@/lib/companion-api'
+import {
+  fetchAccountStreak,
+  fetchEarliestMemoryTitle,
+  fetchMemories,
+  putVoicePosture,
+} from '@/lib/companion-api'
 import { LOBBY_VOICE_CAPABLE, LOBBY_VOICE_NOTE } from './lobby-voice'
 import { useLobbyVoiceSession } from './useLobbyVoiceSession'
 
@@ -78,9 +92,11 @@ export interface CompanionPresence {
   onRestoreVoice: () => void
 }
 
+// Device-local play recency for the arrival IDLE gate only (this device's
+// session recency — "back after being away"). The STREAK that drives tier +
+// milestone is the account value (fetchAccountStreak), never this.
 function readLocalPlayContext(): {
   lastPlayedAt: number | null
-  streakDays: number
   hasPlayedBefore: boolean
 } {
   const summary = summarizeArcadeLocalProfile(readArcadeLocalProfile())
@@ -88,7 +104,6 @@ function readLocalPlayContext(): {
     summary.last_activity_at !== null ? Date.parse(summary.last_activity_at) : null
   return {
     lastPlayedAt: Number.isFinite(lastPlayedAt as number) ? lastPlayedAt : null,
-    streakDays: summary.daily_loop.streak.current_days,
     hasPlayedBefore: summary.last_activity_at !== null,
   }
 }
@@ -198,19 +213,75 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     const today = getTodayString()
     const log = readBeatLog(today)
     const playContext = readLocalPlayContext()
-    if (
-      !canFireArrivalBeat({
-        log,
-        now: Date.now(),
-        lastPlayedAt: playContext.lastPlayedAt,
-        muted: false,
-      })
-    ) {
-      return
-    }
+    const milestoneLog = readMilestoneLog()
+
+    // Sync eligibility gates (no streak needed yet): whether the arrival beat is
+    // due (device-local idle gate — this device's session recency), and whether
+    // any milestone remains un-fired. If neither could fire, skip the network
+    // round-trips entirely — a within-12h return whose milestones are all
+    // delivered stays byte-identical (no fetch, no beat).
+    const arrivalEligible = canFireArrivalBeat({
+      log,
+      now: Date.now(),
+      lastPlayedAt: playContext.lastPlayedAt,
+      muted: false,
+    })
+    const anyMilestoneUnfired = MILESTONE_STREAK_DAYS.some((day) => !milestoneLog.includes(day))
+    if (!arrivalEligible && !anyMilestoneUnfired) return
 
     let cancelled = false
     void (async () => {
+      // The ACCOUNT streak drives the tier + milestone (the relationship lives
+      // at the account — familiarity must not jump when the player switches
+      // devices). The arrival idle gate above stays device-local. All state is
+      // set HERE, inside the async continuation — never synchronously in the
+      // effect body (react-hooks/set-state-in-effect).
+      const streakDays = await fetchAccountStreak()
+      if (cancelled) return
+      const tier = deriveFamiliarityTier(streakDays)
+
+      // 节拍 4 里程碑 (B20): a newly reached 7 / 14 / 30 / 60-day streak. Decided
+      // from the account streak, independent of the >12h idle threshold (a
+      // milestone can land right after the qualifying play). Deduped
+      // once-per-milestone FOR LIFE via the persistent milestone log, and it
+      // counts against the 标准 daily cap (design reserves the 5th slot). A
+      // reached milestone takes this homepage load's beat — the plain arrival
+      // greeting is skipped (recordBeatFired stamps lastArrivalAt so the 5-min
+      // window suppresses one anyway).
+      const milestonePick = anyMilestoneUnfired ? pickMilestone(streakDays, milestoneLog) : null
+      const milestone =
+        milestonePick !== null && canFireMilestoneBeat({ log, muted: false }) ? milestonePick : null
+
+      // Neither the streak crossed a milestone nor is the arrival beat due.
+      if (milestone === null && !arrivalEligible) return
+
+      // --- Milestone beat (takes precedence on a milestone load) ---
+      if (milestone !== null) {
+        // The earliest shared episode backs the design's 「你第一天…」 callback
+        // (real data — null when the album is genuinely empty).
+        const earlyEpisodeTitle = await fetchEarliestMemoryTitle()
+        if (cancelled) return
+        // Persist the consumed thresholds (dedup) then fire, with no await
+        // between — the double-crossing lower threshold is retired here too. The
+        // `cancelled` guards above fenced a StrictMode double-invoke first.
+        writeMilestoneLog([...milestoneLog, ...milestone.consumed])
+        const text = buildMilestoneGreeting({
+          threshold: milestone.fire,
+          streakDays,
+          earlyEpisodeTitle,
+        })
+        setBubble({ text, expanded: false })
+        setLastUtterance(text)
+        setGreetingDwell(true)
+        writeBeatLog(recordBeatFired(log, { kind: 'milestone', now: Date.now() }))
+        schedule(() => {
+          setGreetingDwell(false)
+          setBubble((current) => (current && !current.expanded ? null : current))
+        }, BUBBLE_DWELL_MS)
+        return
+      }
+
+      // --- Arrival greeting (节拍 1) ---
       // Most recent visible memory (first page, newest first); an error or an
       // empty album degrades to the no-episode greeting variant.
       const memories = await fetchMemories()
@@ -220,8 +291,9 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
       const text = buildArrivalGreeting({
         addressStyle: companion.address_style,
         recentEpisodeTitle,
-        streakDays: playContext.streakDays,
+        streakDays,
         hasPlayedBefore: playContext.hasPlayedBefore,
+        tier,
       })
 
       // Greeting TEXT lands first — never blocked on the permission dialog.

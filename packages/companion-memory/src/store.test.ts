@@ -118,6 +118,27 @@ describe('listMemories', () => {
     const page = await listMemories(db, 'user-a', { cursor: '!!not-a-cursor!!' })
     expect(page.memories).toHaveLength(1)
   })
+
+  it('returns the EARLIEST episode first with order=oldest (B20 milestone callback)', async () => {
+    const db = createTestDb()
+    await createCompanion(
+      db,
+      { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' },
+      testDeps()
+    )
+    for (let i = 1; i <= 5; i += 1) {
+      await seedEpisode(db, `ep-${i}`, 'user-a', `2026-06-0${i}T10:00:00.000Z`)
+    }
+    const oldest = await listMemories(db, 'user-a', { order: 'oldest', limit: 1 })
+    expect(oldest.memories.map((m) => m.id)).toEqual(['ep-1'])
+    // Oldest-first pagination stays valid: the next page continues ascending.
+    const next = await listMemories(db, 'user-a', {
+      order: 'oldest',
+      limit: 2,
+      cursor: oldest.nextCursor,
+    })
+    expect(next.memories.map((m) => m.id)).toEqual(['ep-2', 'ep-3'])
+  })
 })
 
 describe('deleteMemory', () => {

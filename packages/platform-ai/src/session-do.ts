@@ -139,6 +139,17 @@ interface CreateSessionMessage {
    */
   gameRunId?: string
   /**
+   * The player's current ACCOUNT streak in days (B9 叙事型成长). Optional and
+   * client-asserted — it only shapes the companion's TONE (register + memory
+   * budget), never a security decision. The client resolves it account-first
+   * (arcade-profile `resolveAccountStreak`: account API primary, cached value
+   * on failure, device-local only as a last-resort stale fallback) so the
+   * relationship's familiarity is account-anchored, not per-device. Absent (or
+   * below the first familiarity tier) leaves the assembled prompt byte-identical
+   * to the pre-B9 shape.
+   */
+  streakDays?: number
+  /**
    * Whether the AI opens the conversation with an unprompted greeting turn
    * (LLM->TTS, no player audio) right after the session is established. Defaults
    * to `true` — AI-first is the product behaviour. A consumer (or a test) sets
@@ -752,12 +763,13 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private async resolveCompanionContextBestEffort(
     userId: string,
-    gameId: string
+    gameId: string,
+    streakDays?: number
   ): Promise<CompanionContext | undefined> {
     const db = this.env.COMPANION_DB
     if (db === undefined) return undefined
     try {
-      const context = await resolveCompanionContext(db, userId, gameId)
+      const context = await resolveCompanionContext(db, userId, gameId, undefined, streakDays)
       return context ?? undefined
     } catch (error) {
       console.warn('session-do: companion-context resolution failed (memory-less session)', error)
@@ -1237,7 +1249,8 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // a memory-less session (the companion context is simply absent).
         const companionContext = await this.resolveCompanionContextBestEffort(
           socketUserId,
-          msg.gameId
+          msg.gameId,
+          msg.streakDays
         )
         // Re-check the create guard AFTER the await above: a second `create`
         // could have interleaved across the resolver read. The check + the

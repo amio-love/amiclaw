@@ -298,6 +298,13 @@ describe('AccountPage /me', () => {
     expect(screen.getByText('练习 · 00:42 · 最快 00:42')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument()
 
+    // B12 断签说明 — one honest, non-punitive line where the streak is visible.
+    expect(
+      screen.getByText(
+        '断一天，连续天数会从头算起。最长记录和已保存的成绩都还在，错过一天不会有惩罚。'
+      )
+    ).toBeInTheDocument()
+
     // None of the retired mock-profile content may render for anyone now.
     expect(screen.queryByText('星海')).not.toBeInTheDocument()
     expect(screen.queryByText('林星海')).not.toBeInTheDocument()

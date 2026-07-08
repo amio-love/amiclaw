@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./api-client": "./src/api-client.ts",
+    "./companion-streak": "./src/companion-streak.ts",
     "./local": "./src/local.ts",
     "./store": "./src/store.ts",
     "./types": "./src/types.ts",

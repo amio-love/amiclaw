@@ -18,6 +18,7 @@
  */
 
 import { API_BASE } from '@shared/api-base'
+import { resolveAccountStreak } from '@amiclaw/arcade-profile/companion-streak'
 import type {
   CompanionIdentity,
   CompanionResponse,
@@ -150,6 +151,38 @@ export async function fetchMemories(cursor?: string): Promise<MemoriesResult> {
     }
   } catch {
     return { kind: 'error' }
+  }
+}
+
+/**
+ * The player's account-anchored streak in days (B9 叙事型成长). Wraps the
+ * arcade-profile resolver (account API primary, cached value on failure,
+ * device-local only as a last-resort stale fallback). Routed through this
+ * module so the dock's data layer stays the single mock boundary for the
+ * presence hook.
+ */
+export async function fetchAccountStreak(): Promise<number> {
+  if (companionSeedEnabled()) return 0
+  return resolveAccountStreak()
+}
+
+/**
+ * The EARLIEST shared episode's title (B20 milestone callback — the design's
+ * 「你第一天…」 register), or null when the album is empty / unreadable. Uses the
+ * memories endpoint's oldest-first ordering.
+ */
+export async function fetchEarliestMemoryTitle(): Promise<string | null> {
+  if (companionSeedEnabled()) {
+    const seeded = seedMemories()
+    return seeded.length > 0 ? (seeded[seeded.length - 1]?.title ?? null) : null
+  }
+  try {
+    const res = await fetch(`${BASE}/memories?order=oldest&limit=1`, { credentials: 'include' })
+    if (!res.ok) return null
+    const data = (await res.json()) as MemoriesResponse
+    return data.memories.length > 0 ? (data.memories[0]?.title ?? null) : null
+  } catch {
+    return null
   }
 }
 

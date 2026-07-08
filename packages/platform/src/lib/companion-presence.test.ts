@@ -11,21 +11,26 @@ import { describe, expect, it } from 'vitest'
 import {
   ARRIVAL_IDLE_THRESHOLD_MS,
   ARRIVAL_REOPEN_SUPPRESS_MS,
+  COMPANION_MILESTONE_LOG_KEY,
   STANDARD_PROACTIVITY_TIER,
   VOICE_POSTURE_STORAGE_KEY,
   buildArrivalGreeting,
+  buildMilestoneGreeting,
   buildPostGameReaction,
   canFireArrivalBeat,
+  canFireMilestoneBeat,
   canFirePostGameBeat,
   deriveDockStatus,
   emptyBeatLog,
   formatDurationSpeech,
   readBeatLog,
   readCachedVoicePosture,
+  readMilestoneLog,
   recordBeatFired,
   transitionPosture,
   writeBeatLog,
   writeCachedVoicePosture,
+  writeMilestoneLog,
 } from '@shared/companion-presence'
 
 const NOW = Date.parse('2026-07-08T12:00:00.000Z')
@@ -243,5 +248,72 @@ describe('copy builders', () => {
         strikeCount: 0,
       })
     ).toBe('时间用完，停在第 4 个模块。')
+  })
+
+  it('modulates the arrival address by familiarity tier (B9a)', () => {
+    const base = {
+      addressStyle: '队长',
+      recentEpisodeTitle: '最后三秒拆掉了炸弹',
+      streakDays: 8,
+      hasPlayedBefore: true,
+    }
+    // Newcomer (default / explicit) keeps the fuller address.
+    expect(buildArrivalGreeting(base)).toBe(
+      '队长，上次最后三秒拆掉了炸弹，我还记着。今天第 9 天了。'
+    )
+    expect(buildArrivalGreeting({ ...base, tier: 'newcomer' })).toBe(
+      '队长，上次最后三秒拆掉了炸弹，我还记着。今天第 9 天了。'
+    )
+    // Familiar / close drop the explicit name for a closer register.
+    expect(buildArrivalGreeting({ ...base, tier: 'familiar' })).toBe(
+      '上次最后三秒拆掉了炸弹，我还记着。今天第 9 天了。'
+    )
+    expect(buildArrivalGreeting({ ...base, tier: 'close' })).toBe(
+      '上次最后三秒拆掉了炸弹，我还记着。今天第 9 天了。'
+    )
+  })
+})
+
+describe('milestone beat (B20)', () => {
+  it('round-trips the milestone log and rejects junk / non-thresholds', () => {
+    const storage = storageStub()
+    expect(readMilestoneLog(storage)).toEqual([])
+    writeMilestoneLog([7, 14], storage)
+    expect(readMilestoneLog(storage)).toEqual([7, 14])
+    // Only recognized thresholds survive a defensive re-read.
+    storage.map.set(COMPANION_MILESTONE_LOG_KEY, JSON.stringify([7, 999, 'oops']))
+    expect(readMilestoneLog(storage)).toEqual([7])
+    storage.map.set(COMPANION_MILESTONE_LOG_KEY, 'not json')
+    expect(readMilestoneLog(storage)).toEqual([])
+  })
+
+  it('gates on the daily cap and the mute freeze, deterministically otherwise', () => {
+    expect(canFireMilestoneBeat({ log: emptyBeatLog(TODAY), muted: false })).toBe(true)
+    expect(canFireMilestoneBeat({ log: emptyBeatLog(TODAY), muted: true })).toBe(false)
+    const capped = { date: TODAY, count: STANDARD_PROACTIVITY_TIER.dailyCap }
+    expect(canFireMilestoneBeat({ log: capped, muted: false })).toBe(false)
+  })
+
+  it('records a milestone against the cap and stamps the arrival window', () => {
+    const next = recordBeatFired(emptyBeatLog(TODAY), { kind: 'milestone', now: NOW })
+    expect(next.count).toBe(1)
+    // Stamping lastArrivalAt suppresses a plain arrival stacking in the same visit.
+    expect(next.lastArrivalAt).toBe(NOW)
+  })
+
+  it('builds the milestone line: time scale + honest fact, or an early callback', () => {
+    expect(buildMilestoneGreeting({ threshold: 7, streakDays: 7, earlyEpisodeTitle: null })).toBe(
+      '认识一周了。这 7 天，你一天没落。'
+    )
+    expect(buildMilestoneGreeting({ threshold: 30, streakDays: 31, earlyEpisodeTitle: null })).toBe(
+      '认识一个月了。这 31 天，你一天没落。'
+    )
+    expect(
+      buildMilestoneGreeting({
+        threshold: 7,
+        streakDays: 7,
+        earlyEpisodeTitle: '连题目都没看完就开剪',
+      })
+    ).toBe('认识一周了。你第一天连题目都没看完就开剪，我还记得。')
   })
 })

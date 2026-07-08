@@ -17,7 +17,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { CompanionIdentity, VoicePosture } from '@shared/companion-types'
-import { COMPANION_BEAT_LOG_KEY, VOICE_POSTURE_STORAGE_KEY } from '@shared/companion-presence'
+import {
+  COMPANION_BEAT_LOG_KEY,
+  COMPANION_MILESTONE_LOG_KEY,
+  VOICE_POSTURE_STORAGE_KEY,
+} from '@shared/companion-presence'
 
 const authState = vi.hoisted(() => ({
   current: { status: 'anon', user: null } as { status: string; user: unknown },
@@ -31,6 +35,8 @@ const companionState = vi.hoisted(() => ({
 }))
 const apiMocks = vi.hoisted(() => ({
   fetchMemories: vi.fn(),
+  fetchAccountStreak: vi.fn(),
+  fetchEarliestMemoryTitle: vi.fn(),
   putVoicePosture: vi.fn(),
 }))
 
@@ -42,6 +48,8 @@ vi.mock('@/hooks/useCompanion', () => ({
 }))
 vi.mock('@/lib/companion-api', () => ({
   fetchMemories: apiMocks.fetchMemories,
+  fetchAccountStreak: apiMocks.fetchAccountStreak,
+  fetchEarliestMemoryTitle: apiMocks.fetchEarliestMemoryTitle,
   putVoicePosture: apiMocks.putVoicePosture,
 }))
 // Pin the flag OFF for this file: it is the flag-OFF honesty suite (the lobby
@@ -125,6 +133,11 @@ describe('CompanionDock', () => {
     companionState.current = { status: 'loading', companion: null }
     apiMocks.fetchMemories.mockReset()
     apiMocks.fetchMemories.mockResolvedValue({ kind: 'ok', memories: [] })
+    apiMocks.fetchAccountStreak.mockReset()
+    // Default: a fresh account with no streak (newcomer tier, no milestone).
+    apiMocks.fetchAccountStreak.mockResolvedValue(0)
+    apiMocks.fetchEarliestMemoryTitle.mockReset()
+    apiMocks.fetchEarliestMemoryTitle.mockResolvedValue(null)
     apiMocks.putVoicePosture.mockReset()
     apiMocks.putVoicePosture.mockResolvedValue({ kind: 'ok' })
   })
@@ -175,6 +188,31 @@ describe('CompanionDock', () => {
     expect(getUserMedia).not.toHaveBeenCalled()
     expect(apiMocks.putVoicePosture).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
+  })
+
+  it('fires the milestone beat once (account streak) with the early-episode callback (B20)', async () => {
+    signInWithCompanion()
+    stubMic('granted')
+    // The ACCOUNT streak just reached a week; the earliest shared episode backs
+    // the design's 「你第一天…」 callback.
+    apiMocks.fetchAccountStreak.mockResolvedValue(7)
+    apiMocks.fetchEarliestMemoryTitle.mockResolvedValue('连题目都没看完就开剪')
+    renderDock()
+
+    // The milestone line lands (bubble + dock text line), composed with the
+    // early-episode callback — NOT a plain arrival greeting.
+    const beats = await screen.findAllByText('认识一周了。你第一天连题目都没看完就开剪，我还记得。')
+    expect(beats.length).toBeGreaterThan(0)
+    expect(screen.queryByText(/今天的每日挑战等你/)).not.toBeInTheDocument()
+
+    // Once-per-milestone dedup persisted, and it counts against the daily cap
+    // (design's reserved 5th slot — it does not bypass the cap).
+    await waitFor(() =>
+      expect(window.localStorage.getItem(COMPANION_MILESTONE_LOG_KEY)).toContain('7')
+    )
+    expect(window.localStorage.getItem(COMPANION_BEAT_LOG_KEY)).toContain('"count":1')
+    // The milestone path fetches the earliest episode, never the recent album.
+    expect(apiMocks.fetchMemories).not.toHaveBeenCalled()
   })
 
   it('mic button surfaces the honest in-game-voice note instead of faking lobby voice', async () => {
