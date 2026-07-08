@@ -341,6 +341,34 @@ describe('ResultPage endgame survey', () => {
     expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
   })
 
+  it('defers the survey while a server rejection notice is showing (F8)', async () => {
+    surveyMock.hasAnsweredSurvey.mockReturnValue(false)
+    vi.mocked(submitScore).mockResolvedValue({
+      ok: false,
+      kind: 'rejected',
+      status: 422,
+      error: 'Time too short — minimum 60 seconds',
+    })
+    renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
+
+    // Fill the leaderboard gate to fire the submission.
+    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
+    fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+
+    // Flush the submit promise → the inline rejection notice renders (its 重试
+    // button is the reliable marker of the rejected state).
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+
+    // The survey delay elapses, but the survey must NOT stack over the
+    // rejection notice — the player has to be able to read why nothing landed.
+    advancePastResultFeedback()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+  })
+
   it('skipping the leaderboard gate defers the survey to a later session', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))

@@ -77,6 +77,14 @@
   word-break: break-word;
 }
 
+/* Same-nickname disambiguation marker (F2) — a muted, non-emphatic suffix so
+   two distinct devices sharing a name read as different players, not a dupe. */
+.dupTag {
+  color: var(--text-4);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .score {
   font-family: var(--amio-font-mono);
   text-align: right;

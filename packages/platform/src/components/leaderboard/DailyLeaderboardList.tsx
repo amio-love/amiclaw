@@ -34,6 +34,23 @@ function formatAiMetadata(entry: LeaderboardEntry): string | null {
    with role="cell" cells. Rendered by the real daily board below; exported so
    other real-data surfaces can reuse the same grid markup. */
 export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
+  // The anonymous board dedups per device, not per nickname, so two different
+  // devices that picked the same name each keep a row (see leaderboard-entries).
+  // Without a marker, two identical「审计员W4」rows read to a cold visitor like a
+  // bug or a refresh dupe. Number each colliding name so the rows read as two
+  // distinct players who happen to share a name (F2). Distinct devices' records
+  // are never silently merged — the honest render is disambiguation, not
+  // collapse (the client cannot even see device_id; it is stripped server-side).
+  const nameCounts = new Map<string, number>()
+  for (const row of entries) nameCounts.set(row.nickname, (nameCounts.get(row.nickname) ?? 0) + 1)
+  const seen = new Map<string, number>()
+  const dupOrdinals = entries.map((row) => {
+    if ((nameCounts.get(row.nickname) ?? 0) <= 1) return 0
+    const n = (seen.get(row.nickname) ?? 0) + 1
+    seen.set(row.nickname, n)
+    return n
+  })
+
   return (
     <div className={styles.list} role="table" aria-label="排行榜">
       <div className={styles.headRow} role="row">
@@ -45,8 +62,9 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
           用时 · 尝试
         </span>
       </div>
-      {entries.map((row) => {
+      {entries.map((row, i) => {
         const isYou = row.nickname.includes('你')
+        const dupOrdinal = dupOrdinals[i]
         const aiMetadata = formatAiMetadata(row)
         const rowClass = [
           styles.row,
@@ -66,7 +84,15 @@ export function LeaderboardRows({ entries }: { entries: LeaderboardEntry[] }) {
               #{String(row.rank).padStart(3, '0')}
             </span>
             <span className={styles.nameCell} role="cell">
-              <span className={styles.name}>{row.nickname}</span>
+              <span className={styles.name}>
+                {row.nickname}
+                {dupOrdinal > 0 && (
+                  <span className={styles.dupTag} title="与其他玩家同名">
+                    {' '}
+                    · 同名 {dupOrdinal}
+                  </span>
+                )}
+              </span>
               {aiMetadata && <span className={styles.aiMeta}>{aiMetadata}</span>}
             </span>
             <span className={styles.score} role="cell">

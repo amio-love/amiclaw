@@ -94,17 +94,16 @@ export interface CompanionPresence {
 
 // Device-local play recency for the arrival IDLE gate only (this device's
 // session recency — "back after being away"). The STREAK that drives tier +
-// milestone is the account value (fetchAccountStreak), never this.
+// milestone + the greeting's welcome-back is the account value
+// (fetchAccountStreak), never this device-local signal.
 function readLocalPlayContext(): {
   lastPlayedAt: number | null
-  hasPlayedBefore: boolean
 } {
   const summary = summarizeArcadeLocalProfile(readArcadeLocalProfile())
   const lastPlayedAt =
     summary.last_activity_at !== null ? Date.parse(summary.last_activity_at) : null
   return {
     lastPlayedAt: Number.isFinite(lastPlayedAt as number) ? lastPlayedAt : null,
-    hasPlayedBefore: summary.last_activity_at !== null,
   }
 }
 
@@ -294,7 +293,6 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
         addressStyle: companion.address_style,
         recentEpisodeTitle,
         streakDays,
-        hasPlayedBefore: playContext.hasPlayedBefore,
         tier,
       })
 

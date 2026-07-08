@@ -29,3 +29,27 @@ describe('LeaderboardRows — attempt column semantics', () => {
     expect(screen.getByText(/02:25 · 第 3 次/)).toBeInTheDocument()
   })
 })
+
+describe('LeaderboardRows — same-nickname disambiguation (F2)', () => {
+  const DUP_ENTRIES: LeaderboardEntry[] = [
+    { rank: 1, nickname: '审计员W4', time_ms: 36_000, attempt_number: 1, ai_tool: 'claude' },
+    { rank: 2, nickname: '审计员W4', time_ms: 36_000, attempt_number: 1, ai_tool: 'claude' },
+    { rank: 3, nickname: '独一无二', time_ms: 90_000, attempt_number: 1 },
+  ]
+
+  it('numbers each colliding nickname so distinct devices read as distinct players', () => {
+    render(<LeaderboardRows entries={DUP_ENTRIES} />)
+    // Both colliding rows are marked, in order.
+    expect(screen.getByText(/· 同名 1/)).toBeInTheDocument()
+    expect(screen.getByText(/· 同名 2/)).toBeInTheDocument()
+    // The rows are still both present (never merged) and still say the name.
+    expect(screen.getAllByText(/审计员W4/)).toHaveLength(2)
+  })
+
+  it('leaves a unique nickname unmarked', () => {
+    render(<LeaderboardRows entries={DUP_ENTRIES} />)
+    const unique = screen.getByText('独一无二')
+    expect(unique.textContent).toBe('独一无二')
+    expect(screen.queryByText(/· 同名 3/)).not.toBeInTheDocument()
+  })
+})

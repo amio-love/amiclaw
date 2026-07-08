@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import type {
@@ -317,9 +317,10 @@ function ClaimLocalProfileCard({
   onClaimed: () => void
 }) {
   const [status, setStatus] = useState<'idle' | 'claiming' | 'claimed' | 'error'>('idle')
-  if (!localProfile || (claimableEvents.length === 0 && status !== 'claimed')) return null
+  const autoClaimedRef = useRef(false)
 
-  const handleClaim = async () => {
+  const handleClaim = useCallback(async () => {
+    if (!localProfile) return
     setStatus('claiming')
     // Adopt the player's chosen daily nickname as the public streak-board label
     // so a logged-in player surfaces their name, not a generated placeholder.
@@ -337,7 +338,26 @@ function ClaimLocalProfileCard({
     onLocalProfileChange(markArcadeProfileEventsClaimed(result.sourceKeys ?? []))
     onClaimed()
     setStatus('claimed')
-  }
+  }, [localProfile, claimableEvents, onLocalProfileChange, onClaimed])
+
+  // Auto-claim the CURRENT device's unsaved records on login (F7): once signed
+  // in, the intent to save this device's own records to the account is
+  // unambiguous, and the claim endpoint is idempotent — so fire it once
+  // automatically instead of stranding the player on a manual「保存到账号」tap
+  // that made a logged-in account look empty despite real play. The manual
+  // button below stays for edge states (an auto-claim that failed can be
+  // retried). Latched so it fires at most once per mount.
+  useEffect(() => {
+    if (autoClaimedRef.current) return
+    if (!localProfile || claimableEvents.length === 0) return
+    autoClaimedRef.current = true
+    // Defer off the effect body so the claim's initial `setStatus('claiming')`
+    // runs in an async continuation, not a synchronous cascading render
+    // (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(handleClaim)
+  }, [localProfile, claimableEvents, handleClaim])
+
+  if (!localProfile || (claimableEvents.length === 0 && status !== 'claimed')) return null
 
   return (
     <section className={styles.section}>

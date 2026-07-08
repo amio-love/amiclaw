@@ -116,6 +116,67 @@ describe('validateSubmission — module-sum tolerance', () => {
   })
 })
 
+describe('validateSubmission — plausibility floor (F1 anti-cheat)', () => {
+  // Build a submission with an explicit total time and four evenly-split module
+  // times that sum to it — so the total floor is the only thing under test.
+  function timedSubmission(totalMs: number): ScoreSubmission {
+    const per = Math.round(totalMs / 4)
+    const moduleTimes = [per, per, per, totalMs - per * 3]
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      nickname: 'tester',
+      time_ms: totalMs,
+      attempt_number: 1,
+      module_times: moduleTimes,
+      operations_hash: 'mvp-placeholder',
+      ai_tool: 'claude',
+      device_id: VALID_DEVICE_ID,
+    }
+  }
+
+  // The ~36s automated full clear that topped the board over real human runs is
+  // now rejected — it sits below the 60s collaborative-loop floor.
+  it('rejects a ~36s automated clear that used to reach the board', () => {
+    const result = validateSubmission(timedSubmission(36_000))
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('Time too short — minimum 60 seconds')
+  })
+
+  it('rejects a run one millisecond under the 60s floor', () => {
+    expect(validateSubmission(timedSubmission(59_999)).ok).toBe(false)
+  })
+
+  it('accepts a run exactly at the 60s floor', () => {
+    expect(validateSubmission(timedSubmission(60_000))).toEqual({ ok: true })
+  })
+
+  it('accepts a genuine human+AI run well above the floor', () => {
+    expect(validateSubmission(timedSubmission(182_000))).toEqual({ ok: true })
+  })
+
+  // Per-module structural floor: a padded total (>= 60s) cannot hide a module
+  // solved in under 3 seconds.
+  it('rejects a plausible total that hides an implausibly fast module', () => {
+    const result = validateSubmission({
+      ...dailySubmission(0),
+      // Sum still 130s (clears the total floor) but one module is 500ms.
+      time_ms: 130_000,
+      module_times: [500, 55_000, 44_500, 30_000],
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('Module solved implausibly fast')
+  })
+
+  it('accepts a module exactly at the 3s per-module floor', () => {
+    const result = validateSubmission({
+      ...dailySubmission(0),
+      time_ms: 130_000,
+      module_times: [3_000, 52_000, 45_000, 30_000],
+    })
+    expect(result).toEqual({ ok: true })
+  })
+})
+
 describe('validateSubmission — leaderboard AI metadata', () => {
   it('requires ai_tool on new score submissions', () => {
     const { ai_tool: _aiTool, ...submission } = dailySubmission(0)

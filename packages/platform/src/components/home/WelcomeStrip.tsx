@@ -17,10 +17,12 @@ interface WelcomeStripProps {
    So the right side is an honest「还没有成绩」prompt with a play CTA, not
    fabricated figures and not a「即将推出」placeholder. */
 export default function WelcomeStrip({ user }: WelcomeStripProps) {
-  // Greet by chosen nickname > companion-known name > a neutral, name-free
-  // greeting — never the account email (audit F19). The avatar stays a decorative
-  // ariaHidden glyph.
-  const greetingName = useGreetingName()
+  // Homepage welcome strip is a companion surface — the companion greets the
+  // returning player here, and the lobby voice already calls them by the
+  // relationship name. So greet companion-known name > board nickname > a
+  // neutral greeting (F5), keeping the strip and the voice consistent. Never the
+  // account email (audit F19). The avatar stays a decorative ariaHidden glyph.
+  const greetingName = useGreetingName(true)
   return (
     <section className={styles.strip}>
       <div className={styles.left}>

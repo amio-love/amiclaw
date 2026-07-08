@@ -289,6 +289,31 @@
   font: 400 12px/1.45 var(--font-body);
 }
 
+/* Terminal select-to-copy fallback (share/copy `manual` state). */
+.shareManual {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shareManualText {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 229, 62, 0.16);
+  border-radius: 12px;
+  color: #fff;
+  font: 400 12px/1.5 var(--font-body);
+  resize: none;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.shareManualText:focus-visible {
+  outline: 2px solid var(--amio-yellow, #ffe53e);
+  outline-offset: 2px;
+}
+
 .actions > button {
   width: 100%;
   padding: 14px 20px;

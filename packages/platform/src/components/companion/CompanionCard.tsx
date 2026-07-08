@@ -65,7 +65,10 @@ export default function CompanionCard() {
 /* The companionship stats cluster — three pills, idiomatic StatPill usage
    (number+unit in `value`, a clean Chinese word in `label`; no "·", which
    belongs to bilingual eyebrows, not stat copy):
-     - 「在一起 X 天」 — REAL, from the companion's `created_at`.
+     - 「相识 X 天」 — REAL, but ACQUAINTANCE days from the companion's
+       `created_at` (onboarding), NOT shared co-play time. Labeled 相识 (not the
+       old 在一起, which implied time played together) so a zero-play account
+       does not read a hollow「在一起 N 天」next to 「完成 0 局」 (F6).
      - 「完成 N 局」/「成功 N 次」 — always shown, an honest 0 in production until
        the per-user game-stats source lands; illustrative numbers in seed mode. */
 function CompanionStatsStrip({ createdAt, stats }: { createdAt: string; stats: CompanionStats }) {
@@ -73,7 +76,7 @@ function CompanionStatsStrip({ createdAt, stats }: { createdAt: string; stats: C
   return (
     <div className={styles.stats}>
       {days >= 1 ? (
-        <StatPill value={`${days} 天`} label="在一起" />
+        <StatPill value={`${days} 天`} label="相识" />
       ) : (
         <StatPill value="今天" label="认识你" />
       )}

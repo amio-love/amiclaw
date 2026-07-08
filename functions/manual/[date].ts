@@ -1,3 +1,5 @@
+import { getTodayString } from '../../shared/date'
+
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> }
 }
@@ -11,6 +13,19 @@ interface Context {
 export async function onRequest(context: Context): Promise<Response> {
   const { request, params, env } = context
   const url = new URL(request.url)
+
+  // The literal `/manual/daily` is not a dated asset — a hand-typed or
+  // bookmarked `/manual/daily` used to render blank (F11). Redirect it to
+  // today's dated manual (the same UTC product-day source every daily surface
+  // uses), preserving any `?format=yaml` so an AI fetching the YAML form still
+  // gets it. The product's own links already point at the dated form, so this
+  // only rescues the manually-guessed path.
+  if (params.date === 'daily') {
+    const target = new URL(`/manual/${getTodayString()}`, request.url)
+    target.search = url.search
+    return Response.redirect(target.toString(), 302)
+  }
+
   const format = url.searchParams.get('format')
   const acceptHeader = request.headers.get('Accept') ?? ''
 

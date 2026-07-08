@@ -410,9 +410,9 @@ describe('AccountPage /me', () => {
     expect(screen.queryByText('本设备的星轨。')).not.toBeInTheDocument()
   })
 
-  it('claims local profile entries into the signed-in account and marks them locally claimed', async () => {
+  it('auto-claims the current device records into the account on login (F7)', async () => {
     seedLocalProfile(localStore)
-    stubApi({
+    const fetchSpy = stubApi({
       session: AUTHED,
       arcadeProfile: {
         profile: EMPTY_ARCADE_PROFILE,
@@ -421,9 +421,13 @@ describe('AccountPage /me', () => {
     })
     renderAccount('/me')
 
-    fireEvent.click(await screen.findByRole('button', { name: '保存到账号' }))
-
+    // No manual tap — the claim fires automatically once signed in.
     expect(await screen.findByText('已保存')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        fetchSpy.mock.calls.some((call) => urlOf(call[0]).includes('/api/arcade/profile/claim'))
+      ).toBe(true)
+    })
     await waitFor(() => {
       const raw = localStore.get(ARCADE_LOCAL_PROFILE_KEY)
       expect(raw).toContain('bombsquad:local-run')
