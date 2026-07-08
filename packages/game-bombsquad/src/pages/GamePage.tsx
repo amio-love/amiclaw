@@ -742,6 +742,16 @@ export default function GamePage() {
   const currentKind = state.moduleSequence[state.currentModuleIndex]
   const moduleLabel = currentKind ? MODULE_LABEL[currentKind] : ''
 
+  // Every module is solved and the run is resolving, but the page is still
+  // mounted — mode② deliberately holds here so the closing recap can play
+  // before navigating to the result screen. `NEXT_MODULE`'s ALL_COMPLETE branch
+  // advances `currentModuleIndex` to `moduleSequence.length` (past the last
+  // module), so the active-play module view no longer applies: rendering it
+  // would show a phantom "模块 5/4" over an empty panel (mode① navigates away
+  // instantly so it never surfaces; mode②'s recap hold made it visible for
+  // seconds). Show a settling screen instead until navigation fires.
+  const runSettling = state.currentModuleIndex >= state.moduleSequence.length
+
   return (
     <main className={styles.page}>
       <Scenery accent="yellow" />
@@ -777,12 +787,22 @@ export default function GamePage() {
 
       <div className={styles.moduleArea}>
         <div className={styles.modulePanel}>
-          <div className={styles.modLabelRow}>
-            <Eyebrow dot>
-              模块 {state.currentModuleIndex + 1}/{state.moduleSequence.length} · {moduleLabel}
-            </Eyebrow>
-          </div>
-          {renderModule()}
+          {runSettling ? (
+            <div className={styles.settling} role="status">
+              <div className={styles.defusedBurst} aria-hidden="true" />
+              <p className={styles.defusedText}>拆除成功</p>
+              <p className={styles.settlingHint}>正在收尾，马上给你今天的结算…</p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.modLabelRow}>
+                <Eyebrow dot>
+                  模块 {state.currentModuleIndex + 1}/{state.moduleSequence.length} · {moduleLabel}
+                </Eyebrow>
+              </div>
+              {renderModule()}
+            </>
+          )}
         </div>
         {errorPulseKey > 0 && (
           <div key={`err-${errorPulseKey}`} className={styles.errorPulse} aria-hidden="true" />

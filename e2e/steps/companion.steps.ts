@@ -98,14 +98,15 @@ When('I enter the daily challenge from the BombSquad landing', async ({ page, wo
 })
 
 Then(
-  'the co-play entry is the default and the BYO handoff stays visible',
+  'the co-play entry is the default and BYO is a low-key secondary link',
   async ({ page, world }) => {
     const name = world.companion?.name ?? ''
-    // The co-play chooser is the default surface — no manual-copy step 1.
+    // Co-play is the single default surface — no manual-copy step 1, no chooser.
     await expect(page.getByRole('button', { name: `和 ${name} 一起进入 →` })).toBeVisible()
     await expect(page.getByText('第 1/2 步')).toHaveCount(0)
-    // The BYO manual handoff remains the visible alternative.
-    await expect(page.getByRole('button', { name: '自带 AI，手动对接' })).toBeVisible()
+    // BYO (mode①) is demoted to a low-key secondary link, still one tap away —
+    // not a co-equal full-width alternative button (owner ruling).
+    await expect(page.getByRole('button', { name: '自带 AI 手动对接' })).toBeVisible()
   }
 )
 

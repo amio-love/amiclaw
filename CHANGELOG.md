@@ -5,6 +5,32 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Finishing a co-play daily run no longer flashes a phantom fifth module** -
+Fix. Completing all four modules while playing WITH your companion briefly
+showed a 「模块 5/4」 counter over an empty panel while the AI wrapped up, instead
+of the win screen. The run now holds on a 拆除成功 settling screen during the
+closing recap, then opens the result page.
+
+**Your companion's words no longer show twice during a run** - Fix. In a co-play
+run the companion's spoken line appeared in both the top subtitle strip and the
+lower voice panel at once. It now renders once, in the top subtitle strip; the
+panel keeps only its listening / thinking / speaking status.
+
+**Your name on the streak board, not a placeholder** - Fix. A signed-in player
+who joined the public streak board showed a generated 「Player XXXX」 label. The
+board now surfaces your chosen nickname, falling back to your account name
+before ever using a generated placeholder.
+
+**Sharing your result no longer dead-ends in "分享失败"** - Fix. Sharing a result
+now uses the device share sheet when available, falls back to copying the text,
+and finally offers the text to select and copy by hand — and dismissing the
+share sheet counts as a cancel, not a failure.
+
+**Companion owners go straight into playing together** - Change. Signed-in
+players with a companion now default directly into companion co-play when they
+enter the daily challenge, with bring-your-own-AI demoted to a low-key link
+rather than a co-equal choice. Anonymous players keep the original flow.
+
 **Your companion now lives on the platform** - Feature. Signed-in players with
 a companion get a persistent companion dock above the tab bar on every platform
 page: the companion's name, a breathing status dot, its latest line, and a

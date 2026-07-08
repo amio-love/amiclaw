@@ -325,8 +325,9 @@ flows:
       companion co-play path (mode②, the platform voice partner) as the DEFAULT:
       the connect page replaces the two-step manual handoff with a one-tap
       「和 X 一起进入」 that navigates straight to the run carrying
-      ?partner=platform (the manual rides the voice session's create message),
-      while the BYO manual handoff stays visible as the explicit alternative.
+      ?partner=platform (the manual rides the voice session's create message).
+      Per the owner ruling there is no co-equal platform-AI-vs-BYO chooser — BYO
+      (mode①) is demoted to a low-key secondary link, still one tap away.
       Anonymous and companion-less players keep the original two-step BYO flow
       unchanged (covered by landing-to-daily). The in-game voice panel connects
       over the stubbed /ai-ws/* bridge and the AI greets first, proving the
@@ -337,7 +338,7 @@ flows:
         bombsquad-landing,
         cta-daily,
         coplay-default,
-        byo-alternative,
+        byo-secondary-link,
         mode2-run,
         voice-connected,
       ]

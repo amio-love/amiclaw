@@ -36,7 +36,7 @@ Feature: Companion presence dock and co-play entry
   Scenario: A companion user enters the daily challenge with co-play by default
     Given I open /
     When I enter the daily challenge from the BombSquad landing
-    Then the co-play entry is the default and the BYO handoff stays visible
+    Then the co-play entry is the default and BYO is a low-key secondary link
 
     When I start the run together with "阿澈"
     Then the run starts in mode② with the platform voice partner connected

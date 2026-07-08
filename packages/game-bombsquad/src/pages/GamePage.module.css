@@ -161,6 +161,28 @@
   margin-bottom: 20px;
 }
 
+/* Run-complete settling screen — shown in the module panel while the run
+   resolves and (mode②) the closing recap plays before navigation, in place of
+   the active-play module view. Reuses the .defusedText / .defusedBurst payoff
+   visuals; the hint reassures the player the result screen is coming. */
+.settling {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  text-align: center;
+}
+
+.settlingHint {
+  position: relative;
+  z-index: 1;
+  font: 400 0.95rem/1.5 var(--font-body);
+  color: var(--soft);
+}
+
 .bottomArea {
   position: relative;
   z-index: 2;

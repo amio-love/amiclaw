@@ -4,8 +4,9 @@
  *
  * A signed-in player WITH a companion entering the DAILY challenge defaults to
  * the platform voice partner (mode②): one tap into the run with
- * `?partner=platform`, no manual handoff. The BYO manual flow stays reachable
- * as the visible alternative, and practice entries never consult the gate.
+ * `?partner=platform`, no manual handoff. There is no co-equal platform-AI vs
+ * BYO chooser (owner ruling) — the BYO manual flow is demoted to a low-key
+ * secondary link, still one tap away. Practice entries never consult the gate.
  *
  * `useCompanionPartner` is mocked per test — the gate's own fetch behaviour is
  * covered by useCompanionPartner.test.ts.
@@ -80,15 +81,18 @@ describe('ConnectPage — companion co-play entry', () => {
     vi.mocked(getAudioContext).mockReturnValue(null)
   })
 
-  it('defaults a companion user into the co-play entry with the BYO alternative visible', () => {
+  it('defaults a companion user into co-play with BYO demoted to a low-key link', () => {
     renderConnect('daily')
 
-    // The co-play chooser is the default — no manual-copy step 1 in sight.
+    // Co-play is the single default — no manual-copy step 1, no chooser.
     expect(screen.getByRole('heading', { level: 2, name: /阿澈/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /和 阿澈 一起进入/ })).toBeInTheDocument()
     expect(screen.queryByText('第 1/2 步')).not.toBeInTheDocument()
-    // The BYO manual handoff stays reachable as the visible alternative.
-    expect(screen.getByRole('button', { name: /自带 AI/ })).toBeInTheDocument()
+    // BYO stays reachable but is demoted to a low-key secondary link (not a
+    // co-equal full-width button): asserted via its link styling class.
+    const byo = screen.getByRole('button', { name: /自带 AI/ })
+    expect(byo).toBeInTheDocument()
+    expect(byo.className).toContain('byoLink')
   })
 
   it('hands off to the mode② run with partner=platform and unlocks audio in the tap', () => {

@@ -20,6 +20,7 @@ import { formatMs } from '@shared/format-time'
 import { submitScore, type SubmitScoreResult } from '@shared/leaderboard-api'
 import { saveOptimisticEntry } from '@shared/leaderboard-optimistic'
 import { getStoredNickname } from '@/utils/nickname'
+import { copyToClipboard } from '@/utils/clipboard'
 import {
   getStoredLeaderboardPlayerMetadata,
   type LeaderboardPlayerMetadata,
@@ -66,7 +67,10 @@ const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
 type ResultVariant = 'success' | 'failure'
 type PostGameModalPurpose = 'leaderboard' | 'survey'
 type ProfileSaveState = 'idle' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
-type ShareState = 'idle' | 'shared' | 'copied' | 'error'
+// `manual` is the terminal fallback: neither the Web Share API nor the
+// clipboard was usable, so the share text is surfaced in a selectable field for
+// the player to copy by hand. No path dead-ends in a bare 「分享失败」.
+type ShareState = 'idle' | 'shared' | 'copied' | 'manual'
 
 /**
  * Map a frozen game outcome to a result variant. `defused` and
@@ -107,6 +111,8 @@ export default function ResultPage() {
   const [profileSaveState, setProfileSaveState] = useState<ProfileSaveState>('idle')
   const [dailyLoop, setDailyLoop] = useState<ArcadeDailyLoopSummary | null>(null)
   const [shareState, setShareState] = useState<ShareState>('idle')
+  // Holds the share text for the terminal select-and-copy fallback (`manual`).
+  const [shareText, setShareText] = useState('')
 
   // Fall back to `defused` for any legacy RESULT state persisted before the
   // game-modes rework added the `outcome` field.
@@ -499,11 +505,20 @@ export default function ResultPage() {
     return `${mode} ${result}：${time}${streak}。来 AMIO 游乐场一起玩：${window.location.origin}/bombsquad/`
   }, [dailyLoop, outcome, state.mode, totalMs, variant])
 
+  // Robust share with graceful degradation (audit F26 — 真机分享失败). No path
+  // dead-ends in a bare failure message:
+  //   1. Web Share API when present. A user-canceled share (AbortError) is
+  //      NOT a failure — leave the state untouched so no error copy shows.
+  //      Any real share error falls through to the clipboard path.
+  //   2. Clipboard copy (navigator.clipboard, then legacy execCommand via the
+  //      shared `copyToClipboard`) with explicit success feedback.
+  //   3. Terminal fallback: surface the text in a selectable field to copy by
+  //      hand — never a bare 「分享失败」.
   const handleShareResult = useCallback(async () => {
     const text = buildShareText()
-    try {
-      const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
-      if (share) {
+    const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
+    if (share) {
+      try {
         await share({
           title: 'AMIO Arcade BombSquad',
           text,
@@ -511,13 +526,21 @@ export default function ResultPage() {
         })
         setShareState('shared')
         return
+      } catch (err) {
+        // User dismissed the native share sheet — a deliberate cancel, not a
+        // failure. Stay silent rather than nagging with an error line.
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        // Any other share failure (real-device NotAllowedError etc.) falls
+        // through to the clipboard path below.
       }
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
-      await navigator.clipboard.writeText(text)
-      setShareState('copied')
-    } catch {
-      setShareState('error')
     }
+    if (await copyToClipboard(text)) {
+      setShareState('copied')
+      return
+    }
+    // Clipboard blocked too — reveal the text for manual selection.
+    setShareText(text)
+    setShareState('manual')
   }, [buildShareText])
 
   const handlePlayAgain = () => {
@@ -759,8 +782,23 @@ export default function ResultPage() {
                       ? '本局已保存；连续打卡状态以今日活动为准。'
                       : '本局已保存；练习、失败和超时不计入连续打卡。'}
                 </p>
-                {shareState !== 'idle' && (
+                {shareState !== 'idle' && shareState !== 'manual' && (
                   <p className={styles.shareStatus}>{shareStatusText(shareState)}</p>
+                )}
+                {shareState === 'manual' && (
+                  <div className={styles.shareManual}>
+                    <p className={styles.shareStatus}>
+                      这台设备不支持一键分享，长按下面的文字复制：
+                    </p>
+                    <textarea
+                      className={styles.shareManualText}
+                      readOnly
+                      rows={3}
+                      value={shareText}
+                      aria-label="分享文案"
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  </div>
                 )}
                 <p className={styles.loopHint}>{getDailyResetHint()}</p>
               </div>
@@ -888,8 +926,6 @@ function shareStatusText(state: ShareState): string {
       return '已打开系统分享。'
     case 'copied':
       return '分享文案已复制。'
-    case 'error':
-      return '分享失败，请稍后再试。'
     default:
       return ''
   }

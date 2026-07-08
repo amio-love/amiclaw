@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accountDerivedPublicLabel,
   defaultArcadePublicLabel,
+  isGeneratedArcadePublicLabel,
   parseArcadeProfileClaimBody,
   parseArcadeProfileEvent,
+  resolveArcadePublicLabel,
   sanitizeArcadePublicLabel,
 } from './validation'
 
@@ -59,5 +62,48 @@ describe('arcade profile validation', () => {
     expect(sanitizeArcadePublicLabel('a@example.com', 'user-a')).toBe(fallback)
     expect(sanitizeArcadePublicLabel('', 'user-a')).toBe(fallback)
     expect(sanitizeArcadePublicLabel('x'.repeat(40), 'user-a')).toBe('x'.repeat(28))
+  })
+})
+
+describe('arcade public label precedence (F-C)', () => {
+  it('detects the generated Player <hex> placeholder', () => {
+    expect(isGeneratedArcadePublicLabel('Player 53CD')).toBe(true)
+    expect(isGeneratedArcadePublicLabel(defaultArcadePublicLabel('user-x'))).toBe(true)
+    expect(isGeneratedArcadePublicLabel('小明')).toBe(false)
+    expect(isGeneratedArcadePublicLabel('Player One')).toBe(false)
+    expect(isGeneratedArcadePublicLabel('byheaven0912')).toBe(false)
+  })
+
+  it('derives the account default from the email local-part', () => {
+    expect(accountDerivedPublicLabel('byheaven0912@gmail.com', 'user-a')).toBe('byheaven0912')
+    // No usable local-part → the anonymous placeholder, not an empty label.
+    expect(accountDerivedPublicLabel('@gmail.com', 'user-a')).toBe(
+      defaultArcadePublicLabel('user-a')
+    )
+  })
+
+  it('resolves by precedence: chosen nickname > existing real name > email > placeholder', () => {
+    const base = { email: 'byheaven0912@gmail.com', userId: 'user-a' }
+
+    // 1. Client-provided nickname wins.
+    expect(
+      resolveArcadePublicLabel({ ...base, clientLabel: '海阔天空', existingLabel: 'Player 53CD' })
+    ).toBe('海阔天空')
+
+    // 2. An existing REAL name is preserved when no client label is sent.
+    expect(resolveArcadePublicLabel({ ...base, existingLabel: '海阔天空' })).toBe('海阔天空')
+
+    // 3. No client label + no real existing label → account email local-part
+    //    (never the generated placeholder for a logged-in user).
+    expect(resolveArcadePublicLabel({ ...base, existingLabel: null })).toBe('byheaven0912')
+
+    // 4. An existing PLACEHOLDER is upgraded to the account default on re-claim.
+    expect(resolveArcadePublicLabel({ ...base, existingLabel: 'Player 53CD' })).toBe('byheaven0912')
+
+    // A client label that sanitizes to the placeholder (email / illegal chars)
+    // never overwrites with Player XXXX — it falls through to the account email.
+    expect(resolveArcadePublicLabel({ ...base, clientLabel: 'a@b.com', existingLabel: null })).toBe(
+      'byheaven0912'
+    )
   })
 })

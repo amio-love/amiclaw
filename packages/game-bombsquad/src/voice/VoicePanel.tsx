@@ -148,12 +148,14 @@ function VoicePanelImpl(
         </p>
       )}
 
-      <div className={styles.reply} role="log" aria-live="polite">
-        {aiText ? (
-          <p className={styles.replyText}>{aiText}</p>
-        ) : (
-          <p className={styles.replyPlaceholder}>{placeholderFor(status, conversationPhase)}</p>
-        )}
+      {/* Status line only — NOT the AI's spoken sentence. In-game, the
+          companion's words render exactly once, in the top subtitle strip
+          (fed by `onUtterance` above; companion-presence-design §字幕条). This
+          panel keeps the connection / phase status so the surface never looks
+          dead, but must not re-render `aiText` or the same utterance would show
+          on two surfaces at once. */}
+      <div className={styles.reply} role="status" aria-live="polite">
+        <p className={styles.replyPlaceholder}>{placeholderFor(status, conversationPhase)}</p>
       </div>
 
       {error && (
