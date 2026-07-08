@@ -30,6 +30,13 @@ milestone, never repeated. No trophy, no popup: just a word that it noticed.
 and plainly, what happens if you miss a day: the streak count starts over, but
 your longest record and every saved result stay, and there is no penalty.
 
+**Voice audio plumbing unified across the two voice sessions** - Internal
+refactor. The in-game and lobby voice hooks each carried their own copy of the
+imperative mic-capture, VAD, and TTS-playback shell (about 200 lines of
+duplicated Web Audio wiring, a drift risk between the two). That shell now lives
+once in `shared/voice`, so both hooks drive one implementation. No player-facing
+behavior changes.
+
 **Finishing a co-play daily run no longer flashes a phantom fifth module** -
 Fix. Completing all four modules while playing WITH your companion briefly
 showed a 「模块 5/4」 counter over an empty panel while the AI wrapped up, instead

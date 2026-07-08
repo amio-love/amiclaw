@@ -16,6 +16,9 @@
     "../../shared/api-base.ts",
     "../../shared/companion-presence.ts",
     "../../shared/leaderboard-api.ts",
-    "../../shared/leaderboard-optimistic.ts"
+    "../../shared/leaderboard-optimistic.ts",
+    "../../shared/voice/audio-capture.ts",
+    "../../shared/voice/audio-context.ts",
+    "../../shared/voice/audio-playback.ts"
   ]
 }
