@@ -93,9 +93,14 @@ const closingControl = vi.hoisted(() => {
   let pendingReject: ((err: Error) => void) | null = null
 
   const requestClosing = vi.fn()
+  // The memory-capture seam: GamePage must call this exactly once, on the clean
+  // recap-drained path, so the server hands the co-play summary to the
+  // consolidator. Shared spy so the test body can assert the call.
+  const endSession = vi.fn()
 
   return {
     requestClosing,
+    endSession,
     /** Resolve the current pending requestClosing promise (recap finished). */
     resolveClosing: () => {
       pendingResolve?.()
@@ -129,7 +134,7 @@ vi.mock('@/voice/useVoiceSession', () => ({
     isAiSpeaking: false,
     error: null,
     summary: null,
-    endSession: vi.fn(),
+    endSession: closingControl.endSession,
     requestClosing: closingControl.requestClosing,
   }),
 }))
@@ -158,6 +163,7 @@ describe('GamePage closing-recap gating', () => {
     vi.mocked(loadManual).mockResolvedValue(yaml.load(practiceYamlRaw) as Manual)
     closingControl.requestClosing.mockReset()
     closingControl.setupPending()
+    closingControl.endSession.mockReset()
     recapLog.record.mockReset()
   })
 
@@ -185,13 +191,21 @@ describe('GamePage closing-recap gating', () => {
     expect(recapLog.record).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('heading', { name: /拆弹成功/ })).toBeNull()
 
-    // Resolve the recap — the .then(doNavigate) handler fires.
+    // No `end` yet — the recap is still draining, so memory capture must not
+    // fire until the session actually concludes.
+    expect(closingControl.endSession).not.toHaveBeenCalled()
+
+    // Resolve the recap — the .then handler sends `end` (memory capture) then
+    // navigates.
     closingControl.resolveClosing()
 
     await waitFor(
       () => expect(screen.getByRole('heading', { name: /拆弹成功/ })).toBeInTheDocument(),
       { timeout: 3000 }
     )
+    // The clean conclusion sent `end` exactly once — the server hands the
+    // co-play summary off to the consolidator (companion-memory capture).
+    expect(closingControl.endSession).toHaveBeenCalledTimes(1)
   }, 15000)
 
   it('fallback: navigates even when requestClosing rejects (error-recovery, same path as timeout)', async () => {
@@ -218,5 +232,9 @@ describe('GamePage closing-recap gating', () => {
       () => expect(screen.getByRole('heading', { name: /拆弹成功/ })).toBeInTheDocument(),
       { timeout: 3000 }
     )
+    // The reject / timeout fallback does NOT send `end` — an abrupt close on a
+    // degraded path loses the capture (acceptable this round; not guaranteed on
+    // crash/network paths).
+    expect(closingControl.endSession).not.toHaveBeenCalled()
   }, 15000)
 })

@@ -50,6 +50,7 @@ import {
   waitFor,
   waitForMessage,
 } from './session-do-test-kit'
+import type { SessionDoEnv } from './session-do'
 
 beforeEach(() => {
   providerControl.override = undefined
@@ -299,5 +300,54 @@ describe('real VoiceSessionDO — end teardown gate, only the owner socket ends 
     await waitForMessage(owner, 'summary')
     const summary = messagesOfType(owner, 'summary')[0].summary as { turnCount: number }
     expect(summary.turnCount).toBe(1)
+  })
+})
+
+// --- end -> companion memory-capture hand-off (the wiring the client relies on) --
+
+describe('real VoiceSessionDO — end hands the summary off to the consolidator', () => {
+  it('POSTs the finished summary to the consolidator DO on a clean end', async () => {
+    // The vitest env deliberately omits COMPANION_CONSOLIDATOR (so the default
+    // suites make no cross-DO call). Inject a structural double at the same
+    // `instance.env` seam the usage-flush suite uses, then drive a real `end`:
+    // the `end` branch's fire-and-forget `handOffSummaryCapture` must reach it.
+    // Parse the request INSIDE the double's fetch — it runs in the DO's I/O
+    // context, and a Request body created there cannot be read from the test's
+    // context (workerd cross-DO I/O rule). Store plain values only.
+    const captured: Array<{ method: string; pathname: string; body: unknown }> = []
+    const consolidatorDouble = {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async (request: Request) => {
+          captured.push({
+            method: request.method,
+            pathname: new URL(request.url).pathname,
+            body: await request.json(),
+          })
+          return new Response('{}')
+        },
+      }),
+    }
+
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    // The credential-free `demo-mock` game (default) — the hand-off wiring is
+    // game-agnostic, so it exercises the same `end` branch a real bombsquad
+    // co-play run hits.
+    await createSessionOverWs(socket)
+    await session.run((instance) => {
+      ;(instance as unknown as { env: SessionDoEnv }).env = {
+        COMPANION_CONSOLIDATOR: consolidatorDouble,
+      } as unknown as SessionDoEnv
+    })
+
+    socket.send(END)
+    await waitForMessage(socket, 'summary')
+    await waitFor(() => captured.length === 1, 'consolidator capture POST')
+
+    expect(captured).toHaveLength(1)
+    expect(captured[0].method).toBe('POST')
+    expect(captured[0].pathname).toBe('/capture')
+    expect(captured[0].body).toMatchObject({ userId: 'user-A', gameId: 'demo-mock' })
   })
 })

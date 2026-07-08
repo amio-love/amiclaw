@@ -344,6 +344,27 @@ describe('useVoiceSession — hands-free lifecycle', () => {
     expect(result.current.status).toBe('closed')
     expect(result.current.summary).toMatchObject({ turnCount: 1 })
   })
+
+  it('endSession sends end exactly once even when called twice (no double capture)', async () => {
+    const { result, ws } = await ready()
+    act(() => result.current.endSession())
+    act(() => result.current.endSession())
+    expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+  })
+
+  it('settlement end then unmount sends end once — the unmount close does not resend', async () => {
+    const { result, ws, unmount } = await ready()
+    act(() => result.current.endSession())
+    unmount()
+    expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+  })
+
+  it('an abrupt unmount with no settlement sends NO end (crash / exit fallback)', async () => {
+    const { ws, unmount } = await ready()
+    unmount()
+    expect(ws.controlMessages().some((m) => m.type === 'end')).toBe(false)
+    expect(ws.readyState).toBe(MockWebSocket.CLOSED)
+  })
 })
 
 /**

@@ -664,6 +664,12 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   // --- Public actions ---
 
   const endSession = useCallback(() => {
+    // Exactly-once: the settlement seam (GamePage's RESULT effect) and any
+    // teardown path can both reach here, and a duplicate `{type:'end'}` would
+    // double the server's memory-capture hand-off. `endedRef` — the same flag
+    // the clean-close `onclose` reads — is set the instant `end` is sent, so a
+    // second call is a no-op.
+    if (endedRef.current) return
     stopCapture()
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
