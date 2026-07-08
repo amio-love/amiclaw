@@ -1,0 +1,36 @@
+# Regression: BombSquad 星盘 (dial) bottom controls untappable on a phone.
+#
+# Real-device bug F2 (fresh-eyes re-audit): on a 390x844 phone the daily 星盘
+# module's third (bottom) dial has its rotate knobs near the bottom of the
+# screen, where a bottom-of-screen layer intercepted the touch — tapping the
+# bottom dial's ←/→ did nothing until the player scrolled the knobs up. A dial
+# whose answer needs the bottom dial rotated was therefore unsolvable without a
+# non-obvious scroll.
+#
+# This scenario reaches the real daily 星盘 module at the exact failing viewport
+# and asserts every dial control is its own top hit-test target (nothing
+# overlays it) WITHOUT scrolling first. The play-through scenarios never caught
+# this because Playwright's `.click()` auto-scrolls the target into view — the
+# assertion here deliberately does not.
+#
+# This is a @playwright regression (deterministic browser hit-test), reusing the
+# existing daily connect-flow + module-solving steps. It lives under
+# e2e/regression/ so it is outside the flow-inventory bijection (it traces to a
+# fixed bug, not a product flow).
+
+Feature: BombSquad 星盘 bottom dial controls stay tappable on a phone
+  As a BombSquad player on a phone
+  I want every dial's rotate controls to receive my touch where they render
+  So that a "turn the bottom dial right" instruction is followable without scrolling
+
+  Background:
+    Given I open /
+
+  @playwright
+  Scenario: the daily 星盘 dial controls are all hit-testable at a 390x844 phone viewport
+    Given the phone viewport is 390 by 844 pixels
+    When I enter the daily challenge from the homepage
+    And I complete the connect-AI flow
+    And I solve the 光弦 module correctly
+    Then the module progress bar advances to the 星盘 module
+    And every 星盘 dial control is its own top hit-test target with nothing overlaying it

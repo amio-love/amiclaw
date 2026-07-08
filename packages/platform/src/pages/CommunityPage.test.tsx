@@ -85,6 +85,23 @@ describe('CommunityPage', () => {
     expect(mockedLike).not.toHaveBeenCalled()
   })
 
+  it('anchors the login hint in the tapped card, not at the page top (F5)', async () => {
+    mockedFetch.mockResolvedValue({ kind: 'ok', feed: { items: [NOVA], next_before: null } })
+    renderPage()
+
+    const likeBtn = await screen.findByRole('button', { name: '点赞' })
+    // No hint before the tap — the feedback is the tap's response.
+    expect(screen.queryByText(/登录后即可点赞/)).not.toBeInTheDocument()
+    fireEvent.click(likeBtn)
+
+    // The hint lands in the SAME card footer as the like button (co-located
+    // feedback), never as a stray line at the page top.
+    const hint = await screen.findByText(/登录后即可点赞/)
+    const footer = likeBtn.closest('div')
+    expect(footer).not.toBeNull()
+    expect(footer).toContainElement(hint)
+  })
+
   it('optimistically likes for a signed-in visitor', async () => {
     authState.current = {
       status: 'authed',

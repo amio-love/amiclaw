@@ -5,6 +5,34 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The homepage「开始玩」button works when you tap its middle** - Fix. On phones a
+decorative ring around the planet artwork sat invisibly over the primary
+「开始玩」call to action and swallowed taps on its center — only the button's
+left and right edges responded. The whole planet artwork is now non-interactive,
+so a tap anywhere on the button opens BombSquad.
+
+**The daily 星盘 puzzle now fits your phone screen** - Fix. The three-dial 星盘
+module ran taller than a phone viewport, so the bottom dial's ←/→ controls and
+the 确认 button sat below the fold and needed a scroll to reach — on some phones
+they fell under the browser's bottom bar. The dials are tighter on small screens
+and the game now sizes to the visible screen, so every control is on-screen and
+tappable without scrolling.
+
+**Turning voice on away from the homepage now actually connects** - Fix. Tapping
+「开启语音」on 我的 or another logged-in page flipped the companion to「在这」but
+started no voice session — it looked on while nothing listened. The voice session
+now opens on any logged-in page you turn it on, and ends when you leave that page.
+
+**Your companion's greeting no longer covers the daily checklist** - Fix. On the
+signed-in homepage the floating greeting bubble reached up over the 今日清单
+打卡 rows. The bubble is now capped to two lines and hugs the companion bar, so
+it stays clear of the checklist items.
+
+**Liking a community post while signed out now tells you why nothing
+happened** - Fix. Tapping ♥ on a community post while not signed in did nothing
+visible — the login hint appeared far up at the top of the page, away from your
+finger. The hint now shows right next to the ♥ you tapped:「登录后即可点赞。去登录 →」.
+
 **Every visible promise now matches what the product actually does** - Fix. A
 sweep of the wording across the product to match today's reality. The BombSquad
 entry no longer reads「自带语音 AI · 支持 …」(which scanned as a built-in AI);

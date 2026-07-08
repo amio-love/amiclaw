@@ -52,7 +52,10 @@ export default function CommunityPage() {
   const auth = useAuth()
   const [items, setItems] = useState<ArcadeCommunityFeedItem[]>([])
   const [load, setLoad] = useState<LoadState>('loading')
-  const [showLoginHint, setShowLoginHint] = useState(false)
+  // The login-gate hint is anchored to the CARD whose ♥ was tapped, not the page
+  // top — an anonymous tap must give feedback where the finger is (re-audit F5:
+  // the old page-top hint landed ~200px above the button, so the tap read dead).
+  const [loginHintItemId, setLoginHintItemId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -79,9 +82,10 @@ export default function CommunityPage() {
   const onToggleLike = useCallback(
     (item: ArcadeCommunityFeedItem) => {
       if (auth.status !== 'authed') {
-        setShowLoginHint(true)
+        setLoginHintItemId(item.id)
         return
       }
+      setLoginHintItemId(null)
       const nextLiked = !item.liked
       const optimisticCount = Math.max(0, item.like_count + (nextLiked ? 1 : -1))
       applyLike(item.id, nextLiked, optimisticCount)
@@ -91,7 +95,7 @@ export default function CommunityPage() {
         } else {
           // anon (session expired) / invalid / error — revert to the real state.
           applyLike(item.id, item.liked, item.like_count)
-          if (res.kind === 'anon') setShowLoginHint(true)
+          if (res.kind === 'anon') setLoginHintItemId(item.id)
         }
       })
     },
@@ -105,12 +109,6 @@ export default function CommunityPage() {
         大家<span className={styles.accent}>在玩</span>。
       </h2>
       <p className={styles.lead}>真实玩家动态：拆弹通关、上榜、连续打卡，都从真实战绩生成。</p>
-
-      {showLoginHint && (
-        <p className={styles.hint}>
-          登录后即可点赞。<Link to="/login">去登录 →</Link>
-        </p>
-      )}
 
       {load === 'loading' && <p className={styles.status}>加载中…</p>}
       {load === 'error' && <p className={styles.status}>社区动态暂不可用，稍后再试。</p>}
@@ -146,6 +144,11 @@ export default function CommunityPage() {
                   >
                     <span aria-hidden>♥</span> {item.like_count}
                   </button>
+                  {loginHintItemId === item.id && (
+                    <span className={styles.likeHint} role="status">
+                      登录后即可点赞。<Link to="/login">去登录 →</Link>
+                    </span>
+                  )}
                 </div>
               </GlassCard>
             )

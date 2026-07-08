@@ -26,15 +26,17 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-.hint {
-  margin: 0 0 24px;
-  font: 400 13px var(--font-body);
-  color: var(--text-3);
+/* Login-gate hint, shown inline in the tapped card's footer next to the ♥ — the
+   feedback lands where the finger is, not at the page top (re-audit F5). */
+.likeHint {
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--text-2);
 }
 
-.hint a {
+.likeHint a {
   color: var(--amio-yellow);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .status {
@@ -115,7 +117,9 @@
 
 .foot {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
   margin-top: 16px;
 }
 

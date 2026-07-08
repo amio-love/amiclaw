@@ -72,6 +72,16 @@ When('my viewport width is {int} pixels', async ({ page }, width: number) => {
   await page.setViewportSize({ width, height: current?.height ?? 760 })
 })
 
+// Both dimensions — some real-device regressions (F1 hero CTA, F2 dial controls)
+// only reproduce at a specific phone height where bottom / overflowing layers
+// reach the failing element.
+Given(
+  'the phone viewport is {int} by {int} pixels',
+  async ({ page }, width: number, height: number) => {
+    await page.setViewportSize({ width, height })
+  }
+)
+
 Then(/^the URL path is (\/\S*)$/, async ({ page }, path: string) => {
   await expect.poll(() => new URL(page.url()).pathname).toBe(path)
 })
