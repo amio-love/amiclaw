@@ -69,6 +69,13 @@ vi.mock('./utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
+// The daily flow drives the connect page; pin the first-run primer (F1) as
+// already seen so the BYO steps render immediately instead of the「怎么玩」screen.
+vi.mock('./utils/connect-intro', () => ({
+  hasSeenConnectIntro: () => true,
+  markConnectIntroSeen: vi.fn(),
+}))
+
 vi.mock('./audio/audio-context', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./audio/audio-context')>()
   return {

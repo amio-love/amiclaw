@@ -1,0 +1,29 @@
+# BombSquad first-run connect primer (F1) — the once-per-device「怎么玩」screen
+# that bridges the unconventional「自带语音 AI + 人机分持信息」premise before an
+# anonymous player hits「把手册发给 AI」. It fronts the BYO connect flow on the
+# first entry only (per-device localStorage flag), explains the three honest
+# facts (the split-information premise, the bring-your-own-AI path, and the
+# no-AI platform-companion path behind login), and is skippable in one tap into
+# the same BYO steps. Returning players never see it (the default fixture seed
+# marks it seen; this scenario carries @connect-intro-fresh to opt out).
+
+Feature: BombSquad first-run connect primer
+  As a brand-new anonymous BombSquad player
+  I want a short honest explanation of how the game is played
+  So that the「自带语音 AI」premise does not lose me at the manual handoff
+
+  Background:
+    Given I open /
+
+  # Source: bombsquad-first-run-intro
+  @playwright @connect-intro-fresh
+  Scenario: First anonymous entry shows the skippable how-to primer, then the BYO steps
+    Given my viewport width is 360 pixels
+    When I enter the daily challenge from the homepage
+    Then I see the heading "开始之前"
+    And I see the tip "你看得到炸弹面板但查不了资料"
+    And I see the tip "把手册链接发给它"
+    And I see the tip "登录后可以让平台的语音伙伴"
+    And the connect screen has no horizontal overflow
+    When I click "知道了，开始对接 →"
+    Then the connect-AI flow opens at step 1

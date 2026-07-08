@@ -53,7 +53,21 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+}
+
+/* The eyebrow is `display: inline-flex`, so `text-overflow: ellipsis` on it does
+   nothing — the AI-tools run just clipped mid-word at 360px ("… · Chat", F8).
+   The truncation must live on a BLOCK inner element that directly wraps the
+   text. Making the AiToolList a shrinkable block flex-item gives it a clean
+   trailing ellipsis instead of a mid-glyph cut; the full list still shows in the
+   wrapping chips row lower on the page. */
+.aiList {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .iconBtn {

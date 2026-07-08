@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { LeaderboardEntry, ScoreSubmission } from '../../../../shared/leaderboard-types'
+import type {
+  LeaderboardEntry,
+  ScoreSubmission,
+  ScoreSubmissionResponse,
+} from '../../../../shared/leaderboard-types'
 import { createTestDb } from '../../../companion-memory/src/test-support/sqlite-db'
 import type {
   CaptureEventRecord,
@@ -371,5 +375,51 @@ describe('handlePostScore — one row per player per day', () => {
     expect(todayEntries?.[0]).toMatchObject({ time_ms: 130_000 })
     expect(yesterdayEntries).toHaveLength(1)
     expect(yesterdayEntries?.[0]).toMatchObject({ time_ms: 150_000 })
+  })
+})
+
+describe('handlePostScore — plausibility floor in the returned rank (F2)', () => {
+  type StoredRow = LeaderboardEntry & { device_id?: string }
+
+  it('ranks a legit submission ahead of legacy sub-floor rows and counts only plausible players', async () => {
+    const kv = new FakeKV()
+    const date = new Date().toISOString().slice(0, 10)
+    // Two legacy sub-60s junk rows already on the board (written before the
+    // plausibility floor shipped, still inside the 48h TTL).
+    await kv.put(
+      `leaderboard:${date}`,
+      JSON.stringify([
+        {
+          rank: 1,
+          nickname: '审计员W4',
+          time_ms: 36_000,
+          attempt_number: 1,
+          device_id: 'dddddddd-eeee-4fff-9aaa-bbbbbbbbbbbb',
+        },
+        {
+          rank: 2,
+          nickname: '审计员W3',
+          time_ms: 36_500,
+          attempt_number: 1,
+          device_id: 'cccccccc-1111-4222-9333-444444444444',
+        },
+      ])
+    )
+
+    // A genuine 130s run from a different device.
+    const response = await handlePostScore(request(submission()), kv.asKV())
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as ScoreSubmissionResponse
+    // The returned rank / count ignore the two sub-floor rows: the submitter is
+    // #1 of 1 plausible player, NOT #3 of 3 behind the 00:36 junk.
+    expect(body.rank).toBe(1)
+    expect(body.total_players).toBe(1)
+
+    // The KV write still PRESERVES the sub-floor rows — the sweep is a display
+    // filter, not a hard delete, so they age out with the TTL on their own.
+    const stored = (await kv.get(`leaderboard:${date}`, 'json')) as StoredRow[] | null
+    expect(stored?.some((e) => e.time_ms === 36_000)).toBe(true)
+    expect(stored?.some((e) => e.time_ms === 36_500)).toBe(true)
+    expect(stored?.some((e) => e.time_ms === 130_000)).toBe(true)
   })
 })

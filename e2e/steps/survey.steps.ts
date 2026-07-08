@@ -5,7 +5,7 @@ import { Given, When, Then } from './fixtures'
 /** Stable test player metadata for the daily leaderboard gate — mirrors result.steps. */
 const E2E_NICKNAME = 'E2ERunner'
 const E2E_AI_ASSISTANT_LABEL = 'Claude'
-const SURVEY_DELAY_MS = 2000
+const SURVEY_DELAY_MS = 4400 // clears the longest (practice, 4200ms) celebration-to-survey delay
 
 /** Answer Q1/Q2/Q3 — the three required survey questions inside an open modal. */
 async function answerRequiredSurvey(dialog: import('@playwright/test').Locator): Promise<void> {

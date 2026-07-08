@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 30 active flows <-> 30 journey
-# scenarios, the regression size budget is 60 (2026-07-08, after the community
-# real-feed flow landed as a @playwright journey).
+# 2 x the journey-scenario count. With 31 active flows <-> 31 journey
+# scenarios, the regression size budget is 62 (2026-07-09, after the BombSquad
+# first-run connect primer flow landed as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -142,6 +142,22 @@ flows:
       compatibility page to see the supported AIs, and returns to the BombSquad
       landing page.
     steps: [connect-step-1, compatibility-link, compatibility-page, back-to-landing]
+    status: active
+
+  - id: bombsquad-first-run-intro
+    name: BombSquad first-run connect primer
+    description: >-
+      A brand-new anonymous player entering the BombSquad connect flow gets a
+      once-per-device「怎么玩」primer (F1) BEFORE the「把手册发给 AI」step: it
+      bridges the unconventional premise (you + a voice AI partner splitting the
+      bomb vs the manual), points players WITH a voice AI at the manual handoff
+      and players WITHOUT one at the platform companion behind login, and is
+      skippable in one tap into the same BYO steps. It shows only on the first
+      BYO entry (per-device localStorage flag); returning players and signed-in
+      companion owners never see it, so the landing-to-daily / landing-to-practice
+      flows stay unchanged. The dedicated scenario carries @connect-intro-fresh to
+      opt out of the default already-seen fixture seed.
+    steps: [connect-first-entry, howto-primer, primer-dismiss, connect-step-1]
     status: active
 
   # === Atlas platform-shell flows =============================================

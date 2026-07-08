@@ -5,6 +5,47 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**A first-time player learns how BombSquad is played before the manual step** - Fix.
+An anonymous newcomer was dropped straight onto 「把手册发给你的 AI」 with no
+explanation of the unusual premise — you and a separate voice AI split the bomb
+and the manual between you — and no path for someone without an AI at hand. The
+first entry into the connect flow now shows one short, honest 「怎么玩」 screen:
+the split-information premise, the bring-your-own-AI path (Claude / ChatGPT /
+Gemini …), and, for players with no AI, the platform voice companion behind login.
+It shows once per device, is one tap to skip into the same steps, and never
+appears again — returning players and signed-in companion owners see nothing new.
+
+**The board's rejection notice reads in plain Chinese** - Fix. A clear too fast
+for the plausibility check was refused with a half-English line that also spelled
+out the exact time threshold. The notice now reads 「成绩未通过合理性校验」 in full
+Chinese, and a pacing limit reads as its own 「提交太频繁」 message — neither leaks
+the raw server text or the threshold a would-be forger would want.
+
+**The board, the 「最快拆弹」 stat, and your submitted rank only count plausible
+times** - Fix. Rows recorded before the 60-second plausibility floor shipped could
+still headline the board, feed the homepage 「最快拆弹 / 日榜首」 stat with
+sub-minute times the floor itself calls implausible, and rank a genuine submitter
+behind them on the result page's 「全球排名」 card. The same floor now filters all
+three surfaces at display time — the board read, the homepage stat, and the rank
+returned when you submit — so none of them can show or count an implausible run.
+The data is filtered, not deleted, so it stays reversible and ages out on its own.
+
+**The homepage checklist time no longer looks like a game score** - Fix. A
+finished daily item read 「已完成 · 04:44」, where 04:44 was the local time you
+completed it — but sitting next to the result page's 用时 (e.g. 00:17) it read as
+a wildly different game time for the same run. The line now reads 「完成于 04:44」,
+labeling it clearly as when you finished; your run 用时 stays on the result page
+and 我的 as before.
+
+**The signed-in homepage drops the anonymous-only caveat** - Fix. A signed-in
+visitor's streak note still carried 「匿名状态只代表这台设备」, a line that only
+belongs to the anonymous device view. It now shows only in device scope.
+
+**The BombSquad top label truncates cleanly on narrow phones** - Fix. On a 360px
+screen the 「自带任意语音 AI · 例如 …」 label cut off mid-word with no ellipsis. It
+now ends with a clean 「…」; the full AI-tools list still shows in the chips row
+below.
+
 **The daily time board rejects clears no human could hit** - Fix. The board only
 blocked runs under 15 seconds, so a ~36-second automated clear could top it over
 real 3-to-5-minute human runs and feed the homepage 「最快拆弹」 stat. The

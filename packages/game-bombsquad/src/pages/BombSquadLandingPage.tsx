@@ -41,7 +41,7 @@ export default function BombSquadLandingPage() {
               keeps it a label, not a "ready/online" signal. */}
           <div className={styles.top}>
             <Eyebrow dot color="var(--y)" className={styles.aiEyebrow}>
-              <AiToolList prefix="自带任意语音 AI · 例如" />
+              <AiToolList prefix="自带任意语音 AI · 例如" className={styles.aiList} />
             </Eyebrow>
             <button
               type="button"

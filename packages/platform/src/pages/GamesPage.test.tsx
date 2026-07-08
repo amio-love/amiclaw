@@ -253,7 +253,9 @@ describe('GamesPage homepage', () => {
     // C3/F7: the completion time renders in the viewer's local timezone as HH:MM
     // and no longer carries a raw「… UTC」label. TZ-robust — assert the shape,
     // not a fixed clock (the exact local time depends on the runner timezone).
-    const completionLine = screen.getByText(/^已完成 · \d{2}:\d{2}$/)
+    // F3: the line reads「完成于 HH:MM」(a point in time), not the old ambiguous
+    // 「已完成 · HH:MM」that read as a game 用时 next to the result page's duration.
+    const completionLine = screen.getByText(/^完成于 \d{2}:\d{2}$/)
     expect(completionLine).toBeInTheDocument()
     expect(completionLine.textContent).not.toContain('UTC')
     expect(screen.getByText('连续天数 · 本设备')).toBeInTheDocument()

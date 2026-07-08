@@ -112,7 +112,12 @@ export default function ResultPage() {
   // Distinguishes a server-side validation rejection from a network failure so
   // the failure copy can be honest. `null` while no failure is showing.
   const [submitFailKind, setSubmitFailKind] = useState<'network' | 'rejected' | null>(null)
-  const [submitFailMessage, setSubmitFailMessage] = useState<string | null>(null)
+  // The rejection's HTTP status drives a fully-localized Chinese reason (F2):
+  // 429 = rate limit, anything else (422 plausibility floor / structural) reads
+  // as「成绩未通过合理性校验」. The server's raw English `error` string is never
+  // shown — it would leak the exact 60s threshold to a would-be forger and mix
+  // English into the Chinese product. `null` while no failure is showing.
+  const [submitFailStatus, setSubmitFailStatus] = useState<number | null>(null)
   const [entryRecovery] = useState(() => readEntryRecoveryState())
   const [profileSaveState, setProfileSaveState] = useState<ProfileSaveState>('idle')
   const [dailyLoop, setDailyLoop] = useState<ArcadeDailyLoopSummary | null>(null)
@@ -285,7 +290,7 @@ export default function ResultPage() {
     hasFinishedDailyRun && (nickname === null || leaderboardMetadata === null)
   const [surveyReady, setSurveyReady] = useState(false)
   const [surveyRetired, setSurveyRetired] = useState(false)
-  // A server rejection notice (成绩校验未通过) is rendered inline in the rank card
+  // A server rejection notice (成绩未通过合理性校验) is rendered inline in the rank card
   // and must be readable before the once-per-device survey opens over it — the
   // same stacking guard as #209 deferring the survey behind the rank reveal
   // (F8). A network failure is deliberately NOT gated: it invites an immediate
@@ -383,7 +388,7 @@ export default function ResultPage() {
         submittedRef.current = 'done' // permanently lock — this run is on the board
         setSubmitFailed(false)
         setSubmitFailKind(null)
-        setSubmitFailMessage(null)
+        setSubmitFailStatus(null)
         setRankResult(result.data)
         // The board keeps one row per player — the day's best. Only seed an
         // optimistic entry when this run IS the personal best; a slower retry
@@ -404,7 +409,7 @@ export default function ResultPage() {
         submittedRef.current = 'idle' // release latch so the retry button can fire
         setSubmitFailed(true)
         setSubmitFailKind(result.kind)
-        setSubmitFailMessage(result.kind === 'rejected' ? (result.error ?? null) : null)
+        setSubmitFailStatus(result.kind === 'rejected' ? result.status : null)
       }
     },
     [recordOptimistic]
@@ -513,7 +518,7 @@ export default function ResultPage() {
     setRetried(true)
     setSubmitFailed(false)
     setSubmitFailKind(null)
-    setSubmitFailMessage(null)
+    setSubmitFailStatus(null)
     setSubmitting(true)
     // applySubmitResult resets submittedRef to 'idle' on failure, so
     // performSubmission will proceed here on the retry path.
@@ -763,16 +768,22 @@ export default function ResultPage() {
                         // Server reached and refused — not an offline state.
                         // Retry once for transient refusals (e.g. rate limit);
                         // a persistent rejection points the player at feedback.
+                        // Fully-localized honest copy (F2): a 429 is a pacing
+                        // limit that a later retry clears; anything else is the
+                        // plausibility校验. Neither leaks the server's raw
+                        // English string or the 60s threshold.
                         retried ? (
                           <>
-                            成绩未能通过校验，暂时无法上榜。
-                            {submitFailMessage ? `（${submitFailMessage}）` : ''}
+                            {submitFailStatus === 429
+                              ? '提交太频繁，请稍后再来重新提交。'
+                              : '成绩未通过合理性校验，暂时无法上榜。'}
                             可邮件反馈 byheaven0912@gmail.com
                           </>
                         ) : (
                           <>
-                            成绩校验未通过
-                            {submitFailMessage ? `（${submitFailMessage}）` : ''}
+                            {submitFailStatus === 429
+                              ? '提交太频繁，请稍后再试'
+                              : '成绩未通过合理性校验'}
                             <button className={styles.retryBtn} onClick={handleRetrySubmit}>
                               重试
                             </button>

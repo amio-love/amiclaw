@@ -57,8 +57,17 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
             <span className={styles.itemBody}>
               <span className={styles.itemTitle}>{item.title}</span>
               <span className={styles.itemDetail}>
+                {/* The completed line shows WHEN the item was done today — the
+                    local wall-clock time of completion (完成于 HH:MM), not the
+                    game 用时. The result page and /me show the run DURATION
+                    (formatMs, e.g. 00:17); the bare「· 04:44」here used to read
+                    as a duration too and looked contradictory (F3). 「完成于」
+                    labels it as a point in time and reads the same for both the
+                    timed BombSquad run and the untimed Oracle sign. */}
                 {item.completed
-                  ? `已完成${item.completedAt ? ` · ${formatLocalClockTime(item.completedAt)}` : ''}`
+                  ? item.completedAt
+                    ? `完成于 ${formatLocalClockTime(item.completedAt)}`
+                    : '已完成'
                   : item.detail}
               </span>
             </span>
@@ -70,7 +79,10 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
       <p className={styles.note}>
         {loading
           ? '正在读取账号记录；暂时显示这台设备上的状态。'
-          : `最长连续 ${loop.streak.longest_days} 天。匿名状态只代表这台设备。`}
+          : // The 匿名状态 caveat only belongs to device-scope (anonymous) records
+            // (F4). A signed-in visitor sees 本账号 scope, so leaking「匿名状态只
+            // 代表这台设备」into the account view is a scope mismatch — drop it there.
+            `最长连续 ${loop.streak.longest_days} 天。${scope === 'device' ? '匿名状态只代表这台设备。' : ''}`}
       </p>
       <p className={styles.hint}>{getDailyResetHint()}</p>
     </section>

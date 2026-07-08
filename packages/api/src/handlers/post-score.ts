@@ -11,6 +11,7 @@ import { dedupeStoredEntries, type StoredEntry } from '../leaderboard-entries'
 import {
   MAX_AI_MODEL_LEN,
   MAX_AI_TOOL_LEN,
+  MIN_GAME_TIME_MS,
   sanitizeLeaderboardText,
   sanitizeNickname,
   validateSubmission,
@@ -95,23 +96,38 @@ export async function handlePostScore(
   // therefore dropped here — the board always shows the day's best run.
   const updated = dedupeStoredEntries([...base, newEntry]).slice(0, MAX_ENTRIES)
 
+  // The KV write keeps the UNFILTERED set — the plausibility sweep is a
+  // display-time filter, not a hard delete, so legacy sub-floor rows age out
+  // with the TTL rather than being purged on the next write.
   await kv.put(leaderboardKey, JSON.stringify(updated), {
     expirationTtl: KV_TTL_SECONDS,
   })
 
+  // The rank / player count RETURNED to the result page must ignore legacy
+  // sub-floor rows (F2), matching the read-path integrity sweep in
+  // get-leaderboard.ts — otherwise the「全球排名」card ranks this legit
+  // submitter behind implausible junk still inside the 48h TTL, re-introducing
+  // the very board-vs-stat contradiction F2 set out to kill. Filter BEFORE
+  // dedup (same order as get-leaderboard) so the player's own legit row is
+  // never shadowed by an earlier sub-floor row on the same device; the just-
+  // submitted run already passed the write-time floor, so it always survives.
+  const ranked = dedupeStoredEntries(
+    [...base, newEntry].filter((e) => e.time_ms >= MIN_GAME_TIME_MS)
+  ).slice(0, MAX_ENTRIES)
+
   // The player's board rank is their kept (best) row — not necessarily the
   // run just submitted. Fall back to the legacy nickname+time match for rows
   // that predate device_id storage.
-  let rank = updated.findIndex((e) => e.device_id === body.device_id) + 1
+  let rank = ranked.findIndex((e) => e.device_id === body.device_id) + 1
   if (rank === 0) {
     rank =
-      updated.findIndex((e) => e.nickname === newEntry.nickname && e.time_ms === newEntry.time_ms) +
+      ranked.findIndex((e) => e.nickname === newEntry.nickname && e.time_ms === newEntry.time_ms) +
       1
   }
 
   const response: ScoreSubmissionResponse = {
-    rank: rank > 0 ? rank : updated.length + 1,
-    total_players: updated.length,
+    rank: rank > 0 ? rank : ranked.length + 1,
+    total_players: ranked.length,
     personal_best_ms: bestRecord.time_ms,
     ...(bestRecord.attempt_number !== undefined
       ? { personal_best_attempt: bestRecord.attempt_number }
