@@ -46,7 +46,15 @@ export async function handlePostArcadeProfileEvent(
   env: ArcadeProfileApiEnv
 ): Promise<Response> {
   const auth = await requireSession(env.AUTH, request)
-  if (!auth.ok) return auth.response
+  // Settlement events are a best-effort, fire-and-forget account sync fired
+  // after EVERY run/sign, including anonymous ones — but an anonymous session
+  // has no account to attach them to (they live in the device-local profile and
+  // sync on the login claim instead). Answer 204 (accepted, nothing to persist
+  // or return) rather than 401 so an anonymous player does not spray a red 401
+  // into the console after every settlement (audit F27). The client reads 204 as
+  //「not synced (anonymous)」and keeps its local record. GET profile / POST claim
+  // keep 401 — those are genuine authenticated reads/writes.
+  if (!auth.ok) return new Response(null, { status: 204 })
 
   const body = await parseJsonBody(request)
   const event = parseArcadeProfileEvent(body)

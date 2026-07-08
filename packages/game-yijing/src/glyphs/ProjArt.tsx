@@ -172,8 +172,11 @@ interface ProjArtProps {
   selected?: boolean
   /** Rank within the player's selection (1 or 2). Renders the corner badge. */
   selectionOrder?: 1 | 2
-  /* Default 120 mirrors handoff prototype tile size; the projection grid
-     overrides this with `aspect-ratio: 1 + width: 100%` via the tile CSS. */
+  /* Optional explicit pixel size. Omit it (the projection grid does) to let the
+     tile fill its grid track via the tile CSS (`aspect-ratio: 1 + width: 100%`).
+     An unconditional inline width would DEFEAT that CSS — inline styles win — and
+     force the 3-column grid to 3×120px, overflowing narrow viewports so the
+     third column is clipped by the page's `overflow-x: hidden` (audit F5). */
   size?: number
   onClick?: () => void
   className?: string
@@ -184,12 +187,15 @@ export function ProjArt({
   id,
   selected = false,
   selectionOrder,
-  size = 120,
+  size,
   onClick,
   className,
   style,
 }: ProjArtProps) {
-  const tileStyle: CSSProperties = { width: size, height: size, ...style }
+  // Pin an explicit box ONLY when a `size` is passed; otherwise defer to the
+  // tile CSS so the tile is fluid inside its grid track (audit F5).
+  const tileStyle: CSSProperties | undefined =
+    size !== undefined ? { width: size, height: size, ...style } : style
   const classes = [styles.tile, selected && styles.on, className].filter(Boolean).join(' ')
   return (
     <button type="button" className={classes} style={tileStyle} onClick={onClick}>

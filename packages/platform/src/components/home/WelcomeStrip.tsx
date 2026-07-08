@@ -1,5 +1,6 @@
 import { Button, ConicAvatar } from '@amiclaw/ui'
 import type { DisplayUser } from '@/hooks/useAuth'
+import { useGreetingName } from '@/hooks/useGreetingName'
 import styles from './WelcomeStrip.module.css'
 
 interface WelcomeStripProps {
@@ -16,13 +17,23 @@ interface WelcomeStripProps {
    So the right side is an honest「还没有成绩」prompt with a play CTA, not
    fabricated figures and not a「即将推出」placeholder. */
 export default function WelcomeStrip({ user }: WelcomeStripProps) {
+  // Greet by chosen nickname > companion-known name > a neutral, name-free
+  // greeting — never the account email (audit F19). The avatar stays a decorative
+  // ariaHidden glyph.
+  const greetingName = useGreetingName()
   return (
     <section className={styles.strip}>
       <div className={styles.left}>
         <ConicAvatar size={56} letter={user.avatarLetter} ariaHidden />
         <div>
           <div className={styles.greet}>
-            你好，<span className={styles.name}>{user.displayName}</span>。
+            {greetingName ? (
+              <>
+                你好，<span className={styles.name}>{greetingName}</span>。
+              </>
+            ) : (
+              '你好。'
+            )}
           </div>
           <div className={styles.meta}>还没有成绩，去玩一局，这里会记录你的战绩。</div>
         </div>

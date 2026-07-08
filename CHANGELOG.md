@@ -5,6 +5,60 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Every visible promise now matches what the product actually does** - Fix. A
+sweep of the wording across the product to match today's reality. The BombSquad
+entry no longer reads「自带语音 AI · 支持 …」(which scanned as a built-in AI);
+it now says「自带任意语音 AI · 例如 …」, framing the tools as examples you can
+bring, with the real per-tool tested status on the compatibility page. The login
+page states what an account gives you today — a personal AI companion, a
+community feed of real player activity, and cross-device progress — instead of
+promising a「社交主场」the community is not yet. The homepage drops the「一周一新 /
+每周上新一款」weekly-cadence claim it does not keep.
+
+**The Oracle's image-picker no longer clips its third column** - Fix. On the
+起意 mind-image step the third column of tiles was cut off at the right screen
+edge and could not be scrolled into view. The tiles now shrink to fit, so all
+six are fully visible on narrow phones.
+
+**Completion times show in your own timezone** - Fix. The daily checklist showed
+a completion time labelled「… UTC」; it now shows your local wall-clock time, no
+UTC label.
+
+**The login page's escape link is no longer hidden behind the tab bar** - Fix.
+On phones the bottom of the login page (including the「直接开始玩」escape) could
+sit under the fixed tab bar with no room to scroll it clear. The page now
+reserves space for the bar. The heading also greets a neutral「欢迎你」instead of
+assuming「欢迎回来」for a first-time visitor.
+
+**You are greeted by your name, not your email** - Fix. The signed-in homepage
+and 我的 page greeted you by your raw email local-part (e.g. a long
+plus-addressed alias). They now greet you by your chosen leaderboard nickname if
+you have one, otherwise by the name your companion knows you as, and otherwise
+with a plain, name-free「你好」— the email is never used as a name.
+
+**The companion setup title updates once your companion exists** - Fix. After
+you created your companion, the page header still said「给它取个名字」above the
+just-created companion. It now switches to a present-tense line.
+
+**Anonymous play no longer logs a 401 after every run** - Fix. Each settlement
+tried to sync to an account even when you were not signed in, printing a red 401
+in the console every time. The server now accepts the anonymous sync as a no-op,
+so there is no error noise.
+
+**The first-screen game-count bubble no longer overlaps the tab bar** - Fix. On
+phones a floating stat bubble on the homepage hero drifted down behind the
+translucent bottom tab bar. The hero's floating pills now sit clear of it.
+
+**The button module tells you it can be held, not only tapped** - New. The
+button puzzle now shows a short player-side hint that a tap and a hold are both
+possible and how the hold's colour strip works — without revealing which one
+this button needs (that stays your AI's to read).
+
+**The practice win celebration is no longer cut short by the survey** - Fix. On
+a first practice win the feedback survey popped up a beat after the win screen,
+over the celebration. It now waits out the full celebration before appearing,
+matching how the daily survey already waits for the rank reveal.
+
 **The community page shows real player activity, not fabricated posts** - New.
 The community page used to show a fixed set of invented posts whose timestamps
 never moved. It is now a real feed, built from actual play: a player defusing

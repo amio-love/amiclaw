@@ -76,6 +76,10 @@ import { submitScore } from '@shared/leaderboard-api'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
 const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
+// A practice win now waits a longer celebration window before the survey opens
+// (audit F11). advancePastResultFeedback advances by this max, which also covers
+// the shorter daily/failure delay.
+const RESULT_PRACTICE_CELEBRATION_MS = 4200
 
 interface FixtureOptions {
   mode: GameState['mode']
@@ -138,7 +142,10 @@ function answerRequiredSurvey({
 
 function advancePastResultFeedback() {
   act(() => {
-    vi.advanceTimersByTime(RESULT_FEEDBACK_SURVEY_DELAY_MS)
+    // Advance by the longest survey delay (the practice celebration window) so
+    // this helper covers both the practice-win and the shorter daily/failure
+    // timings.
+    vi.advanceTimersByTime(RESULT_PRACTICE_CELEBRATION_MS)
   })
 }
 
@@ -171,6 +178,25 @@ describe('ResultPage endgame survey', () => {
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
     // Survey-only modal — no nickname gate for a practice run.
     expect(screen.queryByLabelText(/昵称/)).not.toBeInTheDocument()
+  })
+
+  it('practice win: the survey waits out the celebration window, not the base delay (F11)', () => {
+    surveyMock.hasAnsweredSurvey.mockReturnValue(false)
+    renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
+
+    expect(screen.getByText('拆弹成功')).toBeInTheDocument()
+    // Past the base (daily/failure) delay the practice survey is STILL closed —
+    // the win payoff is not interrupted a beat after mount.
+    act(() => {
+      vi.advanceTimersByTime(RESULT_FEEDBACK_SURVEY_DELAY_MS)
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // It opens only once the full celebration window has elapsed.
+    act(() => {
+      vi.advanceTimersByTime(RESULT_PRACTICE_CELEBRATION_MS - RESULT_FEEDBACK_SURVEY_DELAY_MS)
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
   it('opens the survey modal even on a failed run', () => {

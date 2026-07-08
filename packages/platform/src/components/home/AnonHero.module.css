@@ -235,8 +235,12 @@
     font-size: 14px;
   }
 
+  /* Tighter stage + lifted floating pills on mobile so the lowest pill sits
+     clear of the fixed BottomNav band on the first screen — the old 360px stage
+     let 「最快拆弹 / 已上线游戏」 pills drift down behind the translucent bar
+     (audit F9). */
   .planetStage {
-    height: 360px;
+    height: 300px;
     margin-top: 20px;
   }
 
@@ -261,7 +265,7 @@
   }
 
   .s2 {
-    bottom: 30px;
+    bottom: 56px;
     left: -10px;
   }
 

@@ -23,12 +23,21 @@ export default function CompanionOnboardingPage() {
   const access = useCompanionAccess()
   const { state, reload } = useCompanion(access === 'ready')
 
+  // Once the companion exists, the header must stop inviting a first-time setup
+  // (「给它取个名字」) — that copy contradicted the identity panel shown right
+  // below it after creation (audit F20). It switches to a present-tense line.
+  const hasCompanion = access === 'ready' && state.status === 'exists'
+
   return (
     <div className={styles.page}>
       <CompanionPageHeader
         eyebrow="伙伴 · COMPANION"
-        title="认识你的伙伴"
-        lead="给它取个名字，挑一种声音。它的性格不预设，由你们一起的回忆慢慢长成。"
+        title={hasCompanion ? '你的伙伴' : '认识你的伙伴'}
+        lead={
+          hasCompanion
+            ? '它已经在这了。你们一起玩得越多，它越懂你。'
+            : '给它取个名字，挑一种声音。它的性格不预设，由你们一起的回忆慢慢长成。'
+        }
       />
 
       {access === 'loading' ? null : access === 'gate' ? (

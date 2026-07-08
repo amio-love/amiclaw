@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  formatLocalClockTime,
   getDailyResetHint,
   getLocalRolloverTime,
   getProductDaysEndingAt,
@@ -86,6 +87,24 @@ describe('getDailyResetHint', () => {
 describe('toChineseDateString', () => {
   it('renders a product-day string in the Chinese date form', () => {
     expect(toChineseDateString('2026-07-06')).toBe('2026 年 7 月 6 日')
+  })
+})
+
+describe('formatLocalClockTime — completion time in the viewer timezone (audit F7)', () => {
+  // A daily challenge completed at 14:38 UTC.
+  const completedAtUtc = '2026-07-06T14:38:00Z'
+
+  it('renders the local wall-clock time, not raw UTC', () => {
+    // 14:38 UTC == 22:38 Beijing — the Chinese user sees their own clock.
+    expect(formatLocalClockTime(completedAtUtc, 'Asia/Shanghai')).toBe('22:38')
+  })
+
+  it('renders the same clock time in UTC itself', () => {
+    expect(formatLocalClockTime(completedAtUtc, 'UTC')).toBe('14:38')
+  })
+
+  it('returns an empty string for an unparseable timestamp', () => {
+    expect(formatLocalClockTime('not-a-date')).toBe('')
   })
 })
 

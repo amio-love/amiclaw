@@ -34,11 +34,14 @@ export default function BombSquadLandingPage() {
           {/* Top strip — bring-your-own-AI premise label + exit-to-platform
               control. This is not a status: the player supplies their own
               voice AI, so the label invites rather than asserting any AI is
-              connected. Brand-yellow (not green) keeps it a label, not a
-              "ready/online" signal. */}
+              connected. 「自带任意 …· 例如」 frames the list as EXAMPLES of
+              tools you can bring, not a roster of supported/verified providers
+              (only Claude is acceptance-verified — see /bombsquad/compatibility);
+              「支持 N 家」 would misread as built-in AI. Brand-yellow (not green)
+              keeps it a label, not a "ready/online" signal. */}
           <div className={styles.top}>
             <Eyebrow dot color="var(--y)" className={styles.aiEyebrow}>
-              <AiToolList prefix="自带语音 AI · 支持" />
+              <AiToolList prefix="自带任意语音 AI · 例如" />
             </Eyebrow>
             <button
               type="button"
@@ -129,7 +132,7 @@ export default function BombSquadLandingPage() {
               </svg>
             </a>
 
-            <AiToolList prefix="支持" className={styles.chips} />
+            <AiToolList prefix="例如" className={styles.chips} />
           </div>
         </div>
       </div>

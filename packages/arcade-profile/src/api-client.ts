@@ -66,7 +66,11 @@ export async function submitArcadeProfileEvent(
       credentials: 'include',
       body: JSON.stringify(event),
     })
-    if (res.status === 401) return { kind: 'anon' }
+    // 204 = anonymous best-effort sync (the server accepted the fire-and-forget
+    // event but has no account to attach it to — audit F27); 401 kept for
+    // defensiveness. Both resolve to `anon` so the caller keeps its local record
+    // without treating it as an error.
+    if (res.status === 204 || res.status === 401) return { kind: 'anon' }
     if (res.status === 422 || res.status === 400) return { kind: 'invalid' }
     if (!res.ok) return { kind: 'error' }
     const data = (await res.json()) as ArcadeProfileResponse

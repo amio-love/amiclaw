@@ -43,7 +43,12 @@ export type UseAuthResult = AuthState & {
 
 function deriveDisplayUser(identity: AuthIdentity): DisplayUser {
   const localPart = identity.email.split('@')[0] ?? identity.email
-  const displayName = localPart.length > 0 ? localPart : identity.email
+  // Strip the +tag plus-addressing suffix so a plus-aliased address
+  // (e.g. `name+arcade-newuser@…`) never surfaces its raw internal alias as a
+  // display name (audit F19). Greeting surfaces additionally prefer the
+  // player's chosen nickname over this account-derived handle.
+  const handle = localPart.split('+')[0] || localPart
+  const displayName = handle.length > 0 ? handle : identity.email
   const avatarLetter = displayName.charAt(0).toUpperCase()
   return { user_id: identity.user_id, email: identity.email, displayName, avatarLetter }
 }

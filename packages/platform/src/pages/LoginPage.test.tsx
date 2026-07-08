@@ -75,13 +75,15 @@ describe('LoginPage /login', () => {
     // Playing does NOT require login — the free anonymous mode① line, now a
     // tight one-liner paired with the inline direct-play escape.
     expect(screen.getByText(/玩游戏不需要登录/)).toBeInTheDocument()
-    // The value-prop: an account unlocks the end-state product value — a
-    // dedicated AI companion, social features, and cross-device progress. An
-    // aspirational framing, not the old current-status caveat.
-    const value = screen.getByText(/登录后，你将拥有专属于你的 AI 伙伴/)
+    // The value-prop: an account delivers three things that are real today —
+    // the platform AI companion, a real-activity community feed, and
+    // cross-device progress. States current value, no「社交主场」overclaim and
+    // no aspirational「你将拥有」framing (B6 copy-honesty sweep).
+    const value = screen.getByText(/登录后，你会有专属于你的 AI 伙伴/)
     expect(value).toBeInTheDocument()
-    expect(value.textContent).toContain('社交')
+    expect(value.textContent).toContain('社区')
     expect(value.textContent).toContain('跨设备同步')
+    expect(screen.queryByText(/社交主场/)).not.toBeInTheDocument()
   })
 
   it('offers a direct-play escape into free anonymous play', () => {

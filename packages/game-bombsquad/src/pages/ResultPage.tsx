@@ -62,6 +62,12 @@ const MODULE_GLYPH: Record<string, GlyphKey> = {
 }
 
 const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
+// A practice win has no rank reveal to settle behind (#209 defers the daily
+// survey until the rank card lands). Its celebration beat is the win payoff
+// itself — the success ring + glyph pop + time + companion reaction — so the
+// survey waits a longer, celebration-length window before opening, instead of
+// snapping up over the payoff a beat after mount (audit F11).
+const RESULT_PRACTICE_CELEBRATION_MS = 4200
 
 /** The result screen has two visual variants (handoff README §6.6 / §6.7). */
 type ResultVariant = 'success' | 'failure'
@@ -309,11 +315,19 @@ export default function ResultPage() {
   // on mount. A first win whose leaderboard gate stays unfilled never settles
   // this session — the once-per-device survey simply waits for a later one.
   const celebrationSettled = !hasFinishedDailyRun || rankResult !== null || submitFailed
+  // A practice WIN settles on mount (no rank), so it uses the longer celebration
+  // window to let the win payoff land first (audit F11); a daily win already
+  // waited for its rank reveal, and any failure has no celebration to protect —
+  // both keep the base delay.
+  const surveyDelayMs =
+    variant === 'success' && !hasFinishedDailyRun
+      ? RESULT_PRACTICE_CELEBRATION_MS
+      : RESULT_FEEDBACK_SURVEY_DELAY_MS
   useEffect(() => {
     if (!needSurvey || noRunData || !celebrationSettled) return
-    const id = setTimeout(() => setSurveyReady(true), RESULT_FEEDBACK_SURVEY_DELAY_MS)
+    const id = setTimeout(() => setSurveyReady(true), surveyDelayMs)
     return () => clearTimeout(id)
-  }, [needSurvey, noRunData, celebrationSettled])
+  }, [needSurvey, noRunData, celebrationSettled, surveyDelayMs])
 
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {

@@ -1,5 +1,5 @@
 import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
-import { getDailyResetHint, toChineseDateString } from '@shared/date'
+import { formatLocalClockTime, getDailyResetHint, toChineseDateString } from '@shared/date'
 import styles from './DailyChecklist.module.css'
 
 interface DailyChecklistProps {
@@ -58,7 +58,7 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
               <span className={styles.itemTitle}>{item.title}</span>
               <span className={styles.itemDetail}>
                 {item.completed
-                  ? `已完成${item.completedAt ? ` · ${item.completedAt.slice(11, 16)} UTC` : ''}`
+                  ? `已完成${item.completedAt ? ` · ${formatLocalClockTime(item.completedAt)}` : ''}`
                   : item.detail}
               </span>
             </span>

@@ -4,8 +4,8 @@
  * Covers the `/` route — the AMIO Arcade「星图 / Atlas」homepage:
  *   1. anonymous `/` renders the AnonHero
  *   2. the anonymous hero「开始玩」CTA routes to /bombsquad
- *   3. a signed-in visitor renders the WelcomeStrip (greeting by the
- *      session-derived display name), not the hero
+ *   3. a signed-in visitor renders the WelcomeStrip (greeting by nickname /
+ *      companion-known name, neutral otherwise — never the email), not the hero
  *
  * The homepage has a single in-page play CTA — the AnonHero primary「开始玩」
  * (the other play entry is the TopNav, rendered by the app shell, not here).
@@ -115,6 +115,13 @@ function stubApi(body: SessionResponse, arcadeProfile: unknown = EMPTY_ARCADE_PR
           )
         )
       }
+      // The WelcomeStrip greeting reads the companion for a companion-known name;
+      // default to 404 (no companion) so the greeting resolves to neutral.
+      if (url.includes('/api/companion')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: 'no companion set up' }), { status: 404 })
+        )
+      }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }))
     })
   )
@@ -200,8 +207,10 @@ describe('GamesPage homepage', () => {
     stubApi(AUTHED, ACCOUNT_ARCADE_PROFILE)
     renderHomepage('/')
 
-    // WelcomeStrip greets by the session-derived display name (nova@... → nova).
-    expect(await screen.findByText('nova', { exact: true })).toBeInTheDocument()
+    // With no chosen nickname and no companion, the WelcomeStrip greets
+    // neutrally — never the account email local-part (audit F19).
+    expect(await screen.findByText('你好。')).toBeInTheDocument()
+    expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
     expect(await screen.findByText('今日已打卡')).toBeInTheDocument()
     expect(screen.getByText('连续天数 · 本账号')).toBeInTheDocument()
     // The anonymous hero eyebrow must NOT be present.
@@ -241,7 +250,12 @@ describe('GamesPage homepage', () => {
     renderHomepage('/')
 
     expect(await screen.findByText('今日已打卡')).toBeInTheDocument()
-    expect(screen.getByText('已完成 · 08:00 UTC')).toBeInTheDocument()
+    // C3/F7: the completion time renders in the viewer's local timezone as HH:MM
+    // and no longer carries a raw「… UTC」label. TZ-robust — assert the shape,
+    // not a fixed clock (the exact local time depends on the runner timezone).
+    const completionLine = screen.getByText(/^已完成 · \d{2}:\d{2}$/)
+    expect(completionLine).toBeInTheDocument()
+    expect(completionLine.textContent).not.toContain('UTC')
     expect(screen.getByText('连续天数 · 本设备')).toBeInTheDocument()
   })
 

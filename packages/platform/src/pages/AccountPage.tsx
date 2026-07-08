@@ -15,6 +15,7 @@ import {
 } from '@amiclaw/arcade-profile/local'
 import { claimArcadeProfile, fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
 import { readChosenArcadeNickname } from '@/lib/arcade-nickname'
+import { useGreetingName } from '@/hooks/useGreetingName'
 import { formatMs } from '@shared/format-time'
 import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
@@ -155,10 +156,22 @@ function SignedInProfile({
 }) {
   const { state: accountProfile, reload: reloadAccountProfile } = useAccountArcadeProfile()
 
+  // Greet by chosen nickname > companion-known name > a neutral, name-free
+  // greeting — never the account email (audit F19). The full email stays as the
+  // explicit account-identity line below (that is the account id, not a name
+  // fallback, and not a local-part fragment).
+  const greetingName = useGreetingName()
+
   return (
     <>
       <h2 className={styles.title}>
-        <span className={styles.accent}>{user.displayName}</span> 的星轨。
+        {greetingName ? (
+          <>
+            <span className={styles.accent}>{greetingName}</span> 的星轨。
+          </>
+        ) : (
+          '你的星轨。'
+        )}
       </h2>
       <p className={styles.lead}>这里显示这个账号已经保存的真实记录。</p>
 
@@ -167,7 +180,7 @@ function SignedInProfile({
           <div className={styles.avatar}>
             <ConicAvatar size={96} letter={user.avatarLetter} ariaHidden />
           </div>
-          <div className={styles.name}>{user.displayName}</div>
+          {greetingName && <div className={styles.name}>{greetingName}</div>}
           <div className={styles.rank}>{user.email}</div>
           <Button variant="ghost" size="sm" className={styles.logout} onClick={onLogout}>
             退出登录
