@@ -63,8 +63,11 @@ describe('BombSquadLandingPage', () => {
     expect(screen.getByText(/人机协作 · 语音拆弹挑战/)).toBeInTheDocument()
     // Bring-your-own-AI premise eyebrow (not a status claim). The AI-tools
     // list now emphasizes each tool name in its own span, so the prefix is its
-    // own text node.
-    expect(screen.getByText(/自带语音 AI · 支持/)).toBeInTheDocument()
+    // own text node. 「自带任意 …· 例如」 frames the tools as EXAMPLES you can
+    // bring (BYO), not a roster of supported/verified providers — the audit-F2
+    // honesty fix that also kills the「支持 N 家 → 内置 AI」misread.
+    expect(screen.getByText(/自带任意语音 AI · 例如/)).toBeInTheDocument()
+    expect(screen.queryByText(/自带语音 AI · 支持/)).not.toBeInTheDocument()
     // Daily-countdown card — its label plus the mocked countdown digits.
     // The countdown splits the `:` separators into <span> elements, so the
     // digits are loose text nodes — match on the element's full textContent.

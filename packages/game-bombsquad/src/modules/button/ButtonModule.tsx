@@ -138,6 +138,12 @@ export default function ButtonModule({
       className={`${styles.wrapper} ${buttonState === 'error' ? styles.error : ''} ${buttonState === 'success' ? styles.success : ''}`}
       data-testid="button-module"
     >
+      {/* Player-side interaction hint (audit F10), mirroring the dial module's
+          hint pattern. It teaches that a tap AND a hold are both possible and
+          how the hold's release strip works — WITHOUT revealing which one this
+          button needs (that stays the AI's manual to read), so it never leaks
+          the answer the release-strip cue is deliberately target-agnostic about. */}
+      <p className={styles.hint}>轻按或按住都听 AI 的指示；按住时，松手要对上光带当前的颜色。</p>
       <div className={styles.stage}>
         <div className={styles.lightPanel}>
           <div

@@ -383,10 +383,11 @@ describe('AccountPage /me', () => {
     })
     renderAccount('/me')
 
-    // Identity is derived from the session email local-part (nova@... → nova).
-    // The name appears twice (the title accent span + the profile-card name),
-    // so assert at least one match resolves once the session read returns.
-    expect((await screen.findAllByText('nova', { exact: true })).length).toBeGreaterThan(0)
+    // No chosen nickname and no companion → a neutral, name-free greeting; the
+    // email local-part「nova」is never rendered as a name (audit F19). The full
+    // email stays as the explicit account-identity line (not a name fallback).
+    expect(await screen.findByText('你的星轨。')).toBeInTheDocument()
+    expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
     expect(screen.getByText('nova@amio.fans')).toBeInTheDocument()
     // Account stats are read from /api/arcade/profile, not invented locally.
     expect(await screen.findByText('账号记录')).toBeInTheDocument()
@@ -487,6 +488,29 @@ describe('AccountPage /me', () => {
     expect(screen.getByRole('link', { name: '画像控制面' })).toHaveAttribute('href', '/me/profile')
     // The voice is represented by name, not fabricated audio playback.
     expect(screen.getByText('暖声')).toBeInTheDocument()
+  })
+
+  it('greets by the companion-known name when there is no nickname (F19)', async () => {
+    stubApi({
+      session: AUTHED,
+      companion: {
+        status: 200,
+        body: {
+          name: '小南',
+          address_style: '白舟',
+          voice_id: 'companion-warm',
+          profile_enabled: true,
+          created_at: '2026-05-30T09:12:00.000Z',
+        },
+      },
+    })
+    renderAccount('/me')
+
+    // With no chosen nickname, the greeting falls to the companion-known name
+    // 「白舟」(address_style) — appearing in the title accent span and the
+    // profile-card name — never the email local-part「nova」.
+    expect((await screen.findAllByText('白舟', { exact: true })).length).toBeGreaterThan(0)
+    expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
   })
 
   it('signs out via POST /api/auth/logout and returns to the anonymous state', async () => {

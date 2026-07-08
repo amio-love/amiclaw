@@ -20,9 +20,13 @@ const VALUE_PROPS: ValueProp[] = [
     body: '一局 5 到 8 分钟，等地铁、午休、睡前都来得及。',
   },
   {
+    /* No fixed cadence promise: BombSquad is in beta and the Oracle is a
+       playable preview, with more games coming on no committed schedule.
+       The old「一周一新 / 每周上新一款」claimed a weekly cadence the operation
+       does not keep (B6 copy-honesty sweep). */
     number: '03',
-    title: '一周一新',
-    body: 'BombSquad 公测中，每周上新一款人机协作小游戏。',
+    title: '陆续上新',
+    body: 'BombSquad 公测中，易经签卜可试玩，更多人机协作小游戏在路上。',
   },
 ]
 

@@ -66,3 +66,18 @@ export function getLocalRolloverTime(now: Date = new Date(), timeZone?: string):
 export function getDailyResetHint(now: Date = new Date(), timeZone?: string): string {
   return `每日内容按 UTC 日期刷新 · 本地时间每天 ${getLocalRolloverTime(now, timeZone)}`
 }
+
+/* Render a stored ISO timestamp's clock time (`HH:MM`) in the viewer's local
+   timezone (or an explicit `timeZone`, used by tests). Completion timestamps are
+   stored in UTC; a Chinese user should see their own wall-clock time, not a raw
+   「14:38 UTC」 (audit F7). Returns '' for an unparseable input. */
+export function formatLocalClockTime(iso: string, timeZone?: string): string {
+  const ms = Date.parse(iso)
+  if (Number.isNaN(ms)) return ''
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(ms))
+}

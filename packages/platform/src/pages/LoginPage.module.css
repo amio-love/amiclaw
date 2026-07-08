@@ -297,7 +297,11 @@
 
 @media (max-width: 768px) {
   .page {
-    padding: 56px 0 48px;
+    /* Bottom pad clears the fixed BottomNav (≈56px + iOS safe area) so the
+       escape link and the taller「已发送」panel are never tucked behind the
+       bar. The old 48px was shorter than the bar, so the last line sat under
+       it with no room to scroll it clear (audit F8). */
+    padding: 56px 0 calc(72px + env(safe-area-inset-bottom));
   }
 
   .title {

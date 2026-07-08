@@ -60,9 +60,11 @@ function startWithOwnAI() {
 /* The login page is one clean card, not a wall of text.
    - The card is the single focal point: the email magic-link form and the
      Google option converge on one server session.
-   - One quiet line under the card carries the honest why: login only builds an
-     account for the platform-AI path (mode②), which is decided but not yet live
-     — so it does not overpromise.
+   - One quiet line under the card carries the honest why: an account now
+     delivers three real things — the platform AI companion (mode②, live in
+     co-play), a community feed of real player activity, and cross-device
+     progress via account claim — so the line states current value, not a
+     promise.
    - The escape — playing needs no account — sits as a subtle footer link into
      free anonymous play.
    Platform chrome — brand yellow, dark-only, CSS-only transitions. */
@@ -141,8 +143,11 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={styles.head}>
         <EyebrowTag variant="section">登录 · SIGN IN</EyebrowTag>
+        {/* /login is anonymous-by-default (new AND returning visitors land
+            here), so the greeting must not assume a return — a neutral
+            「欢迎你」 replaces the old「欢迎回来」(audit F8). */}
         <h2 className={styles.title}>
-          欢迎<span className={styles.accent}>回来</span>。
+          欢迎<span className={styles.accent}>你</span>。
         </h2>
       </div>
 
@@ -219,11 +224,14 @@ export default function LoginPage() {
         )}
       </GlassCard>
 
-      {/* The value of an account, stated as the end-state product value — a
-          dedicated AI companion, social features, and cross-device progress.
-          Aspirational ("你将拥有…"), not a literal instant-delivery claim. */}
+      {/* The value of an account, stated as CURRENT product value — three
+          things that are real today: the platform AI companion (mode②, live in
+          co-play), a community feed built from real player activity, and
+          cross-device progress via account claim. No「社交主场」overclaim (the
+          community is a real-but-small activity feed, not a bustling social
+          hub); no aspirational「你将拥有」framing (B6 copy-honesty sweep). */}
       <p className={styles.why}>
-        登录后，你将拥有专属于你的 AI 伙伴、与同好相连的社交主场，以及跨设备同步的战绩与排名。
+        登录后，你会有专属于你的 AI 伙伴、一处能看到同好动态的社区，以及跨设备同步的战绩与排名。
       </p>
 
       {/* The escape — playing needs no account. A subtle footer link into free

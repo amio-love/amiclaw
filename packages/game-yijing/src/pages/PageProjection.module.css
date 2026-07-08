@@ -115,9 +115,12 @@
 }
 
 /* ───── 3×2 grid ───── */
+/* `minmax(0, 1fr)` lets each track shrink below the tile's intrinsic min-content
+   width, so three fluid tiles always fit the viewport instead of overflowing and
+   clipping the third column (audit F5). */
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 

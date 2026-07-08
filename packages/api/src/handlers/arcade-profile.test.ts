@@ -118,6 +118,18 @@ describe('arcade profile handlers', () => {
     })
   })
 
+  it('answers 204 (not 401) for an anonymous settlement event so it makes no console noise (F27)', async () => {
+    // A fire-and-forget settlement sync with no session: the server accepts it
+    // as a no-op (nothing to attach to an account) rather than 401, so an
+    // anonymous run does not spray red 401s into the console.
+    const response = await handlePostArcadeProfileEvent(
+      request(CLAIM_BODY.events[0], ''),
+      await env()
+    )
+
+    expect(response.status).toBe(204)
+  })
+
   it('does not let event writes create public streak-board eligibility', async () => {
     const testEnv = await env()
 
