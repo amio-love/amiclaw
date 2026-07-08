@@ -1,8 +1,8 @@
-/* Community page — handoff §6.10; pixel values mirror
-   prototype/atlas/atlas.html (.screen-pad / .comm-*). The post cards
-   consume the GlassCard primitive (base surface, radius 2xl); this file
-   owns the page header, the 2-column grid, and the card internals.
-   Desktop layout only — responsive @media blocks land in Phase 9. */
+/* Community page — a real, derived event stream (audit F4 rework). The post
+   cards consume the GlassCard primitive (base surface, radius 2xl); this file
+   owns the page header, the 2-column grid, and the card internals (template
+   tag, cyan BombSquad result badge, and the like control).
+   Desktop-first; the grid collapses to one column at ≤768px. */
 
 .page {
   padding: 60px 0;
@@ -20,14 +20,34 @@
 }
 
 .lead {
-  margin: 10px 0 36px;
+  margin: 10px 0 20px;
   max-width: 540px;
   font: 400 16px var(--font-body);
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* §6.10 2-column post grid. */
+.hint {
+  margin: 0 0 24px;
+  font: 400 13px var(--font-body);
+  color: var(--text-3);
+}
+
+.hint a {
+  color: var(--amio-yellow);
+  text-decoration: none;
+}
+
+.status {
+  max-width: 540px;
+  margin: 24px 0 0;
+  padding: 40px 0;
+  font: 400 15px/1.6 var(--font-body);
+  color: var(--text-3);
+}
+
+/* 2-column post grid. */
 .grid {
+  margin-top: 16px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 18px;
@@ -52,6 +72,7 @@
 .name {
   font: 500 13px var(--font-body);
   color: #fff;
+  overflow-wrap: anywhere;
 }
 
 .time {
@@ -60,39 +81,76 @@
   color: var(--text-4);
 }
 
+/* Template tag — 通关 / 上榜 / 里程碑. Neutral glass chip, not brand cyan. */
+.tag {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hairline);
+  font: 500 10px var(--font-body);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .body {
   margin: 0;
   font: 400 15px/1.6 var(--font-body);
   color: rgba(255, 255, 255, 0.8);
 }
 
-/* Optional game-result img-block — BombSquad sub-brand cyan is
-   per-spec here (handoff §6.10): it surfaces a DEFUSED / EXPLODED
-   BombSquad outcome, not platform chrome. */
-.image {
-  display: flex;
+/* BombSquad sub-brand cyan result badge — per-spec here: it surfaces a real
+   DEFUSED outcome (拆弹成功 · time), not platform chrome. */
+.badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 160px;
-  margin-top: 14px;
-  border-radius: 14px;
-  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.3), transparent 55%), #0a0a1a;
-  font: 700 18px var(--amio-font-mono);
-  letter-spacing: 0.1em;
+  margin-top: 12px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.16), transparent 70%), #0a0a1a;
+  font: 700 13px var(--amio-font-mono);
+  letter-spacing: 0.06em;
   color: var(--bs-cyan);
-  text-shadow: 0 0 12px var(--bs-cyan);
+  text-shadow: 0 0 10px var(--bs-cyan);
 }
 
 .foot {
   display: flex;
   gap: 18px;
-  margin-top: 14px;
-  font: 400 12px var(--font-body);
-  color: rgba(255, 255, 255, 0.5);
+  margin-top: 16px;
 }
 
-/* ----------  responsive: mobile  ----------
-   atlas.html .comm-grid collapses to a single column at ≤768px. */
+/* Like button — the one real, persistent interaction. */
+.like {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-hairline);
+  border-radius: 999px;
+  background: transparent;
+  font: 400 12px var(--font-body);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.like:hover {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.liked {
+  color: var(--amio-yellow);
+  border-color: color-mix(in srgb, var(--amio-yellow) 45%, transparent);
+}
+
+.liked:hover {
+  color: var(--amio-yellow);
+}
+
+/* ----------  responsive: mobile  ---------- */
 @media (max-width: 768px) {
   .grid {
     grid-template-columns: 1fr;

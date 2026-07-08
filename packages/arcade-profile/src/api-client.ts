@@ -1,4 +1,6 @@
 import type {
+  ArcadeCommunityFeedResponse,
+  ArcadeCommunityLikeResponse,
   ArcadeProfileClaimBody,
   ArcadeProfileClaimResponse,
   ArcadeProfileEvent,
@@ -111,6 +113,60 @@ export async function fetchArcadeStreakLeaderboard(
     if (!res.ok) return { kind: 'error' }
     const data = (await res.json()) as ArcadeStreakLeaderboardResponse
     return { kind: 'ok', board: data }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+export type ArcadeCommunityFeedReadResult =
+  | { kind: 'ok'; feed: ArcadeCommunityFeedResponse }
+  | { kind: 'error' }
+
+/** Read the community feed. Anonymous is legal (the feed is public); a signed-in
+    read additionally carries the cookie so the viewer's own likes are marked. */
+export async function fetchArcadeCommunityFeed(
+  options: { before?: string; limit?: number } = {}
+): Promise<ArcadeCommunityFeedReadResult> {
+  const params = new URLSearchParams()
+  if (options.before) params.set('before', options.before)
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  try {
+    const res = await fetch(`${apiBase()}/api/arcade/community/feed${query ? `?${query}` : ''}`, {
+      credentials: 'include',
+    })
+    if (!res.ok) return { kind: 'error' }
+    const data = (await res.json()) as ArcadeCommunityFeedResponse
+    return { kind: 'ok', feed: data }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+export type ArcadeCommunityLikeResult =
+  | { kind: 'ok'; like: ArcadeCommunityLikeResponse }
+  | { kind: 'anon' }
+  | { kind: 'invalid' }
+  | { kind: 'error' }
+
+/** Like (POST) or unlike (DELETE) a feed event. Liking requires a session — an
+    anonymous attempt resolves to `anon` so the UI can surface the login hint. */
+export async function setArcadeCommunityLike(
+  eventId: string,
+  liked: boolean
+): Promise<ArcadeCommunityLikeResult> {
+  try {
+    const res = await fetch(`${apiBase()}/api/arcade/community/likes`, {
+      method: liked ? 'POST' : 'DELETE',
+      headers: JSON_HEADERS,
+      credentials: 'include',
+      body: JSON.stringify({ event_id: eventId }),
+    })
+    if (res.status === 401) return { kind: 'anon' }
+    if (res.status === 422 || res.status === 400) return { kind: 'invalid' }
+    if (!res.ok) return { kind: 'error' }
+    const data = (await res.json()) as ArcadeCommunityLikeResponse
+    return { kind: 'ok', like: data }
   } catch {
     return { kind: 'error' }
   }

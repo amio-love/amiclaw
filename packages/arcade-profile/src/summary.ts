@@ -31,11 +31,15 @@ export interface QualifiedActivityDate {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
-function isIsoDate(value: string): boolean {
+/* Streak + product-day primitives. These live here (summary owns the streak
+   definition) and are the SINGLE source every streak-derived surface reuses —
+   the account /me streak, the streak leaderboard, and the community feed. Do
+   not re-implement the consecutive-run logic or date math elsewhere. */
+export function isIsoDate(value: string): boolean {
   return ISO_DATE_RE.test(value)
 }
 
-function shiftDate(date: string, deltaDays: number): string | null {
+export function shiftDate(date: string, deltaDays: number): string | null {
   if (!isIsoDate(date)) return null
   const [year, month, day] = date.split('-').map(Number)
   const time = Date.UTC(year, month - 1, day) + deltaDays * 86_400_000
@@ -46,6 +50,31 @@ function normalizeQualifiedDates(dates: QualifiedActivityDate[], today: string):
   return [
     ...new Set(dates.map((item) => item.date).filter((date) => isIsoDate(date) && date <= today)),
   ].sort()
+}
+
+/* Consecutive-run length ending at each date (1 at a run start). The one
+   implementation of the "consecutive product days" recurrence — computeArcadeStreak
+   derives `longest_days` from it, and the community feed reads per-date lengths
+   from it to classify milestones. */
+function runLengthsFromSorted(sortedDates: string[]): Map<string, number> {
+  const lengths = new Map<string, number>()
+  let previous: string | null = null
+  let runLength = 0
+  for (const date of sortedDates) {
+    runLength = previous !== null && shiftDate(previous, 1) === date ? runLength + 1 : 1
+    lengths.set(date, runLength)
+    previous = date
+  }
+  return lengths
+}
+
+/** Per-date consecutive-run length over a player's qualified activity dates
+    (normalized: deduped, ≤ today, ascending). Exposed for the community feed. */
+export function runLengthsByDate(
+  dates: QualifiedActivityDate[],
+  today: string
+): Map<string, number> {
+  return runLengthsFromSorted(normalizeQualifiedDates(dates, today))
 }
 
 function latestCompletedAt(items: QualifiedActivityDate[], today: string): string | null {
@@ -75,15 +104,8 @@ export function computeArcadeStreak(
 ): ArcadeStreakSummary {
   const sortedDates = normalizeQualifiedDates(dates, today)
   const dateSet = new Set(sortedDates)
-  let longestDays = 0
-  let runLength = 0
-  let previous: string | null = null
-
-  for (const date of sortedDates) {
-    runLength = previous && shiftDate(previous, 1) === date ? runLength + 1 : 1
-    longestDays = Math.max(longestDays, runLength)
-    previous = date
-  }
+  const lengths = runLengthsFromSorted(sortedDates)
+  const longestDays = lengths.size === 0 ? 0 : Math.max(...lengths.values())
 
   const todayCompleted = dateSet.has(today)
   const anchor = todayCompleted ? today : (shiftDate(today, -1) ?? today)

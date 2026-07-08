@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 28 active flows <-> 28 journey
-# scenarios, the regression size budget is 56 (2026-07-08, after the companion
-# dock presence + co-play entry flows landed as @playwright journeys).
+# 2 x the journey-scenario count. With 30 active flows <-> 30 journey
+# scenarios, the regression size budget is 60 (2026-07-08, after the community
+# real-feed flow landed as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -188,6 +188,22 @@ flows:
       The homepage carries no BombSquad cyan anywhere — cyan is wire-only — and
       the featured BombSquad zone uses the brand yellow as its accent.
     steps: [landing, homepage-no-cyan, featured-bombsquad-yellow]
+    status: active
+
+  - id: community-real-feed
+    name: Community real event stream
+    description: >-
+      The community page is a REAL, derived event stream — its fabricated static
+      posts were removed. A visitor opens /community and sees honest player
+      activity synthesized from durable play events (daily defusals 通关,
+      streak-board entries 上榜, streak milestones 里程碑) of players who joined
+      the public streak board, each carrying a live relative-time label rendered
+      off the real event timestamp (the fix for the F4 frozen「12 分钟前」bug).
+      The one interaction is a real, persistent like; an anonymous like attempt
+      surfaces the honest one-line login hint instead of fabricating a count. An
+      empty window shows the honest quiet state (pinned by the CommunityPage unit
+      tests, which also cover the signed-in optimistic like).
+    steps: [community-page, real-feed, relative-time, anon-like-gate]
     status: active
 
   - id: leaderboard-history-navigation

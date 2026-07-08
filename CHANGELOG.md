@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The community page shows real player activity, not fabricated posts** - New.
+The community page used to show a fixed set of invented posts whose timestamps
+never moved. It is now a real feed, built from actual play: a player defusing
+the daily challenge, joining the streak board, or reaching a streak milestone.
+Only players who put their name on the public streak board appear, and only by
+that public name. The times are real and stay correct as they age. You can like
+a post and the like sticks; liking asks you to sign in first. On a quiet day the
+page says it is quiet rather than padding the feed with fakes.
+
 **Finishing a co-play daily run no longer flashes a phantom fifth module** -
 Fix. Completing all four modules while playing WITH your companion briefly
 showed a 「模块 5/4」 counter over an empty panel while the AI wrapped up, instead

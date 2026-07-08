@@ -1,3 +1,4 @@
+import { COMMUNITY_EVENT_ID_PATTERN } from './community'
 import { bombsquadRunSourceKey, oracleSignSourceKey } from './source-key'
 import type {
   ArcadeProfileClaimBody,
@@ -232,6 +233,21 @@ export function parseArcadeProfileEvent(value: unknown): ArcadeProfileEvent | nu
       : null
   }
   return null
+}
+
+/**
+ * Parse a community-like request body to its opaque event id, or null.
+ *
+ * The event id must match the `communityEventId` output shape exactly
+ * (`e` + 16 hex) — this bounds the key space to what real feed events mint, so
+ * a malicious client cannot flood `arcade_community_like` with arbitrary keys.
+ * The owner (liker) identity is NEVER read from the body — the handler derives
+ * it from the session — so a smuggled `user_id` field is simply ignored.
+ */
+export function parseCommunityLikeBody(value: unknown): { event_id: string } | null {
+  if (!isObject(value)) return null
+  if (typeof value.event_id !== 'string') return null
+  return COMMUNITY_EVENT_ID_PATTERN.test(value.event_id) ? { event_id: value.event_id } : null
 }
 
 export function parseArcadeProfileClaimBody(value: unknown): ArcadeProfileClaimBody | null {
