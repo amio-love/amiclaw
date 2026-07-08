@@ -14,7 +14,7 @@
  * sequence code is kept live and test-pinned behind this flag
  * (CompanionDock.lobby-voice.test.tsx).
  */
-export const LOBBY_VOICE_CAPABLE = false
+export const LOBBY_VOICE_CAPABLE = true
 
 /** The honest mic-button note while lobby voice is off (restrained register). */
 export const LOBBY_VOICE_NOTE = '语音陪伴在拆弹局内可用，进入每日挑战开启。'

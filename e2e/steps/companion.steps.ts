@@ -39,31 +39,84 @@ Given(
   }
 )
 
-// --- Companion dock (伙伴坞) ---------------------------------------------------
+// --- Companion dock (伙伴坞) — auto-voice-on-login sequence ---------------------
+
+When('I open the homepage with the microphone {word}', async ({ page, world }, outcome: string) => {
+  const deny = outcome === 'denied'
+  // Deterministically pin the mic outcome AND the text-first invariant. The
+  // auto-voice sequence lands the greeting TEXT, waits 300ms, then calls
+  // getUserMedia. This hook records whether the greeting text was already on
+  // screen at that instant (`__micTextFirst`) and that the request happened
+  // (`__micCalled`), then GRANTS or DENIES deterministically — no dependency on
+  // Chromium's fake-permission UI. On GRANT it resolves a MINIMAL synthetic
+  // stream rather than the real fake device (which hangs headless on the
+  // homepage): the lobby session only needs the stream to open its WebSocket and
+  // stream the greeting; the mic-capture AudioContext failing on the stub stream
+  // is caught as a non-fatal mic-error and never blocks the greeting.
+  //
+  // Override MediaDevices.PROTOTYPE.getUserMedia (not the instance property):
+  // `navigator.mediaDevices` is often undefined at document-start when the init
+  // script runs, but the interface prototype is already present, so the override
+  // lands regardless of when the instance is created.
+  await page.addInitScript(`(() => {
+      const proto = window.MediaDevices && window.MediaDevices.prototype;
+      if (!proto || !proto.getUserMedia) return;
+      proto.getUserMedia = function (c) {
+        window.__micCalled = true;
+        window.__micTextFirst = ((document.body && document.body.textContent) || '').indexOf('我在这') !== -1;
+        ${
+          deny
+            ? "return Promise.reject(new DOMException('microphone denied', 'NotAllowedError'));"
+            : "return Promise.resolve({ getTracks: function () { return [{ kind: 'audio', enabled: true, stop: function () {} }]; }, getAudioTracks: function () { return [{ kind: 'audio', enabled: true, stop: function () {} }]; } });"
+        }
+      };
+    })()`)
+  await world.openPath('/')
+  // The arrival greeting text lands first (after the async memory fetch); wait
+  // for it, then advance the fake clock past the auto-voice mic-request delay
+  // (300ms) AND the greeting-bubble dwell (5s). Both are setTimeouts that the
+  // seed-pinning `page.clock` (from openPath) freezes, so without advancing them
+  // the permission request never fires and the dock never leaves 说话 (speaking)
+  // for its resting state. The homepage has no seed dependency, so this is safe.
+  await expect(page.getByText('我在这。今天的每日挑战等你。').first()).toBeVisible()
+  await page.clock.runFor(6000)
+})
+
+Then('the arrival greeting text lands before the microphone is requested', async ({ page }) => {
+  // The mic request fires (auto-voice step 3, after the clock nudge), and at the
+  // instant it did, the arrival greeting text was already rendered — the ratified
+  // "first impression is never blocked by the browser permission dialog" invariant.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __micCalled?: boolean }).__micCalled))
+    .toBe(true)
+  const textFirst = await page.evaluate(
+    () => (window as unknown as { __micTextFirst?: boolean }).__micTextFirst
+  )
+  expect(textFirst).toBe(true)
+})
 
 Then(
-  'the companion dock shows {string} with the arrival greeting',
-  async ({ page }, name: string) => {
-    const dock = companionDock(page)
-    await expect(dock).toBeVisible()
-    await expect(dock.getByText(name).first()).toBeVisible()
-    // Fresh harness profile = never played → the greeting's no-episode variant
-    // (an honest template fill; no fabricated episode reference). It lands in
-    // the floating bubble AND collapses into the dock's one-line text region.
-    await expect(page.getByText('我在这。今天的每日挑战等你。').first()).toBeVisible()
+  'the companion greets by voice with the streamed greeting as its live subtitle',
+  async ({ page, world }) => {
+    // Grant → the lobby voice session opens over the stubbed /ai-ws/lobby-* bridge
+    // and streams the social lobby greeting; Option B makes the dock bubble the
+    // live subtitle of what the companion is saying (replacing the instant text).
+    await expect(page.getByText(world.voice.lobbyReply).first()).toBeVisible()
   }
 )
 
-Then('the dock offers a mic button', async ({ page }) => {
-  // While lobby voice is behind its capability flag the mic button carries
-  // the honest note affordance (语音陪伴说明) — tapping it surfaces where
-  // voice genuinely runs (the in-game co-play channel) and never triggers a
-  // permission prompt.
-  const micButton = companionDock(page).getByRole('button', { name: '语音陪伴说明' })
-  await expect(micButton).toBeVisible()
-  await micButton.click()
-  await expect(page.getByText('语音陪伴在拆弹局内可用，进入每日挑战开启。')).toBeVisible()
-})
+Then(
+  'the companion stays a quiet text presence and denied-remembered is persisted',
+  async ({ page, world }) => {
+    // Deny → posture transitions to denied-remembered; the dock lands muted (a
+    // quiet text presence, never auto-requesting again) and the denial is
+    // persisted to the account control plane.
+    await expect(companionDock(page).getByText('阿澈在这（静音中）')).toBeVisible()
+    await expect
+      .poll(() => world.companionSettingsPuts.at(-1)?.voice_posture)
+      .toBe('denied-remembered')
+  }
+)
 
 When('I mute the companion from the dock control menu', async ({ page, world }) => {
   await companionDock(page)
@@ -125,10 +178,13 @@ Then(
     expect(new URL(page.url()).searchParams.get('partner')).toBe('platform')
     await world.waitForRunStarted()
     // The in-game voice panel mounted and its stubbed session produced the
-    // AI-first greeting — the proof the co-play wire is live end to end.
-    const panel = page.getByRole('region', { name: 'AI 语音伙伴' })
-    await expect(panel).toBeVisible()
-    await expect(panel.getByText(world.voice.reply)).toBeVisible()
+    // AI-first greeting — the proof the co-play wire is live end to end. Since
+    // #217 the companion's spoken words render EXACTLY ONCE, in the top in-game
+    // subtitle strip (伙伴字幕), NOT re-rendered inside the panel (which keeps only
+    // the connection / phase status). So the panel presence proves the mount and
+    // the subtitle strip proves the streamed greeting.
+    await expect(page.getByRole('region', { name: 'AI 语音伙伴' })).toBeVisible()
+    await expect(page.getByRole('status', { name: '伙伴字幕' })).toHaveText(world.voice.reply)
   }
 )
 
