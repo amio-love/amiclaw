@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import yaml from 'js-yaml'
 import type { Manual, SceneInfo, ModuleConfig, ModuleAnswer } from '@shared/manual-schema'
-import { useGame, MODULE_SEQUENCE, type ModuleKind } from '@/store/game-context'
+import { useGame, MODULE_SEQUENCE, type ModuleKind, type GameOutcome } from '@/store/game-context'
+import type { RecapOutcome } from '@amiclaw/platform-ai/contract'
+import { recordClosingRecapFired } from '@/voice/closing-recap-log'
 import { useTimer } from '@/hooks/useTimer'
 import { createRng, type Rng } from '@/engine/rng'
 import {
@@ -62,11 +64,27 @@ const MODULE_LABEL: Record<ModuleKind, string> = {
 // page — kept in step with the ExplosionOverlay keyframe durations.
 const EXPLOSION_DURATION_MS = 1400
 
-// Hard-max timeout for the closing-recap audio on a successful daily defuse.
-// If the TTS provider does not deliver audio within this window (network hiccup,
-// provider timeout, silent LLM response) we navigate anyway so the player is
-// never stranded on the win screen.
+// Hard-max timeout for the closing-recap audio at settlement. If the TTS
+// provider does not deliver audio within this window (network hiccup, provider
+// timeout, silent LLM response) we navigate anyway so the player is never
+// stranded on the settlement screen.
 const CLOSING_RECAP_TIMEOUT_MS = 8000
+
+// Map a resolved DAILY game outcome onto the wire recap outcome. Only the three
+// daily terminal states recap; practice outcomes (and an unresolved null) return
+// null — nothing to recap, navigate straight through.
+function recapOutcomeFor(outcome: GameOutcome | null): RecapOutcome | null {
+  switch (outcome) {
+    case 'defused':
+      return 'defused'
+    case 'exploded':
+      return 'exploded'
+    case 'daily-timeout':
+      return 'timeout'
+    default:
+      return null
+  }
+}
 
 // Two-line diagnostic copy: line 1 names what just happened locally, line 2
 // names the AI partner's now-stale view. Kept as an array so the two lines
@@ -520,16 +538,23 @@ export default function GamePage() {
     if (state.status !== 'RESULT') return
     if (!resultNavigationArmedRef.current) return
 
-    // Closing recap only for a successful daily defuse with the voice partner
-    // active. All other outcomes (loss, timeout, practice) navigate immediately.
-    const isDefusedDailyVoice = state.outcome === 'defused' && mode === 'daily' && usePlatformVoice
+    // The settlement recap fires for ANY resolved DAILY co-play run — win OR
+    // failure — in the outcome-appropriate register (defused = warm; exploded /
+    // timeout = facts only, per the outcome-aware server directive). Practice
+    // never recaps. `recapOutcome` maps the game outcome onto the wire outcome;
+    // a null map means there is nothing to recap (navigate immediately).
+    const recapOutcome =
+      mode === 'daily' && usePlatformVoice ? recapOutcomeFor(state.outcome) : null
 
-    if (!isDefusedDailyVoice || closingFiredRef.current) {
+    if (recapOutcome === null || closingFiredRef.current) {
       navigate('/bombsquad/result')
       return
     }
 
     closingFiredRef.current = true
+    // Dedup: record that THIS run got the spoken recap, so the result page
+    // suppresses the beat-3 text reaction — one recap, never two.
+    if (voiceInputs) recordClosingRecapFired(voiceInputs.gameRunId)
 
     let settled = false
     const doNavigate = () => {
@@ -540,8 +565,8 @@ export default function GamePage() {
     }
 
     // Hard-max timeout: if TTS never delivers (provider hiccup / silence), do
-    // not leave the player waiting. The "拆除成功" burst stays on screen during
-    // the wait — a natural celebration beat.
+    // not leave the player waiting. The settlement burst stays on screen during
+    // the wait — a natural beat.
     const timeout = setTimeout(doNavigate, CLOSING_RECAP_TIMEOUT_MS)
 
     const panel = voicePanelRef.current
@@ -551,13 +576,14 @@ export default function GamePage() {
       return
     }
 
-    panel.requestClosing().then(doNavigate, doNavigate)
+    panel.requestClosing(recapOutcome).then(doNavigate, doNavigate)
 
     return () => {
       settled = true
       clearTimeout(timeout)
     }
     // voicePanelRef is a stable ref — not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.outcome, mode, usePlatformVoice, navigate])
 
   // Auto-advance from MODULE_COMPLETE after the inter-module transition delay.

@@ -28,11 +28,13 @@ import {
 
 const END = JSON.stringify({ type: 'end' })
 const CLOSING = JSON.stringify({ type: 'closing' })
+const CLOSING_EXPLODED = JSON.stringify({ type: 'closing', outcome: 'exploded' })
+const CLOSING_TIMEOUT = JSON.stringify({ type: 'closing', outcome: 'timeout' })
 
 describe('real VoiceSessionDO — closing recap turn', () => {
   it('streams a complete reply turn after a `closing` control message', async () => {
     // Real demo-mock providers: the mock LLM replies, the mock TTS synthesizes —
-    // no player audio, just the server-side CLOSING_DIRECTIVE.
+    // no player audio, just the server-side closing directive.
     const session = makeSessionDo()
     const socket = await openSocket(session, 'user-A')
     await createSessionOverWs(socket, 'demo-mock', { opening: false })
@@ -44,6 +46,36 @@ describe('real VoiceSessionDO — closing recap turn', () => {
       (c) => c.kind === 'text' && c.text !== ''
     )
     expect(textChunks.length).toBeGreaterThan(0)
+  })
+
+  it('streams a complete recap for an `exploded` outcome (failure register)', async () => {
+    // Outcome-aware closing: an `exploded` recap runs the failure directive and
+    // still streams a complete LLM+TTS turn (the register is the LLM's concern;
+    // the DO path is outcome-agnostic beyond selecting the directive).
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    await createSessionOverWs(socket, 'demo-mock', { opening: false })
+
+    socket.send(CLOSING_EXPLODED)
+
+    await waitFor(() => sawDoneChunk(socket), 'exploded recap completed')
+    const textChunks = messagesOfType(socket, 'chunk').filter(
+      (c) => c.kind === 'text' && c.text !== ''
+    )
+    expect(textChunks.length).toBeGreaterThan(0)
+  })
+
+  it('streams a complete recap for a `timeout` outcome', async () => {
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    await createSessionOverWs(socket, 'demo-mock', { opening: false })
+
+    socket.send(CLOSING_TIMEOUT)
+
+    await waitFor(() => sawDoneChunk(socket), 'timeout recap completed')
+    expect(messagesOfType(socket, 'chunk').some((c) => c.kind === 'text' && c.text !== '')).toBe(
+      true
+    )
   })
 
   it('does not increment turnCount on closing recap', async () => {

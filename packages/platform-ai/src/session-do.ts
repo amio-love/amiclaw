@@ -83,7 +83,13 @@ import {
   summarizeHighlights,
   type ConsolidatorNamespace,
 } from './companion-capture'
-import type { AiResponseChunk, AudioChunk, ManualData, SessionSummary } from './contract'
+import type {
+  AiResponseChunk,
+  AudioChunk,
+  ManualData,
+  RecapOutcome,
+  SessionSummary,
+} from './contract'
 import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
@@ -188,14 +194,16 @@ interface UpdateGameStateMessage {
 }
 
 /**
- * Request the closing-recap turn. Sent by the client on a successful daily
- * defuse BEFORE the results screen appears. The DO runs one final LLM+TTS recap
- * turn (1-2 sentences, spoken Chinese, warm) and streams it back via the normal
- * `AiResponseChunk` channel. The `{type:'end'}` message follows after the client
- * navigates away — this message does NOT end the session.
+ * Request the closing-recap turn. Sent by the client at settlement BEFORE the
+ * results screen appears. The DO runs one final LLM+TTS recap turn (1-2
+ * sentences, spoken Chinese) and streams it back via the normal `AiResponseChunk`
+ * channel. `outcome` picks the recap register (win congratulation vs facts-only
+ * failure recap); absent defaults to `defused`. The `{type:'end'}` message
+ * follows after the client navigates away — this message does NOT end the session.
  */
 interface ClosingSessionMessage {
   type: 'closing'
+  outcome?: RecapOutcome
 }
 
 type ControlMessage =
@@ -1142,12 +1150,14 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * error. The closing recap does NOT end the session — `end` follows later when
    * the client navigates away (the VoicePanel unmount sends `end`).
    */
-  private async runClosingRecap(ws: Connection): Promise<void> {
+  private async runClosingRecap(ws: Connection, outcome: RecapOutcome): Promise<void> {
     const myEpoch = this.turnEpoch
     try {
       if (!this.sessionState || !this.providers || this.sessionId === undefined) return
       traceTurn('turn', 'closing-start', { sessionId: this.sessionId })
-      const turn = runClosingTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
+      const turn = runClosingTurn(this.providers, this.sessionState, outcome)[
+        Symbol.asyncIterator
+      ]()
       await this.streamTurn(ws, turn)
     } catch (err: unknown) {
       // Skip the fail-loud close once a teardown has advanced the generation
@@ -1431,7 +1441,9 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
           return
         }
-        void this.runClosingRecap(ws)
+        // Absent outcome defaults to `defused` (wire back-compat with the
+        // pre-outcome client that sent a bare `{type:'closing'}`).
+        void this.runClosingRecap(ws, msg.outcome ?? 'defused')
         return
       }
       case 'update-gamestate': {

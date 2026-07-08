@@ -287,6 +287,9 @@ importers:
       '@amiclaw/arcade-profile':
         specifier: workspace:*
         version: link:../arcade-profile
+      '@amiclaw/platform-ai':
+        specifier: workspace:*
+        version: link:../platform-ai
       '@amiclaw/ui':
         specifier: workspace:*
         version: link:../ui

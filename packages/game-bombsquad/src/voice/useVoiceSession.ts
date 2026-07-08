@@ -43,7 +43,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
+import type { GameState, ManualData, RecapOutcome } from '@amiclaw/platform-ai/contract'
 import { base64ToBytes, floatTo16BitPCM, pcm16ToFloat32, resamplePcmFloat32 } from './audio-pcm'
 import {
   buildSessionUrl,
@@ -147,12 +147,13 @@ export interface UseVoiceSessionResult {
   /** End the session: send `end`, await the summary, and tear down. */
   endSession: () => void
   /**
-   * Request the closing-recap turn. Sends `{type:'closing'}` to the DO, which
-   * runs one final LLM+TTS recap and streams it back. The returned promise
-   * resolves when the recap audio has finished playing (all queued TTS frames
-   * drained). Resolves immediately if the socket is not open.
+   * Request the closing-recap turn. Sends `{type:'closing', outcome}` to the DO,
+   * which runs one final outcome-aware LLM+TTS recap and streams it back
+   * (`defused` = warm congratulation, `exploded` / `timeout` = facts-only). The
+   * returned promise resolves when the recap audio has finished playing (all
+   * queued TTS frames drained). Resolves immediately if the socket is not open.
    */
-  requestClosing: () => Promise<void>
+  requestClosing: (outcome?: RecapOutcome) => Promise<void>
 }
 
 /**
@@ -692,7 +693,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
    * GamePage applies its own hard-max timeout (~8 s) so a TTS hiccup never
    * strands the player on the win screen.
    */
-  const requestClosing = useCallback((): Promise<void> => {
+  const requestClosing = useCallback((outcome?: RecapOutcome): Promise<void> => {
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return Promise.resolve()
@@ -702,7 +703,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       closingInProgressRef.current = true
       closingDoneRef.current = false
       try {
-        ws.send(JSON.stringify({ type: 'closing' }))
+        ws.send(JSON.stringify({ type: 'closing', ...(outcome ? { outcome } : {}) }))
       } catch {
         // Send failed — resolve immediately so the caller does not hang.
         closingResolveRef.current = null
@@ -768,7 +769,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     playerTranscript: state.playerTranscript,
     isAiSpeaking,
     error: state.error,
-    summary: state.summary,
+    // The shared reducer stores the summary as an opaque payload (keeping
+    // `shared/` free of a workspace dependency); re-narrow to the concrete wire
+    // `SessionSummary` here, at this package's boundary. The client only forwards
+    // the value, so this assertion is the single place the type is recovered.
+    summary: state.summary as import('@amiclaw/platform-ai/contract').SessionSummary | null,
     endSession,
     requestClosing,
   }

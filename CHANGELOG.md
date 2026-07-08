@@ -31,6 +31,23 @@ players with a companion now default directly into companion co-play when they
 enter the daily challenge, with bring-your-own-AI demoted to a low-key link
 rather than a co-equal choice. Anonymous players keep the original flow.
 
+**The companion recaps every run, once** - Change. When you play the daily
+challenge with your voice companion, it now closes the run with a short spoken
+recap in the right register — a warm word and one real callback when you defuse
+it, plain facts (which module, where it stopped) with no consolation when it
+blows or the clock runs out. That spoken recap replaces the old text line on the
+result page for the same run, so you get one recap, never two.
+
+**Voice greeting on the homepage, built and waiting** - Feature. The plumbing
+for your companion to greet you out loud when you land on the homepage is now
+built and tested end to end: a memory-grounded spoken hello that drives its own
+live subtitle, a microphone flow that asks only after the greeting text is
+already on screen, and a strict conversation budget (it falls quiet after a
+short silence, a few exchanges, or ninety seconds, and lobby small talk is never
+saved as a memory). It stays dark behind a flag until the voice service is
+deployed; the dock remains honestly text-only and never asks for the microphone
+outside a run until then.
+
 **Your companion now lives on the platform** - Feature. Signed-in players with
 a companion get a persistent companion dock above the tab bar on every platform
 page: the companion's name, a breathing status dot, its latest line, and a

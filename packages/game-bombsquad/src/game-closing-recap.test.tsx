@@ -73,6 +73,14 @@ import { loadManual } from '@/utils/yaml-loader'
 
 vi.mock('@/utils/event-log', () => ({ logEvent: vi.fn() }))
 
+// --- Mock: closing-recap dedup log ----------------------------------------------
+
+const recapLog = vi.hoisted(() => ({ record: vi.fn() }))
+vi.mock('@/voice/closing-recap-log', () => ({
+  recordClosingRecapFired: recapLog.record,
+  wasClosingRecapFired: () => false,
+}))
+
 // --- Mock: useVoiceSession with controllable requestClosing ----------------------
 
 /**
@@ -150,6 +158,7 @@ describe('GamePage closing-recap gating', () => {
     vi.mocked(loadManual).mockResolvedValue(yaml.load(practiceYamlRaw) as Manual)
     closingControl.requestClosing.mockReset()
     closingControl.setupPending()
+    recapLog.record.mockReset()
   })
 
   afterEach(() => {
@@ -166,11 +175,14 @@ describe('GamePage closing-recap gating', () => {
     // Drive all 4 daily modules to completion.
     await completeModules(DAILY_MODULE_TESTIDS)
 
-    // The RESULT effect should have called requestClosing. Navigation is
-    // blocked while the promise is pending.
+    // The RESULT effect should have called requestClosing with the DEFUSED
+    // outcome (outcome-aware recap register), and recorded the run for the
+    // beat-3 dedup. Navigation is blocked while the promise is pending.
     await waitFor(() => expect(closingControl.requestClosing).toHaveBeenCalled(), {
       timeout: 3000,
     })
+    expect(closingControl.requestClosing).toHaveBeenCalledWith('defused')
+    expect(recapLog.record).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('heading', { name: /拆弹成功/ })).toBeNull()
 
     // Resolve the recap — the .then(doNavigate) handler fires.

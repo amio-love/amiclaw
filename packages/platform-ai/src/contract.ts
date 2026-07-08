@@ -162,18 +162,32 @@ export interface SessionSummary {
 }
 
 /**
+ * The run outcome a closing recap reacts to. Game-agnostic: a game maps its own
+ * terminal state onto these three at the point it requests the recap.
+ *  - `defused`  the player succeeded — warm congratulation + one concrete callback.
+ *  - `exploded` the player failed (too many mistakes) — facts only, no consolation.
+ *  - `timeout`  time ran out unresolved — facts only, no consolation.
+ * Absent on the wire defaults to `defused` (the original single-outcome behaviour).
+ */
+export type RecapOutcome = 'defused' | 'exploded' | 'timeout'
+
+/**
  * Client→server control message: request the closing-recap turn.
  *
- * Sent by the client on a successful daily defuse BEFORE the results screen
- * appears. The DO runs one final LLM+TTS recap turn (1-2 sentences, spoken
- * Chinese, no lists) and streams it back via the normal `AiResponseChunk`
- * channel, ending with `{kind:'text', done:true}`. The client plays the audio
- * and navigates to the results screen once it finishes (or after a hard timeout
- * so a TTS hiccup never strands the player). The `{type:'end'}` message follows
- * after navigation — the recap does not end the session.
+ * Sent by the client at settlement BEFORE the results screen appears. The DO runs
+ * one final LLM+TTS recap turn (1-2 sentences, spoken Chinese, no lists) and
+ * streams it back via the normal `AiResponseChunk` channel, ending with
+ * `{kind:'text', done:true}`. The client plays the audio and navigates to the
+ * results screen once it finishes (or after a hard timeout so a TTS hiccup never
+ * strands the player). The `{type:'end'}` message follows after navigation — the
+ * recap does not end the session.
+ *
+ * `outcome` selects the recap register (win vs failure); an absent value defaults
+ * to `defused` for wire back-compat with the pre-outcome client.
  */
 export interface ClosingMessage {
   type: 'closing'
+  outcome?: RecapOutcome
 }
 
 /**

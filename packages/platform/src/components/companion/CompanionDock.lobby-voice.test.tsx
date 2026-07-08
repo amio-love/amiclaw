@@ -12,7 +12,7 @@
  * pinned in CompanionDock.test.tsx.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { CompanionIdentity, VoicePosture } from '@shared/companion-types'
 import { VOICE_POSTURE_STORAGE_KEY } from '@shared/companion-presence'
@@ -31,6 +31,20 @@ const apiMocks = vi.hoisted(() => ({
   fetchMemories: vi.fn(),
   putVoicePosture: vi.fn(),
 }))
+// The lobby voice session is mocked: `open` / `close` are spies, and `current`
+// is the controllable hook state (a rerender re-reads it, so a test can simulate
+// the channel going live + streaming a greeting).
+const lobbyMock = vi.hoisted(() => ({
+  current: {
+    status: 'idle' as string,
+    live: false,
+    conversationPhase: 'listening' as string,
+    aiText: '',
+    isAiSpeaking: false,
+  },
+  open: vi.fn(),
+  close: vi.fn(),
+}))
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ ...authState.current, logout: async () => {} }),
@@ -46,6 +60,13 @@ vi.mock('@/lib/companion-api', () => ({
 vi.mock('./lobby-voice', () => ({
   LOBBY_VOICE_CAPABLE: true,
   LOBBY_VOICE_NOTE: '语音陪伴在拆弹局内可用，进入每日挑战开启。',
+}))
+vi.mock('./useLobbyVoiceSession', () => ({
+  useLobbyVoiceSession: () => ({
+    ...lobbyMock.current,
+    open: lobbyMock.open,
+    close: lobbyMock.close,
+  }),
 }))
 
 import CompanionDock from './CompanionDock'
@@ -113,6 +134,15 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     apiMocks.fetchMemories.mockResolvedValue({ kind: 'ok', memories: [] })
     apiMocks.putVoicePosture.mockReset()
     apiMocks.putVoicePosture.mockResolvedValue({ kind: 'ok' })
+    lobbyMock.current = {
+      status: 'idle',
+      live: false,
+      conversationPhase: 'listening',
+      aiText: '',
+      isAiSpeaking: false,
+    }
+    lobbyMock.open.mockReset()
+    lobbyMock.close.mockReset()
   })
 
   it('greeting text lands BEFORE the mic request; grant keeps voice-default', async () => {
@@ -173,5 +203,67 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     await waitFor(() =>
       expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
     )
+  })
+
+  it('step 4 — GRANT opens the lobby voice session, reusing the granted stream', async () => {
+    signInWithCompanion()
+    stubMic('granted')
+    renderDock()
+
+    await screen.findAllByText('我在这。今天的每日挑战等你。')
+    // After the 300ms probe grants, the lobby session opens with the granted
+    // stream (no second mic prompt — the stream is handed straight to open()).
+    await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
+    expect(lobbyMock.open).toHaveBeenCalledWith(
+      expect.objectContaining({ getTracks: expect.any(Function) })
+    )
+  })
+
+  it('Option B — the live streamed greeting drives the dock bubble (subtitle)', async () => {
+    signInWithCompanion()
+    stubMic('granted')
+    const { rerender } = renderDock()
+
+    // The instant client greeting lands first.
+    await screen.findAllByText('我在这。今天的每日挑战等你。')
+
+    // The voice channel goes live and streams the memory-grounded greeting; the
+    // bubble becomes its live subtitle (replacing the instant text).
+    await act(async () => {
+      lobbyMock.current = {
+        status: 'ready',
+        live: true,
+        conversationPhase: 'speaking',
+        aiText: '嘿，又见面了，昨天那关你收尾很利落。',
+        isAiSpeaking: true,
+      }
+      rerender(
+        <MemoryRouter initialEntries={['/']}>
+          <CompanionDock />
+        </MemoryRouter>
+      )
+    })
+
+    expect(screen.getAllByText('嘿，又见面了，昨天那关你收尾很利落。').length).toBeGreaterThan(0)
+  })
+
+  it('muting closes the live lobby channel (abrupt, no memory)', async () => {
+    signInWithCompanion()
+    stubMic('granted')
+    renderDock()
+
+    await screen.findAllByText('我在这。今天的每日挑战等你。')
+    fireEvent.click(screen.getByRole('button', { name: '阿澈 控制菜单' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '静音' }))
+
+    expect(lobbyMock.close).toHaveBeenCalled()
+  })
+
+  it('leaving the homepage tears the lobby channel down (homepage-scoped)', async () => {
+    signInWithCompanion()
+    stubMic('granted')
+    // A non-homepage mount is off the lobby scope: the channel is closed.
+    renderDock('/leaderboard')
+    await waitFor(() => expect(lobbyMock.close).toHaveBeenCalled())
   })
 })

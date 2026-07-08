@@ -1,5 +1,5 @@
 import { memo, useImperativeHandle, forwardRef, useEffect } from 'react'
-import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
+import type { GameState, ManualData, RecapOutcome } from '@amiclaw/platform-ai/contract'
 import { useVoiceSession } from './useVoiceSession'
 import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
@@ -36,11 +36,12 @@ interface VoicePanelProps {
  */
 export interface VoicePanelHandle {
   /**
-   * Request the closing-recap turn. Returns a promise that resolves when the
-   * recap audio has finished playing. Resolves immediately if the session is
-   * not live. See `useVoiceSession.requestClosing` for the full contract.
+   * Request the outcome-aware closing-recap turn. Returns a promise that resolves
+   * when the recap audio has finished playing. Resolves immediately if the
+   * session is not live. See `useVoiceSession.requestClosing` for the full
+   * contract.
    */
-  requestClosing: () => Promise<void>
+  requestClosing: (outcome?: RecapOutcome) => Promise<void>
 }
 
 /**
