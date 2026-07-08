@@ -33,12 +33,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
-import {
-  base64ToBytes,
-  floatTo16BitPCM,
-  pcm16ToFloat32,
-  resamplePcmFloat32,
-} from '@shared/voice/audio-pcm'
+import { base64ToBytes } from '@shared/voice/audio-pcm'
 import {
   buildSessionUrl,
   deriveConversationPhase,
@@ -48,13 +43,8 @@ import {
   type ServerFrame,
   type VoiceStatus,
 } from '@shared/voice/voice-session-protocol'
-import {
-  computeRms,
-  DEFAULT_VAD_CONFIG,
-  initialVadState,
-  vadStep,
-  type VadState,
-} from '@shared/voice/voice-vad'
+import { createPcmCapture, type PcmCapture } from '@shared/voice/audio-capture'
+import { createPcmPlayback, type PcmPlayback } from '@shared/voice/audio-playback'
 
 const TTS_OUTPUT_SAMPLE_RATE = 16000
 const CAPTURE_SAMPLE_RATE = 16000
@@ -79,18 +69,6 @@ export type LobbyEndReason = 'silence' | 'turn-cap' | 'max-duration' | 'caller' 
 
 function randomLobbySessionName(): string {
   return `lobby-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function closeAudioContext(ctx: AudioContext | null): void {
-  if (!ctx) return
-  try {
-    const closing = ctx.close()
-    if (closing && typeof closing.then === 'function') {
-      closing.catch(() => {})
-    }
-  } catch {
-    /* already closed */
-  }
 }
 
 export interface UseLobbyVoiceSessionResult {
@@ -130,18 +108,6 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
   /** A pre-granted stream handed to `open()`; consumed once by `startCapture`. */
   const pendingStreamRef = useRef<MediaStream | null>(null)
 
-  const mediaStreamRef = useRef<MediaStream | null>(null)
-  const captureCtxRef = useRef<AudioContext | null>(null)
-  const captureSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
-  const captureProcRef = useRef<ScriptProcessorNode | null>(null)
-  const capturingRef = useRef(false)
-  const vadStateRef = useRef<VadState>(initialVadState)
-  const frameMsRef = useRef<number>((CAPTURE_BUFFER_SIZE / CAPTURE_SAMPLE_RATE) * 1000)
-
-  const playbackCtxRef = useRef<AudioContext | null>(null)
-  const playbackCursorRef = useRef(0)
-  const playingCountRef = useRef(0)
-  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set())
   const turnStreamingRef = useRef(false)
   const suppressTurnRef = useRef(false)
 
@@ -171,112 +137,29 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
     }
   }, [])
 
-  // --- TTS playback ---
-  const ensurePlaybackCtx = useCallback((): AudioContext | null => {
-    if (playbackCtxRef.current) return playbackCtxRef.current
-    try {
-      const ctx = new AudioContext()
-      void ctx.resume?.()
-      playbackCtxRef.current = ctx
-      playbackCursorRef.current = ctx.currentTime
-      return ctx
-    } catch {
-      return null
-    }
-  }, [])
+  // --- Imperative audio shells (TTS playback + mic capture) ---
+  //
+  // The game-agnostic Web Audio plumbing lives in `@shared/voice/*`; both this
+  // hook and the in-game hook drive ONE implementation. The controllers are built
+  // once via a `useState` lazy initializer (stable identity, no ref access during
+  // render); the option closures capture only stable refs / setters and defer
+  // every `.current` read to call time. The factories have no side effects.
 
-  const playAudioFrame = useCallback(
-    (bytes: Uint8Array) => {
-      const floats = pcm16ToFloat32(bytes)
-      if (floats.length === 0) return
-      const ctx = ensurePlaybackCtx()
-      if (!ctx) return
-      try {
-        const buffer = ctx.createBuffer(1, floats.length, TTS_OUTPUT_SAMPLE_RATE)
-        buffer.getChannelData(0).set(floats)
-        const source = ctx.createBufferSource()
-        source.buffer = buffer
-        source.connect(ctx.destination)
-        const startAt = Math.max(ctx.currentTime, playbackCursorRef.current)
-        source.start(startAt)
-        playbackCursorRef.current = startAt + buffer.duration
-        playingCountRef.current += 1
-        activeSourcesRef.current.add(source)
-        setIsAiSpeaking(true)
-        source.onended = () => {
-          activeSourcesRef.current.delete(source)
-          playingCountRef.current = Math.max(0, playingCountRef.current - 1)
-          if (playingCountRef.current === 0 && mountedRef.current) setIsAiSpeaking(false)
-        }
-      } catch {
-        /* a playback failure must never break the turn — text still renders */
-      }
-    },
-    [ensurePlaybackCtx]
+  const [playback] = useState<PcmPlayback>(() => createPcmPlayback(TTS_OUTPUT_SAMPLE_RATE))
+  const [capture] = useState<PcmCapture>(() =>
+    createPcmCapture(CAPTURE_SAMPLE_RATE, CAPTURE_BUFFER_SIZE)
   )
 
-  const interruptPlayback = useCallback(() => {
-    for (const source of activeSourcesRef.current) {
-      try {
-        // eslint-disable-next-line react-hooks/immutability -- Web Audio node in a ref; detach before stop to avoid re-entering onended bookkeeping.
-        source.onended = null
-        source.stop?.()
-        source.disconnect?.()
-      } catch {
-        /* already ended */
-      }
-    }
-    activeSourcesRef.current.clear()
-    playingCountRef.current = 0
-    playbackCursorRef.current = playbackCtxRef.current?.currentTime ?? 0
-    if (mountedRef.current) setIsAiSpeaking(false)
-  }, [])
-
-  const teardownPlayback = useCallback(() => {
-    interruptPlayback()
-    const ctx = playbackCtxRef.current
-    playbackCtxRef.current = null
-    playbackCursorRef.current = 0
-    closeAudioContext(ctx)
-  }, [interruptPlayback])
-
-  // --- Mic capture ---
-  const stopCapture = useCallback(() => {
-    capturingRef.current = false
-    vadStateRef.current = initialVadState
-    const proc = captureProcRef.current
-    if (proc) {
-      proc.onaudioprocess = null
-      try {
-        proc.disconnect()
-      } catch {
-        /* ignore */
-      }
-      captureProcRef.current = null
-    }
-    const source = captureSourceRef.current
-    if (source) {
-      try {
-        source.disconnect()
-      } catch {
-        /* ignore */
-      }
-      captureSourceRef.current = null
-    }
-    const ctx = captureCtxRef.current
-    captureCtxRef.current = null
-    closeAudioContext(ctx)
-    const stream = mediaStreamRef.current
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop())
-      mediaStreamRef.current = null
-    }
+  // `true` is unconditional; the `false` edge is mounted-guarded, as before.
+  const onSpeakingChange = useCallback((speaking: boolean) => {
+    if (speaking) setIsAiSpeaking(true)
+    else if (mountedRef.current) setIsAiSpeaking(false)
   }, [])
 
   const onUtteranceEnd = useCallback(() => {
     setPlayerSpeaking(false)
     const aiHoldsFloor =
-      playingCountRef.current > 0 ||
+      playback.isPlaying() ||
       awaitingResponseRef.current ||
       (turnStreamingRef.current && !suppressTurnRef.current)
     if (aiHoldsFloor) return
@@ -290,12 +173,12 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
         /* non-fatal */
       }
     }
-  }, [setAwaiting])
+  }, [setAwaiting, playback])
 
   const onSpeechStart = useCallback(() => {
-    const bargeIn = playingCountRef.current > 0
+    const bargeIn = playback.isPlaying()
     if (bargeIn) {
-      interruptPlayback()
+      playback.interrupt(onSpeakingChange)
       if (turnStreamingRef.current) suppressTurnRef.current = true
       safeDispatch({ type: 'barge-in' })
     }
@@ -312,67 +195,25 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
         /* non-fatal */
       }
     }
-  }, [interruptPlayback, safeDispatch])
+  }, [playback, safeDispatch, onSpeakingChange])
 
+  /**
+   * Open the mic. Consumes a pre-granted stream handed to `open()` (from the
+   * auto-voice permission probe) so the browser is not prompted a second time;
+   * with none pending, the capture controller acquires its own.
+   */
   const startCapture = useCallback(() => {
-    if (capturingRef.current) return
-    capturingRef.current = true
-    void (async () => {
-      let stream: MediaStream
-      const preGranted = pendingStreamRef.current
-      pendingStreamRef.current = null
-      if (preGranted) {
-        stream = preGranted
-      } else {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-          })
-        } catch {
-          capturingRef.current = false
-          safeDispatch({ type: 'mic-error', message: 'microphone permission denied' })
-          return
-        }
-      }
-      if (!mountedRef.current || !wsRef.current) {
-        stream.getTracks().forEach((t) => t.stop())
-        capturingRef.current = false
-        return
-      }
-      mediaStreamRef.current = stream
-      try {
-        const ctx = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE })
-        captureCtxRef.current = ctx
-        const actualRate = ctx.sampleRate
-        frameMsRef.current = (CAPTURE_BUFFER_SIZE / actualRate) * 1000
-        vadStateRef.current = initialVadState
-        const source = ctx.createMediaStreamSource(stream)
-        captureSourceRef.current = source
-        const proc = ctx.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1)
-        captureProcRef.current = proc
-        proc.onaudioprocess = (e) => {
-          const frame = e.inputBuffer.getChannelData(0)
-          const rms = computeRms(frame)
-          const stepped = vadStep(vadStateRef.current, rms, frameMsRef.current, DEFAULT_VAD_CONFIG)
-          vadStateRef.current = stepped.state
-          if (stepped.event === 'speech-start') onSpeechStart()
-          else if (stepped.event === 'utterance-end') onUtteranceEnd()
-          const socket = wsRef.current
-          if (!socket || socket.readyState !== WebSocket.OPEN) return
-          const pcm =
-            actualRate === CAPTURE_SAMPLE_RATE
-              ? frame
-              : resamplePcmFloat32(frame, actualRate, CAPTURE_SAMPLE_RATE)
-          socket.send(floatTo16BitPCM(pcm))
-        }
-        source.connect(proc)
-        proc.connect(ctx.destination)
-      } catch {
-        stopCapture()
-        safeDispatch({ type: 'mic-error', message: 'microphone capture failed' })
-      }
-    })()
-  }, [onSpeechStart, onUtteranceEnd, safeDispatch, stopCapture])
+    const preGranted = pendingStreamRef.current
+    pendingStreamRef.current = null
+    capture.start({
+      preGranted: preGranted ?? undefined,
+      onSpeechStart,
+      onUtteranceEnd,
+      onError: (message) => safeDispatch({ type: 'mic-error', message }),
+      isMounted: () => mountedRef.current,
+      getSocket: () => wsRef.current,
+    })
+  }, [capture, onSpeechStart, onUtteranceEnd, safeDispatch])
 
   // --- Guard timers ---
   const clearGuardTimers = useCallback(() => {
@@ -413,8 +254,8 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
         clearTimeout(awaitingTimeoutRef.current)
         awaitingTimeoutRef.current = null
       }
-      stopCapture()
-      teardownPlayback()
+      capture.stop()
+      playback.teardown(onSpeakingChange)
       const hadSocket = wsRef.current !== null
       closeSocketOnly(true)
       awaitingResponseRef.current = false
@@ -424,7 +265,7 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
       }
       if (hadSocket) safeDispatch({ type: 'closed' })
     },
-    [clearGuardTimers, stopCapture, teardownPlayback, closeSocketOnly, safeDispatch]
+    [clearGuardTimers, capture, playback, onSpeakingChange, closeSocketOnly, safeDispatch]
   )
 
   const open = useCallback(
@@ -492,7 +333,7 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
           turnStreamingRef.current = !frame.done
           if (awaitingResponseRef.current) setAwaiting(false)
           if (frame.kind === 'audio' && frame.audio) {
-            playAudioFrame(base64ToBytes(frame.audio))
+            playback.play(base64ToBytes(frame.audio), onSpeakingChange)
           }
           safeDispatch({ type: 'frame', frame })
           return
@@ -520,7 +361,7 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
         close('max-duration')
       }, LOBBY_MAX_DURATION_MS)
     },
-    [safeDispatch, setAwaiting, startCapture, playAudioFrame, close]
+    [safeDispatch, setAwaiting, startCapture, playback, onSpeakingChange, close]
   )
 
   const conversationPhase = useMemo(
@@ -582,11 +423,11 @@ export function useLobbyVoiceSession(): UseLobbyVoiceSessionResult {
         clearTimeout(awaitingTimeoutRef.current)
         awaitingTimeoutRef.current = null
       }
-      stopCapture()
-      teardownPlayback()
+      capture.stop()
+      playback.teardown(onSpeakingChange)
       closeSocketOnly(true)
     }
-  }, [clearGuardTimers, stopCapture, teardownPlayback, closeSocketOnly])
+  }, [clearGuardTimers, capture, playback, onSpeakingChange, closeSocketOnly])
 
   return {
     status: state.status,
