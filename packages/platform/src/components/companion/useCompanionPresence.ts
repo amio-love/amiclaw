@@ -136,8 +136,10 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
 
   // The manual-less lobby voice session (design step 4). Opened from the grant
   // branch(es) below; its streamed greeting drives the dock subtitle (Option B)
-  // and its 3-state phase drives the live dock states. Only ever opened on the
-  // homepage this slice (lobby voice is homepage-scoped — teardown on nav away).
+  // and its 3-state phase drives the live dock states. The AUTO-voice arrival
+  // sequence still fires on the homepage only, but a MANUAL mic tap can open the
+  // session on any signed-in page (the session is page-agnostic); either way it
+  // is scene-scoped — teardown on page leave.
   const lobby = useLobbyVoiceSession()
   // Stable action handles (useCallback in the hook) — safe in effect / callback
   // deps without recreating them every render.
@@ -359,11 +361,22 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     setLastLobbyText('')
   }
 
-  // Homepage-scoped: leaving the homepage is a scene switch (design §降级触发 —
-  // no posture change), so the lobby channel tears down (abrupt close, no memory).
+  // Scene-scoped: leaving the CURRENT page is a scene switch (design §降级触发 —
+  // no posture change), so the lobby channel tears down (abrupt close, no
+  // memory). Voice can be elevated on ANY signed-in page now (not just the
+  // homepage — the lobby session is page-agnostic, resolving companion memory
+  // from the auth cookie), so the teardown keys on the pathname CHANGING rather
+  // than on being off the homepage: a session opened on /me closes when the
+  // player leaves /me. `closeLobby` is idempotent, so firing it on a page with
+  // no open session is a harmless no-op.
+  const pathname = location.pathname
+  const lobbyScenePathRef = useRef(pathname)
   useEffect(() => {
-    if (!onHomepage) closeLobby('caller')
-  }, [onHomepage, closeLobby])
+    if (lobbyScenePathRef.current !== pathname) {
+      lobbyScenePathRef.current = pathname
+      closeLobby('caller')
+    }
+  }, [pathname, closeLobby])
 
   // --- Controls ---------------------------------------------------------------
 
@@ -405,10 +418,11 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
             applyPostureEvent('manual-grant')
             setSessionMuted(false)
             setSessionElevated(true)
-            // Elevate into a live channel on the homepage; off-homepage this
-            // slice keeps voice homepage-scoped, so just release the stream.
-            if (onHomepage) openLobby(stream ?? undefined)
-            else stream?.getTracks().forEach((t) => t.stop())
+            // Elevate into a live channel wherever the player tapped — the lobby
+            // session is page-agnostic, so voice genuinely connects on any
+            // signed-in page, not just the homepage. It is scene-scoped: leaving
+            // this page tears it down (the page-leave teardown effect above).
+            openLobby(stream ?? undefined)
           } else {
             stream?.getTracks().forEach((t) => t.stop())
           }
@@ -417,11 +431,12 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
       }
       // quiet-remembered / session mute: elevate THIS visit only — an explicit
       // mute is undone only by the explicit 恢复自动语音 (least surprise). The
-      // user gesture opens a live channel on the homepage (open() acquires the
-      // mic itself — the click is the permission gesture).
+      // user gesture opens a live channel on whatever signed-in page they tapped
+      // (open() acquires the mic itself — the click is the permission gesture);
+      // the session is scene-scoped and tears down on page leave.
       setSessionMuted(false)
       setSessionElevated(true)
-      if (onHomepage) openLobby()
+      openLobby()
       return
     }
     // Voice nominally on → the mic button is the manual downgrade (design:
@@ -430,7 +445,7 @@ export function useCompanionPresence(companion: CompanionIdentity): CompanionPre
     setSessionElevated(false)
     closeLobby('caller')
     applyPostureEvent('mute')
-  }, [applyPostureEvent, sessionElevated, onHomepage, openLobby, closeLobby])
+  }, [applyPostureEvent, sessionElevated, openLobby, closeLobby])
 
   const expandBubble = useCallback(() => {
     setBubble((current) => (current ? { ...current, expanded: true } : current))

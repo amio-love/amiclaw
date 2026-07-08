@@ -257,21 +257,59 @@
   transform: translateY(0);
 }
 
-@media (max-width: 360px) {
+/* Phone fit (re-audit F2): three stacked dials + hint + confirm overflowed a
+   390x844 phone (the whole game page ran ~934px tall), so the bottom dial's
+   knobs and the 确认 button sat below the fold — reachable only by scrolling, and
+   on real mobile browsers they fell under the toolbar / home indicator. Tighten
+   the dial's vertical footprint on narrow viewports (smaller faces + gaps, knobs
+   held at the 46px touch floor) so the full 星盘 module fits on screen and every
+   control is tappable without scrolling. Gameplay is untouched. */
+@media (max-width: 480px) {
+  .wrapper {
+    gap: 16px;
+  }
+  .dials {
+    gap: 12px;
+  }
+  .dial {
+    gap: 9px;
+  }
   .face {
-    width: 124px;
-    height: 124px;
+    width: 116px;
+    height: 116px;
   }
   .well {
-    width: 66px;
-    height: 66px;
+    width: 62px;
+    height: 62px;
   }
   .symbol {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
   }
   .needle {
-    height: 47px;
+    height: 45px;
+  }
+  .knob {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+@media (max-width: 360px) {
+  .face {
+    width: 108px;
+    height: 108px;
+  }
+  .well {
+    width: 60px;
+    height: 60px;
+  }
+  .symbol {
+    width: 36px;
+    height: 36px;
+  }
+  .needle {
+    height: 42px;
   }
 }
 

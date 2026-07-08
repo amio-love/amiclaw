@@ -60,6 +60,14 @@
   align-items: center;
   justify-content: center;
   height: 420px;
+  /* The whole stage is decorative / read-only (orbiting rings, the planet orb,
+     and the display-only StatPills — none is interactive). Its layers are
+     absolutely positioned and OVERFLOW the stage box: on the ≤768px single-column
+     stack the stage sits under the copy column, and a 440px ring (`.planetRing2`)
+     reached up over the「开始玩」CTA and swallowed a center tap (re-audit F1). Make
+     the entire stage pointer-inert so NO decorative layer can ever intercept a
+     touch meant for the CTA — nothing here needs pointer events. */
+  pointer-events: none;
 }
 
 .planet {

@@ -1,0 +1,33 @@
+# Regression: anonymous homepage「开始玩」hero CTA untappable at its center on a phone.
+#
+# Real-device bug F1 (fresh-eyes re-audit): on a 390x844 phone the decorative
+# planet stage's 440px orbiting ring (`.planetRing2`, aria-hidden, pointer-events
+# default) overflowed its stage and reached up over the primary「开始玩 →」CTA,
+# covering roughly its middle 35–65%. A center tap — where a first-time visitor
+# naturally taps — hit the ring and did nothing; only the button's left/right
+# edges routed. The most prominent first CTA on the whole site read as dead.
+#
+# The fix makes the entire decorative stage pointer-inert, so no ring / orb /
+# stat pill can ever intercept a touch meant for the CTA. This scenario taps the
+# CTA center at the exact failing viewport and asserts it routes to BombSquad.
+# Playwright's `.click()` centers the target AND refuses to click through an
+# intercepting overlay, so pre-fix it fails and post-fix it passes.
+#
+# @playwright regression under e2e/regression/ — outside the flow-inventory
+# bijection (traces to a fixed bug, not a product flow).
+
+Feature: Anonymous hero「开始玩」CTA stays tappable at its center on a phone
+  As a first-time visitor on a phone
+  I want the primary「开始玩」CTA to route when I tap its center
+  So that the most prominent call to action is not a dead button
+
+  Background:
+    Given I open /
+
+  @playwright
+  Scenario: the「开始玩」hero CTA routes to BombSquad from a center tap at 390x844
+    Given I am not signed in
+    And the phone viewport is 390 by 844 pixels
+    And the anonymous homepage is shown
+    When I tap the center of the「开始玩」hero CTA
+    Then the URL path is /bombsquad/

@@ -13,7 +13,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import type { CompanionIdentity, VoicePosture } from '@shared/companion-types'
 import { VOICE_POSTURE_STORAGE_KEY } from '@shared/companion-presence'
 
@@ -267,11 +267,44 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     expect(lobbyMock.close).toHaveBeenCalled()
   })
 
-  it('leaving the homepage tears the lobby channel down (homepage-scoped)', async () => {
-    signInWithCompanion()
-    stubMic('granted')
-    // A non-homepage mount is off the lobby scope: the channel is closed.
-    renderDock('/leaderboard')
+  it('a mic tap on a non-homepage page opens a REAL lobby session, not fake state (F3)', async () => {
+    // Re-audit F3: on /me etc. the mic tap flipped the dock to「阿澈在这」but
+    // connected NOTHING (voice was homepage-only). It must genuinely elevate now.
+    signInWithCompanion('quiet-remembered')
+    renderDock('/me')
+
+    // A quiet-remembered visit lands muted with a 开启语音 affordance.
+    expect(screen.getByText('阿澈在这（静音中）')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开启语音' }))
+
+    // The tap opens a real lobby session (no fake feedback) and the dock elevates.
+    await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('阿澈在这')).toBeInTheDocument()
+  })
+
+  it('leaving the page tears the lobby channel down (scene-scoped, any page)', async () => {
+    function Navigator() {
+      const navigate = useNavigate()
+      return (
+        <button type="button" onClick={() => navigate('/leaderboard')}>
+          go-leaderboard
+        </button>
+      )
+    }
+    signInWithCompanion('quiet-remembered')
+    render(
+      <MemoryRouter initialEntries={['/me']}>
+        <CompanionDock />
+        <Navigator />
+      </MemoryRouter>
+    )
+
+    // Elevate a live session on /me, then navigate away.
+    fireEvent.click(screen.getByRole('button', { name: '开启语音' }))
+    await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'go-leaderboard' }))
+    // The page change (scene switch) tears the channel down.
     await waitFor(() => expect(lobbyMock.close).toHaveBeenCalled())
   })
 })
