@@ -1,1 +1,1 @@
-export { default, AI_TOOLS } from './AiToolList'
+export { default, AI_TOOLS, toolLabel } from './AiToolList'

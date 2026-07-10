@@ -16,6 +16,15 @@ export const AI_TOOLS = [
   'DeepSeek',
 ] as const
 
+/* id → display label, derived from the single AI_TOOLS source. Leaderboard
+   entries / survey answers store a lowercased tool id (`claude`); this resolves
+   it back to the canonical display name so no surface hand-maintains a second
+   id→name map. Unknown ids pass through unchanged. */
+const LABEL_BY_ID = new Map<string, string>(AI_TOOLS.map((name) => [name.toLowerCase(), name]))
+export function toolLabel(id: string): string {
+  return LABEL_BY_ID.get(id.toLowerCase()) ?? id
+}
+
 interface AiToolListProps {
   /* Optional leading label supplied by the consumer (e.g. `支持`). */
   prefix?: ReactNode

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button } from '@amiclaw/ui'
+import { Button, toolLabel } from '@amiclaw/ui'
 import { fetchLeaderboard } from '@shared/leaderboard-api'
 import {
   clearOptimisticEntry,
@@ -19,12 +19,10 @@ function isOptimistic(entry: LeaderboardEntry): entry is OptimisticLeaderboardEn
 
 function formatAiMetadata(entry: LeaderboardEntry): string | null {
   if (!entry.ai_tool) return null
-  const toolLabels: Record<string, string> = {
-    claude: 'Claude',
-    chatgpt: 'ChatGPT',
-    gemini: 'Gemini',
-  }
-  const tool = toolLabels[entry.ai_tool] ?? entry.ai_tool
+  // Resolve the stored lowercase tool id through the shared AI_TOOLS source so
+  // all 8 tools render their display name (was a local 3-item map that leaked
+  // raw ids for the other tools).
+  const tool = toolLabel(entry.ai_tool)
   return entry.ai_model ? `${tool} · ${entry.ai_model}` : tool
 }
 
