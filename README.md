@@ -33,6 +33,9 @@ solo real-time grid chase for one human and the existing AI companion.
 - Inspect the complete frozen map during a 20-second tactical-planning phase;
   adjust it from 5 to 60 seconds in five-second steps or start early
 - Collect three cores and reach the exit while a pursuer searches the map
+- Plan against one public pursuer rule: unobstructed row/column sight, nearest
+  visible uncaptured shadow, stable equal-distance ties, and moon-gate return
+  when neither shadow is visible
 - Command the companion to follow, split, or decoy; swap positions when ready
 - Rescue a captured shadow before its deadline
 - Queue rapid movement inputs FIFO, tap a persistent destination path, and see
@@ -45,6 +48,10 @@ Voice reuses the platform's existing companion identity, voice, provider adapter
 and memory boundary. It is opt-in and bounded; neither voice nor model work can
 pause planning or frame-level play. The deterministic engine owns movement and
 outcomes, and the Chinese strategy buttons remain authoritative fallback controls.
+The pursuer cannot read those strategy buttons or model output. Decoy changes
+only companion movement and succeeds when that movement makes the companion the
+nearer visible shadow. Difficulty changes pursuer cadence and rescue time, not
+visibility or target selection.
 
 On the Arcade homepage, BombSquad remains the sole featured game. Dual Shadow
 Chase and the Yijing Oracle appear together in the playable peer grid. Arcade

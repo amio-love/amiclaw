@@ -43,7 +43,10 @@ export interface ShadowActor {
 export interface PursuerActor {
   id: 'pursuer'
   position: Coordinate
+  /** Last observed shadow, used only to keep equal-distance ties stable. */
   target: 'player' | 'companion'
+  /** Actual movement destination selected by the latest observation. */
+  destination: 'player' | 'companion' | 'moon-gate'
 }
 
 export interface ObjectiveState extends ObjectiveDefinition {

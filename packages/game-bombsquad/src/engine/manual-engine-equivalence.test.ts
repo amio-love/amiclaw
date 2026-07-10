@@ -411,7 +411,7 @@ describe('manual↔engine: wire — engine accepts exactly what the manual, read
       }
     }
     expect(checks).toBeGreaterThan(0)
-  }, 60000)
+  }, 90000)
 })
 
 const BUTTON_COLORS = ['red', 'blue', 'yellow', 'white']

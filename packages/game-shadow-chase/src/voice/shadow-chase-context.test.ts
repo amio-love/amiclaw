@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { PURSUER_RULE_CONTRACT, PURSUER_RULE_COPY } from '../engine/pursuer-rules'
 import { createRunningState } from '../engine/rules'
 import {
   buildShadowChaseVoiceContext,
@@ -7,6 +8,8 @@ import {
   MAX_SHADOW_CHASE_MANUAL_BYTES,
   serializedVoiceManualBytes,
   shadowChaseVoiceStateSignature,
+  SHADOW_CHASE_RULES_SECTION,
+  SHADOW_CHASE_VOICE_MANUAL,
 } from './shadow-chase-context'
 
 describe('Shadow Chase voice context', () => {
@@ -43,6 +46,38 @@ describe('Shadow Chase voice context', () => {
     expect(context.objectives).toHaveLength(3)
     expect(context.map.walls.length).toBeLessThanOrEqual(64)
     expect(serializedVoiceManualBytes()).toBeLessThanOrEqual(MAX_SHADOW_CHASE_MANUAL_BYTES)
+    expect(
+      (
+        SHADOW_CHASE_VOICE_MANUAL.sections[SHADOW_CHASE_RULES_SECTION] as {
+          pursuerRule: string
+          pursuerContract: unknown
+        }
+      ).pursuerRule
+    ).toBe(PURSUER_RULE_COPY)
+    expect(
+      (
+        SHADOW_CHASE_VOICE_MANUAL.sections[SHADOW_CHASE_RULES_SECTION] as {
+          pursuerContract: unknown
+        }
+      ).pursuerContract
+    ).toEqual(PURSUER_RULE_CONTRACT)
+    expect(PURSUER_RULE_CONTRACT).toEqual({
+      eligibility: 'free-visible-shadows',
+      vision: {
+        alignment: 'same-row-or-column',
+        blocker: 'wall-between',
+        range: 'full-map',
+      },
+      selection: {
+        metric: 'shortest-path-distance',
+        tie: 'retain-last-eligible-actor-target',
+        initialFallback: 'player',
+      },
+      noVisibleDestination: 'moon-gate',
+      capture: ['same-cell', 'opposite-edge-crossing'],
+      difficultyEffects: ['movement-cadence', 'rescue-time'],
+      decoyAuthority: 'companion-movement-only',
+    })
   })
 
   it('ignores frame-only movement while tracking material game changes', () => {

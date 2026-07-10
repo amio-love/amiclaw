@@ -5,6 +5,21 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**The Shadow Chase pursuer now obeys only visible world rules** — Fix. The
+pursuer no longer reads the private follow, split, or decoy command, any model
+lease, or a hidden shadow's live position. It sees the full unobstructed row and
+column, chases the nearest visible uncaptured shadow, keeps its current actor on
+an equal-distance tie, and returns toward the moon gate when nobody is visible.
+Difficulty changes only movement cadence and rescue time. Decoy now works by
+moving the companion into a nearer visible lane, so the same rule explains why
+the pursuer changes course.
+
+Setup and tactical planning show the exact pursuer rule that is injected into
+the AI companion manual. The board also renders low-contrast cardinal sight
+lanes and one truthful current-destination marker without taking pointer input.
+This makes pursuit, wall cover, decoy timing, capture by same-cell contact or
+opposite-edge crossing, and moon-gate return planable from shared information.
+
 **Dual Shadow Chase now starts with a real tactical conversation** — Improvement.
 The new two-to-five-minute solo game now uses Chinese-first player copy and shows
 the complete frozen map before the chase. Tactical planning defaults to 20 seconds,

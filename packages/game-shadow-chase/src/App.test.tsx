@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { App } from './App'
+import { PURSUER_RULE_COPY } from './engine/pursuer-rules'
 import type { ShadowVoiceSource } from './voice/useShadowChaseVoice'
 
 const BUTTON_ONLY_VOICE: ShadowVoiceSource = {
@@ -15,9 +16,13 @@ describe('playable shell semantics', () => {
     render(<App voiceSource={BUTTON_ONLY_VOICE} />)
     expect(screen.getByRole('heading', { name: '双影追逃' })).toBeTruthy()
     expect(screen.getByText(/收集三枚光核/)).toBeTruthy()
+    expect(screen.getByText(PURSUER_RULE_COPY)).toBeTruthy()
+    expect(screen.getByRole('region', { name: '追兵规则' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '查看地图并制定策略' }))
     expect(screen.getByRole('application', { name: '双影追逃地图' })).toBeTruthy()
     expect(screen.getByText('战术准备')).toBeTruthy()
+    expect(screen.getByText(PURSUER_RULE_COPY)).toBeTruthy()
+    expect(screen.getByRole('region', { name: '追兵规则' })).toBeTruthy()
     expect(screen.getAllByText('20')).toHaveLength(2)
     expect(screen.getByRole('button', { name: '立即出发' })).toBeTruthy()
   })

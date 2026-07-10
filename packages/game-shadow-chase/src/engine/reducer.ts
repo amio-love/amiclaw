@@ -9,7 +9,7 @@ import { companionNextStep } from './companion-policy'
 import { validateModelProposal } from './intent-legality'
 import { getMap } from './maps'
 import { nextStepOnShortestPath, shortestPath } from './pathfinding'
-import { pursuerNextStep } from './pursuer-policy'
+import { pursuerNextStep, refreshPursuerDecision } from './pursuer-policy'
 import { coordinatesEqual, isInsideMap, isWalkable, moved } from './rules'
 import type {
   Coordinate,
@@ -276,6 +276,12 @@ export function advance(
       next.decisionEpoch += 1
       tickEvents.push({ tick: nextTick, type: 'rescue', actorId: capturedId })
     }
+  }
+
+  const targetBeforeCommitRefresh = next.actors.pursuer.target
+  refreshPursuerDecision(next)
+  if (next.actors.pursuer.target !== targetBeforeCommitRefresh) {
+    next.decisionEpoch += 1
   }
 
   const deadlineLoss = (['player', 'companion'] as const).some((actorId) => {

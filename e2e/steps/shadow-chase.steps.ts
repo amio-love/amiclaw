@@ -17,6 +17,13 @@ Then('the Shadow Chase opening rule is complete', async ({ page }) => {
   expect(copy).toContain('02:00 开启')
   expect(copy).toContain('完成救援')
   expect(copy).toContain('一起撤离')
+  expect(copy).toContain(
+    '追兵能看见整条没有墙遮挡的横竖直线：它追最近且未被捕获的可见影子，距离相同时不换目标；谁都看不见就返回月门。同格或迎面交叉会被捕获。诱敌只改变伙伴走位，难度只改变追兵速度和救援时间。'
+  )
+  const pursuerRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
+  await page.locator('html').evaluate((element, rule) => {
+    ;(element as HTMLElement).dataset.shadowPursuerRule = rule
+  }, pursuerRule)
 })
 
 Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => {
@@ -27,6 +34,12 @@ Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => 
     'aria-disabled',
     'true'
   )
+  const setupRule = await page.locator('html').getAttribute('data-shadow-pursuer-rule')
+  const planningRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
+  expect(planningRule).toBe(setupRule)
+  const board = page.getByRole('application', { name: '双影追逃地图' })
+  await expect(board).toHaveAccessibleDescription('追兵当前目标：月门')
+  expect(await page.locator('.sight-lane').count()).toBe(4)
 })
 
 Then('the Shadow Chase board and essential controls are visible', async ({ page }) => {
@@ -87,4 +100,19 @@ Then('Shadow Chase accepts a path target through an overlay', async ({ page, wor
   await page.mouse.click(core!.x + core!.width / 2, core!.y + core!.height / 2)
   await world.advance(300)
   await expect(page.locator('.path-target')).toBeVisible()
+})
+
+Then('Shadow Chase shows nonblocking pursuer sight and target', async ({ page }) => {
+  const lanes = page.locator('.sight-lane')
+  expect(await lanes.count()).toBe(4)
+  const indicator = page.locator('.pursuer-destination-indicator')
+  await expect(indicator).toHaveCount(1)
+  await expect(indicator).toBeVisible()
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toHaveAccessibleDescription(
+    /追兵当前目标：(你|AI 伙伴|月门)/
+  )
+  for (const overlay of [lanes.first(), indicator]) {
+    await expect(overlay).toHaveCSS('pointer-events', 'none')
+    await expect(overlay).toHaveAttribute('aria-hidden', 'true')
+  }
 })

@@ -1,6 +1,6 @@
 import { getMap } from './maps'
+import { visibleSightCells } from './line-of-sight'
 import { neighbors, nextStepOnShortestPath, pathDistance } from './pathfinding'
-import { coordinatesEqual } from './rules'
 import type { Coordinate, SimulationState } from './types'
 
 function nearestObjective(state: SimulationState): Coordinate | null {
@@ -26,6 +26,39 @@ function evade(state: SimulationState): Coordinate | null {
     return distanceDelta || left.y - right.y || left.x - right.x
   })
   return options[0] ?? null
+}
+
+function decoyStep(state: SimulationState): Coordinate {
+  const map = getMap(state.mapId)
+  const companion = state.actors.companion.position
+  const pursuer = state.actors.pursuer.position
+  const player = state.actors.player.position
+  const playerDistance = pathDistance(map, pursuer, player)
+  const candidates = visibleSightCells(map, pursuer)
+    .filter(
+      (candidate) =>
+        (candidate.x !== player.x || candidate.y !== player.y) &&
+        (candidate.x !== pursuer.x || candidate.y !== pursuer.y)
+    )
+    .map((candidate) => ({
+      candidate,
+      companionDistance: pathDistance(map, companion, candidate),
+      pursuerDistance: pathDistance(map, pursuer, candidate),
+    }))
+    .filter((candidate) => Number.isFinite(candidate.companionDistance))
+  candidates.sort((left, right) => {
+    const leftNearer = left.pursuerDistance < playerDistance ? 0 : 1
+    const rightNearer = right.pursuerDistance < playerDistance ? 0 : 1
+    return (
+      leftNearer - rightNearer ||
+      left.companionDistance - right.companionDistance ||
+      left.pursuerDistance - right.pursuerDistance ||
+      left.candidate.y - right.candidate.y ||
+      left.candidate.x - right.candidate.x
+    )
+  })
+  const target = candidates[0]?.candidate
+  return target ? (nextStepOnShortestPath(map, companion, target) ?? companion) : companion
 }
 
 export function companionNextStep(state: SimulationState): Coordinate {
@@ -55,19 +88,7 @@ export function companionNextStep(state: SimulationState): Coordinate {
       : actor.position
   }
   if (intent.intent === 'decoy') {
-    const options = neighbors(map, actor.position).filter(
-      (candidate) => !coordinatesEqual(candidate, state.actors.player.position)
-    )
-    options.sort((left, right) => {
-      const fromPlayer =
-        pathDistance(map, right, state.actors.player.position) -
-        pathDistance(map, left, state.actors.player.position)
-      const toPursuer =
-        pathDistance(map, left, state.actors.pursuer.position) -
-        pathDistance(map, right, state.actors.pursuer.position)
-      return fromPlayer || toPursuer || left.y - right.y || left.x - right.x
-    })
-    return options[0] ?? actor.position
+    return decoyStep(state)
   }
   const uncollected = nearestObjective(state)
   if (

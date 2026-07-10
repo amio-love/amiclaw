@@ -1,5 +1,6 @@
 import type { Difficulty } from '../engine/types'
 import { PlanningDurationControl } from './PlanningDurationControl'
+import { PursuerRule } from './PursuerRule'
 
 interface StartScreenProps {
   difficulty: Difficulty
@@ -21,6 +22,7 @@ export function StartScreen(props: StartScreenProps) {
         收集三枚光核，坚持到月门在 02:00
         开启，与伙伴一起撤离。战术准备结束后追兵立即行动；任何一方被捕获，都要在倒计时结束前完成救援。
       </p>
+      <PursuerRule />
       <div className="start-options" aria-label="本局设置">
         <label>
           难度
