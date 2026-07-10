@@ -1,6 +1,12 @@
 import { useRef } from 'react'
 
 import { getMap } from '../engine/maps'
+import { sightLanes } from '../engine/line-of-sight'
+import {
+  buildPursuerObservation,
+  selectPursuerDecision,
+  type PursuerDestination,
+} from '../engine/pursuer-policy'
 import type { Coordinate, SimulationState } from '../engine/types'
 
 const CELL = 48
@@ -48,6 +54,24 @@ export function GameBoard({
   onTarget(target: Coordinate): void
 }) {
   const map = getMap(state.mapId)
+  const pursuer = state.actors.pursuer
+  const lanes = sightLanes(map, pursuer.position)
+  const displayedDestination: PursuerDestination =
+    !interactive || state.tick === 0
+      ? selectPursuerDecision(buildPursuerObservation(state)).destination
+      : pursuer.destination
+  const destinationPosition =
+    displayedDestination === 'moon-gate'
+      ? state.exit.position
+      : state.actors[displayedDestination].position
+  const destinationName =
+    displayedDestination === 'moon-gate'
+      ? '月门'
+      : displayedDestination === 'player'
+        ? '你'
+        : 'AI 伙伴'
+  const destinationDescriptionId = `pursuer-destination-${state.runId}`
+  const arrowheadId = `pursuer-arrowhead-${state.runId}`
   const gesture = useRef<{ pointerId: number; start: Coordinate } | null>(null)
   const cells = Array.from({ length: map.width * map.height }, (_, index) => ({
     x: index % map.width,
@@ -63,6 +87,7 @@ export function GameBoard({
       className={interactive ? 'game-board interactive' : 'game-board planning-board'}
       role="application"
       aria-label="双影追逃地图"
+      aria-describedby={destinationDescriptionId}
       aria-disabled={!interactive}
       viewBox={`0 0 ${map.width * CELL} ${map.height * CELL}`}
       onPointerDown={(event) => {
@@ -101,6 +126,22 @@ export function GameBoard({
       onLostPointerCapture={clearGesture}
     >
       <title>{map.name}</title>
+      <desc id={destinationDescriptionId}>追兵当前目标：{destinationName}</desc>
+      <defs>
+        <marker
+          className="pursuer-arrowhead"
+          id={arrowheadId}
+          markerWidth="6"
+          markerHeight="6"
+          refX="5"
+          refY="3"
+          orient="auto"
+          markerUnits="userSpaceOnUse"
+          aria-hidden="true"
+        >
+          <path d="M0 0 6 3 0 6Z" />
+        </marker>
+      </defs>
       {cells.map((cell) => {
         const wall = map.walls.some((candidate) => sameCoordinate(candidate, cell))
         return (
@@ -116,6 +157,32 @@ export function GameBoard({
           />
         )
       })}
+      {lanes.map((lane) => (
+        <line
+          key={lane.id}
+          className="sight-lane board-overlay"
+          data-direction={lane.id}
+          x1={pursuer.position.x * CELL + CELL / 2}
+          y1={pursuer.position.y * CELL + CELL / 2}
+          x2={lane.end.x * CELL + CELL / 2}
+          y2={lane.end.y * CELL + CELL / 2}
+          aria-hidden="true"
+        />
+      ))}
+      <g className="pursuer-destination-indicator board-overlay" aria-hidden="true">
+        <line
+          x1={pursuer.position.x * CELL + CELL / 2}
+          y1={pursuer.position.y * CELL + CELL / 2}
+          x2={destinationPosition.x * CELL + CELL / 2}
+          y2={destinationPosition.y * CELL + CELL / 2}
+          markerEnd={`url(#${arrowheadId})`}
+        />
+        <circle
+          cx={destinationPosition.x * CELL + CELL / 2}
+          cy={destinationPosition.y * CELL + CELL / 2}
+          r="20"
+        />
+      </g>
       {state.playerNavigation && (
         <rect
           className="path-target board-overlay"

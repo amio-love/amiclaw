@@ -1,5 +1,6 @@
 import type { PlanningSnapshot } from '../planning/planning-controller'
 import { PlanningDurationControl } from './PlanningDurationControl'
+import { PursuerRule } from './PursuerRule'
 
 export function PlanningScreen({
   planning,
@@ -16,6 +17,7 @@ export function PlanningScreen({
         <p className="eyebrow">战术准备</p>
         <h1>先看地图，再决定伙伴策略</h1>
         <p>追逃尚未开始。地图与角色保持冻结，语音连接失败也不会延长倒计时。</p>
+        <PursuerRule />
       </div>
       <div className="planning-countdown" aria-label="战术准备倒计时">
         <span className="planning-countdown-label">剩余</span>

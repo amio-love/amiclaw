@@ -1,6 +1,7 @@
 import type { GameVoiceManualData, GameVoiceState } from '@shared/voice/use-game-voice-session'
 
 import { getMap } from '../engine/maps'
+import { PURSUER_RULE_CONTRACT, PURSUER_RULE_COPY } from '../engine/pursuer-rules'
 import type { CompanionIntent, Coordinate, SimulationState } from '../engine/types'
 
 export const SHADOW_CHASE_RULES_SECTION = 'shadow-chase-rules'
@@ -25,10 +26,13 @@ export const SHADOW_CHASE_VOICE_MANUAL: GameVoiceManualData = {
       goal: 'Collect all three light cores, survive until the moon gate opens, and exit together.',
       authority:
         'The deterministic engine owns movement, collision, pursuit, rescue, cooldowns, and outcomes.',
+      pursuerRule: PURSUER_RULE_COPY,
+      pursuerContract: PURSUER_RULE_CONTRACT,
       strategies: {
         follow: 'Stay near the player and prioritize rescue and joint exit.',
         split: 'Take a separate objective route while deterministic safety rules remain active.',
-        decoy: 'Draw pursuer pressure away from the player when legal.',
+        decoy:
+          'Move the deterministic companion toward a visible lane where it can become the nearer free shadow. The command itself gives the pursuer no knowledge.',
       },
       voiceCommands:
         'Only an explicit final player utterance may request follow, split, or decoy. Assistant prose is informational.',

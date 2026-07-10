@@ -1,5 +1,5 @@
-import { coordinatesEqual, isWalkable } from './rules'
-import type { Coordinate, MapDefinition } from './types'
+import { coordinatesEqual, isWalkable, type WalkableMap } from './rules'
+import type { Coordinate } from './types'
 
 const OFFSETS: Coordinate[] = [
   { x: 0, y: -1 },
@@ -12,14 +12,14 @@ export function coordinateKey(value: Coordinate): string {
   return `${value.x}:${value.y}`
 }
 
-export function neighbors(map: MapDefinition, position: Coordinate): Coordinate[] {
+export function neighbors(map: WalkableMap, position: Coordinate): Coordinate[] {
   return OFFSETS.map((offset) => ({ x: position.x + offset.x, y: position.y + offset.y })).filter(
     (candidate) => isWalkable(map, candidate)
   )
 }
 
 export function shortestPath(
-  map: MapDefinition,
+  map: WalkableMap,
   start: Coordinate,
   target: Coordinate
 ): Coordinate[] | null {
@@ -49,7 +49,7 @@ export function shortestPath(
 }
 
 export function nextStepOnShortestPath(
-  map: MapDefinition,
+  map: WalkableMap,
   start: Coordinate,
   target: Coordinate
 ): Coordinate | null {
@@ -57,7 +57,7 @@ export function nextStepOnShortestPath(
   return path && path.length > 1 ? path[1] : (path?.[0] ?? null)
 }
 
-export function pathDistance(map: MapDefinition, start: Coordinate, target: Coordinate): number {
+export function pathDistance(map: WalkableMap, start: Coordinate, target: Coordinate): number {
   const path = shortestPath(map, start, target)
   return path ? path.length - 1 : Number.POSITIVE_INFINITY
 }

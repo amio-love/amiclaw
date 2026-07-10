@@ -34,4 +34,5 @@ Feature: Dual Shadow Chase deterministic solo play
     When I click "查看地图并制定策略"
     And I click "立即出发"
     Then Shadow Chase phone controls are at least 44 pixels and do not cover the board
+    And Shadow Chase shows nonblocking pursuer sight and target
     And Shadow Chase accepts a path target through an overlay

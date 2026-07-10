@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { RUN_CAP_TICKS } from './config'
+import { hasLineOfSight } from './line-of-sight'
 import { getMap } from './maps'
 import { advance } from './reducer'
 import { isWalkable } from './rules'
@@ -33,12 +34,25 @@ describe('seeded engine properties', () => {
           },
         ]
         const previousTick = state.tick
+        const previousPursuer = { ...state.actors.pursuer.position }
         state = advance(state, actions)
         expect(state.tick).toBe(previousTick + 1)
         const map = getMap(state.mapId)
         expect(isWalkable(map, state.actors.player.position)).toBe(true)
         expect(isWalkable(map, state.actors.companion.position)).toBe(true)
         expect(isWalkable(map, state.actors.pursuer.position)).toBe(true)
+        expect(
+          Math.abs(previousPursuer.x - state.actors.pursuer.position.x) +
+            Math.abs(previousPursuer.y - state.actors.pursuer.position.y)
+        ).toBeLessThanOrEqual(1)
+        expect(['player', 'companion', 'moon-gate']).toContain(state.actors.pursuer.destination)
+        if (state.actors.pursuer.destination !== 'moon-gate') {
+          const destination = state.actors[state.actors.pursuer.destination]
+          expect(destination.status).toBe('free')
+          expect(hasLineOfSight(map, state.actors.pursuer.position, destination.position)).toBe(
+            true
+          )
+        }
         const nextCollected = state.objectives.filter((objective) => objective.collected).length
         expect(nextCollected).toBeGreaterThanOrEqual(collected)
         collected = nextCollected
@@ -46,5 +60,5 @@ describe('seeded engine properties', () => {
       }
       expect(['win', 'loss', 'timeout']).toContain(state.phase)
     }
-  })
+  }, 30_000)
 })

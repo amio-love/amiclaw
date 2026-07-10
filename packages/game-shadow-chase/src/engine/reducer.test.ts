@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { MIN_RUN_TICKS, RUN_CAP_TICKS } from './config'
+import { pursuerNextStep } from './pursuer-policy'
 import { createRunningState } from './rules'
 import { advance } from './reducer'
 import type { QueuedAction, SimulationState } from './types'
@@ -36,12 +37,81 @@ describe('ten-phase reducer contract', () => {
     expect(next.cooldowns.swapReadyTick).toBeGreaterThan(next.tick)
   })
 
-  it('increments the decision epoch when a command retargets the pursuer', () => {
+  it('accepts a decoy command without granting the pursuer command knowledge', () => {
     const state = createRunningState('courtyard', 'standard', 7)
     state.tick = 1
     const next = advance(state, [action(state, 1, { type: 'companion-command', command: 'decoy' })])
-    expect(next.actors.pursuer.target).toBe('companion')
-    expect(next.decisionEpoch).toBe(2)
+    expect(next.command.intent).toBe('decoy')
+    expect(next.actors.pursuer.target).not.toBe('companion')
+    expect(next.actors.pursuer.destination).toBe('moon-gate')
+    expect(next.decisionEpoch).toBe(1)
+  })
+
+  it('resolves contact even when pursuer cadence holds movement', () => {
+    const state = createRunningState('courtyard', 'relaxed', 7)
+    state.actors.player.position = { ...state.actors.pursuer.position }
+
+    const contacted = advance(state, [])
+
+    expect(contacted.actors.pursuer.position).toEqual(state.actors.pursuer.position)
+    expect(contacted.actors.player.status).toBe('captured')
+    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
+    expect(contacted.actors.pursuer.target).toBe('player')
+  })
+
+  it('reconciles destination after same-cell capture while retaining actor tie memory', () => {
+    const state = createRunningState('courtyard', 'intense', 7)
+    state.actors.pursuer.position = { x: 2, y: 1 }
+    state.actors.player.position = { x: 1, y: 1 }
+    state.actors.companion.position = { x: 6, y: 6 }
+
+    const contacted = advance(state, [])
+
+    expect(contacted.actors.pursuer.position).toEqual({ x: 1, y: 1 })
+    expect(contacted.actors.player.status).toBe('captured')
+    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
+    expect(contacted.actors.pursuer.target).toBe('player')
+  })
+
+  it('captures opposite-edge crossing', () => {
+    const state = createRunningState('courtyard', 'intense', 7)
+    state.actors.player.position = { x: 1, y: 1 }
+    state.actors.companion.position = { x: 6, y: 6 }
+    state.actors.pursuer.position = { x: 2, y: 1 }
+    state.actors.pursuer.destination = 'player'
+
+    const crossed = advance(
+      state,
+      [action(state, 1, { type: 'player-move', direction: 'right' })],
+      {
+        companion: (current) => current.actors.companion.position,
+        pursuer: () => ({ x: 1, y: 1 }),
+      }
+    )
+
+    expect(crossed.actors.player.status).toBe('captured')
+    expect(crossed.actors.pursuer.destination).toBe('moon-gate')
+    expect(crossed.actors.pursuer.target).toBe('player')
+  })
+
+  it('captures contact while returning to the moon gate', () => {
+    const state = createRunningState('courtyard', 'intense', 7)
+    state.actors.pursuer.position = { x: 1, y: 6 }
+    state.actors.player.position = { x: 0, y: 5 }
+    state.actors.companion.position = { x: 6, y: 0 }
+
+    const contacted = advance(
+      state,
+      [action(state, 1, { type: 'player-move', direction: 'down' })],
+      {
+        companion: (current) => current.actors.companion.position,
+        pursuer: pursuerNextStep,
+      }
+    )
+
+    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
+    expect(contacted.actors.pursuer.position).toEqual(state.exit.position)
+    expect(contacted.actors.player.status).toBe('captured')
   })
 
   it('moves the pursuer and resolves contact on the first chase tick', () => {

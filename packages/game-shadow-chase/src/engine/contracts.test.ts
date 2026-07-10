@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DIFFICULTY_CONFIG,
   OBJECTIVE_COUNT,
   MIN_RUN_TICKS,
   RUN_CAP_TICKS,
@@ -10,7 +11,7 @@ import {
 } from './config'
 import { AUTHORED_MAPS, validateMap } from './maps'
 import { nextStepOnShortestPath } from './pathfinding'
-import { hasLineOfSight } from './line-of-sight'
+import { hasLineOfSight, sightLanes } from './line-of-sight'
 
 describe('frozen engine contracts', () => {
   it('freezes the five-minute fixed-step contract', () => {
@@ -51,10 +52,29 @@ describe('frozen engine contracts', () => {
     expect(validateMap(unsafeSpawn)).toEqual({ ok: false, reason: 'pursuer-spawn-distance' })
   })
 
-  it('blocks sight through walls and beyond the difficulty range', () => {
+  it('uses unlimited unobstructed cardinal sight and no difficulty vision range', () => {
     const map = AUTHORED_MAPS[0]
-    expect(hasLineOfSight(map, { x: 3, y: 1 }, { x: 3, y: 5 }, 8)).toBe(false)
-    expect(hasLineOfSight(map, { x: 0, y: 0 }, { x: 6, y: 0 }, 5)).toBe(false)
-    expect(hasLineOfSight(map, { x: 0, y: 0 }, { x: 6, y: 0 }, 6)).toBe(true)
+    expect(hasLineOfSight(map, { x: 3, y: 1 }, { x: 3, y: 5 })).toBe(false)
+    expect(hasLineOfSight({ ...map, width: 15, walls: [] }, { x: 0, y: 0 }, { x: 14, y: 0 })).toBe(
+      true
+    )
+    expect(hasLineOfSight(map, { x: 0, y: 0 }, { x: 6, y: 6 })).toBe(false)
+    expect(
+      hasLineOfSight({ ...map, width: 5, walls: [{ x: 4, y: 0 }] }, { x: 0, y: 0 }, { x: 3, y: 0 })
+    ).toBe(true)
+    for (const config of Object.values(DIFFICULTY_CONFIG)) {
+      expect(Object.keys(config).sort()).toEqual(['pursuerCadence', 'rescueTicks'])
+    }
+  })
+
+  it('returns four deterministic sight lanes clipped by walls and boundaries', () => {
+    const lanes = sightLanes({ width: 4, height: 4, walls: [{ x: 2, y: 0 }] }, { x: 0, y: 0 })
+
+    expect(lanes).toEqual([
+      { id: 'up', end: { x: 0, y: 0 } },
+      { id: 'left', end: { x: 0, y: 0 } },
+      { id: 'right', end: { x: 1, y: 0 } },
+      { id: 'down', end: { x: 0, y: 3 } },
+    ])
   })
 })

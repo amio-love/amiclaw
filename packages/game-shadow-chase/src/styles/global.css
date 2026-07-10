@@ -92,6 +92,27 @@ h1 {
   line-height: 1.65;
 }
 
+.pursuer-rule {
+  max-width: 580px;
+  margin: 0 auto 18px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-md, 10px);
+  color: var(--text-3, rgba(255, 255, 255, 0.55));
+  background: rgba(0, 0, 0, 0.14);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.pursuer-rule strong {
+  color: var(--text-2, rgba(255, 255, 255, 0.7));
+}
+
+.pursuer-rule p {
+  margin: 3px 0 0;
+}
+
 .start-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -303,6 +324,25 @@ select {
 
 .board-overlay {
   pointer-events: none;
+}
+
+.sight-lane {
+  stroke: rgba(255, 107, 157, 0.2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 3 8;
+}
+
+.pursuer-destination-indicator line,
+.pursuer-destination-indicator circle {
+  fill: none;
+  stroke: rgba(255, 229, 62, 0.42);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 6;
+}
+
+.pursuer-arrowhead path {
+  fill: rgba(255, 229, 62, 0.58);
 }
 
 .path-target {

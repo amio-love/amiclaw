@@ -1,6 +1,12 @@
 import { DIFFICULTY_CONFIG } from './config'
 import { getMap, validateMap } from './maps'
-import type { Coordinate, Difficulty, Direction, MapDefinition, SimulationState } from './types'
+import type { Coordinate, Difficulty, Direction, SimulationState } from './types'
+
+export interface WalkableMap {
+  readonly width: number
+  readonly height: number
+  readonly walls: readonly Coordinate[]
+}
 
 export function coordinatesEqual(left: Coordinate, right: Coordinate): boolean {
   return left.x === right.x && left.y === right.y
@@ -12,11 +18,11 @@ export function isCoordinate(value: unknown): value is Coordinate {
   return Number.isSafeInteger(coordinate.x) && Number.isSafeInteger(coordinate.y)
 }
 
-export function isInsideMap(map: MapDefinition, position: Coordinate): boolean {
+export function isInsideMap(map: WalkableMap, position: Coordinate): boolean {
   return position.x >= 0 && position.y >= 0 && position.x < map.width && position.y < map.height
 }
 
-export function isWalkable(map: MapDefinition, position: Coordinate): boolean {
+export function isWalkable(map: WalkableMap, position: Coordinate): boolean {
   return isInsideMap(map, position) && !map.walls.some((wall) => coordinatesEqual(wall, position))
 }
 
@@ -65,7 +71,12 @@ export function createRunningState(
     actors: {
       player: { id: 'player', position: { ...map.playerSpawn }, status: 'free' },
       companion: { id: 'companion', position: { ...map.companionSpawn }, status: 'free' },
-      pursuer: { id: 'pursuer', position: { ...map.pursuerSpawn }, target: 'player' },
+      pursuer: {
+        id: 'pursuer',
+        position: { ...map.pursuerSpawn },
+        target: 'player',
+        destination: 'moon-gate',
+      },
     },
     objectives: map.objectives.map((objective) => ({
       ...objective,

@@ -24,7 +24,7 @@ export function isSafeTick(value: unknown, max = RUN_CAP_TICKS): value is number
 }
 
 export const DIFFICULTY_CONFIG = Object.freeze({
-  relaxed: Object.freeze({ pursuerCadence: 3, rescueTicks: 32, visionRange: 6 }),
-  standard: Object.freeze({ pursuerCadence: 2, rescueTicks: 24, visionRange: 8 }),
-  intense: Object.freeze({ pursuerCadence: 1, rescueTicks: 20, visionRange: 10 }),
+  relaxed: Object.freeze({ pursuerCadence: 3, rescueTicks: 32 }),
+  standard: Object.freeze({ pursuerCadence: 2, rescueTicks: 24 }),
+  intense: Object.freeze({ pursuerCadence: 1, rescueTicks: 20 }),
 })
