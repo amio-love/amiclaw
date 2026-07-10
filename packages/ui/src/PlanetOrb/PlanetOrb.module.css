@@ -1,0 +1,123 @@
+/* PlanetOrb — the shared warm-cosmic orb recipe (DesignSystem.md §Companion
+   Presence / §Brand). ONE definition of the platform's celestial orb: the
+   two-layer warm highlight (signature yellow + violet accent) over a dark
+   cosmic base, with an inset+glow shadow. No cyan — yellow is the brand color,
+   cyan is wire-only (Hard Prohibition #1).
+
+   Three variants tune the same recipe:
+     - hero    the anonymous homepage hero stage orb
+     - lobby   the BombSquad landing glyph core
+     - avatar  the companion's visible body (breathing, 44–56px)
+
+   Size is driven by --orb-size so a consumer can set it responsively from its
+   own module (hero / lobby) or inline via the `size` prop (avatar). The base
+   mid-tone, box-shadow, and animation are the per-variant knobs. */
+
+.orb {
+  box-sizing: border-box;
+  width: var(--orb-size, 48px);
+  height: var(--orb-size, 48px);
+  border-radius: 50%;
+  /* Shared warm highlight + dark cosmic base. --orb-base-mid is the only
+     color knob (the two warm highlight layers are identical across variants). */
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 229, 62, 0.55), transparent 50%),
+    radial-gradient(circle at 70% 65%, rgba(180, 120, 255, 0.35), transparent 60%),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--orb-base-mid, var(--bg-grad-mid-2)),
+      var(--bg-grad-end) 80%
+    );
+}
+
+/* ----------  hero: anonymous homepage stage orb  ----------
+   Byte-for-byte the pre-consolidation AnonHero `.planet` recipe (mid-tone
+   --bg-grad-mid-2, 80px insets/glow). The consumer keeps size (--orb-size) and
+   the float animation in its own module. */
+.hero {
+  --orb-base-mid: var(--bg-grad-mid-2);
+  box-shadow:
+    inset -20px -40px 80px rgba(0, 0, 0, 0.6),
+    inset 20px 30px 60px rgba(255, 229, 62, 0.18),
+    0 0 80px rgba(255, 229, 62, 0.25);
+}
+
+/* ----------  lobby: BombSquad landing glyph core  ----------
+   Byte-for-byte the pre-consolidation BombSquad `.core` recipe (violet-leaning
+   #1a1530 mid-tone, 40/30px insets, 60px glow). Centers its glyph child. */
+.lobby {
+  --orb-base-mid: #1a1530;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset -10px -16px 40px rgba(0, 0, 0, 0.6),
+    inset 10px 16px 30px rgba(255, 229, 62, 0.18),
+    0 0 60px var(--y-glow-25);
+}
+
+/* ----------  avatar: the companion's visible body  ----------
+   A restrained celestial body (never an anthropomorphic face) that breathes.
+   The glow color, breath cadence, and play state are read from inherited
+   custom properties so a host (CompanionPresence) can modulate them per status
+   without reaching into this module's hashed class names:
+     --orb-glow-color   halo hue (default warm yellow; blue while listening…)
+     --orb-breath-ms    breath cadence
+     --orb-play-state   running | paused (paused = muted, a still orb) */
+.avatar {
+  --orb-base-mid: var(--bg-grad-mid-2);
+  position: relative;
+  box-shadow:
+    inset -3px -6px 12px rgba(0, 0, 0, 0.55),
+    inset 3px 5px 10px rgba(255, 229, 62, 0.16),
+    0 0 6px rgba(255, 229, 62, 0.18);
+  animation: orb-breathe var(--orb-breath-ms, 3600ms) ease-in-out infinite;
+  animation-play-state: var(--orb-play-state, running);
+}
+
+/* The breathing halo — a soft pulsing glow ring, decoupled from the orb's own
+   box-shadow so its color/opacity animate independently of the fixed insets. */
+.avatar::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 13px 2px var(--orb-glow-color, var(--y-glow-50));
+  opacity: 0.55;
+  pointer-events: none;
+  animation: orb-halo var(--orb-breath-ms, 3600ms) ease-in-out infinite;
+  animation-play-state: var(--orb-play-state, running);
+}
+
+/* Consumer opt-out of the breathing (a static orb). */
+.still,
+.still::after {
+  animation: none;
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes orb-halo {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar,
+  .avatar::after {
+    animation: none;
+  }
+}

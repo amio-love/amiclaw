@@ -70,23 +70,12 @@
   pointer-events: none;
 }
 
+/* The orb visual (warm-cosmic recipe + shadow) is the shared PlanetOrb
+   `hero` variant. This class now only sizes it (--orb-size, responsive below)
+   and drives the hero float. */
 .planet {
   position: relative;
-  width: 320px;
-  height: 320px;
-  border-radius: 50%;
-  /* Warm cosmic orb — mirrors the BombSquad lobby `.core` recipe
-     (warm-yellow core glow + violet accent over a dark cosmic base), scaled
-     to the hero's larger geometry. No cyan: yellow is the brand color, cyan is
-     wire-only (DesignSystem.md §Brand / Hard Prohibition #1). */
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 229, 62, 0.55), transparent 50%),
-    radial-gradient(circle at 70% 65%, rgba(180, 120, 255, 0.35), transparent 60%),
-    radial-gradient(circle at 50% 50%, var(--bg-grad-mid-2), var(--bg-grad-end) 80%);
-  box-shadow:
-    inset -20px -40px 80px rgba(0, 0, 0, 0.6),
-    inset 20px 30px 60px rgba(255, 229, 62, 0.18),
-    0 0 80px rgba(255, 229, 62, 0.25);
+  --orb-size: 320px;
   animation: float 5s ease-in-out infinite;
 }
 
@@ -178,8 +167,7 @@
   }
 
   .planet {
-    width: 280px;
-    height: 280px;
+    --orb-size: 280px;
   }
 
   .planetRing {
@@ -253,8 +241,7 @@
   }
 
   .planet {
-    width: 260px;
-    height: 260px;
+    --orb-size: 260px;
   }
 
   .planetRing {

@@ -87,23 +87,13 @@
   animation: floatHero 5s ease-in-out infinite;
 }
 
+/* The orb visual (warm-cosmic recipe + shadow + glyph centering) is the shared
+   PlanetOrb `lobby` variant. This class now only stacks it above the rings
+   (z-index) and sizes it (--orb-size, responsive below). */
 .core {
   position: relative;
   z-index: 2;
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 229, 62, 0.55), transparent 50%),
-    radial-gradient(circle at 70% 65%, rgba(180, 120, 255, 0.35), transparent 60%),
-    radial-gradient(circle at 50% 50%, #1a1530, #050511 80%);
-  box-shadow:
-    inset -10px -16px 40px rgba(0, 0, 0, 0.6),
-    inset 10px 16px 30px rgba(255, 229, 62, 0.18),
-    0 0 60px var(--y-glow-25);
+  --orb-size: 140px;
 }
 
 /* The hero glyph carries a wider 24px halo than Glyph's built-in glow,
@@ -386,8 +376,7 @@
   }
 
   .core {
-    width: 160px;
-    height: 160px;
+    --orb-size: 160px;
   }
 
   .ring1 {
@@ -429,8 +418,7 @@
   }
 
   .core {
-    width: 200px;
-    height: 200px;
+    --orb-size: 200px;
   }
 
   .ring1 {
