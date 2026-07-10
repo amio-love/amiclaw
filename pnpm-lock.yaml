@@ -280,6 +280,9 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.0.1)(jsdom@29.1.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.22.4)(yaml@2.9.0))
+      wrangler:
+        specifier: ^4.103.0
+        version: 4.105.0(@cloudflare/workers-types@4.20260621.1)
 
   packages/game-shadow-chase:
     dependencies:
