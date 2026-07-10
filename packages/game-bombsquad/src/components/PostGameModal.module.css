@@ -1,127 +1,15 @@
-/* PostGameModal — unified post-game modal (nickname gate + endgame
-   survey) in the Atlas star-chart visual language.
+/* PostGameModal — the post-game endgame survey, rendered inside the shared
+   @amiclaw/ui `Modal` primitive. The Modal supplies the glass dialog, dimmed
+   cosmic backdrop, title, close (×), Esc / backdrop dismissal and scroll-lock;
+   this stylesheet only lays out the survey form inside it.
 
-   A glass-card dialog floating on a dimmed cosmic backdrop. AMIO-yellow
-   is the only accent; the retired CRT / terminal / neon-cyan aesthetic
-   is not reproduced. Styling is derived by analogy from the redesigned
-   ResultPage glass cards (`.rankCard` / `.breakdown`) and the token
-   reference in docs/DesignSystem.md. */
-
-.overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  /* Deep-space dim — lets the page's star field bleed faintly through. */
-  background: rgba(5, 5, 17, 0.78);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 1100;
-}
-
-.dialog {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
-  /* Scroll fallback so a short landscape viewport cannot clip the dialog
-     without an escape — leaves the 24px overlay padding top and bottom. */
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-  /* Glass card recipe — game glass (cooler blue tint) + hairline border. */
-  background: var(--glass-strong);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-2xl);
-  padding: 32px 24px 24px;
-  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.closeBtn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-4);
-  font-size: 1rem;
-  cursor: pointer;
-  transition:
-    color var(--t-fast),
-    background var(--t-fast);
-}
-
-.closeBtn:hover,
-.closeBtn:focus-visible {
-  color: var(--y);
-  background: var(--amio-yellow-glow-10);
-}
-
-.title {
-  margin: 0;
-  padding-right: 32px;
-  font: 400 24px var(--font-display);
-  font-style: italic;
-  letter-spacing: -0.01em;
-  color: var(--text-1);
-}
-
-.tip {
-  margin: 0;
-  font: 400 13px/1.55 var(--font-body);
-  color: var(--soft);
-}
+   AMIO-yellow is the only accent; the retired CRT / terminal / neon-cyan
+   aesthetic is not reproduced. */
 
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.divider {
-  width: 100%;
-  height: 1px;
-  border: none;
-  margin: 0;
-  background: var(--hairline);
-}
-
-.surveyIntro {
-  margin: 0;
-  font: 400 13px/1.55 var(--font-body);
-  color: var(--soft);
-}
-
-/* --- Nickname section ------------------------------------------------- */
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.labelText {
-  font: 500 10px var(--amio-font-mono);
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
 }
 
 .input {
@@ -147,27 +35,14 @@
   box-shadow: 0 0 0 3px var(--y-glow-25);
 }
 
-.meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 1.2em;
-  gap: 12px;
+.counter {
+  letter-spacing: 0.05em;
+  white-space: nowrap;
   font: 400 12px var(--amio-font-mono);
   color: var(--text-4);
 }
 
-.counter {
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
-
-.error {
-  color: var(--rose);
-  text-align: right;
-}
-
-/* --- Survey section --------------------------------------------------- */
+/* --- Survey questions ------------------------------------------------- */
 
 .question {
   /* Reset the fieldset's native chrome — it is only used for grouping
@@ -282,13 +157,12 @@
 
 .questionHighlight .counter {
   align-self: flex-end;
-  color: var(--text-4);
 }
 
 /* --- Footer ----------------------------------------------------------- */
 
-/* Confirm + skip use the shared BombSquad pill Button; this only stacks
-   them — primary on top, the skip ghost beneath it when dismissable. */
+/* Submit + skip use the shared BombSquad pill Button; this only stacks
+   them — primary on top, the skip ghost beneath. */
 .actions {
   display: flex;
   flex-direction: column;

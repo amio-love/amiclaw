@@ -58,11 +58,11 @@ flows:
     name: Daily win to leaderboard
     description: >-
       After defusing the daily bomb the result page celebrates first — no
-      auto-opened modal — and shows an honest not-on-board notice; the
-      rank-card CTA opens the deferrable nickname gate (skippable and
-      re-openable), posts the score on confirm, and the player navigates to
-      the leaderboard to find their own row.
-    steps: [result-win, rank-cta, nickname-modal, score-submit, global-rank, leaderboard]
+      auto-opened modal — and a signed-in run auto-submits under the account
+      name (ruling B), asking once inline which AI helped when the tool is not
+      inferable; the player then navigates to the leaderboard to find their own
+      row.
+    steps: [result-win, tool-ask, score-submit, global-rank, leaderboard]
     status: active
 
   - id: leaderboard-ai-metadata

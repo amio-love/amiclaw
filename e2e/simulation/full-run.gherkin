@@ -6,10 +6,10 @@
 # detonator. Daily-challenge mode runs 4 modules; three strikes detonate the
 # bomb and the run fails (the only daily failure path). The daily-challenge scenario
 # explicitly tests the "decline submission" path: the player completes the run
-# but does NOT submit a score — the NicknameModal is left unfilled. This
-# prevents leaderboard pollution from simulation runs (per the Design proposal
-# Area 3 decision: fresh browser profile, no saved nickname, decline
-# submission).
+# but does NOT submit a score — the run is anonymous, so the result page shows
+# only a calm login invite, which the player declines. This prevents leaderboard
+# pollution from simulation runs (per the Design proposal Area 3 decision: fresh
+# browser profile, anonymous, decline the login invite).
 #
 # These scenarios exercise the full collaboration arc: game entry, module
 # sequencing, cross-module time pressure, mode-specific end conditions, and
@@ -96,8 +96,8 @@ Feature: Full game run collaboration
     And the fourth module is defused
 
     Then the result page shows the heading for a successful daily defusal
-    And the NicknameModal appears because no nickname is stored on this fresh profile
-    And the player does NOT fill in the NicknameModal — the submission is declined
+    And the result page shows the login invite because this fresh profile is anonymous
+    And the player declines the login invite — the run stays off the board
     And no score is submitted to the leaderboard
 
     Then the coordinator records the total in-game time

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
-import { Button, Scenery } from '@amiclaw/ui'
+import PostGameModal from '@/components/PostGameModal'
+import { AI_TOOLS, Button, COMPANION_TOOL_ID, Disclosure, Scenery } from '@amiclaw/ui'
 import {
   markArcadeProfileEventsClaimed,
   readArcadeLocalProfile,
@@ -9,7 +9,7 @@ import {
   summarizeArcadeLocalProfile,
 } from '@amiclaw/arcade-profile/local'
 import type { ArcadeDailyLoopSummary } from '@amiclaw/arcade-profile/types'
-import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
+import { fetchArcadeProfile, submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
 import { getDailyResetHint, getTodayString } from '@shared/date'
@@ -22,12 +22,14 @@ import { getStoredNickname } from '@/utils/nickname'
 import { copyToClipboard } from '@/utils/clipboard'
 import {
   getStoredLeaderboardPlayerMetadata,
+  setStoredLeaderboardPlayerMetadata,
   type LeaderboardPlayerMetadata,
 } from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
 import { readEntryRecoveryState } from '@/utils/session'
 import { wasClosingRecapFired } from '@/voice/closing-recap-log'
 import { useCompanionPartner } from '@/hooks/useCompanionPartner'
+import type { SurveyAnswers } from '@shared/event-types'
 import {
   readBeatLog,
   readCachedVoicePosture,
@@ -64,18 +66,44 @@ const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
 // A practice win has no rank reveal to settle behind (#209 defers the daily
 // survey until the rank card lands). Its celebration beat is the win payoff
 // itself — the success ring + glyph pop + time + companion reaction — so the
-// survey waits a longer, celebration-length window before opening, instead of
-// snapping up over the payoff a beat after mount (audit F11).
+// survey waits a longer, celebration-length window before folding in, instead of
+// appearing a beat after mount (audit F11).
 const RESULT_PRACTICE_CELEBRATION_MS = 4200
 
 /** The result screen has two visual variants (handoff README §6.6 / §6.7). */
 type ResultVariant = 'success' | 'failure'
-type PostGameModalPurpose = 'leaderboard' | 'survey'
 type ProfileSaveState = 'idle' | 'saved-local' | 'synced' | 'account-error' | 'unavailable'
 // `manual` is the terminal fallback: neither the Web Share API nor the
 // clipboard was usable, so the share text is surfaced in a selectable field for
 // the player to copy by hand. No path dead-ends in a bare 「分享失败」.
 type ShareState = 'idle' | 'shared' | 'copied' | 'manual'
+
+/**
+ * Who this settlement is submitting as. Resolved once, asynchronously, for a
+ * won daily run:
+ *  - `signed-in`  → an account with a resolvable username; the run auto-submits
+ *    under it, no user action (ruling B).
+ *  - `need-name`  → signed in but no public label and no device nickname yet;
+ *    the player sets a name in /me to appear on the board.
+ *  - `anon`       → not signed in (or the profile read failed); ONE calm login
+ *    invite, and the run only goes on the board if they log in. The anonymous
+ *    free-nickname submission flow is retired.
+ */
+type SettlementIdentity =
+  | { status: 'resolving' }
+  | { status: 'signed-in'; username: string }
+  | { status: 'need-name' }
+  | { status: 'anon' }
+
+/**
+ * The leaderboard `ai_tool`, resolved inference-first for a signed-in
+ * auto-submit (ruling B):
+ *  - `ready` → inferred from a companion co-play (mode②) run, or reused from a
+ *    prior device choice; submitted with no ask.
+ *  - `ask`   → not inferable and no stored choice; the settlement shows one
+ *    inline row of SSOT chips, picked once and remembered.
+ */
+type AiToolResolution = { kind: 'ready'; aiTool: string; aiModel?: string } | { kind: 'ask' }
 
 /**
  * Map a frozen game outcome to a result variant. `defused` and
@@ -100,6 +128,22 @@ function consolationText(outcome: GameOutcome, strikeCount: number): string {
     return '三次失误，这一局就到这了 —— 趁记得，跟我聊聊刚才哪几步卡住了，下一局我们会更稳。'
   }
   return '时间走得比想象中快 —— 跟我复盘一下这局哪里慢了，理清思路，下一局再来。'
+}
+
+/** Resolve the leaderboard AI-tool inference-first for the current run. Pure —
+ *  reads localStorage + the frozen entry-recovery state, no writes. */
+function resolveAiTool(platformPartner: boolean): AiToolResolution {
+  // A run played with the platform companion's voice connected (mode②) tags as
+  // the companion — a per-run inference, never written back to the device's BYO
+  // tool choice.
+  if (platformPartner) return { kind: 'ready', aiTool: COMPANION_TOOL_ID }
+  const stored = getStoredLeaderboardPlayerMetadata()
+  if (stored) {
+    return stored.aiModel
+      ? { kind: 'ready', aiTool: stored.aiTool, aiModel: stored.aiModel }
+      : { kind: 'ready', aiTool: stored.aiTool }
+  }
+  return { kind: 'ask' }
 }
 
 export default function ResultPage() {
@@ -254,7 +298,7 @@ export default function ResultPage() {
   ])
 
   // Daily mode submits a score — but only on a successful defuse. An
-  // exploded run never submits and never asks for a nickname. Practice mode
+  // exploded run never submits and never asks for anything. Practice mode
   // never submits in any case.
   const hasFinishedDailyRun =
     state.mode === 'daily' &&
@@ -263,82 +307,41 @@ export default function ResultPage() {
     state.moduleStats.length > 0 &&
     state.gameRunId !== null
 
-  // Lazy initializers: read the stored nickname once on mount. Subsequent
-  // useState calls reuse the captured value so the pieces of mount
-  // state stay consistent without triple-reading localStorage.
-  const [nickname, setNickname] = useState<string | null>(() => getStoredNickname())
-  const [leaderboardMetadata, setLeaderboardMetadata] = useState<LeaderboardPlayerMetadata | null>(
-    () => getStoredLeaderboardPlayerMetadata()
+  // Inference-first AI-tool resolution, frozen on mount (pure read).
+  const [aiToolResolution] = useState<AiToolResolution>(() =>
+    resolveAiTool(entryRecovery?.platformPartner === true)
   )
+  // The chip picked from the inline ask, if any — remembered for next time.
+  const [pickedAiTool, setPickedAiTool] = useState<string | null>(null)
 
-  // The post-game modal has two separate purposes. The leaderboard gate NEVER
-  // auto-opens (audit F1): the celebration and rank reveal own the first beat,
-  // and the rank card's 上榜 CTA opens the gate on demand — skippable, and
-  // re-openable later from the same card (deferred fill). The once-per-device
-  // survey waits until the celebration beat has settled, so it can never stack
-  // over the rank reveal.
-  const [needNickname] = useState(() => hasFinishedDailyRun && nickname === null)
-  const [needLeaderboardMetadata] = useState(
-    () => hasFinishedDailyRun && leaderboardMetadata === null
+  // Concrete metadata to submit once identity is known: the inferred/stored
+  // value, or the chip the player just picked. `null` means we still need the
+  // inline chips ask.
+  const resolvedMetadata: LeaderboardPlayerMetadata | null =
+    aiToolResolution.kind === 'ready'
+      ? aiToolResolution.aiModel
+        ? { aiTool: aiToolResolution.aiTool, aiModel: aiToolResolution.aiModel }
+        : { aiTool: aiToolResolution.aiTool }
+      : pickedAiTool
+        ? { aiTool: pickedAiTool }
+        : null
+
+  const [identity, setIdentity] = useState<SettlementIdentity>(() =>
+    hasFinishedDailyRun ? { status: 'resolving' } : { status: 'anon' }
   )
-  const [needSurvey] = useState(() => !hasAnsweredSurvey())
-  const [leaderboardGateOpen, setLeaderboardGateOpen] = useState(false)
-  // Live, not mount-frozen: flips false the moment a confirm stores both
-  // values, which swaps the rank card's CTA for the submitting → rank states.
-  const needsSubmissionInput =
-    hasFinishedDailyRun && (nickname === null || leaderboardMetadata === null)
-  const [surveyReady, setSurveyReady] = useState(false)
-  const [surveyRetired, setSurveyRetired] = useState(false)
-  // A server rejection notice (成绩未通过合理性校验) is rendered inline in the rank card
-  // and must be readable before the once-per-device survey opens over it — the
-  // same stacking guard as #209 deferring the survey behind the rank reveal
-  // (F8). A network failure is deliberately NOT gated: it invites an immediate
-  // retry and carries no board verdict the player must absorb first.
-  const rejectionShowing = submitFailed && submitFailKind === 'rejected'
-  const surveyOpen =
-    needSurvey && !surveyRetired && surveyReady && !leaderboardGateOpen && !rejectionShowing
-  const modalPurpose: PostGameModalPurpose | null = leaderboardGateOpen
-    ? 'leaderboard'
-    : surveyOpen
-      ? 'survey'
-      : null
-  const modalOpen = modalPurpose !== null
-  // Initialize submitting=true only when the effect below will actually fire a
-  // request, so we avoid a synchronous setState in the effect body
-  // (react-hooks/set-state-in-effect). First-visit daily runs wait for the
-  // modal confirmation before flipping submitting=true.
-  const [submitting, setSubmitting] = useState(
-    () => hasFinishedDailyRun && nickname !== null && leaderboardMetadata !== null
-  )
+  const [submitting, setSubmitting] = useState(false)
 
   // Idempotency latch: prevents the same run from being submitted more than
-  // once within a single ResultPage lifecycle. Guards all three submit paths
-  // (mount effect, modal-confirm, retry). The latch is released back to 'idle'
-  // on a network failure so the retry button can fire a second attempt.
-  // Across remounts (e.g. page refresh with game state still in sessionStorage),
-  // the per-run stable run_id in buildSubmission + backend dedup provide the
+  // once within a single ResultPage lifecycle. Guards every submit path
+  // (auto-submit, chip-pick, retry). The latch is released back to 'idle' on a
+  // network failure so the retry button can fire a second attempt. Across
+  // remounts (page refresh) the per-run stable run_id + backend dedup provide a
   // second layer of protection.
   const submittedRef = useRef<'idle' | 'in-flight' | 'done'>('idle')
-
-  // The survey delay counts from when the celebration beat settles, not from
-  // mount (audit F13): a daily defused run settles when its rank outcome
-  // arrives (rank revealed, or the submission failed); any other run settles
-  // on mount. A first win whose leaderboard gate stays unfilled never settles
-  // this session — the once-per-device survey simply waits for a later one.
-  const celebrationSettled = !hasFinishedDailyRun || rankResult !== null || submitFailed
-  // A practice WIN settles on mount (no rank), so it uses the longer celebration
-  // window to let the win payoff land first (audit F11); a daily win already
-  // waited for its rank reveal, and any failure has no celebration to protect —
-  // both keep the base delay.
-  const surveyDelayMs =
-    variant === 'success' && !hasFinishedDailyRun
-      ? RESULT_PRACTICE_CELEBRATION_MS
-      : RESULT_FEEDBACK_SURVEY_DELAY_MS
-  useEffect(() => {
-    if (!needSurvey || noRunData || !celebrationSettled) return
-    const id = setTimeout(() => setSurveyReady(true), surveyDelayMs)
-    return () => clearTimeout(id)
-  }, [needSurvey, noRunData, celebrationSettled, surveyDelayMs])
+  // The last submitted identity + metadata, so the retry button can re-fire.
+  const lastSubmitRef = useRef<{ username: string; metadata: LeaderboardPlayerMetadata } | null>(
+    null
+  )
 
   const buildSubmission = useCallback(
     (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata): ScoreSubmission | null => {
@@ -376,10 +379,10 @@ export default function ResultPage() {
   )
 
   // Applies a submission outcome to UI state. Centralizes the three-way mapping
-  // (success / network failure / server rejection) so the mount, modal-confirm,
-  // and retry paths stay in lockstep.
-  // Also manages the idempotency latch: locks it permanently on success so no
-  // further submit can fire; releases it to 'idle' on failure so retry works.
+  // (success / network failure / server rejection) so every submit path stays
+  // in lockstep. Also manages the idempotency latch: locks it permanently on
+  // success so no further submit can fire; releases it to 'idle' on failure so
+  // retry works.
   const applySubmitResult = useCallback(
     (submission: ScoreSubmission, result: SubmitScoreResult) => {
       setSubmitting(false)
@@ -414,28 +417,23 @@ export default function ResultPage() {
     [recordOptimistic]
   )
 
-  // Fires the actual submission. Callers own `submitting` toggles — the mount
-  // path relies on the lazy `useState` initializer above to start truthy, and
-  // the modal-confirm path flips it on synchronously before calling here.
-  // Keeping `setSubmitting(true)` out of this function lets us call it from
-  // inside `useEffect` without tripping react-hooks/set-state-in-effect.
-  //
-  // Idempotency: the submittedRef latch guards against concurrent or double
-  // invocations within a single component lifecycle (e.g. React StrictMode
-  // double-effect invocation). A cross-mount double (page refresh) is handled
-  // by the stable run_id in buildSubmission + backend dedup.
+  // Fires the actual submission. Callers own the `setSubmitting(true)` toggle so
+  // this stays callable from an async continuation without tripping
+  // react-hooks/set-state-in-effect. Idempotency: the submittedRef latch guards
+  // against concurrent or double invocations within one component lifecycle.
   const performSubmission = useCallback(
-    (nicknameValue: string, metadataValue: LeaderboardPlayerMetadata) => {
+    (username: string, metadata: LeaderboardPlayerMetadata) => {
       if (submittedRef.current !== 'idle') return // already in-flight or done
       submittedRef.current = 'in-flight'
+      lastSubmitRef.current = { username, metadata }
 
-      const submission = buildSubmission(nicknameValue, metadataValue)
+      const submission = buildSubmission(username, metadata)
       if (!submission) {
         submittedRef.current = 'idle' // release if build failed (totalMs unavailable)
         return
       }
 
-      // Persist locally so a retry can succeed even if user navigates back
+      // Persist locally so a retry can succeed even if the user navigates back.
       try {
         sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
       } catch {
@@ -447,82 +445,116 @@ export default function ResultPage() {
     [buildSubmission, applySubmitResult]
   )
 
-  // Submit score on mount when a nickname is already known (returning daily
-  // player). First-visit daily players wait for the modal handler below.
+  // Resolve identity once for a won daily run and, when it lands signed-in with
+  // an inferred/stored tool, auto-submit with no user action (ruling B). The
+  // setState lives inside the async `.then`, so it does not trip
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
     if (!hasFinishedDailyRun) return
-    if (nickname === null) return
-    if (leaderboardMetadata === null) return
-    performSubmission(nickname, leaderboardMetadata)
+    let active = true
+    fetchArcadeProfile().then((result) => {
+      if (!active) return
+      if (result.kind !== 'ok') {
+        setIdentity({ status: 'anon' })
+        return
+      }
+      const username = result.publicProfile.public_label ?? getStoredNickname()
+      if (!username) {
+        setIdentity({ status: 'need-name' })
+        return
+      }
+      setIdentity({ status: 'signed-in', username })
+      if (aiToolResolution.kind === 'ready') {
+        setSubmitting(true)
+        performSubmission(username, {
+          aiTool: aiToolResolution.aiTool,
+          ...(aiToolResolution.aiModel ? { aiModel: aiToolResolution.aiModel } : {}),
+        })
+      }
+    })
+    return () => {
+      active = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Unified confirm handler. Runs the nickname-confirm path when the nickname
-  // section was present, and emits `survey_submit` only when the survey was
-  // actually completed. Whenever the survey section was shown, the device is
-  // marked answered on confirm — a confirm-past with no answers still retires
-  // the survey so it never reappears.
-  const handleModalConfirm = useCallback(
-    (result: PostGameModalResult) => {
-      if (result.nickname !== undefined) {
-        setNickname(result.nickname)
-      }
-      if (result.leaderboardMetadata !== undefined) {
-        setLeaderboardMetadata(result.leaderboardMetadata)
-      }
-      const confirmedNickname = result.nickname ?? nickname
-      const confirmedMetadata = result.leaderboardMetadata ?? leaderboardMetadata
-      if (confirmedNickname !== null && confirmedMetadata !== null && hasFinishedDailyRun) {
-        setSubmitting(true)
-        performSubmission(confirmedNickname, confirmedMetadata)
-      }
-      const completingSurvey = modalPurpose === 'survey'
-      if (completingSurvey && result.survey !== undefined) {
-        logEvent('survey_submit', { ...result.survey })
-      }
-      if (completingSurvey && needSurvey) {
-        markSurveyAnswered()
-        setSurveyRetired(true)
-      }
-      if (modalPurpose === 'leaderboard') {
-        setLeaderboardGateOpen(false)
-      }
+  // The player picks their AI tool from the inline chips (first-time BYO run,
+  // nothing inferable / stored). One tap remembers the choice and submits.
+  const handlePickAiTool = useCallback(
+    (toolId: string) => {
+      if (identity.status !== 'signed-in') return
+      const metadata: LeaderboardPlayerMetadata = { aiTool: toolId }
+      setStoredLeaderboardPlayerMetadata(metadata)
+      setPickedAiTool(toolId)
+      setSubmitting(true)
+      performSubmission(identity.username, metadata)
     },
-    [
-      performSubmission,
-      needSurvey,
-      nickname,
-      leaderboardMetadata,
-      hasFinishedDailyRun,
-      modalPurpose,
-    ]
+    [identity, performSubmission]
   )
 
-  // Survey-only dismissal. The device is marked answered so the survey does
-  // not reappear, but no `survey_submit` event fires — a skip is not a
-  // response.
-  const handleModalSkip = useCallback(() => {
-    if (modalPurpose === 'survey') {
-      markSurveyAnswered()
-      setSurveyRetired(true)
-    }
-    if (modalPurpose === 'leaderboard') {
-      setLeaderboardGateOpen(false)
-    }
-  }, [modalPurpose])
-
   const handleRetrySubmit = useCallback(() => {
-    if (nickname === null) return
-    if (leaderboardMetadata === null) return
+    const last = lastSubmitRef.current
+    if (!last) return
     setRetried(true)
     setSubmitFailed(false)
     setSubmitFailKind(null)
     setSubmitFailStatus(null)
     setSubmitting(true)
-    // applySubmitResult resets submittedRef to 'idle' on failure, so
-    // performSubmission will proceed here on the retry path.
-    performSubmission(nickname, leaderboardMetadata)
-  }, [performSubmission, nickname, leaderboardMetadata])
+    // applySubmitResult reset submittedRef to 'idle' on failure, so
+    // performSubmission proceeds here on the retry path.
+    performSubmission(last.username, last.metadata)
+  }, [performSubmission])
+
+  // --- Endgame survey (once per device, fold-in entry — audit U13) -----------
+  // The survey is never an auto-opening modal: it appears as a calm inline
+  // 「聊聊这一局」entry AFTER the settlement has settled, and only opens the
+  // modal when the player taps it — so it can never stack over the celebration
+  // or the consolation moment (win and failure alike).
+  const [needSurvey] = useState(() => !hasAnsweredSurvey())
+  const [surveyRetired, setSurveyRetired] = useState(false)
+  const [surveyEntryReady, setSurveyEntryReady] = useState(false)
+  const [surveyModalOpen, setSurveyModalOpen] = useState(false)
+
+  // A server rejection notice (成绩未通过合理性校验) must be resolved before the
+  // survey entry folds in — the player has to see why nothing landed.
+  const rejectionShowing = submitFailed && submitFailKind === 'rejected'
+  // A won daily run settles when its rank outcome arrives (revealed or failed),
+  // or the identity resolved to a state with no pending auto-submit (anon /
+  // need-name). Any other run settles on mount.
+  const celebrationSettled =
+    !hasFinishedDailyRun ||
+    rankResult !== null ||
+    submitFailed ||
+    identity.status === 'anon' ||
+    identity.status === 'need-name'
+  // A practice WIN settles on mount (no rank), so it uses the longer celebration
+  // window to let the win payoff land first (audit F11); a daily win already
+  // waited for its rank reveal, and any failure has no celebration to protect —
+  // both keep the base delay.
+  const surveyDelayMs =
+    variant === 'success' && !hasFinishedDailyRun
+      ? RESULT_PRACTICE_CELEBRATION_MS
+      : RESULT_FEEDBACK_SURVEY_DELAY_MS
+  useEffect(() => {
+    if (!needSurvey || noRunData || !celebrationSettled) return
+    const id = setTimeout(() => setSurveyEntryReady(true), surveyDelayMs)
+    return () => clearTimeout(id)
+  }, [needSurvey, noRunData, celebrationSettled, surveyDelayMs])
+
+  const surveyEntryVisible = needSurvey && !surveyRetired && surveyEntryReady && !rejectionShowing
+
+  const handleSurveySubmit = useCallback((survey: SurveyAnswers) => {
+    logEvent('survey_submit', { ...survey })
+    markSurveyAnswered()
+    setSurveyRetired(true)
+    setSurveyModalOpen(false)
+  }, [])
+
+  const handleSurveySkip = useCallback(() => {
+    markSurveyAnswered()
+    setSurveyRetired(true)
+    setSurveyModalOpen(false)
+  }, [])
 
   const buildShareText = useCallback(() => {
     const time = totalMs !== null ? formatMs(totalMs) : '一局'
@@ -744,59 +776,94 @@ export default function ResultPage() {
               ) : (
                 <div className={styles.rankCell}>
                   <div className={styles.rankPending}>
-                    {needsSubmissionInput && (
-                      // Honest not-on-board state (audit F1): the run is NOT
-                      // on the leaderboard until the player fills the gate.
-                      // The CTA re-opens the modal at any time — the deferred
-                      // fill path after a skip.
+                    {identity.status === 'resolving' && '正在准备上榜…'}
+
+                    {identity.status === 'anon' && (
+                      // ONE calm login invite (ruling B / U13): honest, never
+                      // stacked over the celebration. Decline = the run simply
+                      // is not on the board.
                       <>
-                        这局成绩还没上榜。填写昵称和 AI 搭档后，即可上榜并查看全球排名。
+                        这局拆弹成功，但还没上榜。登录后自动记录成绩，看看你排第几。
                         <button
-                          className={styles.boardCta}
-                          onClick={() => setLeaderboardGateOpen(true)}
+                          className={styles.inviteCta}
+                          onClick={() => window.location.assign('/login')}
                         >
-                          填写并上榜
+                          登录 / 注册<span aria-hidden="true"> →</span>
                         </button>
                       </>
                     )}
-                    {!needsSubmissionInput && submitting && '提交成绩中…'}
-                    {!needsSubmissionInput &&
-                      !submitting &&
-                      submitFailed &&
-                      (submitFailKind === 'rejected' ? (
-                        // Server reached and refused — not an offline state.
-                        // Retry once for transient refusals (e.g. rate limit);
-                        // a persistent rejection points the player at feedback.
-                        // Fully-localized honest copy (F2): a 429 is a pacing
-                        // limit that a later retry clears; anything else is the
-                        // plausibility校验. Neither leaks the server's raw
-                        // English string or the 60s threshold.
-                        retried ? (
-                          <>
-                            {submitFailStatus === 429
-                              ? '提交太频繁，请稍后再来重新提交。'
-                              : '成绩未通过合理性校验，暂时无法上榜。'}
-                            可邮件反馈 byheaven0912@gmail.com
-                          </>
+
+                    {identity.status === 'need-name' && (
+                      <>
+                        这局成绩还没上榜。在「我的」里给自己起个名字，就能自动上榜。
+                        <button
+                          className={styles.inviteCta}
+                          onClick={() => window.location.assign('/me')}
+                        >
+                          去设置名字<span aria-hidden="true"> →</span>
+                        </button>
+                      </>
+                    )}
+
+                    {identity.status === 'signed-in' &&
+                      (resolvedMetadata === null ? (
+                        // First-time BYO run — the tool is not inferable and no
+                        // choice is stored. One inline row of SSOT chips, picked
+                        // once and remembered, then the run auto-submits.
+                        <div className={styles.toolAsk}>
+                          <div className={styles.toolAskLabel}>和哪个 AI 一起玩的？</div>
+                          <div className={styles.toolChips}>
+                            {AI_TOOLS.map((tool) => (
+                              <button
+                                key={tool}
+                                type="button"
+                                className={styles.toolChip}
+                                onClick={() => handlePickAiTool(tool.toLowerCase())}
+                              >
+                                {tool}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : submitting ? (
+                        '正在把成绩送上榜…'
+                      ) : (
+                        submitFailed &&
+                        (submitFailKind === 'rejected' ? (
+                          // Server reached and refused — not an offline state.
+                          // Retry once for transient refusals (e.g. rate limit);
+                          // a persistent rejection points the player at feedback.
+                          // Fully-localized honest copy (F2): a 429 is a pacing
+                          // limit that a later retry clears; anything else is the
+                          // plausibility校验. Neither leaks the server's raw
+                          // English string or the 60s threshold.
+                          retried ? (
+                            <>
+                              {submitFailStatus === 429
+                                ? '提交太频繁，请稍后再来重新提交。'
+                                : '成绩未通过合理性校验，暂时无法上榜。'}
+                              可邮件反馈 byheaven0912@gmail.com
+                            </>
+                          ) : (
+                            <>
+                              {submitFailStatus === 429
+                                ? '提交太频繁，请稍后再试'
+                                : '成绩未通过合理性校验'}
+                              <button className={styles.retryBtn} onClick={handleRetrySubmit}>
+                                重试
+                              </button>
+                            </>
+                          )
+                        ) : retried ? (
+                          '网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com'
                         ) : (
                           <>
-                            {submitFailStatus === 429
-                              ? '提交太频繁，请稍后再试'
-                              : '成绩未通过合理性校验'}
+                            提交失败（可能离线）
                             <button className={styles.retryBtn} onClick={handleRetrySubmit}>
                               重试
                             </button>
                           </>
-                        )
-                      ) : retried ? (
-                        '网络不稳定，可下次再来重新提交。或邮件反馈 byheaven0912@gmail.com'
-                      ) : (
-                        <>
-                          提交失败（可能离线）
-                          <button className={styles.retryBtn} onClick={handleRetrySubmit}>
-                            重试
-                          </button>
-                        </>
+                        ))
                       ))}
                   </div>
                 </div>
@@ -804,19 +871,48 @@ export default function ResultPage() {
             </div>
           )}
 
+          {variant === 'failure' && (
+            <div className={styles.quote}>
+              <div className={styles.quoteLabel}>AI 说</div>
+              <p className={styles.quoteBody}>「{consolationText(outcome, state.strikeCount)}」</p>
+            </div>
+          )}
+
+          {/* U12: 再来一局 + 回主页 sit on the first screen, right after the rank
+              reveal / consolation — the roguelike momentum CTA is one tap away,
+              not buried under the profile / breakdown cards below. */}
+          <div className={styles.cta}>
+            <Button variant="primary" full onClick={handlePlayAgain}>
+              再来一局<span aria-hidden="true"> →</span>
+            </Button>
+            <Button variant="ghost" full onClick={() => navigate('/bombsquad')}>
+              回主页
+            </Button>
+          </div>
+
           {showDailyLoopCard && (
             <div className={styles.loopCard}>
               <div>
                 <div className={styles.loopLabel}>我的档案</div>
                 <div className={styles.loopTitle}>{profileSaveText(profileSaveState)}</div>
+                {/* rc §3 #6/#7 + U15: the default line is the warm fact; the
+                    streak counts + the per-card UTC-reset caption relocate into
+                    ONE ⓘ instead of defaulting a caption onto every card. */}
                 <p className={styles.loopText}>
                   {state.mode === 'daily' &&
                   outcome === 'defused' &&
                   dailyLoop?.streak.today_completed
-                    ? `今日已打卡 · 连续 ${dailyLoop.streak.current_days} 天 · 最长 ${dailyLoop.streak.longest_days} 天`
-                    : state.mode === 'daily' && outcome === 'defused'
-                      ? '本局已保存；连续打卡状态以今日活动为准。'
-                      : '本局已保存；练习、失败和超时不计入连续打卡。'}
+                    ? `第 ${dailyLoop.streak.current_days} 天，拿下。`
+                    : '本局已保存。'}
+                  <Disclosure label="连续打卡与刷新说明">
+                    {(state.mode === 'daily' &&
+                    outcome === 'defused' &&
+                    dailyLoop?.streak.today_completed
+                      ? `连续 ${dailyLoop.streak.current_days} 天 · 最长 ${dailyLoop.streak.longest_days} 天 · `
+                      : state.mode === 'daily' && outcome === 'defused'
+                        ? '连续打卡状态以今日活动为准 · '
+                        : '练习、失败和超时不计入连续打卡 · ') + getDailyResetHint()}
+                  </Disclosure>
                 </p>
                 {shareState !== 'idle' && shareState !== 'manual' && (
                   <p className={styles.shareStatus}>{shareStatusText(shareState)}</p>
@@ -836,7 +932,6 @@ export default function ResultPage() {
                     />
                   </div>
                 )}
-                <p className={styles.loopHint}>{getDailyResetHint()}</p>
               </div>
               <div className={styles.loopActions}>
                 <button type="button" className={styles.loopAction} onClick={handleShareResult}>
@@ -857,13 +952,6 @@ export default function ResultPage() {
                   保存到我的档案
                 </button>
               </div>
-            </div>
-          )}
-
-          {variant === 'failure' && (
-            <div className={styles.quote}>
-              <div className={styles.quoteLabel}>AI 说</div>
-              <p className={styles.quoteBody}>「{consolationText(outcome, state.strikeCount)}」</p>
             </div>
           )}
 
@@ -918,24 +1006,25 @@ export default function ResultPage() {
             </div>
           )}
 
-          <div className={styles.cta}>
-            <Button variant="primary" full onClick={handlePlayAgain}>
-              再来一局<span aria-hidden="true"> →</span>
-            </Button>
-            <Button variant="ghost" full onClick={() => navigate('/bombsquad')}>
-              回主页
-            </Button>
-          </div>
+          {surveyEntryVisible && (
+            // U13 fold-in: a calm survey entry at the very bottom, after everything
+            // has settled — tapping it opens the survey modal. It never pops over
+            // the celebration or the consolation.
+            <button
+              type="button"
+              className={styles.surveyEntry}
+              onClick={() => setSurveyModalOpen(true)}
+            >
+              聊聊这一局<span aria-hidden="true"> →</span>
+            </button>
+          )}
         </div>
       </div>
 
       <PostGameModal
-        open={modalOpen}
-        showNickname={modalPurpose === 'leaderboard' && needNickname}
-        showLeaderboardMetadata={modalPurpose === 'leaderboard' && needLeaderboardMetadata}
-        showSurvey={modalPurpose === 'survey' && needSurvey}
-        onConfirm={handleModalConfirm}
-        onSkip={handleModalSkip}
+        open={surveyModalOpen}
+        onSubmit={handleSurveySubmit}
+        onSkip={handleSurveySkip}
       />
     </main>
   )

@@ -1,10 +1,9 @@
 # Mobile internal-beta — the daily win-to-leaderboard path a friend follows on
 # their phone: a defused daily run -> /bombsquad/result celebration (rank-
-# reveal-first, no auto-opened modal) -> honest not-on-board notice -> the
-# rank-card CTA opens the deferrable nickname + AI metadata gate -> score
-# submission -> /leaderboard ranking. Daily mode is used deliberately so the
-# gate and the leaderboard segment are exercised, including the skip-and-
-# reopen (deferred fill) beat.
+# reveal-first, no modal) -> a signed-in run auto-submits under the account name
+# (ruling B), asking once inline which AI helped when the tool is not inferable
+# -> /leaderboard ranking. Daily mode is used deliberately so the auto-submit and
+# the leaderboard segment are exercised.
 #
 # Restructured for the e2e harness: each scenario carries a per-scenario
 # flow-source comment tracing to e2e/flow-inventory.yaml plus a consumption-layer
@@ -32,22 +31,17 @@ Feature: Mobile internal-beta daily win to leaderboard
 
   # Source: daily-win-to-leaderboard
   @playwright
-  Scenario: A first daily win celebrates first, then collects a nickname on demand and shows my leaderboard row
-    Given I have just defused the bomb in a daily run and the result page is open
-    And no nickname is stored on this device
+  Scenario: A first daily win celebrates first, then auto-submits under my name and shows my leaderboard row
+    Given I am signed in with the leaderboard name "E2ERunner"
+    And I have just defused the bomb in a daily run and the result page is open
+    And no leaderboard AI metadata is stored on this device
     Then I see the heading "拆弹成功"
     And I see the total run time
     And the module breakdown lists all 4 modules without horizontal overflow
-    And the result page shows the honest not-on-board notice
+    And the result page asks which AI I played with
 
-    When I open the leaderboard submission modal
-    Then the leaderboard modal can be deferred and reopened
-
-    When I type a nickname into the NicknameModal input
-    And I choose AI assistant "Claude"
-    And I tap "确认"
-    Then the NicknameModal closes
-    And the result page shows my global rank
+    When I pick AI assistant "Claude" in the settlement
+    Then the result page shows my global rank
     And the leaderboard submission carries a plausible time
 
     When I tap "回主页"
