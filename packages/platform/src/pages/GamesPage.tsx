@@ -3,6 +3,7 @@ import AnonHero from '@/components/home/AnonHero'
 import WelcomeStrip from '@/components/home/WelcomeStrip'
 import DailyChecklist from '@/components/home/DailyChecklist'
 import FeaturedBombSquad from '@/components/home/FeaturedBombSquad'
+import FeaturedShadowChase from '@/components/home/FeaturedShadowChase'
 import WhatIsAmiclaw from '@/components/home/WhatIsAmiclaw'
 import UpcomingGames from '@/components/home/UpcomingGames'
 import FooterPitch from '@/components/home/FooterPitch'
@@ -89,6 +90,7 @@ export default function GamesPage() {
         loading={signedIn && accountProfile === null}
       />
       <FeaturedBombSquad />
+      <FeaturedShadowChase />
       {!signedIn && <WhatIsAmiclaw />}
       <UpcomingGames />
       {!signedIn && <FooterPitch />}

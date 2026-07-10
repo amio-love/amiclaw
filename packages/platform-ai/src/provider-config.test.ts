@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfig } from './provider-config'
+import { resolveConfig, resolveIntentConfig } from './provider-config'
 
 describe('resolveConfig — hit', () => {
   it('resolves the built-in demo game config', () => {
@@ -135,6 +135,20 @@ describe('resolveConfig — miss', () => {
 
   it('names the known gameIds in the miss error to aid debugging', () => {
     expect(() => resolveConfig('missing')).toThrowError(/Known gameIds: .*demo/)
+  })
+})
+
+describe('resolveIntentConfig — shadow chase', () => {
+  it('resolves a text-only DeepSeek selection without manufacturing STT or TTS layers', () => {
+    const resolved = resolveIntentConfig('shadow-chase')
+    expect(resolved.gameId).toBe('shadow-chase')
+    expect(resolved.llm).toEqual({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+    expect(resolved.systemPromptConfig.role).toContain('companion')
+    expect(Object.keys(resolved).sort()).toEqual(['gameId', 'llm', 'systemPromptConfig'])
+  })
+
+  it('throws on an unknown text-intent game instead of falling back', () => {
+    expect(() => resolveIntentConfig('missing')).toThrow(/no intent configuration registered/)
   })
 })
 

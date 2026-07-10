@@ -76,9 +76,9 @@ migrations_dir = "../companion-memory/migrations"
 
 # --- AUTH KV: shared session keyspace owned by auth-session ---
 # The Worker self-binds the auth-session AUTH namespace and reuses the shared
-# session-reader during the WS upgrade handshake (read-only: cookie -> session
-# id -> session:<id>). The Worker never writes here. `id` is the production
-# namespace id, filled at deploy wiring time (placeholder until then).
+# session-reader during the WS upgrade handshake and HTTP intent route. The
+# intent route also writes coarse, non-atomic per-user cost-throttle counters
+# under `ratelimit:shadow-intent:user:*`; it never mutates session records.
 [[kv_namespaces]]
 binding = "AUTH"
 id = "c4a64d33de2f406e825e6249e828f84d"
@@ -105,6 +105,10 @@ id = "5bca263e7860462ea0bef90885b07c1b"
 # domain. The /ai-ws/* prefix is pinned at L2 and must not drift.
 [[routes]]
 pattern = "claw.amio.fans/ai-ws/*"
+zone_name = "amio.fans"
+
+[[routes]]
+pattern = "claw.amio.fans/ai-intent/shadow-chase"
 zone_name = "amio.fans"
 
 # --- Plain-text vars ---

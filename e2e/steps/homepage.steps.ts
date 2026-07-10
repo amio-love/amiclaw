@@ -222,10 +222,11 @@ Then(
   }
 )
 
-Then('I see the welcome strip greeting me by name', async ({ page }) => {
-  await expect(page.getByText('你好，', { exact: false })).toBeVisible()
-  // The display name is the session email local-part (nova@... -> nova).
-  await expect(page.getByText('nova').first()).toBeVisible()
+Then('I see the welcome strip with an honest greeting', async ({ page }) => {
+  await expect(page.getByText('你好。', { exact: true })).toBeVisible()
+  // Without a companion-known name or chosen nickname, never expose the
+  // session email local-part in a greeting.
+  await expect(page.getByText('nova', { exact: true })).toHaveCount(0)
 })
 
 Then('the welcome strip shows an honest no-scores prompt and a play CTA', async ({ page }) => {

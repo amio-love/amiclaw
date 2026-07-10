@@ -5,6 +5,11 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Dual Shadow Chase joins Arcade** — A new two-to-five-minute solo game lets one
+human and the existing AI companion collect cores, split up, decoy the pursuer,
+rescue a capture, swap positions, and escape. Deterministic fallback keeps the
+run playable when optional model intent is slow or unavailable.
+
 **A first-time player learns how BombSquad is played before the manual step** - Fix.
 An anonymous newcomer was dropped straight onto 「把手册发给你的 AI」 with no
 explanation of the unusual premise — you and a separate voice AI split the bomb

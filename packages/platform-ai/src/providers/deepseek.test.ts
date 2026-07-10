@@ -418,6 +418,37 @@ describe('createDeepSeekLlmProvider — streaming idle timeout', () => {
   })
 })
 
+describe('createDeepSeekLlmProvider — caller cancellation', () => {
+  it('propagates the request signal through fetch and cancels a pending SSE read', async () => {
+    const encoder = new TextEncoder()
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(deltaLine('first ')))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const fetchMock = stubFetch(body)
+    const provider = createDeepSeekLlmProvider({ apiKey: 'sk-test', streamIdleMs: 60_000 })
+    const controller = new AbortController()
+    const iterator = provider
+      .streamCompletion({ ...baseRequest, signal: controller.signal })
+      [Symbol.asyncIterator]()
+
+    expect((await iterator.next()).value).toEqual({ content: 'first ', done: false })
+    const parked = iterator.next()
+    controller.abort(new Error('caller cancelled'))
+    await expect(parked).rejects.toThrow('caller cancelled')
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.signal).toBeInstanceOf(AbortSignal)
+    expect((init?.signal as AbortSignal).aborted).toBe(true)
+    expect(cancelled).toBe(true)
+  })
+})
+
 // --- sseStreamToChunks idle deadline (direct, controlled differential) ---------
 
 describe('sseStreamToChunks — idle deadline', () => {
