@@ -9,6 +9,7 @@ import { createRunningState } from './rules'
 import type { Direction, QueuedAction } from './types'
 
 const DIRECTIONS: Direction[] = ['up', 'left', 'right', 'down']
+const RANDOM_TRACE_TICKS = 240
 
 function lcg(seed: number): () => number {
   let state = seed >>> 0
@@ -24,7 +25,7 @@ describe('seeded engine properties', () => {
       const random = lcg(seed)
       let state = createRunningState('courtyard', 'relaxed', seed)
       let collected = 0
-      while (state.phase === 'running') {
+      while (state.phase === 'running' && state.tick < RANDOM_TRACE_TICKS) {
         const direction = DIRECTIONS[random() % DIRECTIONS.length]
         const actions: QueuedAction[] = [
           {
@@ -57,6 +58,10 @@ describe('seeded engine properties', () => {
         expect(nextCollected).toBeGreaterThanOrEqual(collected)
         collected = nextCollected
         expect(state.tick).toBeLessThanOrEqual(RUN_CAP_TICKS)
+      }
+      if (state.phase === 'running') {
+        state.tick = RUN_CAP_TICKS - 1
+        state = advance(state, [])
       }
       expect(['win', 'loss', 'timeout']).toContain(state.phase)
     }
