@@ -30,6 +30,9 @@ importers:
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
+      '@types/react':
+        specifier: ^19.2.17
+        version: 19.2.17
       eslint:
         specifier: ^10.5.0
         version: 10.5.0(jiti@2.6.1)
@@ -60,6 +63,9 @@ importers:
       prettier:
         specifier: ^3.8.4
         version: 3.8.4
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -214,11 +220,8 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.0.1)(jsdom@29.1.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.22.4)(yaml@2.9.0))
 
-  packages/game-yijing:
+  packages/game-shadow-chase:
     dependencies:
-      '@amiclaw/arcade-profile':
-        specifier: workspace:*
-        version: link:../arcade-profile
       '@amiclaw/ui':
         specifier: workspace:*
         version: link:../ui
@@ -263,8 +266,11 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.0.1)(jsdom@29.1.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.22.4)(yaml@2.9.0))
 
-  packages/game-shadow-chase:
+  packages/game-yijing:
     dependencies:
+      '@amiclaw/arcade-profile':
+        specifier: workspace:*
+        version: link:../arcade-profile
       '@amiclaw/ui':
         specifier: workspace:*
         version: link:../ui

@@ -27,7 +27,7 @@ Feature: AMIO Arcade platform homepage
     Then I see the anonymous hero with a single「开始玩 →」CTA
     And I see the featured BombSquad overview
     And I see the "什么是 AMIO Arcade" section
-    And I see the upcoming-games section
+    And I see the peer-game section with playable Oracle and 双影追逃 plus honest future statuses
     And I see the footer pitch
     And the page is dark-only with no light-mode variant
     And the homepage does not scroll horizontally at a 375-pixel phone viewport

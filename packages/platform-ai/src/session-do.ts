@@ -94,6 +94,7 @@ import type { GameState } from './manual-injection'
 import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
 import { traceTurn, traceTurnError } from './trace'
+import { validateShadowChaseVoiceContext } from './shadow-chase-voice-context'
 import {
   runClosingTurn,
   runOpeningTurn,
@@ -224,6 +225,22 @@ type ControlMessage =
   | EndSessionMessage
   | UpdateGameStateMessage
   | ClosingSessionMessage
+
+function normalizeVoiceGameState(gameId: string, gameState: GameState | undefined): GameState {
+  const relevantSections = gameState?.relevantSections
+  if (
+    !Array.isArray(relevantSections) ||
+    !relevantSections.every((sectionId) => typeof sectionId === 'string')
+  ) {
+    throw new Error('session-do: invalid game state')
+  }
+  if (gameId !== 'shadow-chase') return { relevantSections: [...relevantSections] }
+  const validated = validateShadowChaseVoiceContext(gameState?.publicContext)
+  if (!validated.ok) {
+    throw new Error(`session-do: invalid shadow chase context (${validated.reason})`)
+  }
+  return { relevantSections: [...relevantSections], publicContext: validated.value }
+}
 
 /**
  * Base64-encode raw bytes for JSON transport of an audio frame. Uses the
@@ -692,7 +709,18 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     gameState?: GameState,
     extras?: { companionContext?: CompanionContext; gameRunId?: string }
   ): string {
-    const assembled = assembleSession(gameId, userId, manualData, gameState, this.env, extras)
+    const normalizedGameState = normalizeVoiceGameState(
+      gameId,
+      gameState ?? { relevantSections: [] }
+    )
+    const assembled = assembleSession(
+      gameId,
+      userId,
+      manualData,
+      normalizedGameState,
+      this.env,
+      extras
+    )
     // Atomic publish — nothing below this line can throw or await.
     this.sessionId = assembled.sessionId
     this.userId = assembled.userId
@@ -1482,9 +1510,12 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // non-string element is a benign no-op rather than a throw — a throw would
         // be caught by `onMessage` and 1008-close the owner's socket, losing the
         // whole conversation.
-        const incoming = (msg.gameState as { relevantSections?: unknown } | undefined)
-          ?.relevantSections
-        if (!Array.isArray(incoming) || !incoming.every((id) => typeof id === 'string')) return
+        let incoming: GameState
+        try {
+          incoming = normalizeVoiceGameState(this.sessionState.config.gameId, msg.gameState)
+        } catch {
+          return
+        }
         // Reassign the FIELD (not the whole `sessionState` object) so history,
         // turnCount, usage, and any in-flight turn's already-captured `messages`
         // are untouched; only `assembleSystem`'s NEXT read (at the next turn's
@@ -1492,7 +1523,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // mutation of the payload can never reach into session state. An in-flight
         // turn snapshotted its `messages` at its own start, so this update applies
         // strictly to the next turn — the running turn is never disturbed.
-        this.sessionState.gameState = { relevantSections: [...incoming] }
+        this.sessionState.gameState = incoming
         return
       }
     }

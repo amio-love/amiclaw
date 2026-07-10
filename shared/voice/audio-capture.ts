@@ -73,15 +73,20 @@ export function createPcmCapture(captureSampleRate: number, bufferSize: number):
   let captureCtx: AudioContext | null = null
   let sourceNode: MediaStreamAudioSourceNode | null = null
   let proc: ScriptProcessorNode | null = null
-  /** True once the mic is acquired and streaming; guards a double mic-open. */
-  let capturing = false
+  /**
+   * Identity of the pending-or-live capture attempt. A stopped attempt may still
+   * resolve or reject asynchronously; only the current identity may mutate shared
+   * controller state or report an error into the owning session.
+   */
+  let attemptSequence = 0
+  let activeAttempt: number | null = null
   /** Running VAD state, folded one capture frame at a time. */
   let vadState: VadState = initialVadState
   /** Analyzed-frame wall-clock duration (`bufferSize / actualRate`), ms. */
   let frameMs = (bufferSize / captureSampleRate) * 1000
 
   function stop(): void {
-    capturing = false
+    activeAttempt = null
     vadState = initialVadState
     if (proc) {
       proc.onaudioprocess = null
@@ -110,8 +115,9 @@ export function createPcmCapture(captureSampleRate: number, bufferSize: number):
   }
 
   function start(startOptions: PcmCaptureStartOptions): void {
-    if (capturing) return
-    capturing = true
+    if (activeAttempt !== null) return
+    const attempt = ++attemptSequence
+    activeAttempt = attempt
     const { preGranted, onSpeechStart, onUtteranceEnd, onError, isMounted, getSocket } =
       startOptions
     void (async () => {
@@ -124,15 +130,23 @@ export function createPcmCapture(captureSampleRate: number, bufferSize: number):
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
           })
         } catch {
-          capturing = false
+          if (activeAttempt !== attempt) return
+          activeAttempt = null
           onError('microphone permission denied')
           return
         }
       }
+      // `stop()` followed by a new `start()` can happen while permission is in
+      // flight. A stale success owns only its returned stream; it must not clear
+      // or otherwise mutate the newer attempt.
+      if (activeAttempt !== attempt) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
       // The panel may have unmounted / the socket closed during the async acquire.
       if (!isMounted() || !getSocket()) {
         stream.getTracks().forEach((t) => t.stop())
-        capturing = false
+        if (activeAttempt === attempt) activeAttempt = null
         return
       }
       mediaStream = stream
@@ -170,8 +184,14 @@ export function createPcmCapture(captureSampleRate: number, bufferSize: number):
         src.connect(processor)
         processor.connect(ctx.destination)
       } catch {
-        stop()
-        onError('microphone capture failed')
+        // Setup is synchronous, but retain the identity fence so a future async
+        // implementation cannot let an old failure tear down the current capture.
+        if (activeAttempt === attempt) {
+          stop()
+          onError('microphone capture failed')
+        } else {
+          stream.getTracks().forEach((t) => t.stop())
+        }
       }
     })()
   }

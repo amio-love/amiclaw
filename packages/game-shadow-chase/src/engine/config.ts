@@ -4,7 +4,6 @@ export const RUN_CAP_TICKS = 1200
 export const OBJECTIVE_COUNT = 3
 export const MAP_MIN_SIZE = 7
 export const MAP_MAX_SIZE = 15
-export const OPENING_GRACE_TICKS = 20
 export const MIN_PURSUER_SPAWN_DISTANCE = 6
 export const SWAP_COOLDOWN_TICKS = 20
 

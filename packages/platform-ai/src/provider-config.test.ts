@@ -126,6 +126,18 @@ describe('resolveConfig — companion-lobby', () => {
   })
 })
 
+describe('resolveConfig — shadow chase voice', () => {
+  it('resolves the full existing provider stack with a Chinese strategy persona', () => {
+    const resolved = resolveConfig('shadow-chase')
+    expect(resolved.gameId).toBe('shadow-chase')
+    expect(resolved.llm).toEqual({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+    expect(resolved.stt).toEqual({ provider: 'volcengine', model: 'bigmodel' })
+    expect(resolved.tts).toEqual({ provider: 'volcengine', model: '' })
+    expect(resolved.systemPromptConfig.role).toContain('双影追逃')
+    expect(resolved.systemPromptConfig.ruleTemplate.join('\n')).toContain('跟随、分头、诱敌')
+  })
+})
+
 describe('resolveConfig — miss', () => {
   it('throws an explicit error on an unregistered gameId (no silent fallback)', () => {
     expect(() => resolveConfig('not-a-real-game')).toThrowError(

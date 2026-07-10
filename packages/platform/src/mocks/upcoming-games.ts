@@ -3,8 +3,8 @@
    radial-gradient placeholder keyed by `artVariant`. Consumed by
    components/home/UpcomingGames. */
 
-export type GameStatus = 'soon' | 'dev' | 'live' | 'preview'
-export type GameArtVariant = 'echo' | 'draw' | 'lab' | 'oracle'
+export type GameStatus = 'soon' | 'dev' | 'live'
+export type GameArtVariant = 'shadow' | 'oracle' | 'echo' | 'draw' | 'lab'
 
 export interface UpcomingGame {
   id: string
@@ -12,21 +12,37 @@ export interface UpcomingGame {
   blurb: string
   status: GameStatus
   artVariant: GameArtVariant
-  /* When set, the tile becomes a clickable link to this URL. Used by
-     'preview' tiles to route into a sibling-deployed prototype (e.g.
-     /oracle/ for the Yijing Oracle build merged into game/dist/oracle/).
-     'soon' / 'dev' tiles leave this undefined and stay non-clickable. */
+  /* Playable peer games carry a same-origin entry link. Future games leave
+     this undefined and stay non-clickable. */
   href?: string
   /* Real gameplay screenshot filling the art panel (playable games only —
      honest UI, no mockups). Unset tiles keep their gradient placeholder. */
   preview?: { src: string; width: number; height: number; alt: string }
 }
 
-// Oracle (易经签卜) is NOT listed here: it is live and daily-checkable (its own
-// 今日清单 item + streak counting), so listing it under「即将上线 · IN ORBIT」
-// with a「预览体验」badge contradicted its real status (F9). Discovery stays via
-// the daily checklist; this section is only the genuinely-upcoming games.
 export const upcomingGames: UpcomingGame[] = [
+  {
+    id: 'shadow-chase',
+    name: '双影追逃',
+    blurb: '你操控一道影子，和 AI 伙伴分头、诱敌、救援，再一起离开。',
+    status: 'live',
+    artVariant: 'shadow',
+    href: '/shadow-chase/',
+  },
+  {
+    id: 'oracle',
+    name: '易经签卜',
+    blurb: '选两张心象，掷六次铜钱，和 AI 一起读出今日卦签。',
+    status: 'live',
+    artVariant: 'oracle',
+    href: '/oracle/#/home',
+    preview: {
+      src: '/previews/oracle-cast.webp',
+      width: 640,
+      height: 853,
+      alt: '易经签卜的投币起卦界面',
+    },
+  },
   {
     id: 'echo',
     name: '星海回声',
@@ -49,3 +65,6 @@ export const upcomingGames: UpcomingGame[] = [
     artVariant: 'lab',
   },
 ]
+
+/** BombSquad is the one featured live game; the two live peers sit above. */
+export const PLAYABLE_GAME_COUNT = 1 + upcomingGames.filter((game) => game.status === 'live').length

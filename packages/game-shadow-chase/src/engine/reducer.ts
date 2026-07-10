@@ -1,7 +1,6 @@
 import {
   DIFFICULTY_CONFIG,
   MIN_RUN_TICKS,
-  OPENING_GRACE_TICKS,
   RUN_CAP_TICKS,
   SWAP_COOLDOWN_TICKS,
   isSafeTick,
@@ -9,14 +8,14 @@ import {
 import { companionNextStep } from './companion-policy'
 import { validateModelProposal } from './intent-legality'
 import { getMap } from './maps'
-import { nextStepOnShortestPath } from './pathfinding'
+import { nextStepOnShortestPath, shortestPath } from './pathfinding'
 import { pursuerNextStep } from './pursuer-policy'
-import { coordinatesEqual, isWalkable, moved } from './rules'
+import { coordinatesEqual, isInsideMap, isWalkable, moved } from './rules'
 import type {
   Coordinate,
-  EngineAction,
   EngineEvent,
   QueuedAction,
+  PlayerInputRejectionReason,
   ShadowActor,
   SimulationState,
 } from './types'
@@ -64,12 +63,23 @@ export function advance(
     throw new Error('Unsafe action tick')
   }
 
-  let playerAction: Extract<EngineAction, { type: 'player-move' | 'player-target' }> | undefined
+  let playerQueued: QueuedAction | undefined
   let swapRequested = false
   for (const queued of actions) {
     const action = queued.action
-    if (action.type === 'player-move' || action.type === 'player-target') playerAction = action
+    if ((action.type === 'player-move' || action.type === 'player-target') && !playerQueued) {
+      playerQueued = queued
+    }
     if (action.type === 'swap' && !swapRequested) swapRequested = true
+    if (action.type === 'player-input-rejected') {
+      tickEvents.push({
+        tick: nextTick,
+        type: 'move-rejected',
+        actorId: 'player',
+        actionSequence: queued.sequence,
+        reason: action.reason,
+      })
+    }
     if (action.type === 'companion-command') {
       const target = next.objectives.find(
         (objective) => objective.id === action.targetObjectiveId && !objective.collected
@@ -107,18 +117,69 @@ export function advance(
     pursuer: { ...state.actors.pursuer.position },
   }
   let playerEnd = starts.player
-  if (state.actors.player.status === 'free' && playerAction) {
-    const candidate =
-      playerAction.type === 'player-move'
-        ? moved(starts.player, playerAction.direction)
-        : nextStepOnShortestPath(map, starts.player, playerAction.target)
-    if (candidate && isWalkable(map, candidate)) playerEnd = candidate
+  let playerAttemptSequence: number | undefined
+  let playerRejection: PlayerInputRejectionReason | undefined
+  let pathOwnedAttempt = false
+  const reject = (reason: PlayerInputRejectionReason, sequence: number) => {
+    playerRejection = reason
+    playerAttemptSequence = sequence
+  }
+
+  if (playerQueued?.action.type === 'player-move') {
+    next.playerNavigation = undefined
+    playerAttemptSequence = playerQueued.sequence
+    if (state.actors.player.status === 'captured') {
+      reject('captured', playerQueued.sequence)
+    } else {
+      const candidate = moved(starts.player, playerQueued.action.direction)
+      if (!isInsideMap(map, candidate)) reject('edge', playerQueued.sequence)
+      else if (!isWalkable(map, candidate)) reject('wall', playerQueued.sequence)
+      else playerEnd = candidate
+    }
+  } else {
+    if (playerQueued?.action.type === 'player-target') {
+      const target = playerQueued.action.target
+      playerAttemptSequence = playerQueued.sequence
+      pathOwnedAttempt = true
+      if (!isInsideMap(map, target)) {
+        next.playerNavigation = undefined
+        reject('edge', playerQueued.sequence)
+      } else if (!isWalkable(map, target)) {
+        next.playerNavigation = undefined
+        reject('wall', playerQueued.sequence)
+      } else if (!shortestPath(map, starts.player, target)) {
+        next.playerNavigation = undefined
+        reject('unreachable', playerQueued.sequence)
+      } else if (coordinatesEqual(starts.player, target)) {
+        next.playerNavigation = undefined
+      } else {
+        next.playerNavigation = {
+          target: { ...target },
+          actionSequence: playerQueued.sequence,
+        }
+      }
+    }
+
+    const navigation = next.playerNavigation
+    if (!playerRejection && navigation) {
+      playerAttemptSequence = navigation.actionSequence
+      pathOwnedAttempt = true
+      if (state.actors.player.status === 'captured') {
+        next.playerNavigation = undefined
+        reject('captured', navigation.actionSequence)
+      } else {
+        const candidate = nextStepOnShortestPath(map, starts.player, navigation.target)
+        if (!candidate) {
+          next.playerNavigation = undefined
+          reject('unreachable', navigation.actionSequence)
+        } else {
+          playerEnd = candidate
+        }
+      }
+    }
   }
   let companionEnd = policies.companion(next)
-  const pursuerEnd =
-    nextTick <= OPENING_GRACE_TICKS
-      ? next.actors.pursuer.position
-      : policies.pursuer(next, nextTick)
+  const pursuerEnd = policies.pursuer(next, nextTick)
   if (next.actors.pursuer.target !== state.actors.pursuer.target) {
     next.decisionEpoch += 1
   }
@@ -129,12 +190,16 @@ export function advance(
     state.actors.companion.status === 'free' &&
     nextTick >= state.cooldowns.swapReadyTick
   if (canSwap) {
+    next.playerNavigation = undefined
     playerEnd = starts.companion
     companionEnd = starts.player
     next.cooldowns.swapReadyTick = nextTick + SWAP_COOLDOWN_TICKS
     tickEvents.push({ tick: nextTick, type: 'swap' })
   } else {
-    if (swapRequested) tickEvents.push({ tick: nextTick, type: 'swap-rejected' })
+    if (swapRequested) {
+      next.playerNavigation = undefined
+      tickEvents.push({ tick: nextTick, type: 'swap-rejected' })
+    }
     const bothFree =
       state.actors.player.status === 'free' && state.actors.companion.status === 'free'
     const sameOrdinaryTile =
@@ -143,6 +208,9 @@ export function advance(
       !(next.exit.enabled && coordinatesEqual(playerEnd, next.exit.position))
     const crossing = bothFree && crossed(starts.player, playerEnd, starts.companion, companionEnd)
     if (sameOrdinaryTile || crossing) {
+      if (!coordinatesEqual(playerEnd, starts.player) && playerAttemptSequence !== undefined) {
+        playerRejection = 'companion'
+      }
       playerEnd = starts.player
       companionEnd = starts.companion
     }
@@ -156,19 +224,35 @@ export function advance(
       tickEvents.push({ tick: nextTick, type: 'move', actorId })
     }
   }
+  if (playerRejection && playerAttemptSequence !== undefined) {
+    tickEvents.push({
+      tick: nextTick,
+      type: 'move-rejected',
+      actorId: 'player',
+      actionSequence: playerAttemptSequence,
+      reason: playerRejection,
+    })
+  }
+  if (
+    pathOwnedAttempt &&
+    next.playerNavigation &&
+    coordinatesEqual(next.actors.player.position, next.playerNavigation.target)
+  ) {
+    next.playerNavigation = undefined
+  }
 
   const newlyCaptured = new Set<'player' | 'companion'>()
   for (const actorId of ['player', 'companion'] as const) {
     const actor = next.actors[actorId]
     if (state.actors[actorId].status !== 'free') continue
     const contact =
-      nextTick > OPENING_GRACE_TICKS &&
-      (coordinatesEqual(actor.position, pursuerEnd) ||
-        crossed(starts[actorId], actor.position, starts.pursuer, pursuerEnd))
+      coordinatesEqual(actor.position, pursuerEnd) ||
+      crossed(starts[actorId], actor.position, starts.pursuer, pursuerEnd)
     if (contact) {
       actor.status = 'captured'
       actor.rescueDeadlineTick = nextTick + DIFFICULTY_CONFIG[state.difficulty].rescueTicks
       newlyCaptured.add(actorId)
+      if (actorId === 'player') next.playerNavigation = undefined
       next.decisionEpoch += 1
       tickEvents.push({ tick: nextTick, type: 'capture', actorId })
     }
@@ -239,6 +323,7 @@ export function advance(
     tickEvents.push({ tick: nextTick, type: 'timeout' })
   }
   if (next.phase !== 'running') next.decisionEpoch += 1
+  if (next.phase !== 'running') next.playerNavigation = undefined
   next.tick = nextTick
   next.eventLog.push(...tickEvents)
   return next

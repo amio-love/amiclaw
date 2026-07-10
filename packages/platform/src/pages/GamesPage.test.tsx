@@ -282,8 +282,11 @@ describe('GamesPage homepage', () => {
     // The hero's static platform stat counts playable games, not supported AI
     // tools.
     expect(
-      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, '') === '2已上线游戏')
+      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, '') === '3已上线游戏')
     ).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /双影追逃/ })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /易经签卜/ })).toHaveAttribute('href', '/oracle/#/home')
+    expect(screen.queryByText('NEW GAME · AMIO ARCADE')).not.toBeInTheDocument()
     expect(screen.queryByText(/支持 AI 模型/)).not.toBeInTheDocument()
     // Leaderboard data is not repeated inside the BombSquad card.
     expect(screen.queryByText('日榜首')).not.toBeInTheDocument()

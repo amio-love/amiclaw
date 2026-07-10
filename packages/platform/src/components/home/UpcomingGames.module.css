@@ -98,6 +98,13 @@
     var(--bg-grad-mid-2);
 }
 
+.shadow {
+  background:
+    radial-gradient(circle at 30% 38%, rgba(255, 229, 62, 0.36), transparent 48%),
+    radial-gradient(circle at 72% 68%, rgba(180, 120, 255, 0.42), transparent 52%),
+    var(--bg-grad-mid-2);
+}
+
 /* Yijing Oracle — violet-gold (紫金), the platform-safe half of Oracle's
    registered accent. Yang (--amio-yellow) anchor at top-left, yin
    (--accent-violet) sweep at bottom-right. Composed warmer / more saturated
@@ -148,24 +155,6 @@
   margin-top: 12px;
   font: 600 13px var(--font-body);
   letter-spacing: 0.02em;
-  color: var(--accent-violet-soft);
-}
-
-/* Local preview-status pill — sized to match Chip.module.css `.soon/.dev/.live`
-   for visual parity but tinted with yj-yin to read distinct from the
-   yellow `soon` chip. Kept inside this module so the @amiclaw/ui Chip
-   variant union does not have to grow for a homepage-only state. */
-.previewChip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border: 1px solid rgba(180, 120, 255, 0.32);
-  border-radius: 999px;
-  background: rgba(180, 120, 255, 0.1);
-  font-family: var(--font-body);
-  font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.12em;
   color: var(--accent-violet-soft);
 }
 

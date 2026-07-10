@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { assembleLlmContext, type GameState } from './manual-injection'
+import {
+  assembleLlmContext,
+  PUBLIC_GAME_CONTEXT_FENCE_CLOSE,
+  PUBLIC_GAME_CONTEXT_FENCE_OPEN,
+  type GameState,
+} from './manual-injection'
 import type { ManualData } from './contract'
 import type { SystemPromptConfig } from './provider-config'
 
@@ -43,6 +48,20 @@ describe('assembleLlmContext — system prompt', () => {
 })
 
 describe('assembleLlmContext — manual subset selection by game state', () => {
+  it('injects optional public game context inside a data fence', () => {
+    const messages = assembleLlmContext({
+      systemPromptConfig,
+      manualData,
+      gameState: {
+        relevantSections: [],
+        publicContext: { version: 1, phase: 'planning', strategy: 'follow' },
+      },
+    })
+    expect(messages[0].content).toContain(PUBLIC_GAME_CONTEXT_FENCE_OPEN)
+    expect(messages[0].content).toContain('"phase":"planning"')
+    expect(messages[0].content).toContain(PUBLIC_GAME_CONTEXT_FENCE_CLOSE)
+  })
+
   it('injects only the sections named by game state, in the requested order', () => {
     const gameState: GameState = { relevantSections: ['keypad', 'wire_routing'] }
     const messages = assembleLlmContext({ systemPromptConfig, manualData, gameState })

@@ -10,7 +10,7 @@ import type { Coordinate, MapDefinition } from './types'
 export const AUTHORED_MAPS: MapDefinition[] = [
   {
     id: 'courtyard',
-    name: 'Starlit Courtyard',
+    name: '星辉庭院',
     width: 7,
     height: 7,
     walls: [
@@ -32,7 +32,7 @@ export const AUTHORED_MAPS: MapDefinition[] = [
   },
   {
     id: 'crossroads',
-    name: 'Moonlit Crossroads',
+    name: '月下十字路',
     width: 9,
     height: 9,
     walls: [
@@ -57,7 +57,7 @@ export const AUTHORED_MAPS: MapDefinition[] = [
   },
   {
     id: 'moon-vault',
-    name: 'Moon Vault',
+    name: '月影秘库',
     width: 11,
     height: 9,
     walls: [

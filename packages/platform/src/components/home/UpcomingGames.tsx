@@ -3,24 +3,14 @@ import { DISCORD_INVITE_URL } from '@/config/links'
 import { type GameStatus, type UpcomingGame, upcomingGames } from '@/mocks/upcoming-games'
 import styles from './UpcomingGames.module.css'
 
-/* Chinese label for each game-status badge — handoff §6.6.
-   `preview` was added in the Yijing Oracle wiring (round 5): a playable
-   prototype that lives at a sibling deploy sub-path. */
+/* Chinese label for each honest game-status badge. */
 const STATUS_LABEL: Record<GameStatus, string> = {
   soon: '即将上线',
   dev: '开发中',
   live: '可玩',
-  preview: '预览体验',
 }
 
-/* Render the status badge. `soon` / `dev` / `live` use the shared Chip
-   primitive in @amiclaw/ui. `preview` uses a local pill (yj-yin tinted) to
-   avoid extending the shared Chip variant union — `preview` is a homepage-
-   only state and intentionally stays scoped to this component. */
 function StatusBadge({ status }: { status: GameStatus }) {
-  if (status === 'preview') {
-    return <span className={styles.previewChip}>{STATUS_LABEL.preview}</span>
-  }
   return <Chip variant={status}>{STATUS_LABEL[status]}</Chip>
 }
 
@@ -67,23 +57,22 @@ function TileBody({ game, discordCue = false }: { game: UpcomingGame; discordCue
    panel is a CSS radial-gradient placeholder keyed by the game's
    `artVariant`. Platform chrome — no cyan.
 
-   Round 5 (Yijing Oracle wiring): tiles with `href` + `status === 'preview'`
-   render as `<a>` so users can click into the sibling-deployed prototype.
+   Live peer games with `href` render as links into their sibling SPAs.
 
    Game Lab tile: when DISCORD_INVITE_URL is configured (non-empty), it renders
    as a clickable `<a>` into the Discord invite (new tab); while the constant is
    the empty-string sentinel it stays a non-clickable placeholder — byte-for-byte
    the same output as before, so the placeholder state is a zero-regression no-op.
 
-   Other tiles stay non-clickable. */
+   Future tiles stay non-clickable. */
 export default function UpcomingGames() {
   return (
     <section className={styles.section}>
-      <SectionHeader eyebrow="即将上线 · IN ORBIT" title="下一批游戏。" />
+      <SectionHeader eyebrow="更多游戏 · MORE GAMES" title="可玩的，和下一批。" />
       <div className={styles.grid}>
         {upcomingGames.map((game) => {
-          const isPreviewLink = game.status === 'preview' && Boolean(game.href)
-          if (isPreviewLink) {
+          const isPlayableLink = game.status === 'live' && Boolean(game.href)
+          if (isPlayableLink) {
             return (
               <a key={game.id} href={game.href} className={`${styles.tile} ${styles.tilePreview}`}>
                 <TileBody game={game} />

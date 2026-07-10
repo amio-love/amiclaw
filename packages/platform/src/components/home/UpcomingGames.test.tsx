@@ -42,25 +42,24 @@ describe('UpcomingGames — Game Lab Discord tile', () => {
     expect(screen.getByText('Game Lab')).toBeInTheDocument()
   })
 
-  it('does not regress the other upcoming-game tiles', async () => {
+  it('renders Oracle and Shadow Chase as playable peer cards before future games', async () => {
     await renderWith('')
 
-    // The non-clickable 'soon' tiles still render (name appears in both the art
-    // label and the heading, hence getAllByText).
+    const links = screen.getAllByRole('link')
+    const shadow = screen.getByRole('link', { name: /双影追逃/ })
+    const oracle = screen.getByRole('link', { name: /易经签卜/ })
+    expect(shadow).toHaveAttribute('href', '/shadow-chase/')
+    expect(oracle).toHaveAttribute('href', '/oracle/#/home')
+    expect(links.indexOf(shadow)).toBeLessThan(links.indexOf(oracle))
+    expect(screen.getAllByText('可玩')).toHaveLength(2)
+
+    // Future games remain honest, non-clickable cards.
     expect(screen.getAllByText('星海回声').length).toBeGreaterThan(0)
     expect(screen.getAllByText('共绘星图').length).toBeGreaterThan(0)
-    // Neither 'soon' tile is a link.
     expect(screen.queryByRole('link', { name: /星海回声/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /共绘星图/ })).not.toBeInTheDocument()
-  })
-
-  it('no longer lists the live Oracle (易经签卜) under coming-soon (F9)', async () => {
-    await renderWith('')
-
-    // Oracle is live + daily-checkable, so it must not appear as a coming-soon /
-    // 「预览体验」tile here (that contradicted its real status).
-    expect(screen.queryByText('易经签卜')).not.toBeInTheDocument()
+    expect(screen.getAllByText('即将上线')).toHaveLength(2)
+    expect(screen.getByText('开发中')).toBeInTheDocument()
     expect(screen.queryByText('预览体验')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /易经签卜/ })).not.toBeInTheDocument()
   })
 })

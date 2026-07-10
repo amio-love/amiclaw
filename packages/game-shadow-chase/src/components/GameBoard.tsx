@@ -1,54 +1,108 @@
 import { useRef } from 'react'
 
-import { OPENING_GRACE_TICKS } from '../engine/config'
 import { getMap } from '../engine/maps'
 import type { Coordinate, SimulationState } from '../engine/types'
 
 const CELL = 48
 
-function actorLabel(id: string, status?: string): string {
-  return `${id}${status === 'captured' ? ', captured' : ''}`
+function actorLabel(id: 'player' | 'companion', status: string): string {
+  const name = id === 'player' ? '你' : 'AI 伙伴'
+  return `${name}${status === 'captured' ? '，已被捕获' : '，行动自由'}`
+}
+
+function sameCoordinate(left: Coordinate, right: Coordinate): boolean {
+  return left.x === right.x && left.y === right.y
+}
+
+function coordinateFromPointer(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number,
+  width: number,
+  height: number
+): Coordinate | null {
+  let x: number
+  let y: number
+  const matrix = svg.getScreenCTM?.()
+  if (matrix && typeof DOMPoint !== 'undefined') {
+    const local = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+    x = local.x
+    y = local.y
+  } else {
+    const rect = svg.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    x = ((clientX - rect.left) / rect.width) * width * CELL
+    y = ((clientY - rect.top) / rect.height) * height * CELL
+  }
+  const target = { x: Math.floor(x / CELL), y: Math.floor(y / CELL) }
+  return target.x >= 0 && target.y >= 0 && target.x < width && target.y < height ? target : null
 }
 
 export function GameBoard({
   state,
+  interactive = true,
   onTarget,
 }: {
   state: SimulationState
+  interactive?: boolean
   onTarget(target: Coordinate): void
 }) {
   const map = getMap(state.mapId)
-  const activePointer = useRef<number | null>(null)
-  const pendingTarget = useRef<Coordinate | null>(null)
+  const gesture = useRef<{ pointerId: number; start: Coordinate } | null>(null)
   const cells = Array.from({ length: map.width * map.height }, (_, index) => ({
     x: index % map.width,
     y: Math.floor(index / map.width),
   }))
+
+  const clearGesture = () => {
+    gesture.current = null
+  }
+
   return (
     <svg
-      className="game-board"
+      className={interactive ? 'game-board interactive' : 'game-board planning-board'}
       role="application"
-      aria-label="Dual Shadow Chase board"
+      aria-label="双影追逃地图"
+      aria-disabled={!interactive}
       viewBox={`0 0 ${map.width * CELL} ${map.height * CELL}`}
+      onPointerDown={(event) => {
+        if (!interactive || gesture.current) return
+        const target = coordinateFromPointer(
+          event.currentTarget,
+          event.clientX,
+          event.clientY,
+          map.width,
+          map.height
+        )
+        if (!target) return
+        gesture.current = { pointerId: event.pointerId, start: target }
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+      }}
       onPointerUp={(event) => {
-        if (activePointer.current !== event.pointerId || !pendingTarget.current) return
+        const active = gesture.current
+        if (!interactive || !active || active.pointerId !== event.pointerId) return
+        const target = coordinateFromPointer(
+          event.currentTarget,
+          event.clientX,
+          event.clientY,
+          map.width,
+          map.height
+        )
+        clearGesture()
         if (
-          pendingTarget.current.x !== state.actors.player.position.x ||
-          pendingTarget.current.y !== state.actors.player.position.y
+          target &&
+          sameCoordinate(target, active.start) &&
+          !sameCoordinate(target, state.actors.player.position)
         ) {
-          onTarget(pendingTarget.current)
+          onTarget(target)
         }
-        activePointer.current = null
-        pendingTarget.current = null
       }}
-      onPointerCancel={() => {
-        activePointer.current = null
-        pendingTarget.current = null
-      }}
+      onPointerCancel={clearGesture}
+      onLostPointerCapture={clearGesture}
     >
       <title>{map.name}</title>
       {cells.map((cell) => {
-        const wall = map.walls.some((candidate) => candidate.x === cell.x && candidate.y === cell.y)
+        const wall = map.walls.some((candidate) => sameCoordinate(candidate, cell))
         return (
           <rect
             key={`${cell.x}-${cell.y}`}
@@ -59,30 +113,35 @@ export function GameBoard({
             height={CELL - 2}
             rx="8"
             aria-hidden="true"
-            onPointerDown={(event) => {
-              if (wall || activePointer.current !== null) return
-              activePointer.current = event.pointerId
-              pendingTarget.current = cell
-              event.currentTarget.setPointerCapture?.(event.pointerId)
-            }}
           />
         )
       })}
+      {state.playerNavigation && (
+        <rect
+          className="path-target board-overlay"
+          x={state.playerNavigation.target.x * CELL + 5}
+          y={state.playerNavigation.target.y * CELL + 5}
+          width={CELL - 10}
+          height={CELL - 10}
+          rx="10"
+          aria-hidden="true"
+        />
+      )}
       <g
-        className={state.exit.enabled ? 'exit enabled' : 'exit'}
+        className={state.exit.enabled ? 'exit enabled board-overlay' : 'exit board-overlay'}
         transform={`translate(${state.exit.position.x * CELL + CELL / 2} ${state.exit.position.y * CELL + CELL / 2})`}
-        aria-label={state.exit.enabled ? 'Moon gate, open' : 'Moon gate, sealed'}
+        aria-label={state.exit.enabled ? '月门，已开启' : '月门，尚未开启'}
       >
         <circle r="17" />
         <path d="M-8 8V-4L0-12 8-4V8" />
       </g>
-      {state.objectives.map((objective) =>
+      {state.objectives.map((objective, index) =>
         objective.collected ? null : (
           <g
             key={objective.id}
-            className="core"
+            className="core board-overlay"
             transform={`translate(${objective.position.x * CELL + CELL / 2} ${objective.position.y * CELL + CELL / 2})`}
-            aria-label={`Light core ${objective.id}`}
+            aria-label={`光核 ${index + 1}`}
           >
             <path d="M0-13 9-5 6 8 0 13-6 8-9-5Z" />
           </g>
@@ -93,7 +152,7 @@ export function GameBoard({
         return (
           <g
             key={id}
-            className={`shadow ${id} ${actor.status}`}
+            className={`shadow ${id} ${actor.status} board-overlay`}
             transform={`translate(${actor.position.x * CELL + CELL / 2} ${actor.position.y * CELL + CELL / 2})`}
             aria-label={actorLabel(id, actor.status)}
           >
@@ -103,11 +162,9 @@ export function GameBoard({
         )
       })}
       <g
-        className={state.tick < OPENING_GRACE_TICKS ? 'pursuer dormant' : 'pursuer'}
+        className="pursuer board-overlay"
         transform={`translate(${state.actors.pursuer.position.x * CELL + CELL / 2} ${state.actors.pursuer.position.y * CELL + CELL / 2})`}
-        aria-label={
-          state.tick < OPENING_GRACE_TICKS ? 'Pursuer, waiting during head start' : 'Pursuer'
-        }
+        aria-label="追兵"
       >
         <circle r="16" />
         <path d="M-8-8 8 8M8-8-8 8" />

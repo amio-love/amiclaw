@@ -2,25 +2,43 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { App } from './App'
+import type { ShadowVoiceSource } from './voice/useShadowChaseVoice'
+
+const BUTTON_ONLY_VOICE: ShadowVoiceSource = {
+  status: 'unavailable',
+  playerTranscript: '',
+  companionText: '',
+}
 
 describe('playable shell semantics', () => {
-  it('states the complete rule and enters a run with one primary action', () => {
-    render(<App />)
-    expect(screen.getByText(/Collect three light cores/i)).toBeTruthy()
-    expect(screen.getByText(/leave together/i)).toBeTruthy()
-    expect(screen.getByText(/rescue/i)).toBeTruthy()
-    expect(screen.getByText(/first 5 seconds are a head start/i)).toBeTruthy()
-    expect(screen.getByText(/moon gate opens at 02:00/i)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /start chase/i }))
-    expect(screen.getByRole('application', { name: /dual shadow chase board/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /swap positions/i })).toBeTruthy()
+  it('uses Chinese-first copy and enters frozen map-visible planning', () => {
+    render(<App voiceSource={BUTTON_ONLY_VOICE} />)
+    expect(screen.getByRole('heading', { name: '双影追逃' })).toBeTruthy()
+    expect(screen.getByText(/收集三枚光核/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '查看地图并制定策略' }))
+    expect(screen.getByRole('application', { name: '双影追逃地图' })).toBeTruthy()
+    expect(screen.getByText('战术准备')).toBeTruthy()
+    expect(screen.getAllByText('20')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '立即出发' })).toBeTruthy()
   })
 
-  it('exposes keyboard-friendly command controls', () => {
-    render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /start chase/i }))
-    for (const name of [/follow/i, /split/i, /decoy/i]) {
+  it('keeps deterministic Chinese strategy buttons available during planning and play', () => {
+    render(<App voiceSource={BUTTON_ONLY_VOICE} />)
+    fireEvent.click(screen.getByRole('button', { name: '查看地图并制定策略' }))
+    for (const name of ['跟随', '分头', '诱敌']) {
       expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).not.toBeNull()
     }
+    fireEvent.click(screen.getByRole('button', { name: '立即出发' }))
+    expect(screen.getByRole('button', { name: '交换位置' })).toBeTruthy()
+  })
+
+  it('adjusts the same planning duration before and during the frozen phase', () => {
+    render(<App voiceSource={BUTTON_ONLY_VOICE} />)
+    fireEvent.click(screen.getByRole('button', { name: '增加战术准备时间' }))
+    expect(screen.getByText('25')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '查看地图并制定策略' }))
+    expect(screen.getAllByText('25')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '减少战术准备时间' }))
+    expect(screen.getAllByText('20')).toHaveLength(2)
   })
 })

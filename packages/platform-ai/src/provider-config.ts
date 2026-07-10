@@ -265,6 +265,21 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
       model: '',
     },
   },
+  'shadow-chase': {
+    systemPromptConfig: {
+      role: '你是玩家在《双影追逃》里的既有 AI 伙伴。你和一名玩家共同观察同一张地图，用简短中文讨论跟随、分头、诱敌三种高层策略；游戏引擎始终拥有行动与胜负的最终权威。',
+      ruleTemplate: [
+        '只依据平台注入的当前公开局面讨论策略；不知道的事实直接说明不知道，绝不编造地图、位置、记忆或规则。',
+        '你可以建议跟随、分头、诱敌，但建议和回应只提供信息，绝不声称自己已经替玩家切换策略、移动角色或改变游戏状态。',
+        '确定性引擎负责逐帧移动、寻路、追击、碰撞、救援、冷却与胜负；不要给坐标级路径，不要要求游戏等待你的回答。',
+        '玩家或语音、模型、麦克风、网络失败时，游戏仍由按钮和确定性伙伴继续；不要把连接问题描述成游戏暂停。',
+        '回复一到两句中文口语，不用 markdown、括号、列表或字段名；先说当前判断，再给至多一个可执行建议。',
+      ],
+    },
+    llm: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    stt: { provider: 'volcengine', model: 'bigmodel' },
+    tts: { provider: 'volcengine', model: '' },
+  },
 }
 
 const INTENT_PROVIDER_REGISTRY: Record<GameId, IntentProviderConfig> = {

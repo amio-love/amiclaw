@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { GameState, ManualData, SessionSummary } from '@amiclaw/platform-ai/contract'
 import { useVoiceSession } from './useVoiceSession'
+import {
+  GAME_VOICE_END_ACK_TIMEOUT_MS,
+  SHADOW_CHASE_VOICE_GUARDS,
+  useGameVoiceSession,
+} from '@shared/voice/use-game-voice-session'
 
 // --- Mocks: WebSocket / AudioContext / getUserMedia ---
 
@@ -14,6 +19,7 @@ class MockWebSocket {
 
   url: string
   readyState = 0
+  closeCalls = 0
   sent: Array<string | ArrayBuffer> = []
   onopen: Listener = null
   onmessage: ((event: { data: unknown }) => void) | null = null
@@ -30,6 +36,7 @@ class MockWebSocket {
   }
 
   close(): void {
+    this.closeCalls += 1
     this.readyState = MockWebSocket.CLOSED
     this.onclose?.({ code: 1000, reason: '' })
   }
@@ -126,6 +133,16 @@ const getUserMedia = vi.fn(async () => ({
   getTracks: () => [{ stop() {} }],
 }))
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 function manualData(): ManualData {
   return { version: 'v1', sections: { button: { rule: 'hold it' } } }
 }
@@ -179,6 +196,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -350,6 +368,99 @@ describe('useVoiceSession — hands-free lifecycle', () => {
     act(() => result.current.endSession())
     act(() => result.current.endSession())
     expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+  })
+
+  it('closes after the bounded end-ack timeout when the server never acknowledges', () => {
+    vi.useFakeTimers()
+    expect(GAME_VOICE_END_ACK_TIMEOUT_MS).toBe(5_000)
+    const { result } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+
+    act(() => result.current.endSession())
+    act(() => vi.advanceTimersByTime(GAME_VOICE_END_ACK_TIMEOUT_MS - 1))
+    expect(ws.readyState).toBe(MockWebSocket.OPEN)
+    act(() => vi.advanceTimersByTime(1))
+    expect(ws.readyState).toBe(MockWebSocket.CLOSED)
+    expect(ws.closeCalls).toBe(1)
+    expect(result.current.status).toBe('closed')
+  })
+
+  it('a summary clears the end-ack timer and duplicate terminal effects stay idempotent', () => {
+    vi.useFakeTimers()
+    const { result, unmount } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+
+    act(() => result.current.endSession())
+    act(() => result.current.endSession())
+    act(() => ws.fireMessage({ type: 'summary', summary: summary() }))
+    expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+    expect(ws.closeCalls).toBe(1)
+    expect(result.current.summary).toMatchObject({ turnCount: 1 })
+
+    act(() => vi.advanceTimersByTime(GAME_VOICE_END_ACK_TIMEOUT_MS))
+    act(() => result.current.endSession())
+    expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+    expect(ws.closeCalls).toBe(1)
+    unmount()
+    expect(ws.closeCalls).toBe(1)
+  })
+
+  it('unmount clears the end-ack timer after one terminal send', () => {
+    vi.useFakeTimers()
+    const { result, unmount } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    act(() => result.current.endSession())
+
+    unmount()
+    expect(ws.controlMessages().filter((m) => m.type === 'end')).toHaveLength(1)
+    expect(ws.closeCalls).toBe(1)
+    act(() => vi.advanceTimersByTime(GAME_VOICE_END_ACK_TIMEOUT_MS))
+    expect(ws.closeCalls).toBe(1)
+  })
+
+  it('an explicit close clears the pending end-ack timer', () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() =>
+      useGameVoiceSession({
+        manualData: manualData(),
+        gameState: gameState(),
+        autoConnect: false,
+      })
+    )
+    act(() => result.current.openSession())
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    act(() => result.current.endSession())
+    act(() => result.current.closeSession())
+
+    expect(ws.closeCalls).toBe(1)
+    act(() => vi.advanceTimersByTime(GAME_VOICE_END_ACK_TIMEOUT_MS))
+    expect(ws.closeCalls).toBe(1)
+    expect(result.current.status).toBe('closed')
+  })
+
+  it('a terminal socket close clears the pending end-ack timer', () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() =>
+      useVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    act(() => result.current.endSession())
+    act(() => ws.fireClose(1000))
+
+    expect(result.current.status).toBe('closed')
+    act(() => vi.advanceTimersByTime(GAME_VOICE_END_ACK_TIMEOUT_MS))
+    expect(ws.closeCalls).toBe(0)
   })
 
   it('settlement end then unmount sends end once — the unmount close does not resend', async () => {
@@ -646,5 +757,208 @@ describe('useVoiceSession — barge-in', () => {
     })
     act(() => ws.fireMessage({ type: 'chunk', kind: 'text', text: 'new answer', done: false }))
     expect(result.current.aiText).toBe('new answer')
+  })
+})
+
+describe('shared game voice session — Shadow Chase surface', () => {
+  it('opens only on an explicit action, reuses a granted stream, and delivers one final transcript', async () => {
+    const onFinalTranscript = vi.fn()
+    const track = { stop: vi.fn() }
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    const rendered = renderHook(() =>
+      useGameVoiceSession({
+        gameId: 'shadow-chase',
+        gameRunId: 'run-shadow',
+        sessionNamePrefix: 'shadow-chase',
+        manualData: { version: 'shadow-v1', sections: {} },
+        gameState: { relevantSections: [], publicContext: { version: 1 } },
+        autoConnect: false,
+        opening: false,
+        guards: SHADOW_CHASE_VOICE_GUARDS,
+        onFinalTranscript,
+      })
+    )
+
+    expect(MockWebSocket.instances).toHaveLength(0)
+    act(() => rendered.result.current.openSession(stream))
+    const ws = lastSocket()
+    expect(ws.url).toMatch(/\/ai-ws\/shadow-chase-/)
+    act(() => ws.fireOpen())
+    expect(ws.controlMessages()[0]).toMatchObject({
+      type: 'create',
+      gameId: 'shadow-chase',
+      gameRunId: 'run-shadow',
+      opening: false,
+    })
+    await act(async () => ws.fireMessage({ type: 'created', sessionId: 'shadow-session' }))
+    await waitFor(() => captureProcessor())
+    expect(getUserMedia).not.toHaveBeenCalled()
+
+    act(() => {
+      ws.fireMessage({ type: 'transcript', text: '去诱敌', final: false })
+      ws.fireMessage({ type: 'transcript', text: '去诱敌', final: true })
+      ws.fireMessage({ type: 'transcript', text: '去诱敌', final: true })
+    })
+    expect(onFinalTranscript).toHaveBeenCalledOnce()
+    expect(onFinalTranscript).toHaveBeenCalledWith({ sequence: 1, text: '去诱敌' })
+  })
+
+  it('freezes the Shadow voice guards and closes voice on connect timeout only', () => {
+    vi.useFakeTimers()
+    expect(SHADOW_CHASE_VOICE_GUARDS).toEqual({
+      connectMs: 5_000,
+      responseMs: 12_000,
+      silenceMs: 30_000,
+      maxPlayerTurns: 8,
+      maxDurationMs: 180_000,
+    })
+    const { result } = renderHook(() =>
+      useGameVoiceSession({
+        gameId: 'shadow-chase',
+        manualData: { version: 'shadow-v1', sections: {} },
+        gameState: { relevantSections: [], publicContext: { version: 1 } },
+        autoConnect: false,
+        guards: SHADOW_CHASE_VOICE_GUARDS,
+      })
+    )
+    act(() => result.current.openSession())
+    act(() => vi.advanceTimersByTime(SHADOW_CHASE_VOICE_GUARDS.connectMs))
+    expect(result.current.status).toBe('closed')
+    expect(result.current.errorCode).toBe('connect-timeout')
+    vi.useRealTimers()
+  })
+
+  it('reopens only by explicit gesture after close and keeps one socket and capture at a time', async () => {
+    const firstTrack = { stop: vi.fn() }
+    const secondTrack = { stop: vi.fn() }
+    const duplicateTrack = { stop: vi.fn() }
+    const stream = (track: { stop: () => void }) =>
+      ({ getTracks: () => [track] }) as unknown as MediaStream
+    const { result } = renderHook(() =>
+      useGameVoiceSession({
+        gameId: 'shadow-chase',
+        manualData: { version: 'shadow-v1', sections: {} },
+        gameState: { relevantSections: [], publicContext: { version: 1 } },
+        autoConnect: false,
+        opening: false,
+      })
+    )
+
+    act(() => result.current.openSession(stream(firstTrack)))
+    const firstSocket = lastSocket()
+    act(() => firstSocket.fireOpen())
+    await act(async () => firstSocket.fireMessage({ type: 'created', sessionId: 'first' }))
+    expect(result.current.status).toBe('ready')
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    act(() => result.current.closeSession())
+    expect(firstSocket.readyState).toBe(MockWebSocket.CLOSED)
+    expect(firstTrack.stop).toHaveBeenCalledOnce()
+    expect(result.current.status).toBe('closed')
+
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    act(() => result.current.openSession(stream(secondTrack)))
+    const secondSocket = lastSocket()
+    expect(secondSocket).not.toBe(firstSocket)
+    expect(MockWebSocket.instances).toHaveLength(2)
+    expect(result.current.status).toBe('connecting')
+
+    act(() => result.current.openSession(stream(duplicateTrack)))
+    expect(MockWebSocket.instances).toHaveLength(2)
+    expect(duplicateTrack.stop).toHaveBeenCalledOnce()
+    expect(secondTrack.stop).not.toHaveBeenCalled()
+
+    act(() => secondSocket.fireOpen())
+    await act(async () => secondSocket.fireMessage({ type: 'created', sessionId: 'second' }))
+    expect(result.current.status).toBe('ready')
+    expect(getUserMedia).not.toHaveBeenCalled()
+
+    act(() => result.current.closeSession())
+    expect(secondSocket.closeCalls).toBe(1)
+    expect(secondTrack.stop).toHaveBeenCalledOnce()
+  })
+
+  it('a stale successful microphone attempt cannot unlock a reopened session capture', async () => {
+    const firstAttempt = deferred<{ getTracks: () => Array<{ stop: () => void }> }>()
+    const secondAttempt = deferred<{ getTracks: () => Array<{ stop: () => void }> }>()
+    const staleTrack = { stop: vi.fn() }
+    getUserMedia
+      .mockImplementationOnce(() => firstAttempt.promise)
+      .mockImplementationOnce(() => secondAttempt.promise)
+    const { result } = renderHook(() =>
+      useGameVoiceSession({
+        gameId: 'shadow-chase',
+        manualData: { version: 'shadow-v1', sections: {} },
+        gameState: { relevantSections: [], publicContext: { version: 1 } },
+        autoConnect: false,
+        opening: false,
+      })
+    )
+
+    act(() => result.current.openSession())
+    const firstSocket = lastSocket()
+    act(() => firstSocket.fireOpen())
+    act(() => firstSocket.fireMessage({ type: 'created', sessionId: 'first' }))
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    act(() => result.current.closeSession())
+    act(() => result.current.openSession())
+    const secondSocket = lastSocket()
+    act(() => secondSocket.fireOpen())
+    act(() => secondSocket.fireMessage({ type: 'created', sessionId: 'second' }))
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      firstAttempt.resolve({ getTracks: () => [staleTrack] })
+      await firstAttempt.promise
+      await Promise.resolve()
+    })
+    expect(staleTrack.stop).toHaveBeenCalledOnce()
+
+    act(() => secondSocket.fireMessage({ type: 'created', sessionId: 'duplicate' }))
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+  })
+
+  it('a stale rejected microphone attempt cannot close the reopened session', async () => {
+    const firstAttempt = deferred<{ getTracks: () => Array<{ stop: () => void }> }>()
+    const secondAttempt = deferred<{ getTracks: () => Array<{ stop: () => void }> }>()
+    getUserMedia
+      .mockImplementationOnce(() => firstAttempt.promise)
+      .mockImplementationOnce(() => secondAttempt.promise)
+    const { result } = renderHook(() =>
+      useGameVoiceSession({
+        gameId: 'shadow-chase',
+        manualData: { version: 'shadow-v1', sections: {} },
+        gameState: { relevantSections: [], publicContext: { version: 1 } },
+        autoConnect: false,
+        opening: false,
+        guards: SHADOW_CHASE_VOICE_GUARDS,
+      })
+    )
+
+    act(() => result.current.openSession())
+    const firstSocket = lastSocket()
+    act(() => firstSocket.fireOpen())
+    act(() => firstSocket.fireMessage({ type: 'created', sessionId: 'first' }))
+    act(() => result.current.closeSession())
+
+    act(() => result.current.openSession())
+    const secondSocket = lastSocket()
+    act(() => secondSocket.fireOpen())
+    act(() => secondSocket.fireMessage({ type: 'created', sessionId: 'second' }))
+    expect(result.current.status).toBe('ready')
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      firstAttempt.reject(new Error('stale permission denial'))
+      await firstAttempt.promise.catch(() => undefined)
+      await Promise.resolve()
+    })
+
+    expect(result.current.status).toBe('ready')
+    expect(result.current.errorCode).toBeNull()
+    expect(secondSocket.readyState).toBe(MockWebSocket.OPEN)
   })
 })
