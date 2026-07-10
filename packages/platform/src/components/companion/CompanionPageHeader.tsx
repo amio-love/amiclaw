@@ -1,6 +1,4 @@
-import { Link } from 'react-router-dom'
-import { EyebrowTag } from '@amiclaw/ui'
-import styles from './CompanionPageHeader.module.css'
+import { BackLink, EyebrowTag, PageHeader } from '@amiclaw/ui'
 
 interface CompanionPageHeaderProps {
   /** Bilingual eyebrow, e.g. `回忆 · MEMORIES`. */
@@ -10,16 +8,15 @@ interface CompanionPageHeaderProps {
 }
 
 /* Shared header for the nested /me/* companion pages — a back link to /me, the
-   bilingual section eyebrow, a page title, and an optional lead. */
+   bilingual section eyebrow, a page title, and an optional lead. Built on the
+   shared PageHeader + BackLink primitives. */
 export default function CompanionPageHeader({ eyebrow, title, lead }: CompanionPageHeaderProps) {
   return (
-    <header className={styles.header}>
-      <Link to="/me" className={styles.back}>
-        ← 我的
-      </Link>
-      <EyebrowTag variant="section">{eyebrow}</EyebrowTag>
-      <h2 className={styles.title}>{title}</h2>
-      {lead ? <p className={styles.lead}>{lead}</p> : null}
-    </header>
+    <PageHeader
+      back={<BackLink variant="inline" to="/me" label="我的" />}
+      eyebrow={<EyebrowTag variant="section">{eyebrow}</EyebrowTag>}
+      title={title}
+      lead={lead}
+    />
   )
 }

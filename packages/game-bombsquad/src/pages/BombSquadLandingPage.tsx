@@ -1,9 +1,15 @@
 import { useNavigate } from 'react-router-dom'
-import { AiToolList, BombSquadWordmark, DailyCountdown, Scenery } from '@amiclaw/ui'
+import {
+  Button,
+  AiToolList,
+  BombSquadWordmark,
+  DailyCountdown,
+  EyebrowTag,
+  IconButton,
+  Scenery,
+} from '@amiclaw/ui'
 import { getDailyResetHint } from '@shared/date'
 import { formatMs } from '@shared/format-time'
-import Eyebrow from '@/components/bombsquad/Eyebrow'
-import Button from '@/components/bombsquad/Button'
 import Glyph from '@/components/bombsquad/Glyph'
 import { useDailyBoardStats } from '@/hooks/useDailyBoardStats'
 import styles from './BombSquadLandingPage.module.css'
@@ -40,17 +46,12 @@ export default function BombSquadLandingPage() {
               「支持 N 家」 would misread as built-in AI. Brand-yellow (not green)
               keeps it a label, not a "ready/online" signal. */}
           <div className={styles.top}>
-            <Eyebrow dot color="var(--y)" className={styles.aiEyebrow}>
+            <EyebrowTag variant="pill" className={styles.aiEyebrow}>
               <AiToolList prefix="自带任意语音 AI · 例如" className={styles.aiList} />
-            </Eyebrow>
-            <button
-              type="button"
-              className={styles.iconBtn}
-              onClick={() => window.location.assign('/')}
-              aria-label="返回平台首页（claw.amio.fans）"
-            >
-              {/* Exit-to-platform glyph — a settings gear would imply a
-                  settings surface the immersive game does not have. */}
+            </EyebrowTag>
+            {/* Exit-to-platform glyph — a settings gear would imply a
+                settings surface the immersive game does not have. */}
+            <IconButton href="/" label="返回平台首页（claw.amio.fans）">
               <svg
                 viewBox="0 0 24 24"
                 width="20"
@@ -65,7 +66,7 @@ export default function BombSquadLandingPage() {
                 <path d="M16 17l5-5-5-5" />
                 <path d="M21 12H9" />
               </svg>
-            </button>
+            </IconButton>
           </div>
 
           {/* Planet hero — glowing core glyph, two orbit rings, two dots. */}

@@ -27,8 +27,7 @@ import SceneInfoBar from '@/components/SceneInfoBar'
 import MuteButton from '@/components/MuteButton'
 import StrikeIndicator from '@/components/StrikeIndicator'
 import ExplosionOverlay from '@/components/ExplosionOverlay'
-import { Scenery } from '@amiclaw/ui'
-import Eyebrow from '@/components/bombsquad/Eyebrow'
+import { EyebrowTag, Scenery } from '@amiclaw/ui'
 import WireModule from '@/modules/wire/WireModule'
 import DialModule from '@/modules/dial/DialModule'
 import ButtonModule from '@/modules/button/ButtonModule'
@@ -833,9 +832,9 @@ export default function GamePage() {
           ) : (
             <>
               <div className={styles.modLabelRow}>
-                <Eyebrow dot>
+                <EyebrowTag variant="pill">
                   模块 {state.currentModuleIndex + 1}/{state.moduleSequence.length} · {moduleLabel}
-                </Eyebrow>
+                </EyebrowTag>
               </div>
               {renderModule()}
             </>

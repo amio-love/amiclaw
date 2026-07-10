@@ -32,36 +32,10 @@
 .header {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 36px 1fr 36px;
+  grid-template-columns: 44px 1fr 44px;
   gap: 12px;
   align-items: center;
   padding: max(20px, env(safe-area-inset-top)) 22px 12px;
-}
-
-.iconBtn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.iconBtn:hover,
-.iconBtn:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.18);
-  outline: none;
-}
-
-.iconBtn:focus-visible {
-  outline: 2px solid var(--y);
-  outline-offset: 2px;
 }
 
 .headerMeta {
@@ -83,7 +57,7 @@
 }
 
 .headerSpacer {
-  width: 36px;
+  width: 44px;
 }
 
 /* ----------  connect body  ---------- */

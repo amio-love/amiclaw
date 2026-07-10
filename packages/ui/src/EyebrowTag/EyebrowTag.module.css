@@ -59,3 +59,32 @@
   box-shadow: 0 0 8px var(--positive);
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* pill — glass pill with a yellow pulsing status dot (former BombSquad
+   Eyebrow). Uppercase, tracked, non-wrapping. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font: 500 11px var(--font-body);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--amio-yellow);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--hairline);
+  backdrop-filter: var(--glass-blur-soft);
+  -webkit-backdrop-filter: var(--glass-blur-soft);
+}
+
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amio-yellow);
+  box-shadow: 0 0 8px var(--amio-yellow);
+  animation: pulse 2s ease-in-out infinite;
+}
