@@ -29,6 +29,20 @@ featured game, while 「双影追逃」 and 「易经签卜」 sit together as h
 cards in the peer game grid. No room, matchmaking, human co-op, PvP, or voice-room
 surface was added.
 
+**Your AI companion greets you the moment you land** - Improvement. Signed in,
+the first thing on the home screen is now your companion: a breathing orb, its
+name, how it is doing, one warm line remembering your last run together (「还记得
+你上次卡在光弦」), and a labeled 「说话」 button to start talking. It used to live in
+a thin strip pinned to the bottom of the screen, easy to miss. Inside a game the
+companion stays a restrained strip so the puzzle keeps your full attention. The
+talk button drives the same voice connection as before — only how present and
+findable the companion is has changed.
+
+**Dual Shadow Chase joins Arcade** — A new two-to-five-minute solo game lets one
+human and the existing AI companion collect cores, split up, decoy the pursuer,
+rescue a capture, swap positions, and escape. Deterministic fallback keeps the
+run playable when optional model intent is slow or unavailable.
+
 **Your AI partner is named right on the homepage** - Improvement. The homepage
 hero used to say a generic 「带上你的 AI 伙伴，来玩一局」. It now names the voice
 AI you can bring — Claude, ChatGPT, Gemini and the rest flip through in place

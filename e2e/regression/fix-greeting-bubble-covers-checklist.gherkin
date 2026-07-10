@@ -1,4 +1,4 @@
-# Regression: companion greeting bubble covers the homepage 今日清单 on a phone.
+# Regression: companion greeting covers the homepage 今日清单 on a phone.
 #
 # Real-device bug F4 (fresh-eyes re-audit): on the signed-in homepage the
 # floating greeting bubble (a fixed layer above the dock) reached up over the
@@ -6,25 +6,27 @@
 # — so their text sat behind the bubble. A long greeting made the bubble taller
 # and pushed it further up into the rows.
 #
-# The fix caps the bubble to two lines and hugs it to the dock so its top edge
-# stays below the checklist's item rows regardless of greeting length. This
-# scenario reaches the signed-in homepage with the greeting bubble showing and
-# asserts the bubble sits clear of the actionable item rows at 390x844.
+# Post-batch②, the logged-in home leads with the companion presence hosted
+# INLINE in the welcome strip (the 伙伴在场 shell region — normal document flow),
+# not a fixed floating bubble, so the presence sits above the checklist by
+# construction. This scenario keeps guarding the invariant against the new
+# structure: the home companion presence must stay clear of the actionable
+# checklist item rows at 390x844.
 #
 # @playwright regression under e2e/regression/ — outside the flow-inventory
 # bijection (traces to a fixed bug, not a product flow). Reuses the companion
-# auto-voice steps that render the dock + greeting bubble deterministically.
+# auto-voice steps that render the home presence deterministically.
 
-Feature: Companion greeting bubble stays clear of the homepage checklist on a phone
+Feature: Companion greeting stays clear of the homepage checklist on a phone
   As a signed-in player on a phone
-  I want the greeting bubble to not cover my 今日清单打卡 rows
+  I want the companion greeting to not cover my 今日清单打卡 rows
   So that the daily checklist stays readable while my companion greets me
 
   Background:
     Given I am a signed-in player with a companion named "阿澈"
 
   @playwright
-  Scenario: the greeting bubble does not cover the 今日清单 item rows at 390x844
+  Scenario: the companion presence does not cover the 今日清单 item rows at 390x844
     Given the phone viewport is 390 by 844 pixels
     When I open the homepage with the microphone granted
-    Then the greeting bubble sits clear of the 今日清单 item rows
+    Then the companion presence sits clear of the 今日清单 item rows

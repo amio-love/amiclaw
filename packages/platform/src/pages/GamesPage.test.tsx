@@ -208,13 +208,14 @@ describe('GamesPage homepage', () => {
     expect(assignSpy).toHaveBeenCalledWith('/bombsquad/')
   })
 
-  it('renders the WelcomeStrip instead of the hero for a signed-in visitor', async () => {
+  it('leads with the companion presence (create entry) for a signed-in visitor without a companion', async () => {
     stubApi(AUTHED, ACCOUNT_ARCADE_PROFILE)
     renderHomepage('/')
 
-    // With no chosen nickname and no companion, the WelcomeStrip greets
-    // neutrally — never the account email local-part (audit F19).
-    expect(await screen.findByText('你好。')).toBeInTheDocument()
+    // The logged-in home's first screen leads with the companion presence
+    // (rc §2.2 — WelcomeStrip hosts it). With no companion that is the create
+    // entry, never the anonymous hero, never the account email (audit F19).
+    expect(await screen.findByRole('link', { name: '创建你的伙伴 →' })).toBeInTheDocument()
     expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
     expect(await screen.findByText('今日已打卡')).toBeInTheDocument()
     expect(screen.getByText('连续天数 · 本账号')).toBeInTheDocument()
