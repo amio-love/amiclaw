@@ -6,6 +6,7 @@ Feature: Dual Shadow Chase deterministic solo play
   I want to chase with my AI companion without waiting for a model
   So that network failure never blocks the game
 
+  # Source: shadow-chase-deterministic-solo
   @playwright
   Scenario: Direct load starts a deterministic chase while model intent is unavailable
     Given Shadow Chase optional network handoffs are unavailable
@@ -21,6 +22,7 @@ Feature: Dual Shadow Chase deterministic solo play
     When I click "Decoy"
     Then the Shadow Chase command "Decoy" is active
 
+  # Source: shadow-chase-mobile-controls
   @playwright
   Scenario: Phone controls remain reachable and clear of the board
     Given Shadow Chase optional network handoffs are unavailable
