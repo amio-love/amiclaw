@@ -363,6 +363,39 @@ export function buildArrivalGreeting(input: ArrivalGreetingInput): string {
   return `${prefix}我在这。今天的每日挑战等你。`
 }
 
+/**
+ * Restrained-strip status line (design §状态机 坞内文字 column): the companion's
+ * default「X在这」presence, the live「在听…」cue, and the「X在这（静音中）」muted
+ * phrase. The other live phases (说话) surface the utterance itself, not a phrase.
+ */
+export function statusPhrase(status: DockStatus, name: string): string {
+  switch (status) {
+    case 'listening':
+      return '在听…'
+    case 'muted':
+      return `${name}在这（静音中）`
+    default:
+      return `${name}在这`
+  }
+}
+
+/**
+ * Shell-presence memory-hook line (companion-presence §记忆钩子槽): one warm,
+ * specific line drawn from the episodic layer, pointing at the most recent
+ * shared episode. A new companion with no shared history gets the gentle
+ * first-meeting line instead of a fabricated memory. Real data only — the title
+ * IS a real episode; missing data falls to the empty state.
+ *
+ * Restraint is the design's guardrail: this is ONE quiet line the host renders
+ * dismissibly, never a stacked notification.
+ */
+export function buildMemoryHook(recentEpisodeTitle: string | null): string {
+  if (recentEpisodeTitle && recentEpisodeTitle.trim().length > 0) {
+    return `还记得你上次${recentEpisodeTitle.trim()}。`
+  }
+  return '我们才刚认识。'
+}
+
 /** The subset of a settled run the post-game reaction may cite. */
 export interface PostGameReactionInput {
   outcome: 'defused' | 'exploded' | 'practice-cleared' | 'practice-timeout' | 'daily-timeout'

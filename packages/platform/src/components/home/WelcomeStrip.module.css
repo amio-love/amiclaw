@@ -1,6 +1,20 @@
-/* Signed-in welcome strip — replaces the anonymous hero on the logged-in
-   homepage. Handoff §6.2; pixel values mirror prototype/atlas/atlas.html.
-   The responsive @media tier (≤768px) carries atlas.html's exact values. */
+/* Signed-in home header — hosts the elevated companion presence bar
+   (DesignSystem.md §Companion Presence). `.host` wraps the presence bar plus a
+   slim play entry; `.strip` is the neutral greeting fallback used while the
+   companion identity read is in flight. */
+
+.host {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Slim play entry under the presence bar — preserves the signed-in home's
+   one-tap into a game without competing with the companion talk button. */
+.playRow {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 40px;
+}
 
 .strip {
   display: flex;

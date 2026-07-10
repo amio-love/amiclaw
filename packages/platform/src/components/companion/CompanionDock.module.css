@@ -142,13 +142,14 @@
 
 /* --- mic button ------------------------------------------------------------------ */
 
+/* ≥44px touch target (U4) — compact but tappable in the restrained strip. */
 .micButton {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid var(--border-hairline);
   background: rgba(255, 255, 255, 0.06);

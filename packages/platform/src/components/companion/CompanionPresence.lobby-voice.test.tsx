@@ -1,15 +1,13 @@
 /**
- * CompanionDock — the ratified auto-voice-on-login sequence, pinned FLAG-ON.
+ * CompanionPresence — the ratified auto-voice-on-login sequence, pinned FLAG-ON.
  *
- * `LOBBY_VOICE_CAPABLE` is module-mocked to true here so the full design
- * sequence (§自动语音登录序列) stays live and regression-pinned for the slice
- * that ships the lobby voice channel and flips the flag: greeting text first
- * → 300ms → permission request → grant keeps voice-default / denial persists
- * `denied-remembered` (never auto-repeated; the mic button is the sole,
- * user-gesture retry whose grant corrects back to voice-default).
- *
- * The shipping (flag-off) behaviour — the lobby never touching mic APIs — is
- * pinned in CompanionDock.test.tsx.
+ * `LOBBY_VOICE_CAPABLE` is module-mocked to true so the full design sequence
+ * (§自动语音登录序列) stays live and regression-pinned: greeting text first →
+ * 300ms → permission request → grant keeps voice-default / denial persists
+ * `denied-remembered` (never auto-repeated; the talk button is the sole,
+ * user-gesture retry whose grant corrects back to voice-default). The shell
+ * context is the home (pathname `/`) presence; the in-game context is the
+ * off-home strip.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -17,25 +15,12 @@ import { MemoryRouter, useNavigate } from 'react-router-dom'
 import type { CompanionIdentity, VoicePosture } from '@shared/companion-types'
 import { VOICE_POSTURE_STORAGE_KEY } from '@shared/companion-presence'
 
-const authState = vi.hoisted(() => ({
-  current: { status: 'anon', user: null } as { status: string; user: unknown },
-}))
-const companionState = vi.hoisted(() => ({
-  current: { status: 'loading', companion: null } as {
-    status: string
-    companion: CompanionIdentity | null
-    stats?: unknown
-  },
-}))
 const apiMocks = vi.hoisted(() => ({
   fetchMemories: vi.fn(),
   fetchAccountStreak: vi.fn(),
   fetchEarliestMemoryTitle: vi.fn(),
   putVoicePosture: vi.fn(),
 }))
-// The lobby voice session is mocked: `open` / `close` are spies, and `current`
-// is the controllable hook state (a rerender re-reads it, so a test can simulate
-// the channel going live + streaming a greeting).
 const lobbyMock = vi.hoisted(() => ({
   current: {
     status: 'idle' as string,
@@ -48,19 +33,12 @@ const lobbyMock = vi.hoisted(() => ({
   close: vi.fn(),
 }))
 
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ ...authState.current, logout: async () => {} }),
-}))
-vi.mock('@/hooks/useCompanion', () => ({
-  useCompanion: () => ({ state: companionState.current, reload: () => {} }),
-}))
 vi.mock('@/lib/companion-api', () => ({
   fetchMemories: apiMocks.fetchMemories,
   fetchAccountStreak: apiMocks.fetchAccountStreak,
   fetchEarliestMemoryTitle: apiMocks.fetchEarliestMemoryTitle,
   putVoicePosture: apiMocks.putVoicePosture,
 }))
-// Flip the capability: this file pins the sequence the next slice engages.
 vi.mock('./lobby-voice', () => ({
   LOBBY_VOICE_CAPABLE: true,
   LOBBY_VOICE_NOTE: '语音陪伴在拆弹局内可用，进入每日挑战开启。',
@@ -73,7 +51,7 @@ vi.mock('./useLobbyVoiceSession', () => ({
   }),
 }))
 
-import CompanionDock from './CompanionDock'
+import CompanionPresence from './CompanionPresence'
 
 const COMPANION: CompanionIdentity = {
   name: '阿澈',
@@ -84,13 +62,8 @@ const COMPANION: CompanionIdentity = {
   created_at: '2026-06-30T00:00:00.000Z',
 }
 
-function signInWithCompanion(posture: VoicePosture = 'voice-default') {
-  authState.current = { status: 'authed', user: { user_id: 'u1', email: 'a@b.c' } }
-  companionState.current = {
-    status: 'exists',
-    companion: { ...COMPANION, voice_posture: posture },
-    stats: { games_completed: 0, successes: 0 },
-  }
+function withPosture(posture: VoicePosture): CompanionIdentity {
+  return { ...COMPANION, voice_posture: posture }
 }
 
 function installMemoryStorage(): void {
@@ -120,20 +93,26 @@ function stubMic(outcome: 'granted' | 'denied') {
   return getUserMedia
 }
 
-function renderDock(path = '/') {
+function renderShell(companion: CompanionIdentity) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <CompanionDock />
+    <MemoryRouter initialEntries={['/']}>
+      <CompanionPresence context="shell" companion={companion} />
     </MemoryRouter>
   )
 }
 
-describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', () => {
+function renderInGame(companion: CompanionIdentity, path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <CompanionPresence context="in-game" companion={companion} />
+    </MemoryRouter>
+  )
+}
+
+describe('CompanionPresence — auto-voice sequence (lobby voice capability ON)', () => {
   beforeEach(() => {
     vi.useRealTimers()
     installMemoryStorage()
-    authState.current = { status: 'anon', user: null }
-    companionState.current = { status: 'loading', companion: null }
     apiMocks.fetchMemories.mockReset()
     apiMocks.fetchMemories.mockResolvedValue({ kind: 'ok', memories: [] })
     apiMocks.fetchAccountStreak.mockReset()
@@ -153,26 +132,21 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     lobbyMock.close.mockReset()
   })
 
-  it('greeting text lands BEFORE the mic request; grant keeps voice-default', async () => {
-    signInWithCompanion()
+  it('shell: greeting text lands BEFORE the mic request; grant keeps voice-default', async () => {
     const getUserMedia = stubMic('granted')
-    renderDock()
+    renderShell(COMPANION)
 
-    // Text first — never blocked on the permission dialog.
     await screen.findAllByText('我在这。今天的每日挑战等你。')
     expect(getUserMedia).not.toHaveBeenCalled()
 
-    // 300ms later the sequence requests the mic exactly once.
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
-    // Grant: posture stays voice-default — nothing is persisted.
     expect(apiMocks.putVoicePosture).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
   })
 
-  it('a REAL denial persists denied-remembered; the greeting text stays', async () => {
-    signInWithCompanion()
+  it('shell: a REAL denial persists denied-remembered; the greeting text stays', async () => {
     stubMic('denied')
-    renderDock()
+    renderShell(COMPANION)
 
     await screen.findAllByText('我在这。今天的每日挑战等你。')
     await waitFor(() => expect(apiMocks.putVoicePosture).toHaveBeenCalledWith('denied-remembered'))
@@ -180,63 +154,36 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     expect(screen.getAllByText('我在这。今天的每日挑战等你。').length).toBeGreaterThan(0)
   })
 
-  it('denied-remembered never auto-requests; the mic button retry corrects on grant', async () => {
-    signInWithCompanion('denied-remembered')
+  it('shell: denied-remembered never auto-requests; the talk retry corrects on grant', async () => {
     const getUserMedia = stubMic('granted')
-    renderDock()
+    renderShell(withPosture('denied-remembered'))
 
-    expect(screen.getByText('阿澈在这（静音中）')).toBeInTheDocument()
+    expect(screen.getByText('静音中')).toBeInTheDocument()
     expect(getUserMedia).not.toHaveBeenCalled()
 
-    // Manual retry (user gesture): granted → posture corrects back to
-    // voice-default and the dock elevates.
     fireEvent.click(screen.getByRole('button', { name: '开启语音' }))
     await waitFor(() => expect(apiMocks.putVoicePosture).toHaveBeenCalledWith('voice-default'))
     expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
-    await screen.findByText('阿澈在这')
+    await screen.findByText('在这')
   })
 
-  it('a failed posture PUT rolls the cache back (cheap durability)', async () => {
-    signInWithCompanion()
+  it('shell: step 4 — GRANT opens the lobby voice session, reusing the granted stream', async () => {
     stubMic('granted')
-    apiMocks.putVoicePosture.mockResolvedValue({ kind: 'error' })
-    renderDock('/leaderboard')
-
-    fireEvent.click(screen.getByRole('button', { name: '阿澈 控制菜单' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: '静音' }))
-
-    // This visit still mutes (session behaviour honoured)…
-    expect(screen.getByText('阿澈在这（静音中）')).toBeInTheDocument()
-    // …but the cache never claims a posture the account did not accept.
-    await waitFor(() =>
-      expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
-    )
-  })
-
-  it('step 4 — GRANT opens the lobby voice session, reusing the granted stream', async () => {
-    signInWithCompanion()
-    stubMic('granted')
-    renderDock()
+    renderShell(COMPANION)
 
     await screen.findAllByText('我在这。今天的每日挑战等你。')
-    // After the 300ms probe grants, the lobby session opens with the granted
-    // stream (no second mic prompt — the stream is handed straight to open()).
     await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
     expect(lobbyMock.open).toHaveBeenCalledWith(
       expect.objectContaining({ getTracks: expect.any(Function) })
     )
   })
 
-  it('Option B — the live streamed greeting drives the dock bubble (subtitle)', async () => {
-    signInWithCompanion()
+  it('shell: Option B — the live streamed greeting drives the presence subtitle', async () => {
     stubMic('granted')
-    const { rerender } = renderDock()
+    const { rerender } = renderShell(COMPANION)
 
-    // The instant client greeting lands first.
     await screen.findAllByText('我在这。今天的每日挑战等你。')
 
-    // The voice channel goes live and streams the memory-grounded greeting; the
-    // bubble becomes its live subtitle (replacing the instant text).
     await act(async () => {
       lobbyMock.current = {
         status: 'ready',
@@ -247,7 +194,7 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
       }
       rerender(
         <MemoryRouter initialEntries={['/']}>
-          <CompanionDock />
+          <CompanionPresence context="shell" companion={COMPANION} />
         </MemoryRouter>
       )
     })
@@ -255,10 +202,9 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     expect(screen.getAllByText('嘿，又见面了，昨天那关你收尾很利落。').length).toBeGreaterThan(0)
   })
 
-  it('muting closes the live lobby channel (abrupt, no memory)', async () => {
-    signInWithCompanion()
+  it('shell: muting closes the live lobby channel (abrupt, no memory)', async () => {
     stubMic('granted')
-    renderDock()
+    renderShell(COMPANION)
 
     await screen.findAllByText('我在这。今天的每日挑战等你。')
     fireEvent.click(screen.getByRole('button', { name: '阿澈 控制菜单' }))
@@ -267,22 +213,31 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
     expect(lobbyMock.close).toHaveBeenCalled()
   })
 
-  it('a mic tap on a non-homepage page opens a REAL lobby session, not fake state (F3)', async () => {
-    // Re-audit F3: on /me etc. the mic tap flipped the dock to「阿澈在这」but
-    // connected NOTHING (voice was homepage-only). It must genuinely elevate now.
-    signInWithCompanion('quiet-remembered')
-    renderDock('/me')
+  it('in-game: a failed posture PUT rolls the cache back (cheap durability)', async () => {
+    stubMic('granted')
+    apiMocks.putVoicePosture.mockResolvedValue({ kind: 'error' })
+    renderInGame(COMPANION, '/leaderboard')
 
-    // A quiet-remembered visit lands muted with a 开启语音 affordance.
+    fireEvent.click(screen.getByRole('button', { name: '阿澈 控制菜单' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '静音' }))
+
+    expect(screen.getByText('阿澈在这（静音中）')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(window.localStorage.getItem(VOICE_POSTURE_STORAGE_KEY)).toBe('voice-default')
+    )
+  })
+
+  it('in-game: a mic tap on a non-homepage page opens a REAL lobby session, not fake state (F3)', async () => {
+    renderInGame(withPosture('quiet-remembered'), '/me')
+
     expect(screen.getByText('阿澈在这（静音中）')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '开启语音' }))
 
-    // The tap opens a real lobby session (no fake feedback) and the dock elevates.
     await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
     expect(screen.getByText('阿澈在这')).toBeInTheDocument()
   })
 
-  it('leaving the page tears the lobby channel down (scene-scoped, any page)', async () => {
+  it('in-game: leaving the page tears the lobby channel down (scene-scoped, any page)', async () => {
     function Navigator() {
       const navigate = useNavigate()
       return (
@@ -291,20 +246,17 @@ describe('CompanionDock — auto-voice sequence (lobby voice capability ON)', ()
         </button>
       )
     }
-    signInWithCompanion('quiet-remembered')
     render(
       <MemoryRouter initialEntries={['/me']}>
-        <CompanionDock />
+        <CompanionPresence context="in-game" companion={withPosture('quiet-remembered')} />
         <Navigator />
       </MemoryRouter>
     )
 
-    // Elevate a live session on /me, then navigate away.
     fireEvent.click(screen.getByRole('button', { name: '开启语音' }))
     await waitFor(() => expect(lobbyMock.open).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByRole('button', { name: 'go-leaderboard' }))
-    // The page change (scene switch) tears the channel down.
     await waitFor(() => expect(lobbyMock.close).toHaveBeenCalled())
   })
 })

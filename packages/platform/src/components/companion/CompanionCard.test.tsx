@@ -6,9 +6,10 @@
  *   2. seed mode: the full strip (在一起 + 完成 + 成功) shows, and the read
  *      never calls fetch (READ-ONLY seed).
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { __resetCompanionStore } from '@/hooks/useCompanion'
 import CompanionCard from './CompanionCard'
 
 function json(body: unknown, status = 200): Response {
@@ -35,6 +36,10 @@ function pillByLabel(label: string): HTMLElement {
 }
 
 describe('CompanionCard stats strip', () => {
+  beforeEach(() => {
+    __resetCompanionStore()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     window.sessionStorage.clear()
