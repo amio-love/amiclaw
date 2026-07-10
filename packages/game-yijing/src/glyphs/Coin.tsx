@@ -80,7 +80,7 @@ export function Coin({ side = 'heads', size = 88, glow = false, className, style
         />
         {heads ? (
           <g
-            fontFamily="'Noto Serif SC', serif"
+            fontFamily="var(--yj-font-serif)"
             fontSize="14"
             textAnchor="middle"
             fill="#5a3e00"

@@ -28,24 +28,6 @@
   gap: 10px;
   padding: 14px 0 4px;
 }
-.iconBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--hairline);
-  color: rgba(255, 255, 255, 0.7);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.iconBtn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 229, 62, 0.3);
-}
 .headerTitle {
   font: 400 24px var(--font-display);
   color: #fff;
@@ -167,7 +149,7 @@
 
 /* ───── judgment ───── */
 .judgment {
-  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--yj-font-serif);
   font-size: 17px;
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.92);
@@ -227,15 +209,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font:
-    700 14px 'Noto Serif SC',
-    serif;
+  font: 700 14px var(--yj-font-serif);
   letter-spacing: 0.04em;
   line-height: 1;
   transform: rotate(-6deg);
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.08) inset,
-    0 4px 12px rgba(194, 69, 58, 0.3);
+    0 4px 12px rgba(var(--yj-vermilion-rgb), 0.3);
   position: relative;
 }
 .seal::after {

@@ -22,30 +22,10 @@
 .runHeader {
   padding: 20px 22px 12px;
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 44px 1fr auto;
   gap: 12px;
   align-items: center;
   flex-shrink: 0;
-}
-
-.iconBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s;
-}
-
-.iconBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .title {

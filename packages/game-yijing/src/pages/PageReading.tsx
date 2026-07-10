@@ -1,5 +1,5 @@
-import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { Button } from '@amiclaw/ui'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { BackLink, Button } from '@amiclaw/ui'
 import { Hexagram } from '../glyphs'
 import { changedValues, changingLines, hexagramFromBinary, type YaoSextet } from '../glyphs/utils'
 import { hexagramByNumber, type HexagramLine } from '../manual'
@@ -55,19 +55,7 @@ export function PageReading() {
   return (
     <main className={styles.page}>
       <header className={styles.runHeader}>
-        <Link to="/casting" className={styles.iconBtn} aria-label="返回 起卦">
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          >
-            <path d="M15 4 L7 12 L15 20" />
-          </svg>
-        </Link>
+        <BackLink variant="icon" label="返回 起卦" to="/casting" />
         <div className={styles.title}>解卦</div>
         <div className={styles.meta}>
           <div className={styles.metaLead}>第 3 步 / 3</div>
