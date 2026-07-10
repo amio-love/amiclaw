@@ -24,6 +24,20 @@ You are the bomb defuser. Your AI is the manual expert.
 Communication happens entirely through voice, so the experience works with
 Claude, ChatGPT, Gemini, or any other voice-capable AI tool.
 
+## Dual Shadow Chase
+
+**Dual Shadow Chase** (`claw.amio.fans/shadow-chase`) is a two-to-five-minute
+solo real-time grid chase for one human and the existing AI companion.
+
+- Collect three cores and reach the exit while a pursuer searches the map
+- Command the companion to follow, split, or decoy; swap positions when ready
+- Rescue a captured shadow before its deadline
+- Keep playing through missing, slow, malformed, or unauthenticated model intent
+
+The deterministic engine owns frame-level play. Arcade supports one human plus
+one AI companion; rooms, matchmaking, human co-op, PvP, and voice rooms belong
+to the AMIO main world.
+
 ## How It Works
 
 ```text
@@ -71,6 +85,7 @@ amiclaw/
 │   ├── api/                 # Leaderboard handler module (Pages Functions)
 │   ├── platform/            # Platform shell and deploy root
 │   ├── game-bombsquad/      # BombSquad React SPA
+│   ├── game-shadow-chase/   # Dual Shadow Chase React SPA
 │   ├── game-yijing/         # Yijing Oracle React SPA
 │   ├── ui/                  # Shared Atlas UI primitives
 │   └── manual/              # Manual static pages and YAML data
@@ -125,6 +140,7 @@ Workspace notes:
 
 - `packages/platform` contains the React + Vite platform shell and deploy root
 - `packages/game-bombsquad` contains the BombSquad React + Vite game client
+- `packages/game-shadow-chase` contains the Dual Shadow Chase React + Vite game client
 - `packages/game-yijing` contains the Yijing Oracle React + Vite game client
 - `packages/manual` builds the static manual pages and YAML data
 - `packages/api` contains the leaderboard handler module imported by Pages Functions
@@ -136,4 +152,5 @@ See [`docs/plans/`](./docs/plans/) for implementation plans and
 
 - AMIO Arcade: [claw.amio.fans](https://claw.amio.fans)
 - BombSquad: [claw.amio.fans/bombsquad](https://claw.amio.fans/bombsquad)
+- Dual Shadow Chase: [claw.amio.fans/shadow-chase](https://claw.amio.fans/shadow-chase)
 - Part of the [AMIO](https://amio.fans) ecosystem

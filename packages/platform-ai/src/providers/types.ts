@@ -42,6 +42,11 @@ export interface LlmCompletionRequest {
   messages: ChatMessage[]
   /** Optional sampling temperature, passed through to the vendor as-is. */
   temperature?: number
+  /**
+   * Caller cancellation. Adapters must propagate it through the upstream fetch
+   * and any pending stream read, then release the stream reader on abort.
+   */
+  signal?: AbortSignal
 }
 
 /**

@@ -1,0 +1,9 @@
+:root {
+  color-scheme: dark;
+  --sc-player: var(--amio-yellow, #ffe53e);
+  --sc-companion: var(--accent-violet, #b478ff);
+  --sc-pursuer: #ff6b9d;
+  --sc-core: var(--amio-positive, #4bd266);
+  --sc-cell: rgba(255, 255, 255, 0.035);
+  --sc-wall: rgba(255, 255, 255, 0.12);
+}

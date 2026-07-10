@@ -76,6 +76,17 @@ export interface ResolvedConfig extends ProviderConfig {
   gameId: GameId
 }
 
+/** Text-only provider configuration for sparse, non-voice game intents. */
+export interface IntentProviderConfig {
+  systemPromptConfig: SystemPromptConfig
+  llm: LayerSelection
+}
+
+/** Resolved text-intent config. It intentionally has no STT or TTS selection. */
+export interface ResolvedIntentConfig extends IntentProviderConfig {
+  gameId: GameId
+}
+
 /**
  * Built-in registry. Keyed by `gameId`. Adding a game = adding an entry;
  * switching a layer's vendor = editing that entry's `provider`/`model`.
@@ -256,6 +267,24 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
   },
 }
 
+const INTENT_PROVIDER_REGISTRY: Record<GameId, IntentProviderConfig> = {
+  'shadow-chase': {
+    systemPromptConfig: {
+      role: 'You are the player’s existing AI companion in Shadow Chase. Propose one sparse, high-level legal intent; deterministic game rules remain authoritative.',
+      ruleTemplate: [
+        'Choose exactly one intent from the supplied allowedIntents list.',
+        'Use follow or decoy without a target. Use split only with one reachable, uncollected objective id supplied in the state.',
+        'Never propose coordinates, paths, game-rule changes, identity changes, assets, or memory writes.',
+        'Return exactly one JSON object matching the requested response schema and no surrounding text.',
+      ],
+    },
+    llm: {
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    },
+  },
+}
+
 /** Deep-clone a layer selection so callers cannot mutate the registry. */
 function cloneLayer(layer: LayerSelection): LayerSelection {
   return { provider: layer.provider, model: layer.model }
@@ -289,5 +318,24 @@ export function resolveConfig(gameId: GameId): ResolvedConfig {
     llm: cloneLayer(config.llm),
     stt: cloneLayer(config.stt),
     tts: cloneLayer(config.tts),
+  }
+}
+
+/** Resolve the LLM-only configuration for a sparse game-intent surface. */
+export function resolveIntentConfig(gameId: GameId): ResolvedIntentConfig {
+  const config = INTENT_PROVIDER_REGISTRY[gameId]
+  if (config === undefined) {
+    const known = Object.keys(INTENT_PROVIDER_REGISTRY).join(', ') || '<none>'
+    throw new Error(
+      `provider-config: no intent configuration registered for gameId "${gameId}". Known gameIds: ${known}.`
+    )
+  }
+  return {
+    gameId,
+    systemPromptConfig: {
+      role: config.systemPromptConfig.role,
+      ruleTemplate: [...config.systemPromptConfig.ruleTemplate],
+    },
+    llm: cloneLayer(config.llm),
   }
 }

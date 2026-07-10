@@ -182,7 +182,8 @@ export function parseSseLine(line: string): SseEvent {
 export async function* sseStreamToChunks(
   stream: ReadableStream<Uint8Array>,
   onUsage?: (usage: LlmUsage) => void,
-  idleMs?: number
+  idleMs?: number,
+  signal?: AbortSignal
 ): AsyncIterable<LlmCompletionChunk> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
@@ -208,18 +209,34 @@ export async function* sseStreamToChunks(
   // consumer spends between pulls. A stalled producer rejects here; a live one
   // (even slow) never does.
   const readNext = async (): Promise<Awaited<ReturnType<typeof reader.read>>> => {
-    if (idleMs === undefined) return reader.read()
+    if (signal?.aborted) throw abortReason(signal)
     let deadline: Deadline | undefined
-    const idle = new Promise<never>((_resolve, reject) => {
-      deadline = startDeadline(idleMs, () => {
-        traceTurnError('llm', 'idle-timeout', { idleMs, deltaCount })
-        reject(new Error(`deepseek: SSE stream idle for >${idleMs}ms after first response`))
-      })
-    })
+    let removeAbortListener: (() => void) | undefined
+    const candidates: Array<Promise<Awaited<ReturnType<typeof reader.read>>>> = [reader.read()]
+    if (idleMs !== undefined) {
+      candidates.push(
+        new Promise<never>((_resolve, reject) => {
+          deadline = startDeadline(idleMs, () => {
+            traceTurnError('llm', 'idle-timeout', { idleMs, deltaCount })
+            reject(new Error(`deepseek: SSE stream idle for >${idleMs}ms after first response`))
+          })
+        })
+      )
+    }
+    if (signal !== undefined) {
+      candidates.push(
+        new Promise<never>((_resolve, reject) => {
+          const onAbort = (): void => reject(abortReason(signal))
+          signal.addEventListener('abort', onAbort, { once: true })
+          removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+        })
+      )
+    }
     try {
-      return await Promise.race([reader.read(), idle])
+      return await Promise.race(candidates)
     } finally {
       deadline?.cancel()
+      removeAbortListener?.()
     }
   }
 
@@ -266,9 +283,9 @@ export async function* sseStreamToChunks(
       }
     }
   } finally {
-    // An idle-deadline bailout (or the early `[DONE]` return) can leave a read
-    // request outstanding; cancel the stream first so `releaseLock` does not
-    // throw on a pending read, and so the underlying body / socket is torn down.
+    // An idle-deadline/caller-abort bailout (or the early `[DONE]` return) can
+    // leave a read outstanding. Cancelling tears down the upstream body before
+    // the lock is released, so no detached stream read survives the request.
     try {
       await reader.cancel()
     } catch {
@@ -283,6 +300,10 @@ export async function* sseStreamToChunks(
     traceTurn('llm', 'stream-end', { deltaCount, streamEndReason: 'body-closed-no-sentinel' })
     yield { content: '', done: true }
   }
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('deepseek: request aborted')
 }
 
 /**
@@ -364,58 +385,72 @@ export function createDeepSeekLlmProvider(opts: DeepSeekProviderOptions): DeepSe
       // `streamIdleMs` idle deadline inside `sseStreamToChunks` — a long but live
       // stream runs freely, while one that delivers its first delta and then goes
       // permanently silent (the park this guards) is failed loud there.
-      const connectController = new AbortController()
-      const connectDeadline = startDeadline(TIMEOUTS.connectMs, () =>
-        connectController.abort(
-          new Error(`deepseek: connect timed out after ${TIMEOUTS.connectMs}ms`)
-        )
-      )
-      let response: Response
+      const upstreamController = new AbortController()
+      const abortUpstream = (): void => {
+        if (!upstreamController.signal.aborted && request.signal !== undefined) {
+          upstreamController.abort(abortReason(request.signal))
+        }
+      }
+      if (request.signal?.aborted) abortUpstream()
+      else request.signal?.addEventListener('abort', abortUpstream, { once: true })
+
+      let connectDeadline: Deadline | undefined
       try {
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${opts.apiKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: connectController.signal,
-        })
-      } finally {
-        // Headers arrived (or the fetch failed / aborted) — stop the CONNECT timer
-        // either way, leaving no dangling handle. The streaming phase that follows
-        // is not unguarded: it is bounded by the per-chunk `streamIdleMs` idle
-        // deadline inside `sseStreamToChunks`, not by this connect deadline.
-        connectDeadline.cancel()
-      }
-
-      if (!response.ok) {
-        const detail = await safeReadText(response)
-        throw new Error(
-          `deepseek: chat completions request failed with ${response.status} ${response.statusText}${
-            detail ? `: ${detail}` : ''
-          }`
+        connectDeadline = startDeadline(TIMEOUTS.connectMs, () =>
+          upstreamController.abort(
+            new Error(`deepseek: connect timed out after ${TIMEOUTS.connectMs}ms`)
+          )
         )
-      }
-
-      if (response.body === null) {
-        throw new Error('deepseek: response had no body to stream')
-      }
-
-      // Reset before consuming so a half-consumed prior stream cannot leak a
-      // stale usage value into this completion.
-      provider.lastUsage = undefined
-      yield* sseStreamToChunks(
-        response.body,
-        (usage) => {
-          provider.lastUsage = usage
-          traceTurn('llm', 'usage', {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
+        let response: Response
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${opts.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: upstreamController.signal,
           })
-        },
-        streamIdleMs
-      )
+        } finally {
+          // Headers arrived (or the fetch failed / aborted) — stop the connect
+          // timer. Caller cancellation remains wired to the body stream below.
+          connectDeadline.cancel()
+          connectDeadline = undefined
+        }
+
+        if (!response.ok) {
+          const detail = await safeReadText(response)
+          throw new Error(
+            `deepseek: chat completions request failed with ${response.status} ${response.statusText}${
+              detail ? `: ${detail}` : ''
+            }`
+          )
+        }
+
+        if (response.body === null) {
+          throw new Error('deepseek: response had no body to stream')
+        }
+
+        // Reset before consuming so a half-consumed prior stream cannot leak a
+        // stale usage value into this completion.
+        provider.lastUsage = undefined
+        yield* sseStreamToChunks(
+          response.body,
+          (usage) => {
+            provider.lastUsage = usage
+            traceTurn('llm', 'usage', {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+            })
+          },
+          streamIdleMs,
+          upstreamController.signal
+        )
+      } finally {
+        connectDeadline?.cancel()
+        request.signal?.removeEventListener('abort', abortUpstream)
+      }
     },
   }
 

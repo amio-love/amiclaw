@@ -1,0 +1,32 @@
+# Dual Shadow Chase direct-load and responsive-play smoke. The game must remain
+# fully interactive when both optional network handoffs are unavailable.
+
+Feature: Dual Shadow Chase deterministic solo play
+  As an AMIO Arcade visitor
+  I want to chase with my AI companion without waiting for a model
+  So that network failure never blocks the game
+
+  # Source: shadow-chase-deterministic-solo
+  @playwright
+  Scenario: Direct load starts a deterministic chase while model intent is unavailable
+    Given Shadow Chase optional network handoffs are unavailable
+    And I open /shadow-chase/
+    Then I see a heading "Dual Shadow Chase"
+    And the Shadow Chase opening rule is complete
+
+    When I click "Start chase"
+    Then the Shadow Chase board and essential controls are visible
+    And Shadow Chase exposes no multiplayer affordance
+    And Shadow Chase survives the five-second opening window without input
+
+    When I click "Decoy"
+    Then the Shadow Chase command "Decoy" is active
+
+  # Source: shadow-chase-mobile-controls
+  @playwright
+  Scenario: Phone controls remain reachable and clear of the board
+    Given Shadow Chase optional network handoffs are unavailable
+    And the phone viewport is 390 by 844 pixels
+    And I open /shadow-chase/
+    When I click "Start chase"
+    Then Shadow Chase phone controls are at least 44 pixels and do not cover the board

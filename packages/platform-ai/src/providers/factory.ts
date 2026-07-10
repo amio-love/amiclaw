@@ -14,7 +14,7 @@
  */
 
 import type { LlmProvider, SttProvider, TtsProvider } from './types'
-import type { ResolvedConfig } from '../provider-config'
+import type { ResolvedConfig, ResolvedIntentConfig } from '../provider-config'
 import type { VoiceMappingEnv } from '../voice-id-mapping'
 import { createDeepSeekLlmProvider } from './deepseek'
 import { createVolcengineSpeechProvider } from './volcengine'
@@ -80,7 +80,10 @@ function requireCredential(value: string | undefined, name: string, providerId: 
 }
 
 /** Build the LLM provider for the resolved LLM layer selection. */
-function createLlmProvider(resolved: ResolvedConfig, env: ProviderEnv): LlmProvider {
+function createLlmProvider(
+  resolved: Pick<ResolvedConfig, 'llm'> | Pick<ResolvedIntentConfig, 'llm'>,
+  env: ProviderEnv
+): LlmProvider {
   const { provider, model } = resolved.llm
   switch (provider) {
     case PROVIDER_MOCK:
@@ -96,6 +99,17 @@ function createLlmProvider(resolved: ResolvedConfig, env: ProviderEnv): LlmProvi
         `provider-factory: unknown llm provider id "${provider}" (known: ${PROVIDER_MOCK}, ${PROVIDER_DEEPSEEK})`
       )
   }
+}
+
+/**
+ * Build only the configured LLM layer for a sparse text-intent route.
+ * Speech providers and their credentials are deliberately outside this seam.
+ */
+export function createIntentLlmProvider(
+  resolved: ResolvedIntentConfig,
+  env: ProviderEnv
+): LlmProvider {
+  return createLlmProvider(resolved, env)
 }
 
 /**

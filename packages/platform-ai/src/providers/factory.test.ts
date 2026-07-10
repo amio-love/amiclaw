@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createProviders, type ProviderEnv } from './factory'
-import type { ResolvedConfig } from '../provider-config'
+import { createIntentLlmProvider, createProviders, type ProviderEnv } from './factory'
+import { resolveIntentConfig, type ResolvedConfig } from '../provider-config'
 import * as volcengine from './volcengine'
 
 function config(over: Partial<ResolvedConfig> = {}): ResolvedConfig {
@@ -158,5 +158,20 @@ describe('createProviders', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe('createIntentLlmProvider', () => {
+  it('builds only the configured LLM and requires no speech credential', () => {
+    const provider = createIntentLlmProvider(resolveIntentConfig('shadow-chase'), {
+      DEEPSEEK_API_KEY: 'deepseek-secret',
+    })
+    expect(provider.streamCompletion).toBeTypeOf('function')
+  })
+
+  it('fails precisely when the selected LLM credential is missing', () => {
+    expect(() => createIntentLlmProvider(resolveIntentConfig('shadow-chase'), {})).toThrow(
+      /DEEPSEEK_API_KEY/
+    )
   })
 })
