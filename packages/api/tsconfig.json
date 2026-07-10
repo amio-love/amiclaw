@@ -20,6 +20,7 @@
     "../../shared/leaderboard-optimistic.ts",
     "../../shared/voice/audio-capture.ts",
     "../../shared/voice/audio-context.ts",
-    "../../shared/voice/audio-playback.ts"
+    "../../shared/voice/audio-playback.ts",
+    "../../shared/voice/use-game-voice-session.ts"
   ]
 }

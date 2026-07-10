@@ -5,10 +5,29 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
-**Dual Shadow Chase joins Arcade** — A new two-to-five-minute solo game lets one
-human and the existing AI companion collect cores, split up, decoy the pursuer,
-rescue a capture, swap positions, and escape. Deterministic fallback keeps the
-run playable when optional model intent is slow or unavailable.
+**Dual Shadow Chase now starts with a real tactical conversation** — Improvement.
+The new two-to-five-minute solo game now uses Chinese-first player copy and shows
+the complete frozen map before the chase. Tactical planning defaults to 20 seconds,
+can be changed from 5 to 60 seconds in five-second steps before or during planning,
+persists on the device for rapid playtest tuning, and can end early with 「立即出发」.
+The visible final `3 / 2 / 1` leads directly into the chase; hiding the page pauses
+planning without catch-up.
+
+Authenticated players can explicitly open the existing account companion's
+full-duplex voice channel during planning and keep it through the chase. It reuses
+the same companion identity, voice, provider adapters, and memory boundary; an
+explicit final player utterance may request only 「跟随」「分头」「诱敌」. Anonymous
+play, microphone denial, auth or companion lookup failure, provider timeout, and
+voice guard closure all keep the deterministic strategy buttons live and never
+delay the countdown or game.
+
+Movement now preserves rapid direction presses in FIFO order, keeps a tapped map
+destination active across fixed simulation steps, and explains blocked input or a
+full input queue in Chinese instead of appearing to freeze. The homepage no longer
+gives Dual Shadow Chase a second featured block: BombSquad remains the sole
+featured game, while 「双影追逃」 and 「易经签卜」 sit together as honest playable
+cards in the peer game grid. No room, matchmaking, human co-op, PvP, or voice-room
+surface was added.
 
 **Your AI partner is named right on the homepage** - Improvement. The homepage
 hero used to say a generic 「带上你的 AI 伙伴，来玩一局」. It now names the voice

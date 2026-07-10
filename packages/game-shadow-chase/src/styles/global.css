@@ -76,6 +76,13 @@ h1 {
   line-height: 0.96;
 }
 
+.secondary-title {
+  margin: -8px 0 18px;
+  color: var(--text-3, rgba(255, 255, 255, 0.55));
+  font-family: var(--font-display, system-ui, sans-serif);
+  letter-spacing: 0.08em;
+}
+
 .start-rule,
 .result-shell > p:not(.eyebrow) {
   max-width: 580px;
@@ -90,6 +97,101 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.start-planning-option {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  color: var(--text-3, rgba(255, 255, 255, 0.55));
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.planning-duration {
+  display: grid;
+  grid-template-columns: 48px minmax(88px, 1fr) 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+.planning-duration button,
+.voice-control {
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 10px);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.planning-duration-value {
+  display: flex;
+  min-height: 48px;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-md, 10px);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.planning-duration-value strong {
+  font-family: var(--font-numeric, system-ui, sans-serif);
+  font-size: 1.35rem;
+}
+
+.planning-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(200px, 260px) minmax(150px, 200px);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-xl, 20px);
+  background: var(--glass-card, rgba(41, 43, 45, 0.4));
+}
+
+.planning-header h1 {
+  margin: 4px 0 6px;
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  line-height: 1.1;
+}
+
+.planning-header p {
+  margin: 0;
+  color: var(--text-2, rgba(255, 255, 255, 0.7));
+  line-height: 1.45;
+}
+
+.planning-countdown {
+  display: grid;
+  min-width: 84px;
+  text-align: center;
+}
+
+.planning-countdown strong {
+  color: var(--amio-yellow, #ffe53e);
+  font-family: var(--font-numeric, system-ui, sans-serif);
+  font-size: 2.2rem;
+}
+
+.planning-countdown-label {
+  color: var(--text-3, rgba(255, 255, 255, 0.55));
+  font-size: 0.75rem;
+}
+
+.planning-header.urgent {
+  border-color: rgba(255, 229, 62, 0.55);
+}
+
+.planning-header.urgent .planning-countdown strong {
+  text-shadow: 0 0 18px rgba(255, 229, 62, 0.6);
+  animation: planning-pulse 0.75s ease-in-out infinite alternate;
+}
+
+@keyframes planning-pulse {
+  to {
+    transform: scale(1.08);
+  }
 }
 
 .start-options label {
@@ -191,6 +293,25 @@ select {
   touch-action: none;
 }
 
+.game-board.interactive {
+  cursor: crosshair;
+}
+
+.game-board.planning-board {
+  cursor: default;
+}
+
+.board-overlay {
+  pointer-events: none;
+}
+
+.path-target {
+  fill: rgba(255, 229, 62, 0.08);
+  stroke: var(--amio-yellow, #ffe53e);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
 .board-cell {
   fill: var(--sc-cell);
   stroke: rgba(255, 255, 255, 0.04);
@@ -271,10 +392,6 @@ select {
   stroke-width: 3;
 }
 
-.pursuer.dormant {
-  opacity: 0.45;
-}
-
 .companion-bark {
   overflow: hidden;
   margin: 12px 0 0;
@@ -287,9 +404,65 @@ select {
   color: var(--sc-companion);
 }
 
+.input-feedback {
+  min-height: 1.5em;
+  margin: 10px 4px 0;
+  color: var(--amio-yellow, #ffe53e);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 .command-panel {
   display: grid;
   gap: 10px;
+}
+
+.strategy-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.strategy-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-3, rgba(255, 255, 255, 0.55));
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.strategy-current {
+  color: var(--amio-yellow, #ffe53e);
+  font-size: 1.2rem;
+}
+
+.strategy-effect,
+.strategy-recommendation p,
+.voice-strategy p {
+  margin: 5px 0 0;
+  color: var(--text-2, rgba(255, 255, 255, 0.7));
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.strategy-recommendation,
+.voice-strategy {
+  padding: 10px;
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-md, 10px);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.voice-control {
+  width: 100%;
+  margin: 4px 0 6px;
+}
+
+.voice-clarify {
+  color: var(--amio-yellow, #ffe53e) !important;
+}
+
+.voice-status-message {
+  color: var(--text-3, rgba(255, 255, 255, 0.55)) !important;
 }
 
 .command-row {
@@ -404,6 +577,17 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .planning-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .planning-header > .planning-duration,
+  .planning-start {
+    grid-column: span 1;
+  }
+
   .board-panel {
     padding: 8px;
     border-radius: var(--radius-xl, 20px);
@@ -417,6 +601,10 @@ select {
     grid-template-columns: 1fr auto;
     gap: 10px;
     padding: 10px;
+  }
+
+  .strategy-panel {
+    grid-column: 1 / -1;
   }
 
   .keyboard-hint {
@@ -440,6 +628,22 @@ select {
 
   .result-stats {
     grid-template-columns: 1fr;
+  }
+
+  .planning-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .planning-header > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .planning-header > .planning-duration {
+    grid-column: 1 / -1;
+  }
+
+  .planning-start {
+    grid-column: 1 / -1;
   }
 }
 

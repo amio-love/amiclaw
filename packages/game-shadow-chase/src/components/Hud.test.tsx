@@ -13,6 +13,6 @@ describe('pacing feedback', () => {
     })
     state.exit.enabled = false
     render(<Hud state={state} />)
-    expect(screen.getByText('Opens in 01:35')).toBeTruthy()
+    expect(screen.getByText('01:35 后开启')).toBeTruthy()
   })
 })

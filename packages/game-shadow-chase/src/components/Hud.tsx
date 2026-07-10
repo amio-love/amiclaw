@@ -1,4 +1,4 @@
-import { MIN_RUN_TICKS, OPENING_GRACE_TICKS, RUN_CAP_TICKS, TICK_MS } from '../engine/config'
+import { MIN_RUN_TICKS, RUN_CAP_TICKS, TICK_MS } from '../engine/config'
 import { rescueTicksRemaining } from '../engine/reducer'
 import type { SimulationState } from '../engine/types'
 
@@ -13,35 +13,32 @@ export function Hud({ state }: { state: SimulationState }) {
   const captured = (['player', 'companion'] as const)
     .map((id) => ({ id, ticks: rescueTicksRemaining(state.actors[id], state.tick) }))
     .find((entry) => entry.ticks !== null)
-  const openingTicks = Math.max(0, OPENING_GRACE_TICKS - state.tick)
   const gateStatus = state.exit.enabled
-    ? 'Open'
+    ? '已开启'
     : allCoresCollected
-      ? `Opens in ${formatTime(Math.max(0, MIN_RUN_TICKS - state.tick))}`
-      : '3 cores needed'
+      ? `${formatTime(Math.max(0, MIN_RUN_TICKS - state.tick))} 后开启`
+      : '还需收集 3 枚光核'
   return (
-    <header className="hud" aria-label="Chase status">
+    <header className="hud" aria-label="追逃状态">
       <div>
-        <span className="hud-label">Time</span>
+        <span className="hud-label">时间</span>
         <strong className="hud-value">{formatTime(state.tick)}</strong>
-        <span className="sr-only"> of {formatTime(RUN_CAP_TICKS)}</span>
+        <span className="sr-only">，上限 {formatTime(RUN_CAP_TICKS)}</span>
       </div>
       <div>
-        <span className="hud-label">Light cores</span>
+        <span className="hud-label">光核</span>
         <strong className="hud-value">{collected} / 3</strong>
       </div>
       <div>
-        <span className="hud-label">Moon gate</span>
+        <span className="hud-label">月门</span>
         <strong className="hud-value">{gateStatus}</strong>
       </div>
       <div className={captured ? 'rescue-alert' : ''}>
-        <span className="hud-label">Rescue</span>
+        <span className="hud-label">救援</span>
         <strong className="hud-value">
           {captured
-            ? `${captured.id} · ${((captured.ticks ?? 0) * TICK_MS) / 1000}s`
-            : openingTicks > 0
-              ? `Head start · ${(openingTicks * TICK_MS) / 1000}s`
-              : 'Team safe'}
+            ? `${captured.id === 'player' ? '你' : '伙伴'} · ${((captured.ticks ?? 0) * TICK_MS) / 1000} 秒`
+            : '双方安全'}
         </strong>
       </div>
     </header>

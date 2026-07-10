@@ -1,6 +1,7 @@
 import { AiToolTicker, Button, EyebrowTag, StatPill, Wordmark } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
+import { PLAYABLE_GAME_COUNT } from '@/mocks/upcoming-games'
 import styles from './AnonHero.module.css'
 
 interface AnonHeroProps {
@@ -20,7 +21,7 @@ interface AnonHeroProps {
    track: 今日上榜 (real daily participation) and 最快拆弹 (today's #1 time)
    come from the daily board — the leader pill hides until the board has a
    score. The static game-count pill reflects the currently playable platform
-   surfaces: BombSquad plus the Yijing Oracle preview. There is NO weekly /
+   surfaces from the homepage game catalog. There is NO weekly /
    online metric anywhere in the product, so no pill claims one. */
 export default function AnonHero({ onStart, board }: AnonHeroProps) {
   return (
@@ -58,7 +59,7 @@ export default function AnonHero({ onStart, board }: AnonHeroProps) {
         {board.leaderTimeMs !== null && (
           <StatPill className={styles.s2} value={formatMs(board.leaderTimeMs)} label="最快拆弹" />
         )}
-        <StatPill className={styles.s3} value="2" label="已上线游戏" />
+        <StatPill className={styles.s3} value={PLAYABLE_GAME_COUNT} label="已上线游戏" />
       </div>
     </section>
   )

@@ -6,6 +6,8 @@ import type {
   Direction,
   EngineAction,
   QueuedAction,
+  PlayerInputFeedback,
+  ReplayRecord,
   SimulationState,
 } from '../engine/types'
 import { buildIntentRequest } from '../model/intent-contract'
@@ -15,6 +17,7 @@ import {
   type IntentCoordinator,
   type IntentFetch,
 } from '../model/intent-client'
+import { createInputController } from './input-controller'
 
 export interface FrameScheduler {
   now(): number
@@ -27,12 +30,15 @@ export interface GameStore {
   subscribe(listener: () => void): () => void
   start(): void
   restart(): void
+  prepareNextRun(): void
   destroy(): void
   dispatch(action: EngineAction): void
   setHidden(hidden: boolean): void
   setHeldKey(code: string, pressed: boolean): void
   clearInput(): void
-  getInputSnapshot(): { heldKeys: string[] }
+  getInputSnapshot(): { heldKeys: string[]; bufferedMoves: Direction[] }
+  getInputFeedback(): PlayerInputFeedback | undefined
+  getReplayRecord(): ReplayRecord
   getDiagnostics(): {
     droppedCatchUpFrames: number
     destroyCount: number
@@ -83,14 +89,58 @@ export function createGameStore(options?: {
   let frameId: number | undefined
   let droppedCatchUpFrames = 0
   let actionQueue: QueuedAction[] = []
+  let replayActions: QueuedAction[] = []
+  const inputController = createInputController()
+  let inputFeedback: PlayerInputFeedback | undefined
   const listeners = new Set<() => void>()
   const heldKeys = new Map<string, number>()
   let heldSequence = 0
 
   const notify = () => listeners.forEach((listener) => listener())
-  const queue = (action: EngineAction) => {
+  const queueAction = (action: EngineAction, actionSequence = ++sequence) => {
     if (destroyed || state.phase !== 'running') return
-    actionQueue.push({ action, sequence: ++sequence, applyAtTick: state.tick + 1 })
+    actionQueue.push({ action, sequence: actionSequence, applyAtTick: state.tick + 1 })
+  }
+
+  const publishFeedback = (feedback: PlayerInputFeedback | undefined) => {
+    inputFeedback = feedback
+    state = { ...state }
+  }
+
+  const enqueueMove = (direction: Direction) => {
+    if (destroyed || hidden || state.phase !== 'running') return
+    const actionSequence = ++sequence
+    actionQueue = actionQueue.filter((queued) => queued.action.type !== 'player-target')
+    if (!inputController.enqueue({ direction, actionSequence })) {
+      // Show saturation immediately, but stamp it with the deterministic tick
+      // where the matching rejection action will enter the engine event stream.
+      const feedback: PlayerInputFeedback = {
+        tick: state.tick + 1,
+        actionSequence,
+        reason: 'queue-full',
+      }
+      queueAction({ type: 'player-input-rejected', reason: 'queue-full' }, actionSequence)
+      publishFeedback(feedback)
+      notify()
+    }
+  }
+
+  const queue = (action: EngineAction) => {
+    if (action.type === 'player-move') {
+      enqueueMove(action.direction)
+      return
+    }
+    if (action.type === 'player-target') {
+      if (destroyed || hidden || state.phase !== 'running') return
+      inputController.clear()
+      actionQueue = actionQueue.filter(
+        (queued) => queued.action.type !== 'player-move' && queued.action.type !== 'player-target'
+      )
+      queueAction(action)
+      return
+    }
+    if (action.type === 'swap') clearInput()
+    queueAction(action)
   }
 
   let intentCoordinator: IntentCoordinator | undefined
@@ -107,7 +157,7 @@ export function createGameStore(options?: {
         ) {
           return
         }
-        queue({
+        queueAction({
           type: 'accept-model-proposal',
           requestId: response.requestId,
           runId: response.runId,
@@ -173,13 +223,57 @@ export function createGameStore(options?: {
       accumulatorMs -= ticksToRun * TICK_MS
     }
     for (let index = 0; index < ticksToRun && state.phase === 'running'; index += 1) {
-      const direction = heldDirection()
-      if (direction) queue({ type: 'player-move', direction })
+      const bufferedMove = inputController.take()
+      if (bufferedMove) {
+        actionQueue.push({
+          action: { type: 'player-move', direction: bufferedMove.direction },
+          sequence: bufferedMove.actionSequence,
+          applyAtTick: state.tick + 1,
+        })
+      } else if (!state.playerNavigation) {
+        const direction = heldDirection()
+        if (direction) {
+          actionQueue.push({
+            action: { type: 'player-move', direction },
+            sequence: ++sequence,
+            applyAtTick: state.tick + 1,
+          })
+        }
+      }
       const previousEpoch = state.decisionEpoch
       const nextTick = state.tick + 1
       const actions = actionQueue.filter((action) => action.applyAtTick === nextTick)
       actionQueue = actionQueue.filter((action) => action.applyAtTick > nextTick)
+      replayActions.push(...structuredClone(actions))
       state = advance(state, actions)
+      const tickEvents = state.eventLog.filter((event) => event.tick === state.tick)
+      const rejected = tickEvents
+        .filter(
+          (event) =>
+            event.type === 'move-rejected' &&
+            event.reason !== undefined &&
+            event.actionSequence !== undefined
+        )
+        .sort((left, right) => right.actionSequence! - left.actionSequence!)[0]
+      if (rejected?.reason && rejected.actionSequence !== undefined) {
+        const reconciledFeedback: PlayerInputFeedback = {
+          tick: rejected.tick,
+          actionSequence: rejected.actionSequence,
+          reason: rejected.reason,
+        }
+        if (
+          inputFeedback?.tick !== reconciledFeedback.tick ||
+          inputFeedback.actionSequence !== reconciledFeedback.actionSequence ||
+          inputFeedback.reason !== reconciledFeedback.reason
+        ) {
+          publishFeedback(reconciledFeedback)
+        }
+      } else if (tickEvents.some((event) => event.type === 'move' && event.actorId === 'player')) {
+        publishFeedback(undefined)
+      }
+      if (tickEvents.some((event) => event.type === 'capture' && event.actorId === 'player')) {
+        clearInput()
+      }
       notify()
       if (state.phase !== 'running') {
         intentCoordinator?.abortCurrent()
@@ -192,7 +286,45 @@ export function createGameStore(options?: {
   }
 
   const clearInput = () => {
+    const changed =
+      heldKeys.size > 0 || inputController.snapshot().length > 0 || Boolean(state.playerNavigation)
     heldKeys.clear()
+    inputController.clear()
+    actionQueue = actionQueue.filter(
+      (queued) => queued.action.type !== 'player-move' && queued.action.type !== 'player-target'
+    )
+    if (state.playerNavigation) {
+      const next = { ...state }
+      delete next.playerNavigation
+      state = next
+    }
+    if (changed && !destroyed) notify()
+  }
+
+  const prepareNextRun = () => {
+    if (destroyed) return
+    intentCoordinator?.abortCurrent()
+    cancelFrame()
+    clearInput()
+    actionQueue = []
+    replayActions = []
+    inputFeedback = undefined
+    generation += 1
+    state = createRunningState(mapId, difficulty, initialSeed + generation - 1)
+    started = false
+    hidden = false
+    accumulatorMs = 0
+    lastFrameMs = scheduler.now()
+    notify()
+  }
+
+  const startRun = () => {
+    if (destroyed || started) return
+    started = true
+    lastFrameMs = scheduler.now()
+    accumulatorMs = 0
+    requestIntent()
+    scheduleFrame()
   }
 
   return {
@@ -201,29 +333,12 @@ export function createGameStore(options?: {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    start() {
-      if (destroyed || started) return
-      started = true
-      lastFrameMs = scheduler.now()
-      accumulatorMs = 0
-      requestIntent()
-      scheduleFrame()
-    },
+    start: startRun,
     restart() {
-      if (destroyed) return
-      intentCoordinator?.abortCurrent()
-      cancelFrame()
-      clearInput()
-      actionQueue = []
-      generation += 1
-      state = createRunningState(mapId, difficulty, initialSeed + generation - 1)
-      started = true
-      lastFrameMs = scheduler.now()
-      accumulatorMs = 0
-      notify()
-      requestIntent()
-      scheduleFrame()
+      prepareNextRun()
+      startRun()
     },
+    prepareNextRun,
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -241,7 +356,7 @@ export function createGameStore(options?: {
       if (hidden) {
         cancelFrame()
         accumulatorMs = 0
-        actionQueue = []
+        actionQueue = actionQueue.filter((queued) => queued.action.type === 'player-input-rejected')
         clearInput()
         intentCoordinator?.abortCurrent()
         if (state.phase === 'running') {
@@ -262,13 +377,29 @@ export function createGameStore(options?: {
     setHeldKey(code, pressed) {
       if (!(code in KEY_DIRECTIONS) || destroyed || hidden) return
       if (pressed) {
-        if (!heldKeys.has(code)) heldKeys.set(code, ++heldSequence)
+        if (!heldKeys.has(code)) {
+          heldKeys.set(code, ++heldSequence)
+          enqueueMove(KEY_DIRECTIONS[code])
+        }
       } else {
         heldKeys.delete(code)
       }
     },
     clearInput,
-    getInputSnapshot: () => ({ heldKeys: [...heldKeys.keys()].sort() }),
+    getInputSnapshot: () => ({
+      heldKeys: [...heldKeys.keys()].sort(),
+      bufferedMoves: inputController.snapshot().map((move) => move.direction),
+    }),
+    getInputFeedback: () => inputFeedback,
+    getReplayRecord: () => ({
+      schemaVersion: 1,
+      seed: state.seed,
+      mapId: state.mapId,
+      difficulty: state.difficulty,
+      actions: structuredClone(replayActions).sort(
+        (left, right) => left.applyAtTick - right.applyAtTick || left.sequence - right.sequence
+      ),
+    }),
     getDiagnostics: () => ({
       droppedCatchUpFrames,
       destroyCount,

@@ -11,16 +11,19 @@ Feature: Dual Shadow Chase deterministic solo play
   Scenario: Direct load starts a deterministic chase while model intent is unavailable
     Given Shadow Chase optional network handoffs are unavailable
     And I open /shadow-chase/
-    Then I see a heading "Dual Shadow Chase"
+    Then I see a heading "双影追逃"
     And the Shadow Chase opening rule is complete
 
-    When I click "Start chase"
+    When I click "查看地图并制定策略"
+    Then the Shadow Chase planning map is visible and frozen
+
+    When I click "立即出发"
     Then the Shadow Chase board and essential controls are visible
     And Shadow Chase exposes no multiplayer affordance
-    And Shadow Chase survives the five-second opening window without input
+    And Shadow Chase pursuit is active when the chase starts
 
-    When I click "Decoy"
-    Then the Shadow Chase command "Decoy" is active
+    When I click "诱敌"
+    Then the Shadow Chase command "诱敌" is active
 
   # Source: shadow-chase-mobile-controls
   @playwright
@@ -28,5 +31,7 @@ Feature: Dual Shadow Chase deterministic solo play
     Given Shadow Chase optional network handoffs are unavailable
     And the phone viewport is 390 by 844 pixels
     And I open /shadow-chase/
-    When I click "Start chase"
+    When I click "查看地图并制定策略"
+    And I click "立即出发"
     Then Shadow Chase phone controls are at least 44 pixels and do not cover the board
+    And Shadow Chase accepts a path target through an overlay

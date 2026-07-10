@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { TICK_MS } from '../engine/config'
+import { replay } from '../engine/replay'
 import { createGameStore, type FrameScheduler } from './game-store'
 
 class ManualScheduler implements FrameScheduler {
@@ -61,19 +62,22 @@ describe('fixed-step external store', () => {
     expect(store.getDiagnostics().destroyCount).toBe(1)
   })
 
-  it('cancels opposing held keys and keeps the most recent perpendicular key', () => {
+  it('preserves initial keydown steps before opposing held keys cancel', () => {
     const scheduler = new ManualScheduler()
     const store = createGameStore({ scheduler, seed: 5, mapId: 'courtyard', fetchIntent: null })
     store.start()
-    const start = store.getSnapshot().actors.player.position
     store.setHeldKey('KeyA', true)
     store.setHeldKey('KeyD', true)
     store.setHeldKey('KeyD', true)
     scheduler.frame(TICK_MS)
-    expect(store.getSnapshot().actors.player.position).toEqual(start)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 0, y: 1 })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 0, y: 1 })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 0, y: 1 })
     store.setHeldKey('KeyW', true)
     scheduler.frame(TICK_MS)
-    expect(store.getSnapshot().actors.player.position).toEqual({ x: 1, y: 0 })
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 0, y: 0 })
   })
 
   it('reaches a terminal state while the optional model request never resolves', () => {
@@ -101,5 +105,119 @@ describe('fixed-step external store', () => {
     store.dispatch({ type: 'companion-command', command: 'decoy' })
     scheduler.frame(TICK_MS)
     expect(store.getSnapshot().command.intent).toBe('decoy')
+  })
+
+  it('preserves rapid discrete movement FIFO across successive ticks', () => {
+    const scheduler = new ManualScheduler()
+    const store = createGameStore({ scheduler, seed: 5, mapId: 'crossroads', fetchIntent: null })
+    store.start()
+    store.dispatch({ type: 'player-move', direction: 'right' })
+    store.dispatch({ type: 'player-move', direction: 'down' })
+    store.dispatch({ type: 'player-move', direction: 'left' })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 2, y: 1 })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 2, y: 2 })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 1, y: 2 })
+  })
+
+  it('reconciles immediate queue-full feedback into events and replay without eviction', () => {
+    const scheduler = new ManualScheduler()
+    const store = createGameStore({ scheduler, seed: 5, mapId: 'crossroads', fetchIntent: null })
+    store.start()
+    for (let index = 0; index < 9; index += 1) {
+      store.dispatch({ type: 'player-move', direction: 'right' })
+    }
+    expect(store.getInputSnapshot().bufferedMoves).toHaveLength(8)
+    const immediate = store.getInputFeedback()
+    expect(immediate).toEqual({ tick: 1, actionSequence: 9, reason: 'queue-full' })
+    expect(store.getSnapshot().eventLog).toHaveLength(0)
+
+    scheduler.frame(TICK_MS)
+    const authoritative = store
+      .getSnapshot()
+      .eventLog.find((event) => event.actionSequence === immediate?.actionSequence)
+    expect(authoritative).toMatchObject({
+      tick: 1,
+      type: 'move-rejected',
+      actorId: 'player',
+      actionSequence: 9,
+      reason: 'queue-full',
+    })
+    expect(store.getInputFeedback()).toBe(immediate)
+    expect(store.getInputFeedback()).toEqual({
+      tick: authoritative?.tick,
+      actionSequence: authoritative?.actionSequence,
+      reason: authoritative?.reason,
+    })
+    expect(store.getInputSnapshot().bufferedMoves).toHaveLength(7)
+
+    for (let index = 1; index < 8; index += 1) scheduler.frame(TICK_MS)
+    const record = store.getReplayRecord()
+    expect(
+      record.actions
+        .filter((queued) => queued.action.type === 'player-move')
+        .map((queued) => queued.sequence)
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(record.actions[0]).toMatchObject({
+      applyAtTick: 1,
+      sequence: 1,
+      action: { type: 'player-move' },
+    })
+    expect(record.actions[1]).toEqual({
+      applyAtTick: 1,
+      sequence: 9,
+      action: { type: 'player-input-rejected', reason: 'queue-full' },
+    })
+    expect(replay(record, store.getSnapshot().tick).eventLog).toContainEqual(authoritative)
+  })
+
+  it('keeps a tap target active until arrival and lets discrete input cancel it', () => {
+    const scheduler = new ManualScheduler()
+    const store = createGameStore({ scheduler, seed: 5, mapId: 'crossroads', fetchIntent: null })
+    store.start()
+    store.dispatch({ type: 'player-target', target: { x: 3, y: 1 } })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 2, y: 1 })
+    expect(store.getSnapshot().playerNavigation?.target).toEqual({ x: 3, y: 1 })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual({ x: 3, y: 1 })
+    expect(store.getSnapshot().playerNavigation).toBeUndefined()
+
+    store.dispatch({ type: 'player-target', target: { x: 3, y: 3 } })
+    store.dispatch({ type: 'player-move', direction: 'left' })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().playerNavigation).toBeUndefined()
+  })
+
+  it('prepares a restarted run without advancing until start is called', () => {
+    const scheduler = new ManualScheduler()
+    const store = createGameStore({ scheduler, seed: 5, mapId: 'courtyard', fetchIntent: null })
+    store.start()
+    scheduler.frame(TICK_MS)
+    store.prepareNextRun()
+    expect(store.getSnapshot().tick).toBe(0)
+    expect(store.getDiagnostics().started).toBe(false)
+    scheduler.frame(TICK_MS * 4)
+    expect(store.getSnapshot().tick).toBe(0)
+    store.start()
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().tick).toBe(1)
+  })
+
+  it('cancels an active tap path when hidden and resumes without it', () => {
+    const scheduler = new ManualScheduler()
+    const store = createGameStore({ scheduler, seed: 5, mapId: 'crossroads', fetchIntent: null })
+    store.start()
+    store.dispatch({ type: 'player-target', target: { x: 3, y: 1 } })
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().playerNavigation).toBeDefined()
+    store.setHidden(true)
+    expect(store.getSnapshot().playerNavigation).toBeUndefined()
+    const hiddenPosition = store.getSnapshot().actors.player.position
+    store.setHidden(false)
+    scheduler.frame(TICK_MS)
+    expect(store.getSnapshot().actors.player.position).toEqual(hiddenPosition)
   })
 })

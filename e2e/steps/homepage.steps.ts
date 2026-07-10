@@ -105,9 +105,26 @@ Then('I see the "什么是 AMIO Arcade" section', async ({ page }) => {
   await expect(page.getByText('关于 · What is AMIO Arcade')).toBeVisible()
 })
 
-Then('I see the upcoming-games section', async ({ page }) => {
-  await expect(page.getByText('即将上线 · IN ORBIT')).toBeVisible()
-})
+Then(
+  'I see the peer-game section with playable Oracle and 双影追逃 plus honest future statuses',
+  async ({ page }) => {
+    const eyebrow = page.getByText('更多游戏 · MORE GAMES', { exact: true })
+    await expect(eyebrow).toBeVisible()
+    const section = eyebrow.locator('xpath=ancestor::section')
+
+    await expect(section.getByRole('link').filter({ hasText: '易经签卜' })).toHaveAttribute(
+      'href',
+      '/oracle/#/home'
+    )
+    await expect(section.getByRole('link').filter({ hasText: '双影追逃' })).toHaveAttribute(
+      'href',
+      '/shadow-chase/'
+    )
+    await expect(section.getByText('即将上线', { exact: true }).first()).toBeVisible()
+    await expect(section.getByText('开发中', { exact: true }).first()).toBeVisible()
+    await expect(section.getByText('预览体验', { exact: true })).toHaveCount(0)
+  }
+)
 
 Then('I see the footer pitch', async ({ page }) => {
   await expect(page.getByText(/带上你的 AI.*一起玩/)).toBeVisible()

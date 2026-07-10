@@ -11,20 +11,30 @@ Given('Shadow Chase optional network handoffs are unavailable', async ({ page })
 })
 
 Then('the Shadow Chase opening rule is complete', async ({ page }) => {
-  const copy = (await page.locator('body').innerText()).toLowerCase()
-  expect(copy).toContain('first 5 seconds are a head start')
-  expect(copy).toContain('three light cores')
-  expect(copy).toContain('moon gate opens at 02:00')
-  expect(copy).toContain('rescue a captured partner')
-  expect(copy).toContain('leave together')
+  const copy = await page.locator('body').innerText()
+  expect(copy).toContain('战术准备结束后追兵立即行动')
+  expect(copy).toContain('收集三枚光核')
+  expect(copy).toContain('02:00 开启')
+  expect(copy).toContain('完成救援')
+  expect(copy).toContain('一起撤离')
+})
+
+Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => {
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
+  await expect(page.getByText('战术准备')).toBeVisible()
+  await expect(page.getByRole('button', { name: '立即出发' })).toBeVisible()
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toHaveAttribute(
+    'aria-disabled',
+    'true'
+  )
 })
 
 Then('the Shadow Chase board and essential controls are visible', async ({ page }) => {
-  await expect(page.getByRole('application', { name: 'Dual Shadow Chase board' })).toBeVisible()
-  await expect(page.getByText('Light cores')).toBeVisible()
-  await expect(page.getByText('Rescue')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Swap positions' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Move up' })).toBeVisible()
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
+  await expect(page.getByText('光核', { exact: true })).toBeVisible()
+  await expect(page.getByText('救援', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '交换位置' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '向上移动' })).toBeVisible()
 })
 
 Then('Shadow Chase exposes no multiplayer affordance', async ({ page }) => {
@@ -34,15 +44,15 @@ Then('Shadow Chase exposes no multiplayer affordance', async ({ page }) => {
   }
 })
 
-Then(
-  'Shadow Chase survives the five-second opening window without input',
-  async ({ page, world }) => {
-    await world.advance(5_000)
-    await expect(page.getByRole('application', { name: 'Dual Shadow Chase board' })).toBeVisible()
-    await expect(page.locator('.hud-value').first()).not.toHaveText('00:00')
-    await expect(page.locator('.hud').getByText(/Head start|Team safe/)).toBeVisible()
-  }
-)
+Then('Shadow Chase pursuit is active when the chase starts', async ({ page, world }) => {
+  const pursuer = page.getByLabel('追兵')
+  const startingTransform = await pursuer.getAttribute('transform')
+  await world.advance(600)
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
+  await expect(page.locator('.hud').getByText('双方安全')).toBeVisible()
+  await expect(pursuer).toHaveAttribute('class', 'pursuer board-overlay')
+  expect(await pursuer.getAttribute('transform')).not.toBe(startingTransform)
+})
 
 Then('the Shadow Chase command {string} is active', async ({ page, world }, label: string) => {
   await world.advance(300)
@@ -59,10 +69,8 @@ Then(
       expect(box!.width).toBeGreaterThanOrEqual(44)
       expect(box!.height).toBeGreaterThanOrEqual(44)
     }
-    const board = await page
-      .getByRole('application', { name: 'Dual Shadow Chase board' })
-      .boundingBox()
-    const commandPanel = await page.locator('.command-panel').boundingBox()
+    const board = await page.getByRole('application', { name: '双影追逃地图' }).boundingBox()
+    const commandPanel = await page.locator('.strategy-panel').boundingBox()
     expect(board).not.toBeNull()
     expect(commandPanel).not.toBeNull()
     expect(commandPanel!.y).toBeGreaterThanOrEqual(board!.y + board!.height)
@@ -72,3 +80,11 @@ Then(
     expect(overflow).toBeLessThanOrEqual(0)
   }
 )
+
+Then('Shadow Chase accepts a path target through an overlay', async ({ page, world }) => {
+  const core = await page.locator('.core').first().boundingBox()
+  expect(core).not.toBeNull()
+  await page.mouse.click(core!.x + core!.width / 2, core!.y + core!.height / 2)
+  await world.advance(300)
+  await expect(page.locator('.path-target')).toBeVisible()
+})

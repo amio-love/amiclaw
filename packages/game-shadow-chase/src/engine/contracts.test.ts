@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   OBJECTIVE_COUNT,
   MIN_RUN_TICKS,
-  OPENING_GRACE_TICKS,
   RUN_CAP_TICKS,
   TICK_MS,
   isCanonicalUuid,
@@ -19,7 +18,6 @@ describe('frozen engine contracts', () => {
     expect(MIN_RUN_TICKS).toBe(480)
     expect(RUN_CAP_TICKS).toBe(1200)
     expect(OBJECTIVE_COUNT).toBe(3)
-    expect(OPENING_GRACE_TICKS).toBe(20)
   })
 
   it('validates all authored maps and required reachability', () => {

@@ -69,6 +69,8 @@ export interface ManualData {
 export interface GameState {
   /** Ordered manual section ids to inject for this turn. */
   relevantSections: string[]
+  /** Optional bounded player-visible state, validated per game before injection. */
+  publicContext?: unknown
 }
 
 /**

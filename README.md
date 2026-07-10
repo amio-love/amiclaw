@@ -29,14 +29,27 @@ Claude, ChatGPT, Gemini, or any other voice-capable AI tool.
 **Dual Shadow Chase** (`claw.amio.fans/shadow-chase`) is a two-to-five-minute
 solo real-time grid chase for one human and the existing AI companion.
 
+- Use a Chinese-first setup, planning, play, and result surface
+- Inspect the complete frozen map during a 20-second tactical-planning phase;
+  adjust it from 5 to 60 seconds in five-second steps or start early
 - Collect three cores and reach the exit while a pursuer searches the map
 - Command the companion to follow, split, or decoy; swap positions when ready
 - Rescue a captured shadow before its deadline
-- Keep playing through missing, slow, malformed, or unauthenticated model intent
+- Queue rapid movement inputs FIFO, tap a persistent destination path, and see
+  why a blocked move was rejected
+- Optionally discuss strategy by voice with the authenticated account companion;
+  only an explicit final player command can select follow, split, or decoy
+- Keep playing through anonymous, microphone, provider, model, or network failure
 
-The deterministic engine owns frame-level play. Arcade supports one human plus
-one AI companion; rooms, matchmaking, human co-op, PvP, and voice rooms belong
-to the AMIO main world.
+Voice reuses the platform's existing companion identity, voice, provider adapters,
+and memory boundary. It is opt-in and bounded; neither voice nor model work can
+pause planning or frame-level play. The deterministic engine owns movement and
+outcomes, and the Chinese strategy buttons remain authoritative fallback controls.
+
+On the Arcade homepage, BombSquad remains the sole featured game. Dual Shadow
+Chase and the Yijing Oracle appear together in the playable peer grid. Arcade
+supports one human plus one AI companion; rooms, matchmaking, human co-op, PvP,
+and voice rooms belong to the AMIO main world.
 
 ## How It Works
 

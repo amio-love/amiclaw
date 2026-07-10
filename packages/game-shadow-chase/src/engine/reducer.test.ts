@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MIN_RUN_TICKS, OPENING_GRACE_TICKS, RUN_CAP_TICKS } from './config'
+import { MIN_RUN_TICKS, RUN_CAP_TICKS } from './config'
 import { createRunningState } from './rules'
 import { advance } from './reducer'
 import type { QueuedAction, SimulationState } from './types'
@@ -38,31 +38,19 @@ describe('ten-phase reducer contract', () => {
 
   it('increments the decision epoch when a command retargets the pursuer', () => {
     const state = createRunningState('courtyard', 'standard', 7)
-    state.tick = OPENING_GRACE_TICKS + 1
+    state.tick = 1
     const next = advance(state, [action(state, 1, { type: 'companion-command', command: 'decoy' })])
     expect(next.actors.pursuer.target).toBe('companion')
     expect(next.decisionEpoch).toBe(2)
   })
 
-  it('holds the pursuer and prevents capture throughout the five-second opening grace', () => {
-    let state = createRunningState('courtyard', 'standard', 7)
-    const pursuerSpawn = { ...state.actors.pursuer.position }
-    while (state.tick < OPENING_GRACE_TICKS) state = advance(state, [])
-    expect(state.phase).toBe('running')
-    expect(state.actors.player.status).toBe('free')
-    expect(state.actors.companion.status).toBe('free')
-    expect(state.actors.pursuer.position).toEqual(pursuerSpawn)
-  })
+  it('moves the pursuer and resolves contact on the first chase tick', () => {
+    const state = createRunningState('courtyard', 'intense', 7)
+    state.actors.pursuer.position = { x: 1, y: 2 }
 
-  it('enables contact resolution on the first tick after opening grace', () => {
-    const duringGrace = createRunningState('courtyard', 'intense', 7)
-    duringGrace.tick = OPENING_GRACE_TICKS - 1
-    duringGrace.actors.pursuer.position = { x: 1, y: 2 }
-    const safe = advance(duringGrace, [])
-    expect(safe.actors.player.status).toBe('free')
-    expect(safe.actors.pursuer.position).toEqual({ x: 1, y: 2 })
+    const contacted = advance(state, [])
 
-    const contacted = advance(safe, [])
+    expect(contacted.tick).toBe(1)
     expect(contacted.actors.pursuer.position).toEqual({ x: 1, y: 1 })
     expect(contacted.actors.player.status).toBe('captured')
   })
@@ -155,5 +143,59 @@ describe('ten-phase reducer contract', () => {
     expect(rescued.phase).toBe('running')
     expect(rescued.actors.player.status).toBe('free')
     expect(noOpCompanion.phase).toBe('loss')
+  })
+
+  it('persists a tap target and reports closed movement rejection reasons', () => {
+    const state = createRunningState('crossroads', 'standard', 7)
+    const targeted = advance(state, [
+      action(state, 11, { type: 'player-target', target: { x: 3, y: 1 } }),
+    ])
+    expect(targeted.actors.player.position).toEqual({ x: 2, y: 1 })
+    expect(targeted.playerNavigation).toEqual({ target: { x: 3, y: 1 }, actionSequence: 11 })
+    const arrived = advance(targeted, [])
+    expect(arrived.actors.player.position).toEqual({ x: 3, y: 1 })
+    expect(arrived.playerNavigation).toBeUndefined()
+
+    const edge = createRunningState('courtyard', 'standard', 7)
+    edge.actors.player.position = { x: 0, y: 0 }
+    const rejected = advance(edge, [action(edge, 12, { type: 'player-move', direction: 'up' })])
+    expect(rejected.eventLog.at(-1)).toMatchObject({
+      type: 'move-rejected',
+      actionSequence: 12,
+      reason: 'edge',
+    })
+  })
+
+  it('keeps a path after a temporary companion block and rejects wall targets', () => {
+    const blocked = createRunningState('courtyard', 'standard', 7)
+    blocked.actors.player.position = { x: 1, y: 1 }
+    blocked.actors.companion.position = { x: 2, y: 1 }
+    const stationaryPolicies = {
+      companion: (current: SimulationState) => current.actors.companion.position,
+      pursuer: (current: SimulationState) => current.actors.pursuer.position,
+    }
+    const kept = advance(
+      blocked,
+      [action(blocked, 20, { type: 'player-target', target: { x: 3, y: 1 } })],
+      stationaryPolicies
+    )
+    expect(kept.actors.player.position).toEqual({ x: 1, y: 1 })
+    expect(kept.playerNavigation?.target).toEqual({ x: 3, y: 1 })
+    expect(kept.eventLog.at(-1)).toMatchObject({
+      type: 'move-rejected',
+      reason: 'companion',
+      actionSequence: 20,
+    })
+
+    const wall = createRunningState('courtyard', 'standard', 7)
+    const rejected = advance(wall, [
+      action(wall, 21, { type: 'player-target', target: { x: 3, y: 2 } }),
+    ])
+    expect(rejected.playerNavigation).toBeUndefined()
+    expect(rejected.eventLog.at(-1)).toMatchObject({
+      type: 'move-rejected',
+      reason: 'wall',
+      actionSequence: 21,
+    })
   })
 })

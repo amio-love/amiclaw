@@ -2,6 +2,13 @@ export type Direction = 'up' | 'down' | 'left' | 'right'
 export type Difficulty = 'relaxed' | 'standard' | 'intense'
 export type CompanionIntent = 'follow' | 'split' | 'decoy'
 export type SimulationPhase = 'running' | 'win' | 'loss' | 'timeout'
+export type PlayerInputRejectionReason =
+  | 'wall'
+  | 'edge'
+  | 'companion'
+  | 'unreachable'
+  | 'captured'
+  | 'queue-full'
 
 export interface Coordinate {
   x: number
@@ -57,6 +64,7 @@ export interface ModelLease extends ModelProposal {
 
 export type EngineEventType =
   | 'move'
+  | 'move-rejected'
   | 'swap'
   | 'swap-rejected'
   | 'capture'
@@ -74,6 +82,19 @@ export interface EngineEvent {
   type: EngineEventType
   actorId?: string
   detail?: string
+  actionSequence?: number
+  reason?: PlayerInputRejectionReason
+}
+
+export interface PlayerNavigation {
+  target: Coordinate
+  actionSequence: number
+}
+
+export interface PlayerInputFeedback {
+  tick: number
+  actionSequence: number
+  reason: PlayerInputRejectionReason
 }
 
 export interface TerminalSummary {
@@ -99,6 +120,7 @@ export interface SimulationState {
   objectives: ObjectiveState[]
   exit: { position: Coordinate; enabled: boolean }
   command: { intent: CompanionIntent; targetObjectiveId?: string }
+  playerNavigation?: PlayerNavigation
   cooldowns: { swapReadyTick: number }
   activeModelLease?: ModelLease
   decisionEpoch: number
@@ -109,6 +131,7 @@ export interface SimulationState {
 export type EngineAction =
   | { type: 'player-move'; direction: Direction }
   | { type: 'player-target'; target: Coordinate }
+  | { type: 'player-input-rejected'; reason: 'queue-full' }
   | { type: 'companion-command'; command: CompanionIntent; targetObjectiveId?: string }
   | { type: 'swap' }
   | {
