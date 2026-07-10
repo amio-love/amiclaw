@@ -1,0 +1,76 @@
+.sprite {
+  position: relative;
+  z-index: 1;
+  font-size: 30px;
+  line-height: 1;
+  display: block;
+  transform-origin: 50% 90%;
+  transition:
+    transform 0.35s ease,
+    filter 0.35s ease,
+    opacity 0.35s ease;
+}
+
+/* growth_stage → size */
+.g_seedling {
+  font-size: 22px;
+}
+.g_juvenile {
+  font-size: 27px;
+}
+.g_mature {
+  font-size: 31px;
+}
+.g_flowering {
+  font-size: 33px;
+}
+
+/* health → tint + posture */
+.h_thriving {
+  filter: brightness(1.25) saturate(1.2) drop-shadow(0 0 6px rgba(143, 224, 138, 0.55));
+}
+.h_stable {
+  filter: none;
+}
+.h_wilting {
+  filter: grayscale(0.5) brightness(0.82);
+  transform: rotate(-8deg) translateY(2px);
+}
+.h_critical {
+  filter: grayscale(0.75) brightness(0.7) sepia(0.3) hue-rotate(-25deg);
+  transform: rotate(-16deg) translateY(4px);
+}
+.h_dead {
+  filter: grayscale(1) brightness(0.5);
+  transform: rotate(-22deg);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .h_thriving {
+    animation: sway 3.4s ease-in-out infinite;
+  }
+  .flowering {
+    animation: bloom 0.6s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  }
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+@keyframes bloom {
+  0% {
+    transform: scale(0.4) rotate(-30deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}

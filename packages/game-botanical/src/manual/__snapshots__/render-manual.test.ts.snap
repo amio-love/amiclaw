@@ -1,0 +1,146 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderBotanicalManual — bg-demo-001 v1.1.0 > golden: full rendered manual is pinned for bg-demo-001 > bg-demo-001 1`] = `
+{
+  "sections": [
+    {
+      "id": "objective",
+      "lines": [
+        "达成目标：所有植株的健康至少达到「稳定（stable）」，且至少 1 株的生长阶段达到「开花（flowering）」。",
+        "败局：任一植株的健康跌至「枯死（dead）」即告失败；枯死无法挽回。",
+      ],
+      "title": "目标与败局",
+    },
+    {
+      "id": "species_care:orchid",
+      "lines": [
+        "当光照为半荫（partial_shade）时，养护兰花（orchid）可使其恢复健康。",
+      ],
+      "title": "兰花 · 养护要点",
+    },
+    {
+      "id": "danger:fern",
+      "lines": [
+        "当光照为全荫（full_shade）时，蕨类（fern）会受损，应当避免。",
+      ],
+      "title": "蕨类 · 风险提示",
+    },
+    {
+      "id": "compatibility",
+      "lines": [
+        "植株间的相性（本关卡为策略参考）：",
+        "蕨类（fern） 与 多肉（succulent）：相克（incompatible）",
+        "蕨类（fern） 与 兰花（orchid）：相容（compatible）",
+        "多肉（succulent） 与 兰花（orchid）：中性（neutral）",
+        "蕨类（fern） 与 苔藓（moss）：协同（synergy）",
+        "多肉（succulent） 与 藤蔓（vine）：相容（compatible）",
+      ],
+      "title": "相生相克",
+    },
+    {
+      "id": "light",
+      "lines": [
+        "调节光照可改变植株的实际光照：",
+        "全光经遮光变为半荫",
+        "半荫经遮光变为全荫",
+      ],
+      "title": "光照调节",
+    },
+    {
+      "id": "growth",
+      "lines": [
+        "养护得当可推进生长阶段：",
+        "幼苗经施肥变为成株",
+        "成株经换盆变为成熟",
+        "成熟经催花变为开花",
+      ],
+      "title": "生长阶段",
+    },
+    {
+      "id": "health_and_decay",
+      "lines": [
+        "健康档位由差到好：枯死（dead） < 垂危（critical） < 枯萎（wilting） < 稳定（stable） < 茁壮（thriving）。",
+        "浇水（correct_care）可提升健康：枯萎→稳定；稳定→茁壮；垂危→枯萎。",
+        "过量浇水（wrong_care）会降低健康：稳定→枯萎；茁壮→稳定；枯萎→垂危。",
+        "无人照料（neglect）会随时间衰退：茁壮→稳定；稳定→枯萎；枯萎→垂危；垂危→枯死。",
+        "无人照料每约 60 秒衰退一次，临近前 8 秒会预警。",
+        "植株一旦枯死即无法挽回，并会导致败局。",
+      ],
+      "title": "健康与衰败",
+    },
+  ],
+  "version": "1.1.0",
+}
+`;
+
+exports[`renderBotanicalManual — bg-standard-001 v1.1.0 > golden: full rendered manual is pinned for bg-standard-001 > bg-standard-001 1`] = `
+{
+  "sections": [
+    {
+      "id": "objective",
+      "lines": [
+        "达成目标：所有植株的健康至少达到「稳定（stable）」，且至少 1 株的生长阶段达到「开花（flowering）」。",
+        "败局：任一植株的健康跌至「枯死（dead）」即告失败；枯死无法挽回。",
+      ],
+      "title": "目标与败局",
+    },
+    {
+      "id": "species_care:orchid",
+      "lines": [
+        "兰花（orchid）只有在光照为半荫（partial_shade）时，养护才能使其恢复健康。",
+        "遮光只会让光照逐级变暗、无法回退；一旦兰花（orchid）被遮光到全荫（full_shade），就再也无法恢复健康，切勿遮光过头。",
+      ],
+      "title": "兰花 · 养护要点",
+    },
+    {
+      "id": "species_care:fern",
+      "lines": [
+        "蕨类（fern）只有在光照为半荫（partial_shade）时，养护才能使其恢复健康。",
+        "遮光只会让光照逐级变暗、无法回退；一旦蕨类（fern）被遮光到全荫（full_shade），就再也无法恢复健康，切勿遮光过头。",
+      ],
+      "title": "蕨类 · 养护要点",
+    },
+    {
+      "id": "compatibility",
+      "lines": [
+        "植株间的相性（本关卡为策略参考）：",
+        "苔藓（moss） 与 多肉（succulent）：协同（synergy）",
+        "多肉（succulent） 与 藤蔓（vine）：相容（compatible）",
+        "苔藓（moss） 与 藤蔓（vine）：中性（neutral）",
+      ],
+      "title": "相生相克",
+    },
+    {
+      "id": "light",
+      "lines": [
+        "调节光照可改变植株的实际光照：",
+        "全光经遮光变为半荫",
+        "半荫经遮光变为全荫",
+      ],
+      "title": "光照调节",
+    },
+    {
+      "id": "growth",
+      "lines": [
+        "养护得当可推进生长阶段：",
+        "幼苗经施肥变为成株",
+        "成株经换盆变为成熟",
+        "成熟经催花变为开花",
+      ],
+      "title": "生长阶段",
+    },
+    {
+      "id": "health_and_decay",
+      "lines": [
+        "健康档位由差到好：枯死（dead） < 垂危（critical） < 枯萎（wilting） < 稳定（stable） < 茁壮（thriving）。",
+        "浇水（correct_care）仅能提升 苔藓（moss）、多肉（succulent）、藤蔓（vine） 的健康：枯萎→稳定；稳定→茁壮；垂危→枯萎。兰花（orchid）、蕨类（fern）浇水无效，恢复方式见各自养护要点。",
+        "无人照料（neglect）会随时间衰退：茁壮→稳定；稳定→枯萎；枯萎→垂危；垂危→枯死。",
+        "无人照料每约 60 秒衰退一次，临近前 8 秒会预警。",
+        "植株一旦枯死即无法挽回，并会导致败局。",
+      ],
+      "title": "健康与衰败",
+    },
+  ],
+  "version": "1.1.0",
+}
+`;
