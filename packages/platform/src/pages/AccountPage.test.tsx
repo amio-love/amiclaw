@@ -296,14 +296,17 @@ describe('AccountPage /me', () => {
     stubApi({ session: ANON })
     renderAccount('/me')
 
-    expect(await screen.findByText('本设备的星轨。')).toBeInTheDocument()
+    expect(await screen.findByText('你的星轨。')).toBeInTheDocument()
     expect(screen.getByText('练习 · 00:42 · 最快 00:42')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument()
 
-    // B12 断签说明 — one honest, non-punitive line where the streak is visible.
+    // B12 断签说明 — relocated behind the ⓘ (rc §3 progressive disclosure).
+    // Not on the default surface; revealed on demand, honest and non-punitive.
+    expect(screen.queryByText(/断一天，连续天数会从头算起。/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '连续打卡与刷新说明' }))
     expect(
       screen.getByText(
-        '断一天，连续天数会从头算起。最长记录和已保存的成绩都还在，错过一天不会有惩罚。'
+        /断一天，连续天数会从头算起。最长记录和已保存的成绩都还在，错过一天不会有惩罚。/
       )
     ).toBeInTheDocument()
 
@@ -496,7 +499,7 @@ describe('AccountPage /me', () => {
     expect(screen.getByText('暖声')).toBeInTheDocument()
   })
 
-  it('greets by the companion-known name when there is no nickname (F19)', async () => {
+  it('keeps the companion intimate name out of the /me title/greeting (ruling A)', async () => {
     stubApi({
       session: AUTHED,
       companion: {
@@ -512,11 +515,15 @@ describe('AccountPage /me', () => {
     })
     renderAccount('/me')
 
-    // With no chosen nickname, the greeting falls to the companion-known name
-    // 「白舟」(address_style) — appearing in the title accent span and the
-    // profile-card name — never the email local-part「nova」.
-    expect((await screen.findAllByText('白舟', { exact: true })).length).toBeGreaterThan(0)
+    // Ruling A: with no chosen username, the /me greeting is NEUTRAL — the
+    // companion-given intimate name 「白舟」(address_style) must NOT surface in
+    // the title or the profile card (it belongs only to companion surfaces).
+    // The email local-part「nova」is never a name fallback either (F19).
+    expect(await screen.findByText('你的星轨。')).toBeInTheDocument()
+    expect(screen.queryByText('白舟', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
+    // The companion card still names the companion itself (小南).
+    expect(screen.getByText('小南')).toBeInTheDocument()
   })
 
   it('signs out via POST /api/auth/logout and returns to the anonymous state', async () => {

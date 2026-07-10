@@ -1,1 +1,1 @@
-export { default, AI_TOOLS, toolLabel } from './AiToolList'
+export { default, AI_TOOLS, toolLabel, COMPANION_TOOL_ID } from './AiToolList'

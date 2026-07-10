@@ -1,38 +1,23 @@
 import { readChosenArcadeNickname } from '@/lib/arcade-nickname'
-import { useCompanion } from './useCompanion'
 
 /**
- * The name to greet a signed-in player by, decided from the shipped design —
- * never the account email (audit F19).
+ * The unified sitewide username to greet a signed-in player by (ruling A):
+ * ONE name, based on the PUBLIC leaderboard handle. The home greeting, the /me
+ * title, and the leaderboard all show this same name.
  *
- * Two precedences, by surface (F5):
+ * It is never the account email (audit F19), and — the ruling-A change — never
+ * the companion-given intimate name (`address_style`, e.g. 白舟 / 队长). That
+ * intimate name appears ONLY inside companion surfaces (the presence bar, the
+ * companion card, the onboarding page), never in the home greeting or /me
+ * title. Removing the old `preferCompanionName` precedence is what ends the U3
+ * split where the leaderboard read「审计员07」while the greeting read「白舟」.
  *
- *   - Board / account surfaces (default): board nickname → companion-known name
- *     → neutral. The nickname is the board identity, so the account page and
- *     other board-context greetings lead with it.
- *   - Companion surfaces (`preferCompanionName: true` — the homepage welcome
- *     strip, where the companion greets you and the voice already calls you by
- *     the relationship name): companion-known name (`address_style`, e.g. 白舟 /
- *     队长, from GET /api/companion) → board nickname → neutral. This keeps the
- *     companion's spoken name and the greeting consistent instead of the
- *     companion saying 白舟 while the strip says the board nickname.
- *
- * Both fall through to `null` (a NEUTRAL, name-free greeting) when neither is
- * set. The companion read is skipped when the board precedence is in effect and
- * the nickname already decides the name (`enabled: false` to `useCompanion`).
+ * The public handle is the board nickname (`bombsquad-nickname`); a signed-in
+ * player's account `public_label` is kept in sync with it (the claim adopts it,
+ * and the /me username editor writes both), so this synchronous read stays
+ * correct without a profile fetch. Returns null when no username is set, so the
+ * caller falls back to a neutral, name-free greeting.
  */
-export function useGreetingName(preferCompanionName = false): string | null {
-  const nickname = readChosenArcadeNickname()
-  const { state } = useCompanion(preferCompanionName || nickname === undefined)
-  const companionName =
-    state.status === 'exists' ? (state.companion.address_style ?? '').trim() : ''
-
-  if (preferCompanionName) {
-    if (companionName.length > 0) return companionName
-    if (nickname !== undefined) return nickname
-    return null
-  }
-  if (nickname !== undefined) return nickname
-  if (companionName.length > 0) return companionName
-  return null
+export function useGreetingName(): string | null {
+  return readChosenArcadeNickname() ?? null
 }

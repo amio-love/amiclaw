@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EyebrowTag } from '@amiclaw/ui'
+import { Disclosure, EyebrowTag } from '@amiclaw/ui'
 import BoardDateSwitcher from '@/components/leaderboard/BoardDateSwitcher'
 import DailyLeaderboardList from '@/components/leaderboard/DailyLeaderboardList'
 import StreakLeaderboardList from '@/components/leaderboard/StreakLeaderboardList'
@@ -32,8 +32,14 @@ export default function LeaderboardPage() {
       <h2 className={styles.title}>
         Arcade · <span className={styles.accent}>每日</span>
       </h2>
+      {/* rc §3: the default lead states only the day; the UTC-reset boundary +
+          the board-retention rule relocate behind the ⓘ next to the date. */}
       <p className={styles.lead}>
-        {toChineseDateString(selectedDay.date)} · {getDailyResetHint()}
+        {toChineseDateString(selectedDay.date)}
+        <Disclosure label="日榜刷新与保留说明">
+          {getDailyResetHint()}
+          。每日榜只保留今天和昨天，更早的日榜未保存；个人记录在「我的」页保留最近 7 天。
+        </Disclosure>
       </p>
 
       <div className={styles.boardGrid}>
@@ -48,11 +54,6 @@ export default function LeaderboardPage() {
           <div className={styles.card}>
             <DailyLeaderboardList key={selectedDay.date} date={selectedDay.date} />
           </div>
-          {/* Honest retention boundary — keep the day wording in sync with
-              LEADERBOARD_RETENTION_DAYS (2: 今天和昨天). */}
-          <p className={styles.boardNote}>
-            每日榜只保留今天和昨天，更早的日榜未保存；个人记录在「我的」页保留最近 7 天。
-          </p>
         </section>
 
         <section className={styles.boardSection}>

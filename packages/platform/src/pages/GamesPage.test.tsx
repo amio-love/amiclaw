@@ -218,7 +218,10 @@ describe('GamesPage homepage', () => {
     expect(await screen.findByRole('link', { name: '创建你的伙伴 →' })).toBeInTheDocument()
     expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
     expect(await screen.findByText('今日已打卡')).toBeInTheDocument()
-    expect(screen.getByText('连续天数 · 本账号')).toBeInTheDocument()
+    // rc §3: the streak card default is the emotional fact (current_days = 3,
+    // no companion → neutral phrasing); the scope/operational caveats moved
+    // behind the ⓘ.
+    expect(screen.getByText('连续第 3 天，今天也来了')).toBeInTheDocument()
     // The anonymous hero eyebrow must NOT be present.
     expect(screen.queryByText('本周开服 · BOMBSQUAD 公测中')).not.toBeInTheDocument()
   })
@@ -264,7 +267,9 @@ describe('GamesPage homepage', () => {
     const completionLine = screen.getByText(/^完成于 \d{2}:\d{2}$/)
     expect(completionLine).toBeInTheDocument()
     expect(completionLine.textContent).not.toContain('UTC')
-    expect(screen.getByText('连续天数 · 本设备')).toBeInTheDocument()
+    // rc §3: default emotional fact (device local profile, current_days = 1,
+    // no companion → neutral phrasing).
+    expect(screen.getByText('连续第 1 天，今天也来了')).toBeInTheDocument()
   })
 
   it('shows honest empty / zero states when the real daily board is empty', async () => {
@@ -299,6 +304,55 @@ describe('GamesPage homepage', () => {
     expect(screen.queryByText(/本周在线/)).not.toBeInTheDocument()
     expect(screen.queryByText('林星海（你）')).not.toBeInTheDocument()
     expect(screen.queryByText(/42秒|最快拆弹/)).not.toBeInTheDocument()
+  })
+
+  it('holds a neutral placeholder instead of flashing the anonymous hero for a returning signed-in device (auth-flash fix)', async () => {
+    // A returning signed-in device carries the optimistic hint. The default
+    // jsdom environment has no localStorage, so install the fake store and seed
+    // the hint there.
+    const store = installFakeLocalStorage()
+    store.set('amio_auth_hint', '1')
+    let resolveSession!: (res: Response) => void
+    const sessionPromise = new Promise<Response>((resolve) => {
+      resolveSession = resolve
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url.includes('/api/arcade/profile')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                profile: ACCOUNT_ARCADE_PROFILE,
+                public_profile: { claimed: false, public_label: null },
+              }),
+              { status: 200 }
+            )
+          )
+        }
+        if (url.includes('/api/companion')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: 'no companion set up' }), { status: 404 })
+          )
+        }
+        if (url.includes('/api/auth/session')) return sessionPromise
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      })
+    )
+
+    renderHomepage('/')
+
+    // While the session read is still in flight, the anonymous hero must NOT
+    // paint — the whole point of the fix.
+    expect(screen.queryByText('本周开服 · BOMBSQUAD 公测中')).not.toBeInTheDocument()
+
+    // Resolve to a real signed-in session; the companion presence swaps in and
+    // the anonymous hero was never shown.
+    resolveSession(new Response(JSON.stringify(AUTHED), { status: 200 }))
+    expect(await screen.findByRole('link', { name: '创建你的伙伴 →' })).toBeInTheDocument()
+    expect(screen.queryByText('本周开服 · BOMBSQUAD 公测中')).not.toBeInTheDocument()
   })
 
   it('does not repeat leaderboard rows in the featured panel when the daily board has scores', async () => {

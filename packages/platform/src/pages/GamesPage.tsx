@@ -11,6 +11,7 @@ import { fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
 import { readArcadeLocalProfile, summarizeArcadeLocalProfile } from '@amiclaw/arcade-profile/local'
 import { useAuth } from '@/hooks/useAuth'
 import { useDailyBoard } from '@/hooks/useDailyBoard'
+import styles from './GamesPage.module.css'
 
 /* The `/` route — the AMIO Arcade platform homepage. Renders the anonymous
    hero or the signed-in welcome strip per useAuth(), then the homepage
@@ -28,7 +29,7 @@ import { useDailyBoard } from '@/hooks/useDailyBoard'
    derived stats + real rows. No homepage surface fabricates participation
    counts, leader times, or player rows. */
 export default function GamesPage() {
-  const { status, user } = useAuth()
+  const { status, user, optimisticAuthed } = useAuth()
   const board = useDailyBoard()
   const [localProfile] = useState(() => readArcadeLocalProfile())
   const localSummary = useMemo(() => summarizeArcadeLocalProfile(localProfile), [localProfile])
@@ -46,12 +47,17 @@ export default function GamesPage() {
     window.location.assign('/bombsquad/')
   }
 
-  /* The session read is async. While `loading`, show the anonymous hero's
-     shell-neutral default rather than flashing the signed-in welcome strip:
-     the hero is the safe default since most visitors are anonymous, and a
-     loading→authed transition swaps it in without a jarring signed-in flash.
-     `authed` requires a resolved `user`. */
+  /* The session read is async. `authed` requires a resolved `user`.
+
+     Auth-flash fix (rb-codescan Inv4 option 1): a returning signed-in device
+     carries an optimistic localStorage hint. While that device is still
+     `loading`, hold a neutral hero-height placeholder instead of flashing the
+     anonymous hero, then swap in the resolved WelcomeStrip (or, if the hint was
+     stale — logged out elsewhere — the AnonHero). The majority anonymous path
+     (no hint) is unchanged: it renders the hero immediately during `loading`. */
   const signedIn = status === 'authed' && user !== null
+  const holdingForAuth = status === 'loading' && optimisticAuthed
+  const showAnonHero = !signedIn && !holdingForAuth
   const signedInUserId = signedIn ? user.user_id : null
 
   useEffect(() => {
@@ -79,19 +85,17 @@ export default function GamesPage() {
     <>
       {signedIn ? (
         <WelcomeStrip user={user} />
+      ) : holdingForAuth ? (
+        <div className={styles.heroPlaceholder} aria-hidden="true" />
       ) : (
         <AnonHero onStart={enterBombSquad} board={board} />
       )}
 
-      <DailyChecklist
-        profile={checklistProfile}
-        scope={checklistScope}
-        loading={signedIn && accountProfile === null}
-      />
+      <DailyChecklist profile={checklistProfile} scope={checklistScope} />
       <FeaturedBombSquad />
-      {!signedIn && <WhatIsAmiclaw />}
+      {showAnonHero && <WhatIsAmiclaw />}
       <UpcomingGames />
-      {!signedIn && <FooterPitch />}
+      {showAnonHero && <FooterPitch />}
     </>
   )
 }

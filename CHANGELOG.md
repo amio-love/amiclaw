@@ -20,6 +20,40 @@ lanes and one truthful current-destination marker without taking pointer input.
 This makes pursuit, wall cover, decoy timing, capture by same-cell contact or
 opposite-edge crossing, and moon-gate return planable from shared information.
 
+**One name across the whole arcade** — Improvement. Your leaderboard handle,
+the home greeting, and your /me page now all show the same name, and you can
+change it right on your /me page. Your companion's private name for you stays
+where it belongs — inside your companion — instead of leaking into the greeting.
+
+**A calmer, more confident interface** — Improvement. Screens now lead with the
+thing that matters and tuck the fine print (how the UTC day boundary works, what
+counts per device, longest-streak numbers) behind a small ⓘ you can open when you
+want it. Nothing honest was removed — it just stops crowding the moment. The daily
+streak card leads with a warm line (「和阿澈一起来到第 4 天」when you have a
+companion), and the leaderboard, /me, and results screens follow the same rule.
+
+**A cleaner, quicker-loading home** — Improvement. If you are already signed in,
+the home no longer flashes the logged-out page before catching up. The hero
+planet dropped a decorative ring that did nothing and now exists to carry today's
+real numbers. The connect-your-AI screens tightened their spacing so the flow
+feels deliberate rather than half-empty.
+
+**Steadier result-screen buttons** — Improvement. Every button on the results
+screen now meets the 44px minimum touch size, and each card's repeated day-reset
+caption collapsed into a single ⓘ so the celebration and 「再来一局」 stay front
+and center.
+
+**Your win goes on the board without the extra step** — Improvement. Finish a
+daily run while signed in and your score now posts to the leaderboard on its
+own, under the same name you use everywhere — no nickname box, no submit button.
+If you played with the platform voice partner, that is recorded for you;
+otherwise the results screen asks once, inline, which AI you played with and
+remembers your answer. Not signed in? The results screen shows one calm invite
+to sign in — decline and the run simply stays off the board. The celebration and
+「再来一局」 lead the first screen, with the profile and module-breakdown cards
+below. The post-game survey no longer opens over your celebration or a near-miss:
+it waits as a quiet 「聊聊这一局」 link at the bottom once everything has settled.
+
 **Dual Shadow Chase now starts with a real tactical conversation** — Improvement.
 The new two-to-five-minute solo game now uses Chinese-first player copy and shows
 the complete frozen map before the chase. Tactical planning defaults to 20 seconds,

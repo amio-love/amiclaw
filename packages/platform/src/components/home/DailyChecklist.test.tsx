@@ -1,16 +1,24 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
 import DailyChecklist from './DailyChecklist'
+import { __resetCompanionStore } from '@/hooks/useCompanion'
 
 /**
  * DailyChecklist copy contracts:
  *  - F3: a completed item reads「完成于 HH:MM」(the local wall-clock completion
  *    time, a point in time), never「已完成 · HH:MM」that read as a game 用时
  *    next to the result page / /me duration display (formatMs).
- *  - F4: the「匿名状态只代表这台设备」caveat only belongs to device (anonymous)
- *    scope; the 本账号 (signed-in) view must not leak it.
+ *  - F4 / rc §3: the default state is ONE emotional fact; the operational
+ *    caveats (longest streak / UTC reset / the anonymous device boundary)
+ *    relocate behind the ⓘ Disclosure, never deleted. The「匿名状态只代表这台
+ *    设备」caveat still belongs to device (anonymous) scope only.
  */
+
+// DailyChecklist reads the shared companion store (enabled=false — no fetch).
+// Reset it between cases so a stray cached companion can't flavor the streak
+// line unexpectedly.
+beforeEach(() => __resetCompanionStore())
 
 function profile(overrides?: {
   bombsquadCompletedAt?: string | null
@@ -53,16 +61,32 @@ describe('DailyChecklist — completion time label (F3)', () => {
   })
 })
 
-describe('DailyChecklist — anonymous caveat scope (F4)', () => {
-  it('shows the 匿名状态 caveat in device scope', () => {
+describe('DailyChecklist — default emotional fact (rc §3)', () => {
+  it('leads with the neutral emotional fact when there is no companion', () => {
     render(<DailyChecklist profile={profile()} scope="device" />)
-    expect(screen.getByText(/匿名状态只代表这台设备。/)).toBeInTheDocument()
+    // current_days = 3, no companion loaded → neutral phrasing, not a caveat.
+    expect(screen.getByText('连续第 3 天，今天也来了')).toBeInTheDocument()
+    // The operational caveats are NOT on the default surface — they sit behind
+    // the ⓘ (collapsed by default).
+    expect(screen.queryByText(/匿名状态只代表这台设备/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/最长 5 天/)).not.toBeInTheDocument()
+  })
+})
+
+describe('DailyChecklist — relocated caveats behind the ⓘ (F4 / rc §3)', () => {
+  it('reveals the 匿名状态 caveat in device scope when the ⓘ is opened', () => {
+    render(<DailyChecklist profile={profile()} scope="device" />)
+    fireEvent.click(screen.getByRole('button', { name: '连续打卡说明' }))
+    expect(screen.getByText(/最长 5 天/)).toBeInTheDocument()
+    expect(screen.getByText(/匿名状态只代表这台设备/)).toBeInTheDocument()
   })
 
-  it('omits the 匿名状态 caveat in account scope', () => {
+  it('omits the 匿名状态 caveat in account scope even inside the ⓘ', () => {
     render(<DailyChecklist profile={profile()} scope="account" />)
+    fireEvent.click(screen.getByRole('button', { name: '连续打卡说明' }))
+    // The longest-streak line still renders inside the disclosure...
+    expect(screen.getByText(/最长 5 天/)).toBeInTheDocument()
+    // ...but the anonymous-device boundary must not leak into the account view.
     expect(screen.queryByText(/匿名状态只代表这台设备/)).not.toBeInTheDocument()
-    // The longest-streak line still renders in the account view.
-    expect(screen.getByText(/最长连续 5 天。/)).toBeInTheDocument()
   })
 })

@@ -14,10 +14,11 @@ interface AnonHeroProps {
 }
 
 /* Anonymous homepage hero — left copy column + right planet stage.
-   Handoff §6.1. The planet and rings are a decorative warm-cosmic orb
-   (aria-hidden), matching the BombSquad lobby planet — no game wordmark is
-   baked onto the platform hero. The floating StatPills only ever show data we
-   actually
+   Handoff §6.1. The orb (shared PlanetOrb `hero`) anchors the daily-board
+   StatPills as a「今日这里的动静」dashboard (rc §2.1) — it earns its place by
+   carrying real data, not by decoration; the one orbiting ring is the only
+   remaining flourish (the jobless static dashed ring was deleted). The floating
+   StatPills only ever show data we actually
    track: 今日上榜 (real daily participation) and 最快拆弹 (today's #1 time)
    come from the daily board — the leader pill hides until the board has a
    score. The static game-count pill reflects the currently playable platform
@@ -52,7 +53,6 @@ export default function AnonHero({ onStart, board }: AnonHeroProps) {
       </div>
 
       <div className={styles.planetStage}>
-        <div className={styles.planetRing2} aria-hidden="true" />
         <div className={styles.planetRing} aria-hidden="true" />
         <PlanetOrb variant="hero" className={styles.planet} ariaHidden />
         <StatPill className={styles.s1} value={board.participantCount} label="今日上榜" />

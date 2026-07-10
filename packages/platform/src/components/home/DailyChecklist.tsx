@@ -1,16 +1,42 @@
+import { Disclosure } from '@amiclaw/ui'
 import type { ArcadeProfileSummary } from '@amiclaw/arcade-profile/types'
 import { formatLocalClockTime, getDailyResetHint, toChineseDateString } from '@shared/date'
+import { useCompanion } from '@/hooks/useCompanion'
 import styles from './DailyChecklist.module.css'
 
 interface DailyChecklistProps {
   profile: ArcadeProfileSummary
   scope: 'account' | 'device'
-  loading?: boolean
 }
 
-export default function DailyChecklist({ profile, scope, loading = false }: DailyChecklistProps) {
+export default function DailyChecklist({ profile, scope }: DailyChecklistProps) {
   const loop = profile.daily_loop
-  const scopeText = scope === 'account' ? '本账号' : '本设备'
+  // Cheap read of the shared, deduped companion store (enabled=false — never
+  // triggers its own fetch; reflects whatever the signed-in home's WelcomeStrip
+  // already loaded). Anonymous visitors have no companion, so the streak line
+  // stays in its neutral phrasing. The companion's own NAME in the warm streak
+  // narrative is allowed on this platform surface — ruling A restricts the
+  // companion-given intimate name FOR THE PLAYER (address_style), not the
+  // companion's name.
+  const { state: companion } = useCompanion(false)
+  const companionName = companion.status === 'exists' ? companion.companion.name.trim() : ''
+
+  const days = loop.streak.current_days
+  // Default state is ONE emotional fact (rc §3): companion-flavored when a
+  // companion exists, neutral otherwise.
+  const streakFact =
+    days <= 0
+      ? '新的一天，来玩第一局。'
+      : companionName.length > 0
+        ? `和${companionName}一起来到第 ${days} 天`
+        : `连续第 ${days} 天，今天也来了`
+  // The operational caveats relocate behind the ⓘ — honesty content is not
+  // deleted, only moved off the default emotional position: longest streak +
+  // the UTC reset boundary + (device scope only) the anonymous-device note.
+  const streakDetail = `最长 ${loop.streak.longest_days} 天 · ${getDailyResetHint()}${
+    scope === 'device' ? ' · 匿名状态只代表这台设备' : ''
+  }`
+
   const items = [
     {
       id: 'bombsquad',
@@ -40,8 +66,8 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
           </h2>
         </div>
         <div className={styles.streak}>
-          <span className={styles.streakValue}>{loop.streak.current_days}</span>
-          <span className={styles.streakLabel}>连续天数 · {scopeText}</span>
+          <span className={styles.streakValue}>{days}</span>
+          <span className={styles.streakLabel}>连续天数</span>
         </div>
       </div>
 
@@ -76,15 +102,10 @@ export default function DailyChecklist({ profile, scope, loading = false }: Dail
         ))}
       </div>
 
-      <p className={styles.note}>
-        {loading
-          ? '正在读取账号记录；暂时显示这台设备上的状态。'
-          : // The 匿名状态 caveat only belongs to device-scope (anonymous) records
-            // (F4). A signed-in visitor sees 本账号 scope, so leaking「匿名状态只
-            // 代表这台设备」into the account view is a scope mismatch — drop it there.
-            `最长连续 ${loop.streak.longest_days} 天。${scope === 'device' ? '匿名状态只代表这台设备。' : ''}`}
+      <p className={styles.streakFact}>
+        {streakFact}
+        <Disclosure label="连续打卡说明">{streakDetail}</Disclosure>
       </p>
-      <p className={styles.hint}>{getDailyResetHint()}</p>
     </section>
   )
 }
