@@ -15,9 +15,9 @@
   overflow: hidden;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-3xl);
-  background: rgba(13, 13, 26, 0.6);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
+  background: rgba(var(--chrome-surface-raised-rgb), 0.6);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
 }
 
 /* ----------  left art panel — warm-cosmic BombSquad zone  ---------- */
@@ -35,7 +35,8 @@
      inside the gameplay screenshot is wire-module game content. */
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 229, 62, 0.25), transparent 55%),
-    radial-gradient(circle at 70% 80%, rgba(180, 120, 255, 0.15), transparent 55%), #050511;
+    radial-gradient(circle at 70% 80%, rgba(180, 120, 255, 0.15), transparent 55%),
+    var(--bg-grad-end);
 }
 
 /* Copy column — carries the original top/meta stack. */
@@ -111,7 +112,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px 28px;
-  background: rgba(7, 8, 24, 0.55);
+  background: rgba(var(--chrome-surface-rgb), 0.55);
 }
 
 .dailyPanel {

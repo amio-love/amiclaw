@@ -16,8 +16,9 @@ type LoadState = 'loading' | 'ready' | 'error'
 interface ItemCopy {
   tag: string
   body: string
-  /** BombSquad sub-brand cyan result badge — the one sanctioned cyan here,
-      surfacing a real defusal outcome, not platform chrome. */
+  /** Success badge surfacing a real defusal outcome. Uses the platform success
+      color (green --positive), never a game accent — the community feed is
+      platform chrome (semantic color law / bounded-accent rule). */
   badge?: string
 }
 

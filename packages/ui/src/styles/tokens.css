@@ -77,8 +77,17 @@
   --amio-success: #48bb78;
   --amio-warning: #f59e6b;
   --amio-danger: rgba(255, 100, 100, 0.8);
+  /* Danger tints — border + surface fills derived from the danger channel
+     (rgb 255,100,100). Used by error panels (LoginPage) so the box stays a
+     soft red without hand-rolling a second danger hue. */
+  --amio-danger-border: rgba(255, 100, 100, 0.35);
+  --amio-danger-surface: rgba(255, 100, 100, 0.08);
   --positive: #4bd266;
   --accent-violet: #b478ff;
+  /* Softer lavender tint of the violet accent — decorative text on
+     violet-bordered surfaces (upcoming-game preview cues) that need more
+     legibility than the saturated --accent-violet. */
+  --accent-violet-soft: #d6c0ff;
   --accent-blue: #4a9eff;
 
   /* ----------  OVERLAYS (hover / press tints)  ---------- */
@@ -102,6 +111,19 @@
   --glass-card: rgba(41, 43, 45, 0.4);
   --glass-card-strong: rgba(41, 43, 45, 0.55);
   --surface-dark: rgba(0, 0, 0, 0.55);
+
+  /* ----------  CHROME SURFACE  ----------
+     Translucent base behind platform navigation / dock chrome (TopNav,
+     BottomNav, CompanionDock, companion popovers). Declared as an rgb channel
+     so each surface composes it at the alpha it needs via
+     rgba(var(--chrome-surface-rgb), <a>) — replaces the hand-rolled
+     rgba(5,5,17,*) / rgba(10,10,26,*) nav bases (the base equals the
+     --bg-grad-end cosmic stop).
+       - base   → deepest chrome: TopNav / BottomNav / CompanionDock bar.
+       - raised → slightly lifted dark chrome: companion popovers +
+         home feature glass cards (FeaturedBombSquad / DailyChecklist). */
+  --chrome-surface-rgb: 5, 5, 17;
+  --chrome-surface-raised-rgb: 10, 10, 26;
 
   /* ----------  BORDERS  ---------- */
   --border-hairline: rgba(255, 255, 255, 0.06);
@@ -169,7 +191,12 @@
   --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.12);
   --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.16);
   --shadow-yellow-ring: 0 0 0 2px var(--amio-yellow);
+  /* Backdrop-blur ramp — four steps so surfaces stop hand-rolling freehand
+     blur radii. soft (chips / popovers) → standard (glass cards) → strong
+     (elevated nav / feature panels) → heavy (full-screen overlays). */
+  --glass-blur-soft: blur(12px);
   --glass-blur: blur(20px);
+  --glass-blur-strong: blur(28px);
   --glass-blur-heavy: blur(37.5px);
 
   /* ----------  GLOWS  ---------- */

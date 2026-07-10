@@ -23,15 +23,15 @@
   padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-2xl);
-  background: rgba(41, 43, 45, 0.42);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--glass-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   transition: all 0.3s;
 }
 
 .tile:hover {
   border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(41, 43, 45, 0.6);
+  background: var(--glass-card-strong);
 }
 
 /* Preview tile renders as <a> — strip default anchor styling and signal
@@ -46,7 +46,7 @@
 
 .tilePreview:hover {
   border-color: rgba(180, 120, 255, 0.32);
-  background: rgba(41, 43, 45, 0.72);
+  background: var(--glass-card-strong);
 }
 
 .art {
@@ -73,31 +73,40 @@
   object-position: center 18%;
 }
 
+/* Tile-art gradients evoke each game with platform-palette hues only. The
+   home tiles are platform chrome, so no game accent leaks here (bounded-accent
+   rule): echo pairs violet + cosmic blue (was BombSquad near-miss rose), the
+   oracle preview reads as violet-gold (its cinnabar 朱印 seal stays inside the
+   Oracle game). */
 .echo {
   background:
     radial-gradient(circle at 30% 40%, rgba(180, 120, 255, 0.45), transparent 55%),
-    radial-gradient(circle at 70% 70%, rgba(255, 107, 157, 0.25), transparent 55%), #0a0a1a;
+    radial-gradient(circle at 70% 70%, rgba(74, 158, 255, 0.22), transparent 55%),
+    var(--bg-grad-mid-2);
 }
 
 .draw {
   background:
     radial-gradient(circle at 40% 50%, rgba(75, 210, 102, 0.4), transparent 55%),
-    radial-gradient(circle at 75% 30%, rgba(255, 229, 62, 0.2), transparent 55%), #0a0a1a;
+    radial-gradient(circle at 75% 30%, rgba(255, 229, 62, 0.2), transparent 55%),
+    var(--bg-grad-mid-2);
 }
 
 .lab {
-  background: radial-gradient(circle at 50% 50%, rgba(255, 229, 62, 0.3), transparent 55%), #0a0a1a;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 229, 62, 0.3), transparent 55%),
+    var(--bg-grad-mid-2);
 }
 
-/* Yijing Oracle — handoff §4 yj-tokens. Yang (#ffe53e) anchor at top-left,
-   yin (#b478ff) sweep at bottom-right; vermilion (#c2453a) accent for the
-   印章 motif. Composed warmer / more saturated than echo or draw so the
-   first tile reads as the freshest entry. */
+/* Yijing Oracle — violet-gold (紫金), the platform-safe half of Oracle's
+   registered accent. Yang (--amio-yellow) anchor at top-left, yin
+   (--accent-violet) sweep at bottom-right. Composed warmer / more saturated
+   than echo or draw so the first tile reads as the freshest entry. */
 .oracle {
   background:
     radial-gradient(circle at 28% 32%, rgba(255, 229, 62, 0.42), transparent 55%),
     radial-gradient(circle at 72% 70%, rgba(180, 120, 255, 0.4), transparent 55%),
-    radial-gradient(circle at 80% 20%, rgba(194, 69, 58, 0.22), transparent 50%), #0a0a1a;
+    var(--bg-grad-mid-2);
 }
 
 .artLabel {
@@ -105,13 +114,13 @@
   position: relative;
   font: 600 22px var(--font-display);
   letter-spacing: 0.04em;
-  color: #fff;
+  color: var(--text-1);
   mix-blend-mode: screen;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
 }
 
 .artLabelCn {
-  font-family: 'Noto Sans SC', sans-serif;
+  font-family: var(--font-body);
   font-weight: 700;
 }
 
@@ -121,7 +130,7 @@
   justify-content: space-between;
   margin: 0;
   font: 600 16px var(--font-display);
-  color: #fff;
+  color: var(--text-1);
 }
 
 .blurb {
@@ -139,7 +148,7 @@
   margin-top: 12px;
   font: 600 13px var(--font-body);
   letter-spacing: 0.02em;
-  color: #d6c0ff;
+  color: var(--accent-violet-soft);
 }
 
 /* Local preview-status pill — sized to match Chip.module.css `.soon/.dev/.live`
@@ -157,7 +166,7 @@
   font-weight: 500;
   font-size: 12px;
   letter-spacing: 0.12em;
-  color: #d6c0ff;
+  color: var(--accent-violet-soft);
 }
 
 /* ----------  responsive: mobile  ----------
