@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Button } from '@amiclaw/ui'
+import { useNavigate } from 'react-router-dom'
+import { BackLink, Button } from '@amiclaw/ui'
 import { castThrow, type CoinThrow } from '../casting'
 import { CoinTrio, Hexagram, Yao } from '../glyphs'
 import {
@@ -130,19 +130,7 @@ export function PageCasting() {
   return (
     <main className={styles.page}>
       <header className={styles.runHeader}>
-        <Link to="/projection" className={styles.iconBtn} aria-label="返回 心象">
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          >
-            <path d="M15 4 L7 12 L15 20" />
-          </svg>
-        </Link>
+        <BackLink variant="icon" label="返回 心象" to="/projection" />
         <div className={styles.title}>起卦</div>
         <div className={styles.meta}>
           <div className={styles.metaLead}>{done ? '完成' : `第 ${stepIndex} / 6 次`}</div>

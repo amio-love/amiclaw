@@ -56,7 +56,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
         y1="56"
         x2="110"
         y2="70"
-        stroke="#ff6b9d"
+        stroke="var(--yj-art-rose)"
         strokeWidth="2"
         strokeLinecap="round"
       />
@@ -76,7 +76,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
         fill="#ffe53e"
         opacity="0.75"
       />
-      <ellipse cx="62" cy="78" rx="14" ry="9" fill="#ff6b9d" opacity="0.85" />
+      <ellipse cx="62" cy="78" rx="14" ry="9" fill="var(--yj-art-rose)" opacity="0.85" />
       <circle cx="86" cy="38" r="2.5" fill="#fff" />
     </svg>
   ),
@@ -85,7 +85,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
     <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="pc-band" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stopColor="#ff6b9d" />
+          <stop offset="0" stopColor="var(--yj-art-rose)" />
           <stop offset="0.5" stopColor="#ffa849" />
           <stop offset="1" stopColor="#ffe53e" />
         </linearGradient>
@@ -115,7 +115,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
         strokeLinecap="round"
       />
       <path d="M 92 28 a 22 22 0 1 0 0 56 a 16 16 0 0 1 0 -56 Z" fill="#ffe53e" opacity="0.95" />
-      <circle cx="96" cy="98" r="3.5" fill="#ff6b9d" />
+      <circle cx="96" cy="98" r="3.5" fill="var(--yj-art-rose)" />
     </svg>
   ),
   /* 5 — watercolor wash + black wedge */
@@ -139,7 +139,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
   f: (
     <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
       <rect width="120" height="120" fill="#1a1a2e" />
-      <circle cx="36" cy="38" r="14" fill="none" stroke="#ff6b9d" strokeWidth="3" />
+      <circle cx="36" cy="38" r="14" fill="none" stroke="var(--yj-art-rose)" strokeWidth="3" />
       <circle cx="84" cy="32" r="6" fill="#ffe53e" />
       <line
         x1="60"
@@ -162,7 +162,7 @@ const PROJ: Record<ProjArtId, ReactElement> = {
       <polygon points="76,68 92,68 84,82" fill="#b478ff" />
       <circle cx="42" cy="100" r="3" fill="#fff" />
       <circle cx="60" cy="46" r="2" fill="#fff" />
-      <circle cx="105" cy="62" r="2.5" fill="#ff6b9d" />
+      <circle cx="105" cy="62" r="2.5" fill="var(--yj-art-rose)" />
     </svg>
   ),
 }

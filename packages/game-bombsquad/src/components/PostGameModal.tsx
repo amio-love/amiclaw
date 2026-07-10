@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { AI_TOOLS } from '@amiclaw/ui'
+import { AI_TOOLS, Button } from '@amiclaw/ui'
 import type { SurveyAnswers } from '@shared/event-types'
 import { NICKNAME_MAX_LENGTH, isValidNickname, setStoredNickname } from '@/utils/nickname'
 import {
@@ -10,7 +10,6 @@ import {
   normalizeLeaderboardAiModel,
   setStoredLeaderboardPlayerMetadata,
 } from '@/utils/leaderboard-player-metadata'
-import Button from '@/components/bombsquad/Button'
 import styles from './PostGameModal.module.css'
 
 /** Hard caps mirroring the `survey_submit` wire contract (data payload ≤ 1KB). */

@@ -27,6 +27,18 @@
   transform: translateY(-2px);
 }
 
+/* Primary fill accents — green (success) / rose (near-miss), dark text.
+   Folded in from the former BombSquad Button. */
+.primary.accentGreen {
+  background: var(--positive);
+  color: #061509;
+}
+
+.primary.accentRose {
+  background: var(--rose);
+  color: #2a0511;
+}
+
 .ghost {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
@@ -57,4 +69,12 @@
    md pairing without touching primary. */
 .ghost.md {
   padding: 16px 26px;
+}
+
+/* full — block button with the wider vertical padding (BombSquad's 16/22).
+   Supersedes the size class (the TSX applies full OR size, never both). */
+.full {
+  width: 100%;
+  padding: 16px 22px;
+  white-space: nowrap;
 }

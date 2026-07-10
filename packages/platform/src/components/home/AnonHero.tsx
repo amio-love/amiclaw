@@ -1,4 +1,4 @@
-import { Button, EyebrowTag, StatPill, Wordmark } from '@amiclaw/ui'
+import { AiToolTicker, Button, EyebrowTag, StatPill, Wordmark } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import styles from './AnonHero.module.css'
@@ -38,7 +38,10 @@ export default function AnonHero({ onStart, board }: AnonHeroProps) {
             <Wordmark language="zh" />
             是你和 AI 伙伴的轻量体验入口。
           </span>
-          <span className={styles.subLine}>带上你的 AI 伙伴，来玩一局。</span>
+          <span className={styles.subLine}>
+            带上你的 <AiToolTicker />
+            ，来玩一局。
+          </span>
         </p>
         <div className={styles.cta}>
           <Button variant="primary" onClick={onStart}>

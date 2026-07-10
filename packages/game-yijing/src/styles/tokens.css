@@ -2,10 +2,33 @@
 /* Cosmic shell variables (--y / --green / --rose / --violet / --blue / --bg-* / --glass / --hairline / --font-*) */
 /* are inherited from BombSquad's existing stylesheet and intentionally NOT redeclared here. */
 
+/* ============================================================
+   ORACLE REGISTERED ACCENT (bounded-accent rule — DesignSystem.md
+   §Platform Grammar). Oracle's one registered accent is 紫金
+   (violet-gold) + 朱印 (cinnabar seal). Violet-gold reuses the
+   platform decorative channels (--accent-violet / --amio-yellow);
+   the cinnabar is the only Oracle-owned hue. The accent may appear
+   ONLY on Oracle ritual graphics (太极 / 卦象 / 卦签 / 干支 seal)
+   and Oracle titles — never on platform chrome.
+   ============================================================ */
+
 :root {
-  --yj-yang: var(--y); /* 阳爻 = AMIO 黄 #ffe53e */
-  --yj-yin: #b478ff; /* 阴爻 = 紫罗兰 */
+  --yj-yang: var(--y); /* 阳爻 = 金 = AMIO 黄 #ffe53e (platform channel) */
+  --yj-yin: var(--accent-violet); /* 阴爻 = 紫 = 紫罗兰 #b478ff (platform channel) */
   --yj-yang-soft: rgba(255, 229, 62, 0.16);
   --yj-yin-soft: rgba(180, 120, 255, 0.18);
-  --yj-vermilion: #c2453a; /* 朱砂红 — 仅用于印章 */
+
+  /* 朱印 — cinnabar seal, the one Oracle-owned hue. Solid + rgb channel so
+     the 卦签红印 / 干支徽 tints compose from one source. Ritual seals only. */
+  --yj-vermilion: #c2453a;
+  --yj-vermilion-rgb: 194, 69, 58;
+
+  /* Oracle registered display serif — 卦辞 / 卦签 classical text + seal
+     lettering. Oracle's registered accent face (not a platform type token). */
+  --yj-font-serif: 'Noto Serif SC', 'Songti SC', serif;
+
+  /* 心象 projection-art decorative accent — placeholder Kandinsky/Miro tiles
+     (ProjArt), distinct from the ritual accent above. Named here so the tiles
+     stop sharing a wild #ff6b9d literal with BombSquad's near-miss --rose. */
+  --yj-art-rose: #ff6b9d;
 }

@@ -80,26 +80,6 @@
   letter-spacing: 0.05em;
 }
 
-.statusBadge {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 3px 8px;
-  border-radius: 3px;
-  border: 1px solid currentColor;
-  white-space: nowrap;
-  letter-spacing: 0.05em;
-}
-
-.statusBadge.statusVerified {
-  color: var(--y);
-  background: rgba(255, 229, 62, 0.08);
-}
-
-.statusBadge.statusUntested {
-  color: var(--color-text-muted);
-  background: transparent;
-}
-
 .toolTip {
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -153,7 +133,6 @@
 
   /* Floor secondary text at 14px on mobile so Chinese stays legible at 375px;
      primary text already meets the floor via base rules. */
-  .statusBadge,
   .homeLink {
     font-size: 0.875rem;
   }

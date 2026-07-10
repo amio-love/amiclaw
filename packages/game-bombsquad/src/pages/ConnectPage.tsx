@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Scenery, ConicAvatar } from '@amiclaw/ui'
-import Eyebrow from '@/components/bombsquad/Eyebrow'
-import Button from '@/components/bombsquad/Button'
+import { BackLink, Button, Scenery, ConicAvatar, EyebrowTag } from '@amiclaw/ui'
 import { useDailyChallenge } from '@/hooks/useDailyChallenge'
 import { useCompanionPartner } from '@/hooks/useCompanionPartner'
 import { copyToClipboard } from '@/utils/clipboard'
@@ -157,24 +155,11 @@ export default function ConnectPage() {
       <Scenery accent="yellow" />
       <div className={styles.stage}>
         <header className={styles.header}>
-          <button
-            type="button"
-            className={styles.iconBtn}
+          <BackLink
+            variant="icon"
+            label="返回 BombSquad 主页"
             onClick={() => navigate('/bombsquad')}
-            aria-label="返回 BombSquad 主页"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            >
-              <path d="M15 4 L7 12 L15 20" />
-            </svg>
-          </button>
+          />
           <div className={styles.headerMeta}>
             <div className={styles.headerMode}>{modeLabel}</div>
             <div className={styles.headerSub}>对接 AI</div>
@@ -194,9 +179,7 @@ export default function ConnectPage() {
         {/* Companion co-play default (mode②) — signed in, companion exists. */}
         {companionEntry && (
           <div className={styles.connect}>
-            <Eyebrow dot color="var(--y)">
-              你的伙伴
-            </Eyebrow>
+            <EyebrowTag variant="pill">你的伙伴</EyebrowTag>
 
             <h2 className={styles.title}>
               和<span className={styles.titleAccent}>{partner.name}</span>一起拆弹。
@@ -251,9 +234,7 @@ export default function ConnectPage() {
             primary CTA dismisses it into the same steps (skippable, one tap). */}
         {showIntro && (
           <div className={`${styles.connect} ${styles.intro}`}>
-            <Eyebrow dot color="var(--y)">
-              开始之前
-            </Eyebrow>
+            <EyebrowTag variant="pill">开始之前</EyebrowTag>
 
             <h2 className={styles.title}>
               先弄清<span className={styles.titleAccent}>怎么玩</span>。
@@ -301,9 +282,7 @@ export default function ConnectPage() {
 
         {!showIntro && (mode === 'practice' || partner.status === 'unavailable' || byoChosen) && (
           <div className={styles.connect}>
-            <Eyebrow dot color="var(--y)">
-              第 {step}/2 步
-            </Eyebrow>
+            <EyebrowTag variant="pill">第 {step}/2 步</EyebrowTag>
 
             <h2 className={styles.title}>
               {step === 1 && (

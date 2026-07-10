@@ -15,9 +15,9 @@
     justify-content: space-around;
     padding: 6px 8px;
     padding-bottom: calc(6px + env(safe-area-inset-bottom));
-    background: rgba(5, 5, 17, 0.92);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+    background: rgba(var(--chrome-surface-rgb), 0.92);
+    backdrop-filter: var(--glass-blur-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
     border-top: 1px solid var(--border-hairline);
   }
 

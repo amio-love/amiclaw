@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PostGameModal, { type PostGameModalResult } from '@/components/PostGameModal'
-import { Scenery } from '@amiclaw/ui'
+import { Button, Scenery } from '@amiclaw/ui'
 import {
   markArcadeProfileEventsClaimed,
   readArcadeLocalProfile,
@@ -10,7 +10,6 @@ import {
 } from '@amiclaw/arcade-profile/local'
 import type { ArcadeDailyLoopSummary } from '@amiclaw/arcade-profile/types'
 import { submitArcadeProfileEvent } from '@amiclaw/arcade-profile/api-client'
-import Button from '@/components/bombsquad/Button'
 import Glyph, { type GlyphKey } from '@/components/bombsquad/Glyph'
 import { useGame, MAX_STRIKES, type GameOutcome } from '@/store/game-context'
 import { getDailyResetHint, getTodayString } from '@shared/date'

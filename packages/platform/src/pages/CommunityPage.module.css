@@ -100,19 +100,22 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
-/* BombSquad sub-brand cyan result badge — per-spec here: it surfaces a real
-   DEFUSED outcome (拆弹成功 · time), not platform chrome. */
+/* Success badge — surfaces a real defusal outcome (拆弹成功 · time) in the
+   platform success color (green --positive), never a game accent (semantic
+   color law / bounded-accent rule: the community feed is platform chrome). */
 .badge {
   display: inline-flex;
   align-items: center;
   margin-top: 12px;
   padding: 7px 12px;
   border-radius: 10px;
-  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.16), transparent 70%), #0a0a1a;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(75, 210, 102, 0.16), transparent 70%),
+    var(--bg-grad-mid-2);
   font: 700 13px var(--amio-font-mono);
   letter-spacing: 0.06em;
-  color: var(--bs-cyan);
-  text-shadow: 0 0 10px var(--bs-cyan);
+  color: var(--positive);
+  text-shadow: 0 0 10px rgba(75, 210, 102, 0.5);
 }
 
 .foot {

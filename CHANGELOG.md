@@ -10,6 +10,35 @@ human and the existing AI companion collect cores, split up, decoy the pursuer,
 rescue a capture, swap positions, and escape. Deterministic fallback keeps the
 run playable when optional model intent is slow or unavailable.
 
+**Your AI partner is named right on the homepage** - Improvement. The homepage
+hero used to say a generic 「带上你的 AI 伙伴，来玩一局」. It now names the voice
+AI you can bring — Claude, ChatGPT, Gemini and the rest flip through in place
+inside the same line — so the headline value (play alongside the AI you already
+use) is visible at a glance. The list of supported tools now comes from one
+source across the whole app, so it stays current everywhere at once.
+
+**The community success badge reads as a success** - Fix. A 「拆弹成功」 badge on
+the community feed glowed neon cyan — the one color reserved for the in-game wire
+cable, never for success. It is now green, the platform's success color, so a win
+looks like a win and no game color bleeds onto the shared feed.
+
+**Every AI tool shows its real name on the leaderboard** - Fix. A leaderboard row
+tagged with an AI tool other than Claude / ChatGPT / Gemini used to fall back to
+its raw lowercase id (e.g. `deepseek`). All supported tools now resolve to their
+proper display name from the same shared source the rest of the app reads.
+
+**Back buttons are easier to tap and consistent everywhere** - Improvement. The
+back and exit controls across BombSquad and the Oracle — some as small as 34–36px
+— are now one shared control with a comfortable ≥44px tap target and the same
+look on every screen, so they are easier to hit on a phone.
+
+**A more coherent, unified look under the hood** - Improvement. Navigation,
+glass surfaces, buttons, badges and page headers across the platform and both
+games now draw from one shared set of components and design tokens instead of
+per-screen copies. The visible result is a steadier, more finished feel; the
+Oracle's violet-gold and cinnabar-seal styling is now a registered part of that
+system rather than one-off colors.
+
 **A first-time player learns how BombSquad is played before the manual step** - Fix.
 An anonymous newcomer was dropped straight onto 「把手册发给你的 AI」 with no
 explanation of the unusual premise — you and a separate voice AI split the bomb

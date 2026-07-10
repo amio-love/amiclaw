@@ -181,13 +181,18 @@ describe('GamesPage homepage', () => {
     // AnonHero markers: the hero eyebrow pill, platform description, and the
     // single primary「开始玩」CTA.
     expect(await screen.findByText('本周开服 · BOMBSQUAD 公测中')).toBeInTheDocument()
+    // The hero description wraps the AI-tool ticker between the stable copy
+    // ("带上你的 …，来玩一局。"); assert the surrounding text plus the ticker.
     expect(
-      screen.getByText(
-        (_, el) =>
-          el?.textContent ===
-          'AMIO 游乐场是你和 AI 伙伴的轻量体验入口。带上你的 AI 伙伴，来玩一局。'
-      )
+      screen.getByText((_, el) => {
+        const text = el?.textContent ?? ''
+        return (
+          text.startsWith('AMIO 游乐场是你和 AI 伙伴的轻量体验入口。带上你的') &&
+          text.endsWith('，来玩一局。')
+        )
+      })
     ).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /支持的语音 AI/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /开始玩/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /看看 BombSquad/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/一起拆弹/)).not.toBeInTheDocument()

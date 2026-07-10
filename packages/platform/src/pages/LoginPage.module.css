@@ -75,7 +75,7 @@
 .errorText {
   margin: 0;
   font: 400 13px var(--font-body);
-  color: #ff8a8a;
+  color: var(--amio-danger);
 }
 
 /* The unified anti-enumeration confirmation replacing the form on send. */
@@ -144,10 +144,10 @@
   margin: 0 0 18px;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 138, 138, 0.35);
-  background: rgba(255, 138, 138, 0.08);
+  border: 1px solid var(--amio-danger-border);
+  background: var(--amio-danger-surface);
   font: 400 14px/1.6 var(--font-body);
-  color: #ff8a8a;
+  color: var(--amio-danger);
 }
 
 /* ----------  signed-in notice (an authenticated visitor on /login)  ---------- */

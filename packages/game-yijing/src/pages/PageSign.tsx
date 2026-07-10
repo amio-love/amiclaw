@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { Button, Scenery } from '@amiclaw/ui'
+import { BackLink, Button, Scenery } from '@amiclaw/ui'
 import {
   markArcadeProfileEventsClaimed,
   readArcadeLocalProfile,
@@ -164,24 +164,7 @@ function SignCard({ values }: { values: YaoSextet }) {
 
       <div className={styles.content}>
         <div className={styles.header}>
-          <button
-            type="button"
-            className={styles.iconBtn}
-            onClick={() => navigate('/home')}
-            aria-label="返回"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            >
-              <path d="M15 4 L7 12 L15 20" />
-            </svg>
-          </button>
+          <BackLink variant="icon" label="返回" onClick={() => navigate('/home')} />
           <div className={styles.headerTitle}>今日卦签</div>
           <div className={styles.headerMeta}>
             <div className={styles.headerStep}>完成</div>
