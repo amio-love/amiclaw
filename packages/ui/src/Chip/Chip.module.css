@@ -17,18 +17,6 @@
   letter-spacing: 0.08em;
 }
 
-/* cyan — BombSquad featured-art chip (mono, neon cyan). */
-.cyan {
-  padding: 5px 11px;
-  background: rgba(0, 255, 255, 0.08);
-  border: 1px solid rgba(0, 255, 255, 0.2);
-  font-family: var(--amio-font-mono);
-  font-weight: 500;
-  font-size: 12px;
-  color: rgba(0, 255, 255, 0.85);
-  letter-spacing: 0.08em;
-}
-
 /* soon / dev / live — game-tile status badges, shared base. */
 .soon,
 .dev,
@@ -52,4 +40,27 @@
 
 .live {
   color: var(--positive);
+}
+
+/* verified / untested — a verification status badge (mono status label,
+   currentColor outline). verified = brand yellow; untested = muted. */
+.verified,
+.untested {
+  padding: 4px 11px;
+  border: 1px solid currentColor;
+  font-family: var(--amio-font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.verified {
+  color: var(--amio-yellow);
+  background: var(--amio-yellow-glow-10);
+}
+
+.untested {
+  color: var(--text-4);
+  background: transparent;
 }

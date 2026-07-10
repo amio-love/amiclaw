@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AI_TOOLS as AI_TOOL_NAMES } from '@amiclaw/ui'
+import { AI_TOOLS as AI_TOOL_NAMES, Chip } from '@amiclaw/ui'
 import styles from './CompatibilityPage.module.css'
 
 type Verification = 'verified' | 'untested'
@@ -67,15 +67,9 @@ export default function CompatibilityPage() {
             >
               <div className={styles.toolHeader}>
                 <span className={styles.toolName}>{tool.name}</span>
-                <span
-                  className={
-                    tool.verification === 'verified'
-                      ? `${styles.statusBadge} ${styles.statusVerified}`
-                      : `${styles.statusBadge} ${styles.statusUntested}`
-                  }
-                >
+                <Chip variant={tool.verification === 'verified' ? 'verified' : 'untested'}>
                   {tool.statusLabel}
-                </span>
+                </Chip>
               </div>
               <p className={styles.toolTip}>{tool.tip}</p>
             </li>
