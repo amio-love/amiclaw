@@ -234,6 +234,15 @@ interface ClosingSessionMessage {
   outcome?: RecapOutcome
 }
 
+/**
+ * Server-side cap on a `text-turn`'s typed text. A botanist question is a short
+ * prompt; a client caps it too, but the DO must not trust the client — an
+ * over-long payload is TRUNCATED (not rejected) so a benign over-run still gets
+ * answered, and a hostile one cannot bloat the LLM context. Generous vs the
+ * client bound so normal input is never clipped.
+ */
+const MAX_TEXT_TURN_CHARS = 2000
+
 type ControlMessage =
   | CreateSessionMessage
   | SpeechStartMessage
@@ -1418,7 +1427,9 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
           return
         }
-        const text = typeof msg.text === 'string' ? msg.text.trim() : ''
+        // Truncate defensively: never trust the client's length cap.
+        const text =
+          typeof msg.text === 'string' ? msg.text.trim().slice(0, MAX_TEXT_TURN_CHARS) : ''
         if (text.length === 0) {
           // Empty/whitespace typed input: benign no-op (the typed analog of a
           // no-speech turn) — no reply, no state, no turn counted.

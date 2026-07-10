@@ -13,8 +13,9 @@
  * template or an added enum value keeps working. Golden tests pin the current
  * fixture's exact output.
  */
-import type { GameType, Level, LevelRule } from '@amiclaw/creation'
+import type { GameType, Level, LevelElement, LevelRule, TimedEmitter } from '@amiclaw/creation'
 import type { ManualData } from '@amiclaw/platform-ai/contract'
+import { CARE_VERBS } from '@/game/care-verbs'
 import { GROWTH_LABEL, HEALTH_LABEL, LIGHT_LABEL } from '@/game/visual-map'
 import {
   ACTION_LABEL,
@@ -91,6 +92,82 @@ function eventVerbLabel(eventToActionMap: Map<string, string>, event: string): s
   const action = eventToActionMap.get(event)
   if (action === undefined) return '无人照料'
   return ACTION_LABEL[action] ?? action
+}
+
+/**
+ * Events the level can ACTUALLY emit — the only ones the manual should document.
+ * An event is emittable if a PLAYER-usable action_type reaches it via
+ * action_event_mapping (the shipped care verbs are the source of "player-usable";
+ * `overwater`→`wrong_care` is NOT among them, so tutorial harm the player can
+ * never cause is dropped), OR a timed emitter fires it (decay `neglect`).
+ */
+function emittableEvents(gameType: GameType): Set<string> {
+  const playerActionTypes = new Set(CARE_VERBS.map((v) => v.actionType))
+  const events = new Set<string>()
+  for (const row of gameType.action_event_mapping ?? []) {
+    if (!playerActionTypes.has(row.action_type)) continue
+    for (const [key, value] of Object.entries(row)) {
+      if (key.endsWith('_event') && typeof value === 'string') events.add(value)
+    }
+  }
+  for (const emitter of gameType.timed_emitters ?? []) events.add(emitter.event)
+  return events
+}
+
+/**
+ * True when a compatibility relation binds an effect that carries a `state_effect`
+ * (its effect verb ADVANCES a state) — i.e. the relation MECHANICALLY changes play
+ * (synergy→heal here) rather than being informational strategy-reference only.
+ */
+function relationIsActive(gameType: GameType, relation: string): boolean {
+  const template = gameType.rule_templates.find((t) => t.type === 'interaction_matrix') as
+    | { matrix_schema?: { effect_schema?: Array<{ relation: string; effect: string }> } }
+    | undefined
+  const effect = template?.matrix_schema?.effect_schema?.find((e) => e.relation === relation)
+  if (effect === undefined) return false
+  const action = gameType.action_registry.find((a) => a.name === effect.effect)
+  return action?.state_effect === 'advance_state' || action?.state_effect === 'complete_state'
+}
+
+/** Elements a timed emitter targets (archetype-scoped, or by target_template rule). */
+function emitterTargetElements(level: Level, emitter: TimedEmitter): LevelElement[] {
+  if (emitter.target.kind === 'archetype') {
+    const archetype = emitter.target.archetype
+    return level.elements.filter((e) => e.archetype === archetype)
+  }
+  const ids = new Set<string>()
+  for (const rule of level.rules) {
+    if (rule.template === emitter.target_template)
+      for (const id of rule.target_elements) ids.add(id)
+  }
+  return level.elements.filter((e) => ids.has(e.id))
+}
+
+/**
+ * Effective per-instance decay intervals across an emitter's targeted elements,
+ * folding in each element's `initial_timers[emitter.id].interval_ms` override (as
+ * the engine + the on-screen ring do). Returns the min/max (ms) and the species
+ * on the fastest interval, so the manual reports the real pacing — including
+ * bg-standard-001's orchid at 40s, not the base 60s.
+ */
+function effectiveDecayIntervals(
+  level: Level,
+  emitter: TimedEmitter
+): { minMs: number; maxMs: number; fastestSpecies: string[] } {
+  const entries = emitterTargetElements(level, emitter).map((el) => {
+    const override = el.initial_timers?.[emitter.id]?.interval_ms
+    return {
+      species: String(el.params.species ?? ''),
+      intervalMs: typeof override === 'number' ? override : emitter.interval_ms,
+    }
+  })
+  const intervals = entries.map((e) => e.intervalMs)
+  const minMs = Math.min(...intervals)
+  const maxMs = Math.max(...intervals)
+  const fastestSpecies = [
+    ...new Set(entries.filter((e) => e.intervalMs === minMs).map((e) => e.species)),
+  ]
+  return { minMs, maxMs, fastestSpecies }
 }
 
 // --- rule kind + binding narrowing ------------------------------------------
@@ -189,11 +266,16 @@ function objectiveSection(gameType: GameType, level: Level): RenderedManualSecti
 }
 
 function compatibilitySection(gameType: GameType, rows: MatrixRow[]): RenderedManualSection {
-  const lines = ['植株间的相性（本关卡为策略参考）：']
-  for (const [a, b, relation] of rows)
+  // A relation with an active state_effect (synergy→heal) gets its mechanical
+  // consequence spelled out; relations without one keep the strategic-reference
+  // framing carried by the lead line.
+  const lines = ['植株间的相性（未注明机械效果的仅供策略参考）：']
+  for (const [a, b, relation] of rows) {
+    const base = `${gloss(gameType, 'species', a)} 与 ${gloss(gameType, 'species', b)}：${RELATION_LABEL[relation] ?? relation}（${relation}）`
     lines.push(
-      `${gloss(gameType, 'species', a)} 与 ${gloss(gameType, 'species', b)}：${RELATION_LABEL[relation] ?? relation}（${relation}）`
+      relationIsActive(gameType, relation) ? `${base}，养护任一株会同时治愈相邻的另一株。` : base
     )
+  }
   return { id: 'compatibility', title: '相生相克', lines }
 }
 
@@ -308,6 +390,7 @@ function speciesCareSection(
 
 function healthSection(
   gameType: GameType,
+  level: Level,
   rules: HealthRule[],
   e2a: Map<string, string>
 ): RenderedManualSection {
@@ -389,14 +472,23 @@ function healthSection(
 
   for (const emitter of gameType.timed_emitters ?? []) {
     if (!eventSpecies.has(emitter.event)) continue
-    const intervalS = Math.round(emitter.interval_ms / 1000)
+    // Report the EFFECTIVE per-instance pacing (folding in initial_timers
+    // overrides) so the manual matches the on-screen decay ring — a uniform
+    // value, or a range that names the fastest-decaying species.
+    const { minMs, maxMs, fastestSpecies } = effectiveDecayIntervals(level, emitter)
+    const minS = Math.round(minMs / 1000)
+    const maxS = Math.round(maxMs / 1000)
     const warnS =
       emitter.warning_lead_ms !== undefined ? Math.round(emitter.warning_lead_ms / 1000) : 0
-    lines.push(
-      warnS > 0
-        ? `无人照料每约 ${intervalS} 秒衰退一次，临近前 ${warnS} 秒会预警。`
-        : `无人照料每约 ${intervalS} 秒衰退一次。`
-    )
+    const warnSuffix = warnS > 0 ? `，临近前 ${warnS} 秒会预警` : ''
+    if (minS === maxS) {
+      lines.push(`无人照料每约 ${minS} 秒衰退一次${warnSuffix}。`)
+    } else {
+      const fastestStr = fastestSpecies.map((s) => gloss(gameType, 'species', s)).join('、')
+      lines.push(
+        `无人照料每约 ${minS}–${maxS} 秒衰退一次，其中${fastestStr}最快（每约 ${minS} 秒）${warnSuffix}。`
+      )
+    }
   }
   lines.push('植株一旦枯死即无法挽回，并会导致败局。')
   return { id: 'health_and_decay', title: '健康与衰败', lines }
@@ -414,6 +506,10 @@ function healthSection(
  */
 export function renderBotanicalManual(gameType: GameType, level: Level): RenderedManual {
   const e2a = eventToAction(gameType)
+  // Only document transition rows whose event this level can actually emit — a
+  // manual that describes unreachable harm (tutorial `overwater`→`wrong_care`,
+  // which no shipped verb produces) mis-advises the botanist.
+  const emittable = emittableEvents(gameType)
   const needsRules: ParsedNeeds[] = []
   const matrixRows: MatrixRow[] = []
   const lightTransitions: Transition[] = []
@@ -430,7 +526,7 @@ export function renderBotanicalManual(gameType: GameType, level: Level): Rendere
     } else if (kind === 'interaction_matrix') {
       matrixRows.push(...matrixOf(rule))
     } else if (kind === 'state_transition') {
-      const transitions = transitionsOf(rule)
+      const transitions = transitionsOf(rule).filter(([, event]) => emittable.has(event))
       const field = transitionField(gameType, transitions)
       if (field === 'effective_light') {
         for (const t of transitions) {
@@ -494,7 +590,7 @@ export function renderBotanicalManual(gameType: GameType, level: Level): Rendere
   if (matrixRows.length > 0) sections.push(compatibilitySection(gameType, matrixRows))
   if (lightTransitions.length > 0) sections.push(lightSection(gameType, lightTransitions, e2a))
   if (growthTransitions.length > 0) sections.push(growthSection(gameType, growthTransitions, e2a))
-  if (healthRules.length > 0) sections.push(healthSection(gameType, healthRules, e2a))
+  if (healthRules.length > 0) sections.push(healthSection(gameType, level, healthRules, e2a))
 
   return { version: gameType.version, sections }
 }

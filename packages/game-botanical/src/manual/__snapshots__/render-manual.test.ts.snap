@@ -28,11 +28,11 @@ exports[`renderBotanicalManual — bg-demo-001 v1.1.0 > golden: full rendered ma
     {
       "id": "compatibility",
       "lines": [
-        "植株间的相性（本关卡为策略参考）：",
+        "植株间的相性（未注明机械效果的仅供策略参考）：",
         "蕨类（fern） 与 多肉（succulent）：相克（incompatible）",
         "蕨类（fern） 与 兰花（orchid）：相容（compatible）",
         "多肉（succulent） 与 兰花（orchid）：中性（neutral）",
-        "蕨类（fern） 与 苔藓（moss）：协同（synergy）",
+        "蕨类（fern） 与 苔藓（moss）：协同（synergy），养护任一株会同时治愈相邻的另一株。",
         "多肉（succulent） 与 藤蔓（vine）：相容（compatible）",
       ],
       "title": "相生相克",
@@ -61,7 +61,6 @@ exports[`renderBotanicalManual — bg-demo-001 v1.1.0 > golden: full rendered ma
       "lines": [
         "健康档位由差到好：枯死（dead） < 垂危（critical） < 枯萎（wilting） < 稳定（stable） < 茁壮（thriving）。",
         "浇水（correct_care）可提升健康：枯萎→稳定；稳定→茁壮；垂危→枯萎。",
-        "过量浇水（wrong_care）会降低健康：稳定→枯萎；茁壮→稳定；枯萎→垂危。",
         "无人照料（neglect）会随时间衰退：茁壮→稳定；稳定→枯萎；枯萎→垂危；垂危→枯死。",
         "无人照料每约 60 秒衰退一次，临近前 8 秒会预警。",
         "植株一旦枯死即无法挽回，并会导致败局。",
@@ -103,8 +102,8 @@ exports[`renderBotanicalManual — bg-standard-001 v1.1.0 > golden: full rendere
     {
       "id": "compatibility",
       "lines": [
-        "植株间的相性（本关卡为策略参考）：",
-        "苔藓（moss） 与 多肉（succulent）：协同（synergy）",
+        "植株间的相性（未注明机械效果的仅供策略参考）：",
+        "苔藓（moss） 与 多肉（succulent）：协同（synergy），养护任一株会同时治愈相邻的另一株。",
         "多肉（succulent） 与 藤蔓（vine）：相容（compatible）",
         "苔藓（moss） 与 藤蔓（vine）：中性（neutral）",
       ],
@@ -135,7 +134,7 @@ exports[`renderBotanicalManual — bg-standard-001 v1.1.0 > golden: full rendere
         "健康档位由差到好：枯死（dead） < 垂危（critical） < 枯萎（wilting） < 稳定（stable） < 茁壮（thriving）。",
         "浇水（correct_care）仅能提升 苔藓（moss）、多肉（succulent）、藤蔓（vine） 的健康：枯萎→稳定；稳定→茁壮；垂危→枯萎。兰花（orchid）、蕨类（fern）浇水无效，恢复方式见各自养护要点。",
         "无人照料（neglect）会随时间衰退：茁壮→稳定；稳定→枯萎；枯萎→垂危；垂危→枯死。",
-        "无人照料每约 60 秒衰退一次，临近前 8 秒会预警。",
+        "无人照料每约 40–60 秒衰退一次，其中兰花（orchid）最快（每约 40 秒），临近前 8 秒会预警。",
         "植株一旦枯死即无法挽回，并会导致败局。",
       ],
       "title": "健康与衰败",

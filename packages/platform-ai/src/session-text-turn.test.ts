@@ -84,6 +84,21 @@ describe('real VoiceSessionDO — text-turn (FP1 text fallback)', () => {
     expect(sawDoneChunk(socket)).toBe(true)
   })
 
+  it('truncates over-long typed text to the server cap (2000 chars)', async () => {
+    providerControl.override = makeInspectingProviders().providers
+    const session = makeSessionDo()
+    const socket = await openSocket(session, 'user-A')
+    await createSessionOverWs(socket)
+
+    socket.send(textTurn('兰'.repeat(5000))) // way over the cap
+    await waitFor(() => sawDoneChunk(socket), 'reply done')
+
+    // The echoed transcript is the TRUNCATED text (exactly the 2000-char cap),
+    // proving the DO did not trust the client and did not feed the LLM 5000 chars.
+    const finalTranscript = messagesOfType(socket, 'transcript').find((t) => t.final === true)
+    expect((finalTranscript?.text as string).length).toBe(2000)
+  })
+
   it('empty / whitespace text is a benign no-op (no reply, no turn counted)', async () => {
     providerControl.override = makeInspectingProviders().providers
     const session = makeSessionDo()

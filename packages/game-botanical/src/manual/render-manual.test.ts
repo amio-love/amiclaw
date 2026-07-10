@@ -49,12 +49,16 @@ describe('renderBotanicalManual — bg-demo-001 v1.1.0', () => {
     expect(s.lines[0]).toContain('受损')
   })
 
-  it('compatibility renders every matrix relation as strategic info', () => {
+  it('renders active synergy as a mechanical consequence; other relations as strategic reference', () => {
     const lines = section(manual, 'compatibility').lines
+    expect(lines[0]).toContain('未注明机械效果的仅供策略参考')
+    // synergy binds an active state_effect (heal) → spell out the consequence.
+    expect(lines).toContain(
+      '蕨类（fern） 与 苔藓（moss）：协同（synergy），养护任一株会同时治愈相邻的另一株。'
+    )
+    // relations without a state_effect stay bare (strategic reference).
     expect(lines).toContain('蕨类（fern） 与 多肉（succulent）：相克（incompatible）')
-    expect(lines).toContain('蕨类（fern） 与 苔藓（moss）：协同（synergy）')
-    // 1 lead line + 5 matrix rows
-    expect(lines).toHaveLength(6)
+    expect(lines).toHaveLength(6) // 1 lead line + 5 matrix rows
   })
 
   it('light renders the shade ladder with the player verb', () => {
@@ -70,16 +74,19 @@ describe('renderBotanicalManual — bg-demo-001 v1.1.0', () => {
     expect(lines).toContain('成熟经催花变为开花')
   })
 
-  it('health_and_decay renders the ladder, decay timing, and death', () => {
+  it('health_and_decay renders the ladder, decay timing, and death — but NOT unemittable harm', () => {
     const lines = section(manual, 'health_and_decay').lines.join('\n')
     expect(lines).toContain(
       '枯死（dead） < 垂危（critical） < 枯萎（wilting） < 稳定（stable） < 茁壮（thriving）'
     )
     expect(lines).toContain('浇水（correct_care）可提升健康')
-    expect(lines).toContain('过量浇水（wrong_care）会降低健康')
     expect(lines).toContain('无人照料（neglect）会随时间衰退')
-    expect(lines).toContain('每约 60 秒衰退一次，临近前 8 秒会预警')
+    expect(lines).toContain('每约 60 秒衰退一次，临近前 8 秒会预警') // uniform base interval
     expect(lines).toContain('枯死即无法挽回')
+    // Finding 2: overwater→wrong_care has no shipped verb, so the tutorial manual
+    // must NOT document that harm (it was mis-advising the botanist).
+    expect(lines).not.toContain('wrong_care')
+    expect(lines).not.toContain('过量浇水')
   })
 
   it('golden: full rendered manual is pinned for bg-demo-001', () => {
@@ -140,12 +147,21 @@ describe('renderBotanicalManual — bg-standard-001 v1.1.0', () => {
     expect(lines).not.toContain('浇水（correct_care）可提升健康：')
     // Decay stays universal (every plant decays).
     expect(lines).toContain('无人照料（neglect）会随时间衰退')
-    expect(lines).toContain('每约 60 秒衰退一次')
   })
 
-  it('compatibility renders the synergy pair and the informational relations', () => {
+  it('reports the EFFECTIVE per-instance decay pacing (orchid 40s override), matching the ring', () => {
+    // Finding 1: the orchid overrides interval_ms to 40s via initial_timers; the
+    // manual must report the effective range + fastest species, not the base 60s.
+    const lines = section(standard, 'health_and_decay').lines.join('\n')
+    expect(lines).toContain('每约 40–60 秒衰退一次，其中兰花（orchid）最快（每约 40 秒）')
+    expect(lines).not.toContain('每约 60 秒衰退一次') // the understated base value is gone
+  })
+
+  it('renders active synergy with its heal consequence; informational relations bare', () => {
     const lines = section(standard, 'compatibility').lines
-    expect(lines).toContain('苔藓（moss） 与 多肉（succulent）：协同（synergy）')
+    expect(lines).toContain(
+      '苔藓（moss） 与 多肉（succulent）：协同（synergy），养护任一株会同时治愈相邻的另一株。'
+    )
     expect(lines).toContain('多肉（succulent） 与 藤蔓（vine）：相容（compatible）')
     expect(lines).toContain('苔藓（moss） 与 藤蔓（vine）：中性（neutral）')
   })

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import TextPanel from './TextPanel'
+import TextPanel, { MAX_QUESTION_CHARS } from './TextPanel'
 
 describe('TextPanel', () => {
   it('sends the typed question and clears the input', () => {
@@ -27,5 +27,13 @@ describe('TextPanel', () => {
     render(<TextPanel onSend={vi.fn()} disabled />)
     expect(screen.getByLabelText('给植物学家的问题')).toBeDisabled()
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  })
+
+  it('caps the typed question length client-side (visible maxLength)', () => {
+    render(<TextPanel onSend={vi.fn()} disabled={false} />)
+    expect(screen.getByLabelText('给植物学家的问题')).toHaveAttribute(
+      'maxLength',
+      String(MAX_QUESTION_CHARS)
+    )
   })
 })
