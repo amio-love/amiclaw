@@ -68,8 +68,8 @@ Feature: AMIO Arcade platform homepage
   Scenario: A signed-in visitor sees the welcome strip instead of the hero
     Given I am signed in
     When the `/` route renders
-    Then I see the welcome strip with an honest greeting
-    And the welcome strip shows an honest no-scores prompt and a play CTA
+    Then the welcome strip leads with the create-companion entry
+    And the welcome strip never leaks the account email
     And the anonymous hero is not shown
     And the "什么是 AMIO Arcade" section and the footer pitch are not shown
     And I can still reach the featured BombSquad overview

@@ -8,10 +8,11 @@
  *      identity, not an error;
  *   3. a player who already has a companion skips the form entirely.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { CompanionIdentity } from '@shared/companion-types'
+import { __resetCompanionStore } from '@/hooks/useCompanion'
 import CompanionOnboardingPage from './CompanionOnboardingPage'
 
 function json(body: unknown, status = 200): Response {
@@ -83,6 +84,10 @@ function renderOnboarding() {
 }
 
 describe('CompanionOnboardingPage /me/companion', () => {
+  beforeEach(() => {
+    __resetCompanionStore()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })

@@ -15,6 +15,7 @@ import {
   STANDARD_PROACTIVITY_TIER,
   VOICE_POSTURE_STORAGE_KEY,
   buildArrivalGreeting,
+  buildMemoryHook,
   buildMilestoneGreeting,
   buildPostGameReaction,
   canFireArrivalBeat,
@@ -217,6 +218,14 @@ describe('copy builders', () => {
         streakDays: 0,
       })
     ).toBe('我在这。今天的每日挑战等你。')
+  })
+
+  it('builds the shell memory-hook line from a real episode, gentle empty state otherwise', () => {
+    expect(buildMemoryHook('卡在光弦')).toBe('还记得你上次卡在光弦。')
+    expect(buildMemoryHook('  最后三秒拆掉了炸弹  ')).toBe('还记得你上次最后三秒拆掉了炸弹。')
+    // A new companion with no shared history → the first-meeting register.
+    expect(buildMemoryHook(null)).toBe('我们才刚认识。')
+    expect(buildMemoryHook('   ')).toBe('我们才刚认识。')
   })
 
   it('builds the post-game reaction from run facts, factual on failure', () => {

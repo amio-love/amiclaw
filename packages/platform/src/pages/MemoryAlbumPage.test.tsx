@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { MemoryView } from '@shared/companion-types'
+import { __resetCompanionStore } from '@/hooks/useCompanion'
 import MemoryAlbumPage from './MemoryAlbumPage'
 
 function json(body: unknown, status = 200): Response {
@@ -20,6 +21,7 @@ function json(body: unknown, status = 200): Response {
 // jsdom does not implement scrollIntoView; a focused MemoryCard calls it.
 beforeEach(() => {
   Element.prototype.scrollIntoView = () => {}
+  __resetCompanionStore()
 })
 
 const AUTHED = { authenticated: true, identity: { user_id: 'u_1', email: 'nova@amio.fans' } }

@@ -239,18 +239,16 @@ Then(
   }
 )
 
-Then('I see the welcome strip with an honest greeting', async ({ page }) => {
-  await expect(page.getByText('你好。', { exact: true })).toBeVisible()
-  // Without a companion-known name or chosen nickname, never expose the
-  // session email local-part in a greeting.
-  await expect(page.getByText('nova', { exact: true })).toHaveCount(0)
+Then('the welcome strip leads with the create-companion entry', async ({ page }) => {
+  // The logged-in home's first screen leads with the companion presence
+  // (WelcomeStrip hosts it). For a signed-in player without a companion that
+  // presence is the invitation to create one (mirrors GamesPage.test.tsx).
+  await expect(page.getByRole('link', { name: '创建你的伙伴 →' })).toBeVisible()
 })
 
-Then('the welcome strip shows an honest no-scores prompt and a play CTA', async ({ page }) => {
-  // Per-user stats need the leaderboard user_id migration (not yet built), so
-  // the strip shows an honest empty state rather than fabricated figures.
-  await expect(page.getByText('还没有成绩，去玩一局，这里会记录你的战绩。')).toBeVisible()
-  await expect(page.getByRole('button', { name: '开始玩' })).toBeVisible()
+Then('the welcome strip never leaks the account email', async ({ page }) => {
+  // The strip must never expose the session email local-part (audit F19).
+  await expect(page.getByText('nova', { exact: true })).toHaveCount(0)
 })
 
 Then('the anonymous hero is not shown', async ({ page }) => {

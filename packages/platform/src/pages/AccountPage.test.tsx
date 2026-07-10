@@ -18,6 +18,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { SessionResponse } from '@shared/auth-types'
 import { ARCADE_LOCAL_PROFILE_KEY } from '@amiclaw/arcade-profile/local'
+import { __resetCompanionStore } from '@/hooks/useCompanion'
 import AccountPage from './AccountPage'
 
 /** Resolve any fetch input to its URL string. */
@@ -283,6 +284,7 @@ describe('AccountPage /me', () => {
 
   beforeEach(() => {
     localStore = installFakeLocalStorage()
+    __resetCompanionStore()
   })
 
   afterEach(() => {

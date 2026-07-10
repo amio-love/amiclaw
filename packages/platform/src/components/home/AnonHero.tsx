@@ -1,4 +1,4 @@
-import { AiToolTicker, Button, EyebrowTag, StatPill, Wordmark } from '@amiclaw/ui'
+import { AiToolTicker, Button, EyebrowTag, PlanetOrb, StatPill, Wordmark } from '@amiclaw/ui'
 import { formatMs } from '@shared/format-time'
 import type { DailyBoardState } from '@/hooks/useDailyBoard'
 import { PLAYABLE_GAME_COUNT } from '@/mocks/upcoming-games'
@@ -54,7 +54,7 @@ export default function AnonHero({ onStart, board }: AnonHeroProps) {
       <div className={styles.planetStage}>
         <div className={styles.planetRing2} aria-hidden="true" />
         <div className={styles.planetRing} aria-hidden="true" />
-        <div className={styles.planet} aria-hidden="true" />
+        <PlanetOrb variant="hero" className={styles.planet} ariaHidden />
         <StatPill className={styles.s1} value={board.participantCount} label="今日上榜" />
         {board.leaderTimeMs !== null && (
           <StatPill className={styles.s2} value={formatMs(board.leaderTimeMs)} label="最快拆弹" />

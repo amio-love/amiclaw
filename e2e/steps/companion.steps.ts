@@ -1,5 +1,5 @@
-/** mode② companion steps — the /me/companion setup flow, the persistent
-    companion dock (伙伴坞), and the daily co-play entry default.
+/** mode② companion steps — the /me/companion setup flow, the elevated home
+    companion presence (伙伴在场), and the daily co-play entry default.
     Auth + the /api/companion* control plane are route-mocked in fixtures.ts
     (world.signIn + world.companion + the settings PUT capture), so these
     journeys run against the static build with no Workers runtime, exactly
@@ -9,9 +9,11 @@ import { Given, When, Then } from './fixtures'
 
 const TEST_EMAIL = 'nova@amio.fans'
 
-/** The dock — `<aside aria-label="伙伴坞">` renders as a complementary region. */
-function companionDock(page: Page): Locator {
-  return page.getByRole('complementary', { name: '伙伴坞' })
+/** The home's elevated presence — `<section aria-label="伙伴在场">` (role region).
+    The logged-in home leads with the companion here; off-home it is the
+    restrained bottom strip (伙伴坞), unexercised by these home scenarios. */
+function companionPresence(page: Page): Locator {
+  return page.getByRole('region', { name: '伙伴在场' })
 }
 
 Given('I am a signed-in player without a companion', async ({ world }) => {
@@ -108,10 +110,10 @@ Then(
 Then(
   'the companion stays a quiet text presence and denied-remembered is persisted',
   async ({ page, world }) => {
-    // Deny → posture transitions to denied-remembered; the dock lands muted (a
-    // quiet text presence, never auto-requesting again) and the denial is
+    // Deny → posture transitions to denied-remembered; the presence lands muted
+    // (a quiet text presence, never auto-requesting again) and the denial is
     // persisted to the account control plane.
-    await expect(companionDock(page).getByText('阿澈在这（静音中）')).toBeVisible()
+    await expect(companionPresence(page).getByText('静音中')).toBeVisible()
     await expect
       .poll(() => world.companionSettingsPuts.at(-1)?.voice_posture)
       .toBe('denied-remembered')
@@ -119,7 +121,7 @@ Then(
 )
 
 When('I mute the companion from the dock control menu', async ({ page, world }) => {
-  await companionDock(page)
+  await companionPresence(page)
     .getByRole('button', { name: `${world.companion?.name} 控制菜单` })
     .click()
   await page.getByRole('menuitem', { name: '静音' }).click()
@@ -128,8 +130,7 @@ When('I mute the companion from the dock control menu', async ({ page, world }) 
 Then(
   'the dock lands muted and quiet-remembered is persisted to the account',
   async ({ page, world }) => {
-    const name = world.companion?.name ?? ''
-    await expect(companionDock(page).getByText(`${name}在这（静音中）`)).toBeVisible()
+    await expect(companionPresence(page).getByText('静音中')).toBeVisible()
     // The posture write reached the account control plane (PUT captured).
     await expect
       .poll(() => world.companionSettingsPuts.at(-1)?.voice_posture)

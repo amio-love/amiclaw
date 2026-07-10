@@ -6,6 +6,7 @@ import {
   DailyCountdown,
   EyebrowTag,
   IconButton,
+  PlanetOrb,
   Scenery,
 } from '@amiclaw/ui'
 import { getDailyResetHint } from '@shared/date'
@@ -72,9 +73,9 @@ export default function BombSquadLandingPage() {
           {/* Planet hero — glowing core glyph, two orbit rings, two dots. */}
           <div className={styles.hero}>
             <div className={styles.planet}>
-              <div className={styles.core}>
+              <PlanetOrb variant="lobby" className={styles.core}>
                 <Glyph name="ji" size={64} glow={false} color="#fff" className={styles.heroGlyph} />
-              </div>
+              </PlanetOrb>
               <div className={`${styles.ring} ${styles.ring1}`} aria-hidden="true" />
               <div className={`${styles.ring} ${styles.ring2}`} aria-hidden="true" />
               <div className={`${styles.orbitDot} ${styles.dot1}`} aria-hidden="true" />
