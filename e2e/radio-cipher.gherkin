@@ -1,0 +1,27 @@
+# Radio Cipher listener win + codebook partition smoke. The /radio-cipher/
+# hash-routed SPA plays fully client-side: the listener wins the two-module
+# tutorial by submitting each decrypted answer (the real content + creation
+# engine drive the decryption and the all-solved win), and the shareable decoder
+# codebook teaches the finals-ring cipher method + channel protocol without ever
+# leaking a listener-side plaintext answer.
+
+Feature: Radio Cipher listener run
+  As an AMIO Arcade visitor
+  I want to decrypt a radio transmission with my AI partner
+  So that we win the tutorial together without either side seeing the other half
+
+  # Source: radio-cipher-listener-run
+  @playwright
+  Scenario: Listener wins the tutorial and the codebook leaks no answer
+    Given I open /radio-cipher/
+    Then the Radio Cipher onboarding explains the two roles
+
+    When I dismiss the Radio Cipher onboarding
+    Then I see a heading "密码电台 · 监听台"
+
+    When I decrypt Radio Cipher segment "段一" as "猴子"
+    And I decrypt Radio Cipher segment "段二" as "紫色"
+    Then the Radio Cipher run is won
+
+    When I open the Radio Cipher codebook
+    Then the Radio Cipher codebook teaches the cipher without revealing any answer

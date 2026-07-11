@@ -42,19 +42,22 @@ describe('UpcomingGames — Game Lab Discord tile', () => {
     expect(screen.getByText('Game Lab')).toBeInTheDocument()
   })
 
-  it('renders Shadow Chase, Oracle and Botanical as playable peer cards before future games', async () => {
+  it('renders Shadow Chase, Oracle, Botanical and Radio Cipher as playable peer cards before future games', async () => {
     await renderWith('')
 
     const links = screen.getAllByRole('link')
     const shadow = screen.getByRole('link', { name: /双影追逃/ })
     const oracle = screen.getByRole('link', { name: /易经签卜/ })
     const botanical = screen.getByRole('link', { name: /植物园养护/ })
+    const radio = screen.getByRole('link', { name: /密码电台/ })
     expect(shadow).toHaveAttribute('href', '/shadow-chase/')
     expect(oracle).toHaveAttribute('href', '/oracle/#/home')
     expect(botanical).toHaveAttribute('href', '/botanical/')
+    expect(radio).toHaveAttribute('href', '/radio-cipher/')
     expect(links.indexOf(shadow)).toBeLessThan(links.indexOf(oracle))
     expect(links.indexOf(oracle)).toBeLessThan(links.indexOf(botanical))
-    expect(screen.getAllByText('可玩')).toHaveLength(3)
+    expect(links.indexOf(botanical)).toBeLessThan(links.indexOf(radio))
+    expect(screen.getAllByText('可玩')).toHaveLength(4)
 
     // Future games remain honest, non-clickable cards.
     expect(screen.getAllByText('星海回声').length).toBeGreaterThan(0)

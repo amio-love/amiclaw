@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 31 active flows <-> 31 journey
-# scenarios, the regression size budget is 62 (2026-07-09, after the BombSquad
-# first-run connect primer flow landed as a @playwright journey).
+# 2 x the journey-scenario count. With 34 active flows <-> 34 journey
+# scenarios, the regression size budget is 68 (2026-07-11, after the Radio
+# Cipher listener-run flow landed as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -494,4 +494,23 @@ flows:
       and no screen in the flow renders an AI / voice / mind-reading or
       demo-label claim.
     steps: [oracle-home, projection-picks, coin-cast, classical-reading, sign-card]
+    status: active
+
+  # === Radio Cipher flows =====================================================
+  # The /radio-cipher/ hash-routed SPA. A two-role voice cipher: the listener
+  # types the decrypted answer (the real content + creation engine drive state
+  # and the all-solved win), while the shareable decoder codebook is derived
+  # from the engine's decoder role-view — so it teaches the finals-ring cipher
+  # method and channel protocol without ever carrying a plaintext answer (the
+  # information partition holds by construction, not by discipline).
+
+  - id: radio-cipher-listener-run
+    name: Radio Cipher listener tutorial win with leak-free codebook
+    description: >-
+      A visitor opens the Radio Cipher listener, reads the two-role onboarding,
+      dismisses it, and wins the two-module tutorial by submitting each
+      decrypted answer (engine-driven decryption → all-solved win). The
+      shareable decoder codebook then teaches the finals-ring cipher and channel
+      protocol while leaking no listener-side plaintext answer.
+    steps: [radio-listener-open, onboarding-dismiss, tutorial-decrypt, run-won, codebook-partition]
     status: active

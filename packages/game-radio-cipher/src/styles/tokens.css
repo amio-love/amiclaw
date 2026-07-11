@@ -1,0 +1,59 @@
+/* ============================================================
+   Radio Cipher — local design tokens (--rc-*)
+   ============================================================
+   The game's registered identity layer: a vintage-receiver
+   fantasy — brushed-charcoal panels, amber dial backlight,
+   phosphor-green signal-lock, a rose wrong-answer flash. Loaded
+   AFTER @amiclaw/ui/styles/tokens.css (see main.tsx), so it may
+   alias shared platform tokens where a shared value fits.
+
+   Every color the component stylesheet (app.css) paints is
+   declared here as a --rc-* token; app.css carries zero bare hex.
+   Solids define the palette; the *-rgb channels compose the
+   one-off amber / yellow tints via rgba(var(--rc-*-rgb), <a>).
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ----------  SURFACES (charcoal receiver body)  ---------- */
+  --rc-bg-0: #07090d;
+  --rc-bg-1: #0d1016;
+  --rc-bg-radial: #131a2b; /* body top-glow radial stop */
+  --rc-panel: #14181f;
+  --rc-panel-2: #191e27;
+  --rc-panel-lift: #171c26; /* dial face inner gradient stop */
+  --rc-dial-well: #0f131a; /* dial ring base */
+  --rc-border: #2a303c;
+  --rc-border-hot: #3c4557;
+  --rc-scrim: rgba(4, 6, 10, 0.82); /* onboarding overlay backdrop */
+
+  /* ----------  TEXT  ---------- */
+  --rc-text: #e8ebf2;
+  --rc-muted: #9aa3b4;
+  --rc-ink: #1a1400; /* dark text on amber / yellow fills */
+
+  /* ----------  AMBER — dial backlight (the radio signature)  ---------- */
+  --rc-amber: #ffb340;
+  --rc-amber-rgb: 255, 179, 64;
+  --rc-amber-deep: #7a4a00; /* glyph gradient mid */
+  --rc-amber-abyss: #201200; /* glyph gradient edge */
+  --rc-amber-soft: rgba(var(--rc-amber-rgb), 0.16);
+
+  /* ----------  PHOSPHOR GREEN — signal lock / decrypted  ---------- */
+  --rc-green: #4ee39a;
+  --rc-green-rgb: 78, 227, 154;
+  --rc-green-soft: rgba(var(--rc-green-rgb), 0.16);
+
+  /* ----------  ROSE — wrong-answer / channel-discipline flash  ---------- */
+  --rc-rose: #ff6b5e;
+  --rc-rose-rgb: 255, 107, 94;
+  --rc-rose-soft: rgba(var(--rc-rose-rgb), 0.16);
+
+  /* ----------  YELLOW — primary action, aliased to platform yellow  ---------- */
+  --rc-yellow: var(--amio-yellow); /* #ffe53e — shared @amiclaw/ui token */
+  --rc-yellow-rgb: 255, 229, 62;
+
+  /* ----------  MONO — dial readouts / codebook chips  ---------- */
+  --rc-mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+}

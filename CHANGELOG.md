@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Radio Cipher joins AMIO Arcade** — Added. A new voice game at
+`claw.amio.fans/radio-cipher`. You are the listener, tuning a static-swept radio
+to catch an encrypted transmission by ear; your AI partner (or a friend) holds
+the decoder codebook. You type the syllables you hear and report them, and
+together you rotate a Caesar-shifted finals cipher back into the answer — neither
+side can solve it alone. It ships with two levels (a given-shift tutorial and a
+deduction level whose offset you derive by frequency attack), a shareable
+codebook page to hand your partner, a per-segment transcription pad, first-run
+onboarding, and a count-up stopwatch with a wrong-answer time penalty. Dark-only,
+CSS-only animation, running on the shared creation engine.
+
 <!-- Add every change that will land on main directly below this header. -->
 <!-- Entries below are maintained manually -->
 

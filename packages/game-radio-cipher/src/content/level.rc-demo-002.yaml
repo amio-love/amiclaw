@@ -1,0 +1,141 @@
+# Radio Cipher deduction Level (rc-demo-002) — the playable's second level,
+# "未知偏移·推理局". Authored for the playable prototype (NOT a spec-extracted
+# fixture, so it lives in the playable layer, not packages/creation/fixtures/).
+# It reuses the radio-cipher GameType v1.0.0 verbatim and is driven by the real
+# engine (loadLevel + GameSession) exactly like rc-demo-001.
+#
+# What makes it a DEDUCTION level: key-1 declares target_method caesar_shift but
+# OMITS shift_amount (shift_amount is `required: false` in the archetype). The
+# offset is therefore not on the codebook — the decoder derives it from the
+# frequency hint (most-frequent plaintext final = a) plus the listener's
+# reported ciphered finals. seg-1 and seg-2 share this one unknown-shift key;
+# seg-3 is a self-inverse reverse. Concrete linguistic content (蚂蚱 / 八十 /
+# 黑白 and the +5 shift) lives in playable/content/deduction-level.ts — the
+# engine models only cipher STRUCTURE.
+Level:
+  metadata:
+    id: rc-demo-002
+    game_type: radio-cipher
+    game_type_version: '1.0.0'
+    title: 未知偏移·推理局
+    author: ai-author-002
+    created_at: '2026-07-10T20:24:35+08:00'
+
+  # partition_complexity is derived from the GameType partition template (roles'
+  # hidden-attribute ratios + channel constraint counts), not from this level's
+  # element multiplicities — so dropping a frequency_hint instance leaves it
+  # unchanged at 3.6. Only element_count / total_score move with the element set.
+  difficulty:
+    element_count: 5 # seg-1, seg-2, seg-3, key-1, hint-1
+    rule_count: 4 # rule-decrypt-1, rule-decrypt-2, rule-reverse-3, rule-verify
+    partition_complexity: 3.6
+    total_score: 18.2 # 5*1.0 + 4*1.5 + 3.6*2.0 = 5.0+6.0+7.2
+
+  # round_trips: decrypt_step(2.0)+decrypt_step(2.0)+reverse_decrypt(1.5)+verification_check(1.0)=6.5 → ceil = 7
+  communication_estimate:
+    round_trips: 7
+    estimated_seconds: 84
+    time_limit_seconds: 300
+    feasibility: feasible # 84 <= 300*0.8=240
+
+  elements:
+    - id: seg-1
+      archetype: cipher_segment
+      params:
+        content_length: short
+        plaintext_category: animal
+      position:
+        slot: 1
+    - id: seg-2
+      archetype: cipher_segment
+      params:
+        content_length: short
+        plaintext_category: number_word
+      position:
+        slot: 2
+    - id: seg-3
+      archetype: cipher_segment
+      params:
+        content_length: short
+        plaintext_category: color
+      position:
+        slot: 3
+    - id: key-1
+      archetype: cipher_key
+      params:
+        target_method: caesar_shift
+        # shift_amount deliberately OMITTED — the offset is unknown and must be
+        # derived from the frequency hint (this is what makes level 2 a
+        # deduction). shift_amount is required:false in the archetype.
+    - id: hint-1
+      archetype: frequency_hint
+      params:
+        hint_type: most_frequent
+        target_syllable: a # plaintext's most-frequent final → the derivation anchor
+      # A least_frequent hint is deliberately OMITTED: the listener reports the
+      # reverse segment's finals too, so counting ALL reported finals makes the
+      # least-frequent value ambiguous (ao/ei tie; ei−5=e≠i) and would contradict
+      # the derivation. The taught frequency attack uses only the most-frequent.
+
+  rules:
+    - id: rule-decrypt-1
+      template: decrypt_step
+      bindings:
+        cipher_segment_id: seg-1
+        cipher_key_id: key-1 # seg-1 uses caesar_shift with the shared unknown-shift key
+      target_elements: [seg-1, key-1]
+    - id: rule-decrypt-2
+      template: decrypt_step
+      bindings:
+        cipher_segment_id: seg-2
+        cipher_key_id: key-1 # seg-2 shares the SAME key-1 (one shift covers both)
+      target_elements: [seg-2, key-1]
+    - id: rule-reverse-3
+      template: reverse_decrypt
+      bindings:
+        cipher_segment_id: seg-3 # seg-3 uses reverse (self-inverse, no key needed)
+      target_elements: [seg-3]
+    - id: rule-verify
+      template: verification_check
+      bindings:
+        predicates: [{ name: plaintext_is_valid_word, category: animal }]
+        combinator: AND
+        action: { verb: confirm_decryption }
+      target_elements: [seg-1]
+
+  information_partition:
+    role_assignments:
+      - role: listener
+        element_views:
+          - element_id: seg-1
+            visible_attributes: [content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-2
+            visible_attributes: [content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-3
+            visible_attributes: [content_length]
+            visible_states: [decryption_progress]
+      - role: decoder
+        element_views:
+          - element_id: key-1
+            visible_attributes: [target_method, shift_amount] # shift_amount absent → nothing to show
+            visible_states: []
+          - element_id: hint-1
+            visible_attributes: [hint_type, target_syllable]
+            visible_states: []
+          - element_id: seg-1
+            visible_attributes: [plaintext_category, content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-2
+            visible_attributes: [plaintext_category, content_length]
+            visible_states: [decryption_progress]
+          - element_id: seg-3
+            visible_attributes: [plaintext_category, content_length]
+            visible_states: [decryption_progress]
+
+  win_condition:
+    type: all_solved
+    params:
+      target_state: decrypted
+      target_elements: [seg-1, seg-2, seg-3]
