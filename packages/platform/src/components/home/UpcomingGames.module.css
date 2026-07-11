@@ -128,6 +128,25 @@
     var(--bg-grad-mid-2);
 }
 
+/* Radio Cipher — a signal band in platform hues (bounded-accent rule: the
+   game's amber identity stays inside the game). A violet radial haze settles
+   into the cosmic near-black, crossed by a single thin luminous cosmic-blue
+   horizontal band with a soft bloom (the tuned-in needle line). CSS gradients
+   only — no image. */
+.radio {
+  background:
+    linear-gradient(
+      0deg,
+      transparent calc(50% - 7px),
+      rgba(74, 158, 255, 0.12) calc(50% - 3px),
+      rgba(154, 202, 255, 0.92) 50%,
+      rgba(74, 158, 255, 0.12) calc(50% + 3px),
+      transparent calc(50% + 7px)
+    ),
+    radial-gradient(circle at 50% 46%, rgba(180, 120, 255, 0.3), transparent 60%),
+    var(--bg-grad-mid-2);
+}
+
 .artLabel {
   /* Sits above the (optional) .artShot gameplay capture. */
   position: relative;

@@ -4,7 +4,7 @@
    components/home/UpcomingGames. */
 
 export type GameStatus = 'soon' | 'dev' | 'live'
-export type GameArtVariant = 'shadow' | 'oracle' | 'garden' | 'echo' | 'draw' | 'lab'
+export type GameArtVariant = 'shadow' | 'oracle' | 'garden' | 'radio' | 'echo' | 'draw' | 'lab'
 
 export interface UpcomingGame {
   id: string
@@ -50,6 +50,14 @@ export const upcomingGames: UpcomingGame[] = [
     status: 'live',
     artVariant: 'garden',
     href: '/botanical/',
+  },
+  {
+    id: 'radio-cipher',
+    name: '密码电台',
+    blurb: '静电深处传来加密电波。你听，你的 AI 查密码本——两个人拼一个答案。',
+    status: 'live',
+    artVariant: 'radio',
+    href: '/radio-cipher/',
   },
   {
     id: 'echo',
