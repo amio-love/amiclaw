@@ -5,6 +5,21 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Shadow Chase now reads at a glance** — Improved. Setup, tactical planning, the
+live chase, and results now use the shared Atlas page, navigation, button, status,
+and icon-control grammar. Compact diagrams show that three collected cores open
+the moon gate immediately, both shadows must exit, and captures require rescue.
+The pursuer strip now reflects deterministic shortest-path pursuit, its switch
+from the player to the companion only while the player is captured, contact and
+crossing captures, core-earned swaps, and immediate gate unlock. Exact objective,
+rescue, and pursuer rules remain available in a collapsed disclosure.
+
+Shadow Chase also registers one bounded moon-blue accent for its title, shadows,
+companion, and game-owned ritual graphics. Pursuer and rescue risk use platform
+danger, cores and success use platform positive green, and primary actions and
+focus stay warm gold. BombSquad rose and Oracle violet no longer leak into the
+game.
+
 **Radio Cipher joins AMIO Arcade** — Added. A new voice game at
 `claw.amio.fans/radio-cipher`. You are the listener, tuning a static-swept radio
 to catch an encrypted transmission by ear; your AI partner (or a friend) holds

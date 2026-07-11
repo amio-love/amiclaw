@@ -11,6 +11,9 @@ Given('Shadow Chase optional network handoffs are unavailable', async ({ page })
 })
 
 Then('the Shadow Chase opening rule is complete', async ({ page }) => {
+  const ruleDisclosure = page.getByText('规则说明', { exact: true })
+  await expect(ruleDisclosure).toBeVisible()
+  await ruleDisclosure.click()
   const copy = await page.locator('body').innerText()
   expect(copy).toContain('战术准备结束后追兵立即行动')
   expect(copy).toContain('收集三枚光核')
@@ -20,7 +23,11 @@ Then('the Shadow Chase opening rule is complete', async ({ page }) => {
   expect(copy).toContain(
     '追兵始终以略快速度走最短路：玩家自由时只追玩家，玩家被捕时转追伙伴，玩家获救后立即转回。碰到任意一方都会捕获；每枚光核提供一次换位，三枚集齐后月门立即开启。'
   )
-  const pursuerRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
+  const pursuerRule = await page
+    .getByRole('region', { name: '追兵规则' })
+    .locator('p')
+    .last()
+    .innerText()
   await page.locator('html').evaluate((element, rule) => {
     ;(element as HTMLElement).dataset.shadowPursuerRule = rule
   }, pursuerRule)
@@ -28,13 +35,17 @@ Then('the Shadow Chase opening rule is complete', async ({ page }) => {
 
 Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => {
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
-  await expect(page.getByText('战术准备')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '制定策略' })).toBeVisible()
+  await expect(page.getByText('地图冻结', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '立即出发' })).toBeVisible()
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toHaveAttribute(
     'aria-disabled',
     'true'
   )
   const setupRule = await page.locator('html').getAttribute('data-shadow-pursuer-rule')
+  const ruleDisclosure = page.getByText('规则说明', { exact: true })
+  await expect(ruleDisclosure).toBeVisible()
+  await ruleDisclosure.click()
   const planningRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
   expect(planningRule).toBe(setupRule)
   const board = page.getByRole('application', { name: '双影追逃地图' })
@@ -43,8 +54,8 @@ Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => 
 
 Then('the Shadow Chase board and essential controls are visible', async ({ page }) => {
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
-  await expect(page.getByText('光核', { exact: true })).toBeVisible()
-  await expect(page.getByText('救援', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('光核 0 / 3')).toBeVisible()
+  await expect(page.getByText('双方安全', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '交换位置 · 0' })).toBeVisible()
   await expect(page.getByRole('button', { name: '向上移动' })).toBeVisible()
 })

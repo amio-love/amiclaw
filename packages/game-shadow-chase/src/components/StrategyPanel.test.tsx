@@ -44,7 +44,8 @@ describe('StrategyPanel voice controls', () => {
       render(panel(voice(status, { stop })))
 
       const button = screen.getByRole('button', { name: '停止伙伴语音' })
-      expect(button.className).toContain('voice-control')
+      expect(button.textContent).toBe('')
+      expect(button.getAttribute('aria-label')).toBe('停止伙伴语音')
       fireEvent.click(button)
       expect(stop).toHaveBeenCalledTimes(1)
       for (const label of ['接应', '探路', '架点']) {

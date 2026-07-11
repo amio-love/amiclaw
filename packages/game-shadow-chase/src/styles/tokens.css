@@ -1,9 +1,24 @@
 :root {
   color-scheme: dark;
-  --sc-player: var(--amio-yellow, #ffe53e);
-  --sc-companion: var(--accent-violet, #b478ff);
-  --sc-pursuer: #ff6b9d;
-  --sc-core: var(--amio-positive, #4bd266);
-  --sc-cell: rgba(255, 255, 255, 0.035);
-  --sc-wall: rgba(255, 255, 255, 0.12);
+
+  /* Shadow Chase's single registered accent layer: Atlas moon blue. */
+  --sc-moon-blue: var(--accent-blue);
+  --sc-moon-blue-soft: rgba(74, 158, 255, 0.1);
+  --sc-moon-blue-border: rgba(74, 158, 255, 0.28);
+  --sc-moon-blue-glow: rgba(74, 158, 255, 0.42);
+
+  /* Named presentation roles keep semantics in the Atlas platform palette. */
+  --sc-shadow: var(--sc-moon-blue);
+  --sc-companion: var(--sc-moon-blue);
+  --sc-ritual: var(--sc-moon-blue);
+  --sc-pursuer: var(--amio-danger);
+  --sc-pursuer-soft: var(--amio-danger-surface);
+  --sc-pursuer-border: var(--amio-danger-border);
+  --sc-core: var(--amio-positive);
+  --sc-positive-soft: var(--glass-soft);
+  --sc-positive-border: var(--amio-positive);
+  --sc-positive-glow: var(--amio-positive);
+  --sc-cell: var(--glass-soft);
+  --sc-wall: var(--amio-overlay-press);
+  --sc-shadow-fill: rgba(var(--chrome-surface-rgb), 0.9);
 }
