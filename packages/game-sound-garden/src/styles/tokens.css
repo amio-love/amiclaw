@@ -1,0 +1,32 @@
+/* Sound Garden design tokens — the game's ONE registered accent layer
+   (bounded-accent rule, DesignSystem.md §Platform Grammar). Sound Garden's owned
+   hues are the melody/rhythm piece palette + the warm synergy gold, painted only
+   on garden graphics (pieces / lanes / harmony feedback) — never on platform
+   chrome. Everything else INHERITS the Atlas cosmic shell + platform semantics
+   from @amiclaw/ui (--bg-grad-*, --text-*, --border-*, --positive / --amio-*),
+   imported before this file. Dark-only; no light mode. */
+:root {
+  /* Registered game palette — the melody/rhythm piece hues (game graphics only). */
+  --sg-melody: #ffcf6b;
+  --sg-melody-2: #ff9ec4;
+  --sg-rhythm: #8a6b4f;
+  /* Warm synergy gold — the one game accent kept as a bespoke hue. */
+  --sg-synergy: #ffd76b;
+
+  /* Harmony-relation feedback reconciles with the platform semantic colors
+     (§Semantic Color Law) — never bespoke hexes. */
+  --sg-compat: var(--amio-success); /* compatible = softer success green */
+  --sg-neutral: var(--amio-fg-666); /* neutral = platform gray */
+  --sg-harsh: var(--amio-danger); /* incompatible = platform danger red */
+  --sg-bloom: var(--positive); /* bloom = platform success green */
+
+  /* Chrome inherits Atlas — aliases only, Atlas is SSOT (no bespoke chrome hex). */
+  --sg-ink: var(--text-1);
+  --sg-ink-dim: var(--text-3);
+  --sg-line: var(--border-soft);
+
+  /* Elevated green-tinted dark glass over the cosmic base (game panels only —
+     same pattern as BombSquad's blue-tinted glass / Botanical's --garden-surface). */
+  --sg-surface: rgba(14, 23, 18, 0.72);
+  --sg-surface-2: rgba(20, 34, 26, 0.66);
+}
