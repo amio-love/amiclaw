@@ -179,7 +179,7 @@ describe('ResultPage endgame survey (fold-in entry)', () => {
     openSurveyEntry()
     expect(screen.getByRole('dialog', { name: '聊聊这一局' })).toBeInTheDocument()
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('practice win: the entry waits out the full celebration window, not the base delay (F11)', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)

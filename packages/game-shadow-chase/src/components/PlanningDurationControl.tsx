@@ -1,3 +1,5 @@
+import { IconButton } from '@amiclaw/ui'
+
 import {
   MAX_PLANNING_SECONDS,
   MIN_PLANNING_SECONDS,
@@ -13,26 +15,26 @@ export function PlanningDurationControl({
 }) {
   return (
     <div className="planning-duration" aria-label="战术准备时长">
-      <button
-        type="button"
-        aria-label="减少战术准备时间"
+      <IconButton
+        label="减少战术准备时间"
+        variant="bare"
         disabled={seconds <= MIN_PLANNING_SECONDS}
         onClick={() => onChange(seconds - PLANNING_STEP_SECONDS)}
       >
         −
-      </button>
+      </IconButton>
       <span className="planning-duration-value">
         <strong>{seconds}</strong>
         <span>秒</span>
       </span>
-      <button
-        type="button"
-        aria-label="增加战术准备时间"
+      <IconButton
+        label="增加战术准备时间"
+        variant="bare"
         disabled={seconds >= MAX_PLANNING_SECONDS}
         onClick={() => onChange(seconds + PLANNING_STEP_SECONDS)}
       >
         ＋
-      </button>
+      </IconButton>
     </div>
   )
 }

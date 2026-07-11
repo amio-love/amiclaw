@@ -1,6 +1,7 @@
 import { RUN_CAP_TICKS, TICK_MS } from '../engine/config'
 import { rescueTicksRemaining } from '../engine/reducer'
 import type { SimulationState } from '../engine/types'
+import { ClockIcon, CoreIcon, GateIcon, ShieldIcon, SwapIcon } from './ShadowChaseIcons'
 
 function formatTime(tick: number): string {
   const seconds = Math.floor((tick * TICK_MS) / 1000)
@@ -20,25 +21,25 @@ export function Hud({ state }: { state: SimulationState }) {
     : `还需收集 ${state.objectives.length - collected} 枚光核`
   return (
     <header className="hud" aria-label="追逃状态">
-      <div>
-        <span className="hud-label">时间</span>
+      <div aria-label={`时间 ${formatTime(state.tick)}`}>
+        <ClockIcon className="hud-icon" />
         <strong className="hud-value">{formatTime(state.tick)}</strong>
         <span className="sr-only">，上限 {formatTime(RUN_CAP_TICKS)}</span>
       </div>
-      <div>
-        <span className="hud-label">光核</span>
+      <div className="hud-positive" aria-label={`光核 ${collected} / 3`}>
+        <CoreIcon className="hud-icon" />
         <strong className="hud-value">{collected} / 3</strong>
       </div>
-      <div>
-        <span className="hud-label">月门</span>
+      <div className={state.exit.enabled ? 'hud-positive' : ''} aria-label={`月门 ${gateStatus}`}>
+        <GateIcon className="hud-icon" />
         <strong className="hud-value">{gateStatus}</strong>
       </div>
-      <div>
-        <span className="hud-label">换位</span>
+      <div aria-label={`换位 ${state.swapCharges} 次`}>
+        <SwapIcon className="hud-icon" />
         <strong className="hud-value">{state.swapCharges} 次</strong>
       </div>
-      <div className={captured ? 'rescue-alert' : ''}>
-        <span className="hud-label">救援</span>
+      <div className={captured ? 'rescue-alert' : 'hud-positive'}>
+        <ShieldIcon className="hud-icon" />
         <strong className="hud-value">
           {captured
             ? `${recentRescue?.actorId === captured.id ? (captured.id === 'player' ? '你再次被捕' : '伙伴再次被捕') : captured.id === 'player' ? '你' : '伙伴'} · ${((captured.ticks ?? 0) * TICK_MS) / 1000} 秒`
