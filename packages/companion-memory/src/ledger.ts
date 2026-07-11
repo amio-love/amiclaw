@@ -36,6 +36,17 @@ import {
 const ENTRIES_PAGE_DEFAULT = 20
 const ENTRIES_PAGE_MAX = 50
 
+/**
+ * Normalize a caller-supplied page limit to a safe SQL LIMIT: a clean integer
+ * in [1, ENTRIES_PAGE_MAX]. Anything malformed — undefined, NaN, Infinity,
+ * fractional, zero, or negative — falls back to ENTRIES_PAGE_DEFAULT; a valid
+ * integer above the max is clamped down. A non-integer is never bound to LIMIT.
+ */
+function normalizeLimit(raw: number | undefined): number {
+  if (raw === undefined || !Number.isInteger(raw) || raw < 1) return ENTRIES_PAGE_DEFAULT
+  return Math.min(raw, ENTRIES_PAGE_MAX)
+}
+
 /** Per-row display kind, derived from the `source_key` prefix (never stored). */
 export type AssetEntryKind = 'win' | 'checkin' | 'welcome' | 'session' | 'other'
 
@@ -138,7 +149,7 @@ export async function listAssetEntries(
   userId: string,
   options: { limit?: number; cursor?: string; assetType?: string } = {}
 ): Promise<AssetsPage> {
-  const limit = Math.min(Math.max(options.limit ?? ENTRIES_PAGE_DEFAULT, 1), ENTRIES_PAGE_MAX)
+  const limit = normalizeLimit(options.limit)
   const assetType = options.assetType ?? ASSET_TYPE_STARBURST
   const cursor = options.cursor === undefined ? null : decodeCursor(options.cursor)
 
@@ -148,7 +159,7 @@ export async function listAssetEntries(
           .prepare(
             `SELECT id, amount, source_product, source_key, earned_at
              FROM asset_entry
-             WHERE user_id = ? AND asset_type = ?
+             WHERE user_id = ? AND asset_type = ? AND amount != 0
              ORDER BY earned_at DESC, id DESC
              LIMIT ?`
           )
@@ -157,7 +168,7 @@ export async function listAssetEntries(
           .prepare(
             `SELECT id, amount, source_product, source_key, earned_at
              FROM asset_entry
-             WHERE user_id = ? AND asset_type = ?
+             WHERE user_id = ? AND asset_type = ? AND amount != 0
                AND (earned_at < ? OR (earned_at = ? AND id < ?))
              ORDER BY earned_at DESC, id DESC
              LIMIT ?`
@@ -194,9 +205,10 @@ function utcNextDayStart(utcDate: string): string {
 
 /**
  * Rewarded wins the user already earned on `today` (UTC `YYYY-MM-DD`), COMBINED
- * across games — a `win:*` COUNT over the half-open UTC-day range. The ledger
- * is the counter (no separate cell); the cap is soft under concurrency (design
- * §3/§11).
+ * across games — a `win:*` COUNT over the half-open UTC-day range, counting only
+ * CREDITED rows (`amount > 0`) so zero-amount capped markers never inflate it.
+ * The ledger is the counter (no separate cell); the cap is soft under
+ * concurrency (design §3/§11).
  */
 export async function countTodaysRewardedWins(
   db: CompanionDb,
@@ -206,7 +218,7 @@ export async function countTodaysRewardedWins(
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS c FROM asset_entry
-       WHERE user_id = ? AND asset_type = ? AND source_key GLOB 'win:*'
+       WHERE user_id = ? AND asset_type = ? AND source_key GLOB 'win:*' AND amount > 0
          AND earned_at >= ? AND earned_at < ?`
     )
     .bind(userId, ASSET_TYPE_STARBURST, utcDayStart(today), utcNextDayStart(today))
@@ -232,11 +244,13 @@ export interface CreditWinInput {
 }
 
 /**
- * Credit +5 星芒 for one game win, synchronously at the settlement handler
+ * Credit +5 starburst for one game win, synchronously at the settlement handler
  * (design §3). Self-guarding contract:
  *   - a replayed already-rewarded run returns `duplicate` (looked up BEFORE the
  *     cap, so a replay is never miscounted as `capped`);
- *   - a run past the daily cap returns `capped`;
+ *   - a run past the daily cap returns `capped` AND persists a zero-amount
+ *     marker row under the run's key, so a later replay (even after UTC rollover)
+ *     dedups instead of crediting over the cap;
  *   - an insert that loses the race (ON CONFLICT no-op) returns `duplicate`;
  *   - any D1 failure returns `error` — FAIL-OPEN: the caller keeps the
  *     settlement succeeding and omits the reward field.
@@ -252,6 +266,19 @@ export async function creditWinReward(
       return { status: 'duplicate', amount: 0, balance: await readBalance(db, input.userId) }
     }
     if ((await countTodaysRewardedWins(db, input.userId, input.today)) >= DAILY_WIN_CAP) {
+      // Persist a zero-amount capped marker under the SAME win:{settlementId}
+      // key so a replay of this run — even after the UTC day rolls over and the
+      // new day's count is low — hits the duplicate lookup above and is never
+      // credited over the cap. amount=0 keeps it out of the balance SUM, the
+      // entries list (amount != 0), and the rewarded-win count (amount > 0).
+      await db
+        .prepare(
+          `INSERT INTO asset_entry (id, user_id, asset_type, amount, source_product, source_ref, source_key, earned_at)
+           VALUES (?, ?, ?, 0, ?, 'win-capped', ?, ?)
+           ON CONFLICT (source_key) DO NOTHING`
+        )
+        .bind(deps.newId(), input.userId, ASSET_TYPE_STARBURST, input.gameId, key, deps.now())
+        .run()
       return { status: 'capped', amount: 0, balance: await readBalance(db, input.userId) }
     }
     const result = await db
@@ -287,7 +314,7 @@ export interface CreditResult {
 }
 
 /**
- * Credit +3 星芒 for the first qualified activity of the UTC day. The
+ * Credit +3 starburst for the first qualified activity of the UTC day. The
  * `checkin:{userId}:{today}` unique key makes only the day's FIRST attempt
  * insert; every later one no-ops (`credited: false`). The caller wraps this in
  * try/catch so the profile write always succeeds (design §4 fail-open).
@@ -318,7 +345,7 @@ export async function creditCheckinReward(
 }
 
 /**
- * Mint the +10 星芒 welcome grant, exactly once ever per user via the
+ * Mint the +10 starburst welcome grant, exactly once ever per user via the
  * `welcome:{userId}` unique key. Idempotent across both mint points (assets
  * endpoint + session-create gate, design §6). The caller wraps in try/catch.
  */

@@ -208,6 +208,24 @@ describe('listAssetEntries', () => {
     const page = await listAssetEntries(db, USER, { cursor: 'not-base64-json' })
     expect(page.entries).toHaveLength(1)
   })
+
+  it('normalizes a malformed limit to a safe page instead of binding a bad LIMIT', async () => {
+    const db = createTestDb()
+    for (const id of ['r1', 'r2', 'r3']) {
+      await seedEntry(db, {
+        id,
+        amount: 5,
+        sourceKey: `win:${id}`,
+        earnedAt: `2026-07-11T0${id.slice(1)}:00:00.000Z`,
+      })
+    }
+    // NaN / Infinity / zero / negative / fractional / oversize all resolve to a
+    // valid positive-integer LIMIT (default 20 or clamped 50) — never a throw.
+    for (const limit of [NaN, Infinity, -Infinity, 0, -5, 2.7, 1e9]) {
+      const page = await listAssetEntries(db, USER, { limit })
+      expect(page.entries).toHaveLength(3)
+    }
+  })
 })
 
 describe('creditWelcomeGrant', () => {
@@ -341,6 +359,90 @@ describe('creditWinReward', () => {
     })
     // Only the two 2026-07-11 rows count.
     expect(await countTodaysRewardedWins(db, USER, TODAY)).toBe(2)
+  })
+
+  it('persists a zero-amount marker on a capped attempt without moving the balance', async () => {
+    const db = createTestDb()
+    for (const runId of ['r1', 'r2', 'r3', 'r4']) {
+      await creditWinReward(db, {
+        userId: USER,
+        gameId: 'bombsquad',
+        runId,
+        today: TODAY,
+        deps: testDeps(),
+      })
+    }
+    const capped = await creditWinReward(db, {
+      userId: USER,
+      gameId: 'bombsquad',
+      runId: 'r5',
+      today: TODAY,
+      deps: testDeps(),
+    })
+    expect(capped.status).toBe('capped')
+    // The marker exists under r5's key but contributes 0 to the balance.
+    expect(await existsBySourceKey(db, winSourceKey('bombsquad', USER, 'r5'))).toBe(true)
+    expect(await readBalance(db, USER)).toBe(WIN_REWARD * DAILY_WIN_CAP)
+  })
+
+  it('keeps capped markers out of the entries list and the rewarded-win count', async () => {
+    const db = createTestDb()
+    for (const runId of ['r1', 'r2', 'r3', 'r4']) {
+      await creditWinReward(db, {
+        userId: USER,
+        gameId: 'bombsquad',
+        runId,
+        today: TODAY,
+        deps: testDeps(),
+      })
+    }
+    await creditWinReward(db, {
+      userId: USER,
+      gameId: 'bombsquad',
+      runId: 'r5',
+      today: TODAY,
+      deps: testDeps(),
+    })
+    const page = await listAssetEntries(db, USER, { limit: 50 })
+    expect(page.entries).toHaveLength(DAILY_WIN_CAP)
+    expect(page.entries.every((e) => e.amount > 0)).toBe(true)
+    expect(await countTodaysRewardedWins(db, USER, TODAY)).toBe(DAILY_WIN_CAP)
+  })
+
+  it('replays a capped run on the next UTC day as duplicate, never crediting over the cap', async () => {
+    const db = createTestDb()
+    // Day 1: cap reached, then r5 is capped and its marker is written.
+    const day1 = testDeps('2026-07-11T10:00:00.000Z')
+    for (const runId of ['r1', 'r2', 'r3', 'r4']) {
+      await creditWinReward(db, {
+        userId: USER,
+        gameId: 'bombsquad',
+        runId,
+        today: '2026-07-11',
+        deps: day1,
+      })
+    }
+    const capped = await creditWinReward(db, {
+      userId: USER,
+      gameId: 'bombsquad',
+      runId: 'r5',
+      today: '2026-07-11',
+      deps: day1,
+    })
+    expect(capped.status).toBe('capped')
+
+    // Day 2: the same r5 settlement retries. The new day's rewarded-win count is
+    // 0, but the marker makes the duplicate lookup hit — so it is NOT credited.
+    const day2 = testDeps('2026-07-12T10:00:00.000Z')
+    const replay = await creditWinReward(db, {
+      userId: USER,
+      gameId: 'bombsquad',
+      runId: 'r5',
+      today: '2026-07-12',
+      deps: day2,
+    })
+    expect(replay.status).toBe('duplicate')
+    expect(await readBalance(db, USER)).toBe(WIN_REWARD * DAILY_WIN_CAP)
   })
 })
 
