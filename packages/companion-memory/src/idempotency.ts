@@ -49,3 +49,45 @@ export function assetSourceKey(eventId: string, ordinal: number): string {
 export function correctionSourceKey(originalClaimId: string): string {
   return `correction:${originalClaimId}`
 }
+
+// --- Reward-economy ledger keys (L2 design §1 idempotency scheme) -------------
+//
+// Every reward/deduct row on `asset_entry` carries a source-derived UNIQUE key
+// and is written `ON CONFLICT (source_key) DO NOTHING`, so a replayed reward or
+// a double-fired session teardown is a row-level no-op. Per-row display `kind`
+// is derived from the key prefix (`win:` / `checkin:` / `welcome:` / `session:`),
+// never stored — see `ledger.ts`.
+
+/**
+ * Stable settlement identity for one (game, user, run). The `userId.length`
+ * prefix prevents delimiter ambiguity when userId contains a colon.
+ *
+ * This MUST stay byte-identical to the `settlementIdFor` in
+ * `packages/api/src/handlers/shadow-chase-settlement.ts` — the settlement
+ * handlers and the win-reward key must derive the same id for the same run.
+ * The wiring PR (design §9 PR-3) converges the api handlers onto this copy and
+ * deletes the local one; until then the two definitions are kept in lockstep.
+ */
+export function settlementIdFor(gameId: string, userId: string, runId: string): string {
+  return `${gameId}:${userId.length}:${userId}:${runId}`
+}
+
+/** Unique key for one game win's reward. Anchored per (game, user, run). */
+export function winSourceKey(gameId: string, userId: string, runId: string): string {
+  return `win:${settlementIdFor(gameId, userId, runId)}`
+}
+
+/** Unique key for one user's check-in on one UTC day (`YYYY-MM-DD`). */
+export function checkinSourceKey(userId: string, utcDate: string): string {
+  return `checkin:${userId}:${utcDate}`
+}
+
+/** Unique key for one user's once-ever welcome grant. */
+export function welcomeSourceKey(userId: string): string {
+  return `welcome:${userId}`
+}
+
+/** Unique key for one voice session's single negative deduct row. */
+export function sessionDeductSourceKey(sessionId: string): string {
+  return `session:${sessionId}`
+}
