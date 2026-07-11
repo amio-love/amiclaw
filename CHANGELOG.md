@@ -46,7 +46,6 @@ balance with recent entries and self-heals a one-time +10 welcome grant on
 the first authenticated read. No gameplay rewards flow yet — win, check-in,
 and companion-time wiring land in follow-up changes.
 
-
 **The platform companion learns to act in co-build games** — Added. The voice
 AI pipeline gains a backward-compatible action channel: in games flagged as
 co-build, the companion's reply can carry one structured board action
