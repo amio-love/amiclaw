@@ -26,6 +26,7 @@ import {
   type LeaderboardPlayerMetadata,
 } from '@/utils/leaderboard-player-metadata'
 import { hasAnsweredSurvey, markSurveyAnswered } from '@/utils/survey'
+import { readSubmittedRun, writeSubmittedRun } from '@/utils/submitted-run'
 import { readEntryRecoveryState } from '@/utils/session'
 import { wasClosingRecapFired } from '@/voice/closing-recap-log'
 import { useCompanionPartner } from '@/hooks/useCompanionPartner'
@@ -149,7 +150,15 @@ function resolveAiTool(platformPartner: boolean): AiToolResolution {
 export default function ResultPage() {
   const navigate = useNavigate()
   const { state, dispatch } = useGame()
-  const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(null)
+  // Restore the earned rank on a reload / navigate-back within the backend's 10s
+  // device rate-limit window (F1): the RESULT state is persisted, so without
+  // this the auto-submit effect would re-POST, hit the 429 rate limit, and
+  // replace the just-earned rank with a false failure. The per-run marker lets
+  // the settlement re-render the rank instead of re-submitting.
+  const [rankResult, setRankResult] = useState<ScoreSubmissionResponse | null>(() => {
+    const submitted = readSubmittedRun()
+    return submitted && submitted.runId === state.gameRunId ? submitted.response : null
+  })
   const [submitFailed, setSubmitFailed] = useState(false)
   const [retried, setRetried] = useState(false)
   // Distinguishes a server-side validation rejection from a network failure so
@@ -336,8 +345,10 @@ export default function ResultPage() {
   // (auto-submit, chip-pick, retry). The latch is released back to 'idle' on a
   // network failure so the retry button can fire a second attempt. Across
   // remounts (page refresh) the per-run stable run_id + backend dedup provide a
-  // second layer of protection.
-  const submittedRef = useRef<'idle' | 'in-flight' | 'done'>('idle')
+  // second layer of protection. When the rank was restored from the submitted
+  // marker on mount (F1), the latch starts 'done' so the auto-submit effect
+  // never re-POSTs the already-boarded run.
+  const submittedRef = useRef<'idle' | 'in-flight' | 'done'>(rankResult !== null ? 'done' : 'idle')
   // The last submitted identity + metadata, so the retry button can re-fire.
   const lastSubmitRef = useRef<{ username: string; metadata: LeaderboardPlayerMetadata } | null>(
     null
@@ -402,17 +413,28 @@ export default function ResultPage() {
         ) {
           recordOptimistic(submission, result.data)
         }
-        try {
-          sessionStorage.removeItem(`pending-score:${submission.date}`)
-        } catch {
-          /* ignore */
-        }
-      } else {
-        submittedRef.current = 'idle' // release latch so the retry button can fire
-        setSubmitFailed(true)
-        setSubmitFailKind(result.kind)
-        setSubmitFailStatus(result.kind === 'rejected' ? result.status : null)
+        // Persist the earned rank keyed by run_id so a reload within the 10s
+        // rate-limit window re-renders it instead of re-POSTing (F1).
+        if (submission.run_id) writeSubmittedRun(submission.run_id, result.data)
+        return
       }
+      // A rejection for a run already known to be on the board is not a real
+      // failure (F1): the common case is a 429 from the backend's 10s device
+      // rate-limit after a reload re-fired the auto-submit. Re-render the earned
+      // rank instead of the false「提交太频繁 / 提交失败」copy.
+      const boarded = submission.run_id ? readSubmittedRun() : null
+      if (boarded && boarded.runId === submission.run_id) {
+        submittedRef.current = 'done'
+        setSubmitFailed(false)
+        setSubmitFailKind(null)
+        setSubmitFailStatus(null)
+        setRankResult(boarded.response)
+        return
+      }
+      submittedRef.current = 'idle' // release latch so the retry button can fire
+      setSubmitFailed(true)
+      setSubmitFailKind(result.kind)
+      setSubmitFailStatus(result.kind === 'rejected' ? result.status : null)
     },
     [recordOptimistic]
   )
@@ -433,13 +455,6 @@ export default function ResultPage() {
         return
       }
 
-      // Persist locally so a retry can succeed even if the user navigates back.
-      try {
-        sessionStorage.setItem(`pending-score:${submission.date}`, JSON.stringify(submission))
-      } catch {
-        /* storage full */
-      }
-
       submitScore(submission).then((result) => applySubmitResult(submission, result))
     },
     [buildSubmission, applySubmitResult]
@@ -451,6 +466,10 @@ export default function ResultPage() {
   // react-hooks/set-state-in-effect.
   useEffect(() => {
     if (!hasFinishedDailyRun) return
+    // Rank already restored from the submitted marker on a reload / navigate-back
+    // (F1): the run is on the board, so skip the profile fetch and the re-POST
+    // that the 10s device rate-limit would reject.
+    if (submittedRef.current === 'done') return
     let active = true
     fetchArcadeProfile().then((result) => {
       if (!active) return
@@ -483,6 +502,12 @@ export default function ResultPage() {
   const handlePickAiTool = useCallback(
     (toolId: string) => {
       if (identity.status !== 'signed-in') return
+      // Lock on the first tap: a rapid second tap of a different chip must not
+      // overwrite the stored tool while the first tap's submission is already in
+      // flight — otherwise the board records tool A (first tap, guarded by the
+      // latch) while the device remembers tool B (F4). Gating the storage write
+      // on the same latch keeps the submitted and remembered tool identical.
+      if (submittedRef.current !== 'idle') return
       const metadata: LeaderboardPlayerMetadata = { aiTool: toolId }
       setStoredLeaderboardPlayerMetadata(metadata)
       setPickedAiTool(toolId)

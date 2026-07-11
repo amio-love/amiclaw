@@ -42,6 +42,16 @@ Rescue coverage now includes a live pursuer returning to the moon gate instead
 of relying on a frozen-pursuer fixture. Chinese setup, HUD, buttons, voice
 commands, and the Platform AI contract share the new rules.
 
+**Your rank sticks after a reload, and a storage-blocked browser no longer hangs
+the results screen** — Fix. Reloading or returning to the results screen within a
+few seconds of a daily win used to resubmit the run, hit the ten-second rate
+limit, and swap the rank you just earned for a false「提交太频繁」. The screen now
+remembers the run is already on the board and re-shows your rank instead of
+resubmitting. On browsers where site storage is fully blocked, the results screen
+no longer freezes on「正在把成绩送上榜…」— the run still submits. And tapping two
+different AI-tool chips in quick succession now remembers the one that actually
+went on the board.
+
 **The Shadow Chase pursuer now obeys only visible world rules** — Fix. The
 pursuer no longer reads the private follow, split, or decoy command, any model
 lease, or a hidden shadow's live position. It sees the full unobstructed row and
