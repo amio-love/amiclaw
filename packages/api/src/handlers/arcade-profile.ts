@@ -31,7 +31,14 @@ export async function handleGetArcadeProfile(
   env: ArcadeProfileApiEnv
 ): Promise<Response> {
   const auth = await requireSession(env.AUTH, request)
-  if (!auth.ok) return auth.response
+  // An anonymous read has no account profile to resolve. Answer 204 (accepted,
+  // no content) rather than 401 so an anonymous player's settlement never paints
+  // a red 401 into the console on every win — mirroring the settlement-event
+  // endpoint below (audit F27). The client reads 204 as `anon` and keeps its
+  // device-local record. POST claim keeps 401 — it is a genuine authenticated
+  // write, not a legal anonymous read. no-store: the anon-vs-authed answer
+  // varies by cookie, so a shared cache must never reuse it.
+  if (!auth.ok) return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
 
   const [profile, publicProfile] = await Promise.all([
     readArcadeAccountProfile(env.COMPANION_DB, auth.session.user_id),

@@ -47,7 +47,12 @@ export type ArcadeStreakLeaderboardReadResult =
 export async function fetchArcadeProfile(): Promise<ArcadeProfileReadResult> {
   try {
     const res = await fetch(`${apiBase()}/api/arcade/profile`, { credentials: 'include' })
-    if (res.status === 401) return { kind: 'anon' }
+    // 204 = anonymous (no session to resolve a profile for): the server answers
+    // 204 rather than 401 so an anonymous player's settlement makes no red
+    // console noise (mirrors the events endpoint, audit F27). 401 is kept for
+    // defensiveness. Both resolve to `anon` — the caller then keeps its
+    // device-local record and shows the calm login invite.
+    if (res.status === 204 || res.status === 401) return { kind: 'anon' }
     if (!res.ok) return { kind: 'error' }
     const data = (await res.json()) as ArcadeProfileResponse
     return { kind: 'ok', profile: data.profile, publicProfile: publicProfileOf(data) }

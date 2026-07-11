@@ -5,6 +5,19 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Anonymous settlement stops logging a console error** — Fixed. An anonymous
+player's win used to leave a single red `401 /api/arcade/profile` line in the
+browser console. The identity read now answers a clean `204` (no account to
+resolve) instead, so a settlement is error-free end to end. No visible gameplay
+change — the anonymous run still stays off the leaderboard and shows the same
+calm login invite.
+
+**Opening「我的」no longer writes to your account** — Changed. Visiting `/me`
+used to auto-save this device's unsaved records into your account on load. Now
+that visit is read-only: the「本设备记录」card shows how many records are pending
+and you save them with an explicit「保存到账号」tap. Nothing is saved without your
+action.
+
 **Botanical Garden joins Arcade** - A new co-op care game: you tend a night
 garden of five species while plants decay in real time, and your AI companion
 becomes the botanist who holds the care manual. Signed in, your existing

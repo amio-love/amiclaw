@@ -22,6 +22,9 @@ Given(
     } else {
       await world.drivePracticeToResult()
     }
+    // Identity-state evidence: this survey-fresh device is anonymous, so the
+    // settlement is the anonymous state (login invite, run stays off the board).
+    await world.captureSettlement(`anon-${mode}`)
   }
 )
 
