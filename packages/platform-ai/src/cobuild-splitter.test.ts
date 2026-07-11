@@ -23,6 +23,13 @@ function run(deltas: string[]): { speech: string; actions: CoBuildAction[] } {
   return { speech, actions: flushed.actions }
 }
 
+/** The full flush result (incl. the observability diagnostic) for a delta run. */
+function flushOf(deltas: string[]) {
+  const splitter = new CoBuildSplitter(parseCoBuildActions)
+  for (const d of deltas) splitter.push(d)
+  return splitter.flush()
+}
+
 describe('CoBuildSplitter', () => {
   it('streams pure speech immediately and parses a trailing fenced action block', () => {
     const { speech, actions } = run([
@@ -129,8 +136,49 @@ describe('CoBuildSplitter', () => {
     const splitter = new CoBuildSplitter(parseCoBuildActions)
     // '看' streams immediately; the '<<' partial-prefix is HELD for flush.
     expect(splitter.push('看<<')).toBe('看')
-    expect(splitter.flush()).toEqual({ speech: '<<', actions: [] })
-    expect(splitter.flush()).toEqual({ speech: '', actions: [] })
+    // No fence ever came → the held carry is real speech, flushed once.
+    expect(splitter.flush()).toEqual({
+      speech: '<<',
+      actions: [],
+      diagnostic: 'no-fence',
+      bodyChars: 0,
+    })
+    expect(splitter.flush()).toEqual({ speech: '', actions: [], diagnostic: 'empty', bodyChars: 0 })
+  })
+})
+
+describe('CoBuildSplitter flush diagnostic (observability breadcrumb)', () => {
+  it('reports no-fence when the model spoke but emitted no action block', () => {
+    // The production failure: the partner narrates a move in prose, no fence.
+    const flushed = flushOf(['好，第三拍我放一个军鼓打底，你听。'])
+    expect(flushed.diagnostic).toBe('no-fence')
+    expect(flushed.actions).toEqual([])
+    expect(flushed.bodyChars).toBe(0)
+  })
+
+  it('reports emitted with the action count + body length when a valid block lands', () => {
+    const flushed = flushOf([
+      '放个底鼓。',
+      `${CO_BUILD_OPEN}[{"op":"place","piece_type":"kick","slot":1}]${CO_BUILD_CLOSE}`,
+    ])
+    expect(flushed.diagnostic).toBe('emitted')
+    expect(flushed.actions).toHaveLength(1)
+    expect(flushed.bodyChars).toBeGreaterThan(0)
+  })
+
+  it('reports parse-reject when a block is emitted but fails the strict parser', () => {
+    const flushed = flushOf([
+      `${CO_BUILD_OPEN}[{"op":"place","piece_type":"kazoo","slot":1}]${CO_BUILD_CLOSE}`,
+    ])
+    expect(flushed.diagnostic).toBe('parse-reject')
+    expect(flushed.actions).toEqual([])
+    expect(flushed.bodyChars).toBeGreaterThan(0)
+  })
+
+  it('reports discard-overflow when the action buffer exceeds ACTION_MAX_BYTES', () => {
+    const flushed = flushOf([`${CO_BUILD_OPEN}${'x'.repeat(ACTION_MAX_BYTES + 100)}`])
+    expect(flushed.diagnostic).toBe('discard-overflow')
+    expect(flushed.actions).toEqual([])
   })
 })
 
@@ -141,5 +189,20 @@ describe('buildCoBuildInstruction', () => {
     expect(instruction).toContain(CO_BUILD_CLOSE)
     expect(instruction).toContain('place')
     expect(instruction).toContain('remove')
+  })
+
+  it('is a hard contract: mandatory, one-move, with a concrete worked example', () => {
+    const instruction = buildCoBuildInstruction({ verbs: CO_BUILD_VERBS })
+    // Mandatory + violation framing (fixes the narrate-instead-of-emit failure).
+    expect(instruction).toMatch(/MUST/)
+    expect(instruction).toMatch(/CONTRACT VIOLATION/)
+    // Exactly one move per reply.
+    expect(instruction).toMatch(/EXACTLY ONE/)
+    // A concrete, parseable worked example (speech then the block).
+    expect(instruction).toContain(
+      `${CO_BUILD_OPEN}[{"op":"place","piece_type":"snare","slot":3}]${CO_BUILD_CLOSE}`
+    )
+    // Steer toward enum ids over Chinese names.
+    expect(instruction).toMatch(/NOT its Chinese name/)
   })
 })

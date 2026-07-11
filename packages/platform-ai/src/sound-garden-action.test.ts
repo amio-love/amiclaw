@@ -95,6 +95,34 @@ describe('parseCoBuildActions', () => {
     expect(parseCoBuildActions('[{"op":"place","slot":1}]')).toBeNull()
   })
 
+  it('accepts a vocabulary display label and normalizes it to the enum id (军鼓 → snare)', () => {
+    expect(parseCoBuildActions('[{"op":"place","piece_type":"军鼓","slot":3}]')).toEqual([
+      { op: 'place', pieceType: 'snare', slot: 3 },
+    ])
+    // Every Chinese display label maps back to its canonical id.
+    const labelToId: Array<[string, string]> = [
+      ['底鼓', 'kick'],
+      ['军鼓', 'snare'],
+      ['踩镲', 'hihat'],
+      ['拍掌', 'clap'],
+      ['铃铛', 'bell'],
+      ['风铃', 'chime'],
+      ['笛音', 'flute'],
+      ['竖琴', 'harp'],
+    ]
+    for (const [label, id] of labelToId) {
+      expect(parseCoBuildActions(`[{"op":"place","piece_type":"${label}","slot":1}]`)).toEqual([
+        { op: 'place', pieceType: id, slot: 1 },
+      ])
+    }
+  })
+
+  it('rejects a Chinese label OUTSIDE the vocabulary (labels stay vocabulary-bounded)', () => {
+    // A real-sounding but non-vocabulary label must still drop the whole set.
+    expect(parseCoBuildActions('[{"op":"place","piece_type":"小提琴","slot":1}]')).toBeNull()
+    expect(parseCoBuildActions('[{"op":"place","piece_type":"鼓","slot":1}]')).toBeNull()
+  })
+
   it('rejects a forged piece type outside the vocabulary', () => {
     expect(parseCoBuildActions('[{"op":"place","piece_type":"drum","slot":1}]')).toBeNull()
     expect(parseCoBuildActions('[{"op":"place","piece_type":"guitar","slot":1}]')).toBeNull()

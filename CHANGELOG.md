@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**The co-build companion now actually plants** — Fixed. In Sound Garden's
+signed-in tier the companion would narrate a move ("I placed a snare on beat
+three") without the board changing: the deployed prompt made the structured
+action block optional, so the model talked instead of acting. The action
+contract is now mandatory with a worked example, the parser accepts the
+vocabulary's Chinese display labels alongside piece ids, and every co-build
+turn leaves a bounded diagnostic breadcrumb so a silent drop can never hide
+again.
+
 **Sound Garden joins AMIO Arcade** — Added. A new co-build voice game at
 `claw.amio.fans/sound-garden`. You plant melody flowers along an 8-beat timeline
 while your companion plants rhythm roots on the same beats; a root and a flower
