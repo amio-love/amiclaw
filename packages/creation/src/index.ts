@@ -22,6 +22,9 @@ export type {
   TimedTick,
   TimerStatus,
 } from './engine/engine'
+// Per-element placement-state key, for consumers that read raw element state from
+// `EngineSnapshot.elements[id]` (e.g. a presentation layer deriving lane occupancy).
+export { PLACEMENT_STATE } from './engine/rules'
 
 // Bounded solution search (solver).
 export { searchSolution, solutionDriversForTarget } from './engine/search'
