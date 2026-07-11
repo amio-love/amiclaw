@@ -108,6 +108,13 @@ const CAPTURE_BUFFER_SIZE = 4096
  * Generous enough to cover a real STT->LLM->TTS first-chunk latency.
  */
 const NO_RESPONSE_TIMEOUT_MS = 12000
+/**
+ * Client-side cap on a typed `text-turn` (see `sendText`), matching the server's
+ * own truncation in `session-do.ts` (`MAX_TEXT_TURN_CHARS`). A game may cap
+ * tighter at its input (e.g. the botanical TextPanel's visible `maxLength`); this
+ * is the hard ceiling the hook never exceeds even if a consumer bypasses it.
+ */
+const TEXT_TURN_MAX_CHARS = 2000
 
 function randomSessionName(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
@@ -188,6 +195,13 @@ export interface UseGameVoiceSessionResult {
   closeSession: () => void
   /** Push one bounded material game-state update on the live socket. */
   updateGameState: (next: GameVoiceState) => void
+  /**
+   * Text fallback: send a typed question as a `text-turn` on the live socket — the
+   * AI replies over the same session, skipping STT. No-op if empty or not
+   * connected. The reply streams back through the same `chunk`/`transcript` path a
+   * voice turn uses.
+   */
+  sendText: (text: string) => void
   /** End the session: send `end`, await the summary, and tear down. */
   endSession: () => void
   /**
@@ -367,6 +381,29 @@ export function useGameVoiceSession(
       }
     },
     [guards]
+  )
+
+  const sendText = useCallback(
+    (text: string) => {
+      // Text fallback: a typed question rides a `text-turn` (server feeds the LLM
+      // directly, skipping STT) on the SAME live socket, so the reply streams back
+      // through the same `chunk`/`transcript` path a voice turn uses. Trim + cap
+      // to the server's ceiling; no-op if empty or not connected. Additive to the
+      // hook — voice-only consumers (bombsquad/shadow-chase) never call it.
+      const trimmed = text.trim().slice(0, TEXT_TURN_MAX_CHARS)
+      if (trimmed === '') return
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+      // A typed question awaits a reply → drive the `thinking` phase; the first
+      // reply chunk (or a turn_in_flight rejection, or the watchdog) clears it.
+      setAwaiting(true)
+      try {
+        ws.send(JSON.stringify({ type: 'text-turn', text: trimmed }))
+      } catch {
+        /* non-fatal — a dropped text-turn just goes unanswered */
+      }
+    },
+    [setAwaiting]
   )
 
   // --- Imperative audio shells (TTS playback + mic capture) ---
@@ -932,6 +969,7 @@ export function useGameVoiceSession(
     openSession,
     closeSession,
     updateGameState,
+    sendText,
     endSession,
     requestClosing,
   }

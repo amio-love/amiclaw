@@ -28,7 +28,7 @@
   border: 1px solid var(--garden-line);
   border-radius: 12px;
   padding: 10px 12px 12px;
-  background: var(--bg-garden-2);
+  background: var(--garden-surface);
   margin-bottom: 8px;
 }
 

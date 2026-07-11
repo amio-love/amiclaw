@@ -2,7 +2,7 @@
   border: 1px solid var(--garden-line);
   border-radius: 12px;
   padding: 12px 12px 10px;
-  background: var(--bg-garden-2);
+  background: var(--garden-surface);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -136,6 +136,22 @@
   font-weight: 600;
 }
 .endButton:active {
+  transform: scale(0.97);
+}
+
+.startButton {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid var(--garden-accent);
+  border-radius: 10px;
+  background: rgba(var(--garden-accent-rgb), 0.1);
+  color: var(--garden-accent);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.startButton:active {
   transform: scale(0.97);
 }
 

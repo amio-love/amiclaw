@@ -1,0 +1,35 @@
+/* Botanical Garden design tokens — the game's ONE registered accent layer
+   (bounded-accent rule, DesignSystem.md §Platform Grammar). Botanical's single
+   owned accent is 园圃绿 (garden green #7fd4a3), painted only on garden graphics
+   (plants / pots / decay rings / selection) + botanical titles — never on
+   platform chrome. Everything else INHERITS the Atlas cosmic shell + platform
+   semantics from @amiclaw/ui (--bg-grad-*, --text-*, --border-*, --positive /
+   --amio-*), which is imported before this file. Dark-only; no light mode. */
+:root {
+  /* Registered accent — the one Botanical-owned hue + its tint channels. */
+  --garden-accent: #7fd4a3;
+  --garden-accent-rgb: 127, 212, 163;
+  --garden-accent-soft: rgba(127, 212, 163, 0.16);
+
+  /* Garden neutrals reuse platform channels (aliases — Atlas is SSOT). */
+  --garden-ink: var(--text-1); /* primary garden text */
+  --garden-ink-dim: var(--text-3); /* secondary / dim garden text */
+  --garden-line: var(--border-soft); /* garden hairline borders */
+
+  /* Elevated garden surface — a bounded green-tinted dark glass over the cosmic
+     base (same pattern as BombSquad's blue-tinted --glass). Game panels only. */
+  --garden-surface: rgba(14, 23, 18, 0.72);
+
+  /* Health / decay states reconcile with the platform semantic colors
+     (§Semantic Color Law) — never bespoke hexes, never wire-cyan. */
+  --health-thriving: var(--positive); /* best state = platform success green */
+  --health-stable: var(--amio-success); /* softer success green */
+  --health-wilting: var(--amio-warning); /* warning amber */
+  --health-critical: var(--amio-danger); /* danger red */
+  --health-critical-rgb:
+    255, 100, 100; /* danger channel — critical glows compose from one source */
+  --health-dead: var(--amio-fg-666); /* neutral gray */
+
+  /* Decay-ring mid-warning tier = the same platform warning. */
+  --garden-warn: var(--amio-warning);
+}

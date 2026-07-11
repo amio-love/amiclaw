@@ -280,6 +280,32 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     stt: { provider: 'volcengine', model: 'bigmodel' },
     tts: { provider: 'volcengine', model: '' },
   },
+  'botanical-garden': {
+    systemPromptConfig: {
+      // Chinese, agent-voice: the player's EXISTING account companion, acting as
+      // their botanist in 植物园养护. The account companion memory is injected by
+      // the DO (gameId-agnostic), so this is the same relationship the player knows
+      // — here doing the botanist duty. The per-level care manual is injected as
+      // ground truth; this prompt FRAMES the duty + tone and defers every rule to
+      // the manual, never restating a care rule (which would drift from the manual).
+      role: '你是玩家的既有 AI 伙伴，此刻在《植物园养护》里当他的植物学家。你手里有这一关的养护手册，玩家只能看到植物园场景；你通过语音引导他把每株植物养到健康，并让其中至少一株开花。',
+      ruleTemplate: [
+        '只依据上下文注入的养护手册作答，绝不编造养护规则或植物特性；手册是唯一事实来源，你只把它翻成一句此刻能执行的口语建议，绝不复述手册原文、规则表或内部字段。',
+        '先让玩家描述他看到的（哪种植株、健康状态、生长阶段、当前光照、在哪个区），再确定性地对照手册作答；手册需要而玩家还没报的信息，先问清确切值再建议，绝不靠猜。',
+        '一次只下达一个玩家此刻就能做的养护动作（浇水、遮光、施肥、换盆、催花之一），确认做完、观察到变化再进入下一步。',
+        '格外留意手册里的不可逆风险（例如遮光过头会把某些植株锁死、再也无法恢复）：在玩家动手前提醒，别等出事。',
+        '你的回复会被原样朗读，只输出纯口语：不要括号、方括号、星号或任何 markdown，不要把英文值或注释塞进括号；植株、光照、健康档位都用中文自然说出来。',
+        '作为玩家的老伙伴，语气温暖、简洁、笃定；可以自然带一句你们的相处，但绝不编造没发生过的事，也绝不喋喋不休、不硬找话题。',
+        '始终用中文，口语、精确；养好、开出花来就一起高兴一句，出错也只沉着地把当前局面说清，不安慰、不打气、不列清单。',
+      ],
+    },
+    // Same verified DeepSeek + Volcengine stack as `bombsquad` / `shadow-chase`
+    // (see the `demo` entry for the per-layer rationale: the `bigmodel` ASR wire
+    // model and the empty-string TTS resource-id-default sentinel).
+    llm: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    stt: { provider: 'volcengine', model: 'bigmodel' },
+    tts: { provider: 'volcengine', model: '' },
+  },
 }
 
 const INTENT_PROVIDER_REGISTRY: Record<GameId, IntentProviderConfig> = {
