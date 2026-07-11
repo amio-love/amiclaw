@@ -180,3 +180,44 @@ export interface MemoriesResponse {
   /** Opaque keyset cursor for the next page; absent on the last page. */
   next_cursor?: string
 }
+
+// --- Reward-economy balance / ledger (starburst) -----------------------------
+
+/**
+ * Per-row display kind on the balance ledger, derived from the row's
+ * `source_key` prefix server-side (`win:` / `checkin:` / `welcome:` /
+ * `session:`), never stored. Defined here as the wire SSOT; the domain package
+ * (`packages/companion-memory/src/ledger.ts`) keeps a structurally identical
+ * local copy, mirroring how `MemoryView` relates to its D1 record.
+ */
+export type AssetEntryKind = 'win' | 'checkin' | 'welcome' | 'session' | 'other'
+
+/**
+ * One ledger row as returned by `GET /api/companion/assets`. The internal row
+ * `id` is NEVER exposed here — it lives only inside the opaque `next_cursor`
+ * (design §2); `source_ref` is internal provenance and also omitted.
+ */
+export interface AssetEntryView {
+  /** Signed amount: positive credit (reward/grant), negative deduct (spend). */
+  amount: number
+  source_product: string
+  kind: AssetEntryKind
+  earned_at: string
+}
+
+/**
+ * Body of `GET /api/companion/assets` — the reward-economy balance plus a
+ * keyset page of recent ledger entries (design §2). Balance is the SUM over the
+ * append-only ledger; `starburst` is the only asset type in v1 (UI renders 星芒).
+ * Owner identity is server-derived (require-session guard); no inbound
+ * `user_id`.
+ */
+export interface CompanionAssetsResponse {
+  asset_type: 'starburst'
+  balance: number
+  entries: AssetEntryView[]
+  /** Opaque keyset cursor for the next page; absent on the last page. */
+  next_cursor?: string
+  /** True ONLY on the request that first mints the +10 welcome grant (one-time UI beat). */
+  welcome_granted?: boolean
+}
