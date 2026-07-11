@@ -116,6 +116,18 @@
     var(--bg-grad-mid-2);
 }
 
+/* Botanical Garden — a lush living green (the one garden hue) fading into a
+   cosmic blue platform channel (rgba(74, 158, 255), shared with .echo), over
+   the platform base. Green sits only on the tile art (bounded-accent rule),
+   never the card chrome. Positioned distinctly from .draw (green + gold) so the
+   two green-family tiles stay legible side by side. */
+.garden {
+  background:
+    radial-gradient(circle at 32% 34%, rgba(75, 210, 102, 0.42), transparent 52%),
+    radial-gradient(circle at 74% 72%, rgba(74, 158, 255, 0.24), transparent 55%),
+    var(--bg-grad-mid-2);
+}
+
 .artLabel {
   /* Sits above the (optional) .artShot gameplay capture. */
   position: relative;

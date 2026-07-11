@@ -4,7 +4,7 @@
    components/home/UpcomingGames. */
 
 export type GameStatus = 'soon' | 'dev' | 'live'
-export type GameArtVariant = 'shadow' | 'oracle' | 'echo' | 'draw' | 'lab'
+export type GameArtVariant = 'shadow' | 'oracle' | 'garden' | 'echo' | 'draw' | 'lab'
 
 export interface UpcomingGame {
   id: string
@@ -42,6 +42,14 @@ export const upcomingGames: UpcomingGame[] = [
       height: 853,
       alt: '易经签卜的投币起卦界面',
     },
+  },
+  {
+    id: 'botanical',
+    name: '植物园养护',
+    blurb: '花园在慢慢枯萎，你和 AI 伙伴一株株把它救回来。',
+    status: 'live',
+    artVariant: 'garden',
+    href: '/botanical/',
   },
   {
     id: 'echo',
