@@ -4,9 +4,9 @@ const MAX_COMMAND_CODEPOINTS = 64
 const NEGATION_OR_HYPOTHETICAL = /不|别|如果|假如|要是|是否|建议|[吗呢？?]|["“”「」『』]/
 
 const FAMILIES: Array<{ intent: CompanionIntent; patterns: RegExp[] }> = [
-  { intent: 'follow', patterns: [/跟着我/, /跟随我/, /跟我走/] },
-  { intent: 'split', patterns: [/分头行动/, /我们分头/, /分开走/] },
-  { intent: 'decoy', patterns: [/去诱敌/, /吸引追兵/, /把追兵引开/] },
+  { intent: 'support', patterns: [/过来接应/, /保持接应/, /靠近我/] },
+  { intent: 'scout', patterns: [/去光核探路/, /去探路/, /光核附近站位/] },
+  { intent: 'anchor', patterns: [/远处架点/, /建立换位点/, /拉开距离/] },
 ]
 
 export type StrategyCommandResult =

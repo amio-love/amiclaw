@@ -16,6 +16,21 @@ engine gains game-agnostic timed-emitter and lose-condition extensions with
 validator checks; sibling game fixtures are untouched. Not wired into the
 production arcade; playable via local dev only.
 
+**Shadow Chase now revolves around earned position swaps** — Changed. The
+pursuer locks onto the human-controlled shadow only, moves every tick, and takes
+a predictable difficulty-based bonus step so equal-speed infinite kiting is no
+longer possible. It can still capture the AI companion through incidental
+same-cell contact or opposite-edge crossing. Each collected core grants one
+consumable position swap, replacing the unlimited cooldown-based swap.
+
+Companion strategies are now Support, Scout, and Anchor. The companion can stand
+near a core but only the player can collect it, preventing an idle player from
+outsourcing the objective. The strategies trade rescue distance, route setup,
+and swap distance without giving the pursuer any private strategy knowledge.
+Rescue coverage now includes a live pursuer returning to the moon gate instead
+of relying on a frozen-pursuer fixture. Chinese setup, HUD, buttons, voice
+commands, and the Platform AI contract share the new rules.
+
 **The Shadow Chase pursuer now obeys only visible world rules** — Fix. The
 pursuer no longer reads the private follow, split, or decoy command, any model
 lease, or a hidden shadow's live position. It sees the full unobstructed row and

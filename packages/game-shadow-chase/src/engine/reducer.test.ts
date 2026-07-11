@@ -21,33 +21,36 @@ describe('ten-phase reducer contract', () => {
     state.actors.companion.position = { x: 3, y: 1 }
     const next = advance(state, [
       action(state, 1, { type: 'player-move', direction: 'right' }),
-      action(state, 2, { type: 'companion-command', command: 'follow' }),
+      action(state, 2, { type: 'companion-command', command: 'support' }),
     ])
     expect(next.actors.player.position).toEqual({ x: 2, y: 1 })
     expect(next.actors.companion.position).toEqual({ x: 3, y: 1 })
   })
 
-  it('applies swap atomically and starts cooldown', () => {
+  it('applies a charged swap atomically and consumes the charge', () => {
     const state = createRunningState('courtyard', 'standard', 7)
+    state.swapCharges = 1
     const playerStart = state.actors.player.position
     const companionStart = state.actors.companion.position
     const next = advance(state, [action(state, 1, { type: 'swap' })])
     expect(next.actors.player.position).toEqual(companionStart)
     expect(next.actors.companion.position).toEqual(playerStart)
-    expect(next.cooldowns.swapReadyTick).toBeGreaterThan(next.tick)
+    expect(next.swapCharges).toBe(0)
   })
 
-  it('accepts a decoy command without granting the pursuer command knowledge', () => {
+  it('accepts an anchor command without granting the pursuer command knowledge', () => {
     const state = createRunningState('courtyard', 'standard', 7)
     state.tick = 1
-    const next = advance(state, [action(state, 1, { type: 'companion-command', command: 'decoy' })])
-    expect(next.command.intent).toBe('decoy')
-    expect(next.actors.pursuer.target).not.toBe('companion')
+    const next = advance(state, [
+      action(state, 1, { type: 'companion-command', command: 'anchor' }),
+    ])
+    expect(next.command.intent).toBe('anchor')
+    expect(next.actors.pursuer.target).toBe('player')
     expect(next.actors.pursuer.destination).toBe('moon-gate')
     expect(next.decisionEpoch).toBe(1)
   })
 
-  it('resolves contact even when pursuer cadence holds movement', () => {
+  it('resolves contact before the pursuer leaves an occupied tile', () => {
     const state = createRunningState('courtyard', 'relaxed', 7)
     state.actors.player.position = { ...state.actors.pursuer.position }
 

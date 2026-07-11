@@ -18,7 +18,7 @@ Then('the Shadow Chase opening rule is complete', async ({ page }) => {
   expect(copy).toContain('完成救援')
   expect(copy).toContain('一起撤离')
   expect(copy).toContain(
-    '追兵能看见整条没有墙遮挡的横竖直线：它追最近且未被捕获的可见影子，距离相同时不换目标；谁都看不见就返回月门。同格或迎面交叉会被捕获。诱敌只改变伙伴走位，难度只改变追兵速度和救援时间。'
+    '追兵只锁定你：横竖直线没有墙遮挡时追向你，看不见你就返回月门。它始终比你和伙伴略快；接触或迎面交叉仍会捕获任何一方。每收集一枚光核获得一次换位。'
   )
   const pursuerRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
   await page.locator('html').evaluate((element, rule) => {
@@ -46,7 +46,7 @@ Then('the Shadow Chase board and essential controls are visible', async ({ page 
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
   await expect(page.getByText('光核', { exact: true })).toBeVisible()
   await expect(page.getByText('救援', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '交换位置' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '交换位置 · 0' })).toBeVisible()
   await expect(page.getByRole('button', { name: '向上移动' })).toBeVisible()
 })
 

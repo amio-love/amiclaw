@@ -5,14 +5,14 @@ export const MAX_SHADOW_CHASE_VOICE_WALLS = 64
 export const MAX_SHADOW_CHASE_VOICE_OBJECTIVES = 3
 export const MAX_SHADOW_CHASE_VOICE_ID_CODEPOINTS = 32
 
-type Strategy = 'follow' | 'split' | 'decoy'
+type Strategy = 'support' | 'scout' | 'anchor'
 type Coordinate = { x: number; y: number }
 
 export interface ShadowChaseVoiceContext {
   version: 1
   phase: 'planning' | 'running'
   strategy: Strategy
-  allowedStrategies: ['follow', 'split', 'decoy']
+  allowedStrategies: ['support', 'scout', 'anchor']
   map: { id: string; width: number; height: number; walls: Coordinate[] }
   objectives: Array<{ id: string; position: Coordinate }>
   collectedObjectiveIds: string[]
@@ -87,13 +87,13 @@ export function validateShadowChaseVoiceContext(value: unknown): ShadowChaseVoic
   if (value.version !== 1 || (value.phase !== 'planning' && value.phase !== 'running')) {
     return { ok: false, reason: 'version-phase' }
   }
-  if (!['follow', 'split', 'decoy'].includes(String(value.strategy))) {
+  if (!['support', 'scout', 'anchor'].includes(String(value.strategy))) {
     return { ok: false, reason: 'strategy' }
   }
   if (
     !Array.isArray(value.allowedStrategies) ||
     value.allowedStrategies.length !== 3 ||
-    value.allowedStrategies.join(',') !== 'follow,split,decoy'
+    value.allowedStrategies.join(',') !== 'support,scout,anchor'
   ) {
     return { ok: false, reason: 'allowed-strategies' }
   }

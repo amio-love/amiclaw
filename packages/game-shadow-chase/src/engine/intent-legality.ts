@@ -29,10 +29,10 @@ export function validateModelProposal(
     return { ok: false, reason: 'lease' }
   }
   const { proposal } = input
-  if (!['follow', 'split', 'decoy'].includes(proposal.intent)) {
+  if (!['support', 'scout', 'anchor'].includes(proposal.intent)) {
     return { ok: false, reason: 'intent' }
   }
-  if (proposal.intent === 'follow' || proposal.intent === 'decoy') {
+  if (proposal.intent === 'support' || proposal.intent === 'anchor') {
     return proposal.targetObjectiveId ? { ok: false, reason: 'unexpected-target' } : { ok: true }
   }
   const objective = state.objectives.find(

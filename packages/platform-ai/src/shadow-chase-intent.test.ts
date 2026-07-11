@@ -32,7 +32,7 @@ function validBody(): ShadowChaseIntentRequest {
     decisionEpoch: 3,
     observedTick: 40,
     difficulty: 'standard',
-    command: 'follow',
+    command: 'support',
     actors: [
       { id: 'player', position: { x: 1, y: 1 }, status: 'free' },
       { id: 'companion', position: { x: 2, y: 1 }, status: 'free' },
@@ -44,8 +44,8 @@ function validBody(): ShadowChaseIntentRequest {
       { id: 'core-c', position: { x: 5, y: 3 }, collected: true },
     ],
     exit: { x: 6, y: 1 },
-    cooldowns: { swapReadyTick: 60 },
-    allowedIntents: ['follow', 'split', 'decoy'],
+    swapCharges: 1,
+    allowedIntents: ['support', 'scout', 'anchor'],
   }
 }
 
@@ -68,7 +68,7 @@ function validModelOutput(body = validBody()): string {
     requestId: body.requestId,
     runId: body.runId,
     decisionEpoch: body.decisionEpoch,
-    proposal: { intent: 'split', targetObjectiveId: 'core-a', bark: 'I will take core A.' },
+    proposal: { intent: 'scout', targetObjectiveId: 'core-a', bark: 'I will scout core A.' },
     leaseTicks: LEASE_DEFAULT_TICKS,
   })
 }
@@ -171,7 +171,7 @@ describe('shadow chase intent contract', () => {
       parseShadowChaseIntentResponse(
         JSON.stringify({
           ...base,
-          proposal: { intent: 'split', targetObjectiveId: 'core-c' },
+          proposal: { intent: 'scout', targetObjectiveId: 'core-c' },
         }),
         body
       ).ok
@@ -184,7 +184,7 @@ describe('shadow chase intent contract', () => {
     for (const bark of ['safe\u0007', 'a'.repeat(MAX_BARK_CODEPOINTS + 1)]) {
       expect(
         parseShadowChaseIntentResponse(
-          JSON.stringify({ ...base, proposal: { intent: 'follow', bark } }),
+          JSON.stringify({ ...base, proposal: { intent: 'support', bark } }),
           body
         ).ok
       ).toBe(false)
@@ -193,7 +193,7 @@ describe('shadow chase intent contract', () => {
       parseShadowChaseIntentResponse(
         JSON.stringify({
           ...base,
-          proposal: { intent: 'follow', bark: '😀'.repeat(MAX_BARK_CODEPOINTS) },
+          proposal: { intent: 'support', bark: '😀'.repeat(MAX_BARK_CODEPOINTS) },
         }),
         body
       ).ok

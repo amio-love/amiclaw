@@ -63,7 +63,7 @@ describe('frozen engine contracts', () => {
       hasLineOfSight({ ...map, width: 5, walls: [{ x: 4, y: 0 }] }, { x: 0, y: 0 }, { x: 3, y: 0 })
     ).toBe(true)
     for (const config of Object.values(DIFFICULTY_CONFIG)) {
-      expect(Object.keys(config).sort()).toEqual(['pursuerCadence', 'rescueTicks'])
+      expect(Object.keys(config).sort()).toEqual(['pursuerBonusStepInterval', 'rescueTicks'])
     }
   })
 

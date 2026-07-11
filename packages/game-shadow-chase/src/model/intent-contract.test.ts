@@ -26,7 +26,7 @@ describe('model intent contract', () => {
       requestId: '00000000-0000-4000-8000-000000000001',
       runId: '00000000-0000-4000-8000-000000000002',
       decisionEpoch: 2,
-      proposal: { intent: 'decoy', bark: 'Take the core. I will draw it away.' },
+      proposal: { intent: 'anchor', bark: 'I will establish a distant swap point.' },
       leaseTicks: 8,
     })
     expect(parseIntentResponse(value).ok).toBe(true)
@@ -43,12 +43,12 @@ describe('model intent contract', () => {
     }
     expect(
       parseIntentResponse(
-        JSON.stringify({ ...base, proposal: { intent: 'follow', bark: 'a'.repeat(49) } })
+        JSON.stringify({ ...base, proposal: { intent: 'support', bark: 'a'.repeat(49) } })
       )
     ).toEqual({ ok: false, reason: 'bark' })
     expect(
       parseIntentResponse(
-        JSON.stringify({ ...base, proposal: { intent: 'follow', bark: 'safe\u0007' } })
+        JSON.stringify({ ...base, proposal: { intent: 'support', bark: 'safe\u0007' } })
       )
     ).toMatchObject({ ok: true, value: { proposal: { bark: 'safe' } } })
   })

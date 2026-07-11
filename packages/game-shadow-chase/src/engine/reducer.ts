@@ -1,15 +1,9 @@
-import {
-  DIFFICULTY_CONFIG,
-  MIN_RUN_TICKS,
-  RUN_CAP_TICKS,
-  SWAP_COOLDOWN_TICKS,
-  isSafeTick,
-} from './config'
+import { DIFFICULTY_CONFIG, MIN_RUN_TICKS, RUN_CAP_TICKS, isSafeTick } from './config'
 import { companionNextStep } from './companion-policy'
 import { validateModelProposal } from './intent-legality'
 import { getMap } from './maps'
 import { nextStepOnShortestPath, shortestPath } from './pathfinding'
-import { pursuerNextStep, refreshPursuerDecision } from './pursuer-policy'
+import { pursuerStepPath, refreshPursuerDecision } from './pursuer-policy'
 import { coordinatesEqual, isInsideMap, isWalkable, moved } from './rules'
 import type {
   Coordinate,
@@ -35,12 +29,12 @@ function cloneState(state: SimulationState): SimulationState {
 
 export interface ReducerPolicies {
   companion(state: SimulationState): Coordinate
-  pursuer(state: SimulationState, nextTick: number): Coordinate
+  pursuer(state: SimulationState, nextTick: number): Coordinate | readonly Coordinate[]
 }
 
 const DEFAULT_POLICIES: ReducerPolicies = {
   companion: companionNextStep,
-  pursuer: pursuerNextStep,
+  pursuer: pursuerStepPath,
 }
 
 export function advance(
@@ -86,7 +80,7 @@ export function advance(
       )
       next.command = {
         intent: action.command,
-        ...(action.command === 'split' && target ? { targetObjectiveId: target.id } : {}),
+        ...(action.command === 'scout' && target ? { targetObjectiveId: target.id } : {}),
       }
       next.activeModelLease = undefined
       next.decisionEpoch += 1
@@ -179,7 +173,11 @@ export function advance(
     }
   }
   let companionEnd = policies.companion(next)
-  const pursuerEnd = policies.pursuer(next, nextTick)
+  const pursuerResult = policies.pursuer(next, nextTick)
+  const plannedPursuerPath: Coordinate[] = Array.isArray(pursuerResult)
+    ? [...pursuerResult]
+    : [pursuerResult as Coordinate]
+  if (plannedPursuerPath.length === 0) throw new Error('Pursuer path cannot be empty')
   if (next.actors.pursuer.target !== state.actors.pursuer.target) {
     next.decisionEpoch += 1
   }
@@ -188,12 +186,12 @@ export function advance(
     swapRequested &&
     state.actors.player.status === 'free' &&
     state.actors.companion.status === 'free' &&
-    nextTick >= state.cooldowns.swapReadyTick
+    state.swapCharges > 0
   if (canSwap) {
     next.playerNavigation = undefined
     playerEnd = starts.companion
     companionEnd = starts.player
-    next.cooldowns.swapReadyTick = nextTick + SWAP_COOLDOWN_TICKS
+    next.swapCharges -= 1
     tickEvents.push({ tick: nextTick, type: 'swap' })
   } else {
     if (swapRequested) {
@@ -215,6 +213,35 @@ export function advance(
       companionEnd = starts.companion
     }
   }
+
+  const pursuerContactIndex = (
+    actorStart: Coordinate,
+    actorEnd: Coordinate,
+    path: readonly Coordinate[]
+  ): number => {
+    let pursuerStart = starts.pursuer
+    for (let index = 0; index < path.length; index += 1) {
+      const pursuerStep = path[index]
+      const actorStepStart = index === 0 ? actorStart : actorEnd
+      if (
+        coordinatesEqual(actorEnd, pursuerStep) ||
+        crossed(actorStepStart, actorEnd, pursuerStart, pursuerStep)
+      ) {
+        return index
+      }
+      pursuerStart = pursuerStep
+    }
+    return -1
+  }
+  const playerContactIndex =
+    state.actors.player.status === 'free'
+      ? pursuerContactIndex(starts.player, playerEnd, plannedPursuerPath)
+      : -1
+  const effectivePursuerPath =
+    playerContactIndex >= 0
+      ? plannedPursuerPath.slice(0, playerContactIndex + 1)
+      : plannedPursuerPath
+  const pursuerEnd = effectivePursuerPath[effectivePursuerPath.length - 1]
 
   next.actors.player.position = playerEnd
   next.actors.companion.position = companionEnd
@@ -245,9 +272,7 @@ export function advance(
   for (const actorId of ['player', 'companion'] as const) {
     const actor = next.actors[actorId]
     if (state.actors[actorId].status !== 'free') continue
-    const contact =
-      coordinatesEqual(actor.position, pursuerEnd) ||
-      crossed(starts[actorId], actor.position, starts.pursuer, pursuerEnd)
+    const contact = pursuerContactIndex(starts[actorId], actor.position, effectivePursuerPath) >= 0
     if (contact) {
       actor.status = 'captured'
       actor.rescueDeadlineTick = nextTick + DIFFICULTY_CONFIG[state.difficulty].rescueTicks
@@ -289,14 +314,19 @@ export function advance(
     return actor.status === 'captured' && nextTick >= (actor.rescueDeadlineTick ?? 0)
   })
 
-  for (const actorId of ['player', 'companion'] as const) {
-    const actor = next.actors[actorId]
-    if (actor.status !== 'free') continue
+  const player = next.actors.player
+  if (player.status === 'free') {
     for (const objective of next.objectives) {
-      if (!objective.collected && coordinatesEqual(actor.position, objective.position)) {
+      if (!objective.collected && coordinatesEqual(player.position, objective.position)) {
         objective.collected = true
+        next.swapCharges += 1
         next.decisionEpoch += 1
-        tickEvents.push({ tick: nextTick, type: 'core-collected', actorId, detail: objective.id })
+        tickEvents.push({
+          tick: nextTick,
+          type: 'core-collected',
+          actorId: 'player',
+          detail: objective.id,
+        })
       }
     }
   }

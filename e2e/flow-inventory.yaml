@@ -461,11 +461,11 @@ flows:
     name: Dual Shadow Chase deterministic solo play
     description: >-
       A visitor opens the Shadow Chase SPA, reads the five-second head-start
-      rule, starts a solo run, and activates a companion Decoy command while
+      rule, starts a solo run, and activates a companion Anchor command while
       optional model handoffs return unavailable. The deterministic loop stays
       live and exposes no multi-human room, matchmaking, PvP, or voice-room
       affordance.
-    steps: [shadow-chase-start, opening-grace, companion-decoy, fallback-live]
+    steps: [shadow-chase-start, opening-grace, companion-anchor, fallback-live]
     status: active
 
   - id: shadow-chase-mobile-controls

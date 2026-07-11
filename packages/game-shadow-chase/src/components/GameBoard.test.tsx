@@ -40,7 +40,7 @@ describe('whole-board target ownership', () => {
     state.tick = 1
     state.actors.pursuer.position = { x: 0, y: 0 }
     state.actors.pursuer.target = 'player'
-    state.actors.pursuer.destination = 'companion'
+    state.actors.pursuer.destination = 'player'
     const onTarget = vi.fn()
     const view = render(<GameBoard state={state} onTarget={onTarget} />)
 
@@ -54,7 +54,7 @@ describe('whole-board target ownership', () => {
     expect(target.getAttribute('aria-hidden')).toBe('true')
     const board = screen.getByRole('application', { name: '双影追逃地图' })
     const description = document.getElementById(board.getAttribute('aria-describedby')!)
-    expect(description?.textContent).toBe('追兵当前目标：AI 伙伴')
+    expect(description?.textContent).toBe('追兵当前目标：你')
     Object.defineProperty(board, 'getBoundingClientRect', {
       value: () => ({ left: 0, top: 0, width: 336, height: 336 }),
     })

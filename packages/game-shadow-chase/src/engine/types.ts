@@ -1,6 +1,6 @@
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type Difficulty = 'relaxed' | 'standard' | 'intense'
-export type CompanionIntent = 'follow' | 'split' | 'decoy'
+export type CompanionIntent = 'support' | 'scout' | 'anchor'
 export type SimulationPhase = 'running' | 'win' | 'loss' | 'timeout'
 export type PlayerInputRejectionReason =
   | 'wall'
@@ -43,10 +43,10 @@ export interface ShadowActor {
 export interface PursuerActor {
   id: 'pursuer'
   position: Coordinate
-  /** Last observed shadow, used only to keep equal-distance ties stable. */
-  target: 'player' | 'companion'
+  /** The pursuer only locks onto the human-controlled shadow. */
+  target: 'player'
   /** Actual movement destination selected by the latest observation. */
-  destination: 'player' | 'companion' | 'moon-gate'
+  destination: 'player' | 'moon-gate'
 }
 
 export interface ObjectiveState extends ObjectiveDefinition {
@@ -124,7 +124,7 @@ export interface SimulationState {
   exit: { position: Coordinate; enabled: boolean }
   command: { intent: CompanionIntent; targetObjectiveId?: string }
   playerNavigation?: PlayerNavigation
-  cooldowns: { swapReadyTick: number }
+  swapCharges: number
   activeModelLease?: ModelLease
   decisionEpoch: number
   eventLog: EngineEvent[]

@@ -134,7 +134,7 @@ describe('resolveConfig — shadow chase voice', () => {
     expect(resolved.stt).toEqual({ provider: 'volcengine', model: 'bigmodel' })
     expect(resolved.tts).toEqual({ provider: 'volcengine', model: '' })
     expect(resolved.systemPromptConfig.role).toContain('双影追逃')
-    expect(resolved.systemPromptConfig.ruleTemplate.join('\n')).toContain('跟随、分头、诱敌')
+    expect(resolved.systemPromptConfig.ruleTemplate.join('\n')).toContain('接应、探路、架点')
   })
 })
 

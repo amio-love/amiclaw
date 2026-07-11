@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createRunningState } from '../engine/rules'
-import type { SimulationState } from '../engine/types'
+import type { CompanionIntent, SimulationState } from '../engine/types'
 import { ShadowVoiceRuntime } from './ShadowVoiceRuntime'
 
 const voiceHarness = vi.hoisted(() => ({
@@ -49,13 +49,13 @@ vi.mock('./voice-eligibility', () => ({
 function RuntimeHarness({
   state,
   phase = 'planning',
-  strategy = 'follow',
+  strategy = 'support',
   onStrategy = vi.fn(),
 }: {
   state: SimulationState
   phase?: 'planning' | 'running'
-  strategy?: 'follow' | 'split' | 'decoy'
-  onStrategy?: (intent: 'follow' | 'split' | 'decoy') => void
+  strategy?: CompanionIntent
+  onStrategy?: (intent: CompanionIntent) => void
 }) {
   return (
     <ShadowVoiceRuntime
@@ -101,7 +101,7 @@ describe('Shadow voice production runtime', () => {
 
   it('configures one explicit-open shared session with exact Shadow context', () => {
     const state = createRunningState('courtyard', 'standard', 7)
-    render(<RuntimeHarness state={state} strategy="split" />)
+    render(<RuntimeHarness state={state} strategy="scout" />)
 
     const options = latestOptions()
     expect(options).toMatchObject({
@@ -122,8 +122,8 @@ describe('Shadow voice production runtime', () => {
         publicContext: {
           version: 1,
           phase: 'planning',
-          strategy: 'split',
-          allowedStrategies: ['follow', 'split', 'decoy'],
+          strategy: 'scout',
+          allowedStrategies: ['support', 'scout', 'anchor'],
         },
       },
     })
@@ -163,10 +163,10 @@ describe('Shadow voice production runtime', () => {
       text: string
     }) => void
 
-    act(() => deliver({ sequence: 4, text: '分头行动' }))
-    act(() => deliver({ sequence: 4, text: '去诱敌' }))
+    act(() => deliver({ sequence: 4, text: '去光核探路' }))
+    act(() => deliver({ sequence: 4, text: '去远处架点' }))
     expect(onStrategy).toHaveBeenCalledTimes(1)
-    expect(onStrategy).toHaveBeenCalledWith('split')
+    expect(onStrategy).toHaveBeenCalledWith('scout')
   })
 
   it('maps bounded errors to Chinese while deterministic controls remain available', () => {

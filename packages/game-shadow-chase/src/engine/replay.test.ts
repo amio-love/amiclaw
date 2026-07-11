@@ -11,7 +11,7 @@ const RECORD: ReplayRecord = {
   difficulty: 'standard',
   actions: [
     { applyAtTick: 1, sequence: 1, action: { type: 'player-move', direction: 'right' } },
-    { applyAtTick: 2, sequence: 2, action: { type: 'companion-command', command: 'split' } },
+    { applyAtTick: 2, sequence: 2, action: { type: 'companion-command', command: 'scout' } },
     { applyAtTick: 3, sequence: 3, action: { type: 'swap' } },
   ],
 }
@@ -36,12 +36,12 @@ describe('replay determinism', () => {
             requestId: '00000000-0000-4000-8000-000000000001',
             runId: runIdForSeed(RECORD.seed),
             decisionEpoch: 0,
-            proposal: { intent: 'decoy', bark: 'I will draw it away.' },
+            proposal: { intent: 'anchor', bark: 'I will establish a distant swap point.' },
             leaseTicks: 8,
           },
         },
       ],
     }
-    expect(replay(withLease, 4).activeModelLease?.intent).toBe('decoy')
+    expect(replay(withLease, 4).activeModelLease?.intent).toBe('anchor')
   })
 })

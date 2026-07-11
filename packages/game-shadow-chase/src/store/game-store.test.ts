@@ -102,9 +102,9 @@ describe('fixed-step external store', () => {
     const scheduler = new ManualScheduler()
     const store = createGameStore({ scheduler, seed: 5, mapId: 'courtyard', fetchIntent: null })
     store.start()
-    store.dispatch({ type: 'companion-command', command: 'decoy' })
+    store.dispatch({ type: 'companion-command', command: 'anchor' })
     scheduler.frame(TICK_MS)
-    expect(store.getSnapshot().command.intent).toBe('decoy')
+    expect(store.getSnapshot().command.intent).toBe('anchor')
   })
 
   it('preserves rapid discrete movement FIFO across successive ticks', () => {

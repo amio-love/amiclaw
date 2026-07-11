@@ -30,11 +30,11 @@ describe('playable shell semantics', () => {
   it('keeps deterministic Chinese strategy buttons available during planning and play', () => {
     render(<App voiceSource={BUTTON_ONLY_VOICE} />)
     fireEvent.click(screen.getByRole('button', { name: '查看地图并制定策略' }))
-    for (const name of ['跟随', '分头', '诱敌']) {
+    for (const name of ['接应', '探路', '架点']) {
       expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).not.toBeNull()
     }
     fireEvent.click(screen.getByRole('button', { name: '立即出发' }))
-    expect(screen.getByRole('button', { name: '交换位置' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '交换位置 · 0' })).toBeTruthy()
   })
 
   it('adjusts the same planning duration before and during the frozen phase', () => {

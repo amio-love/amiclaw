@@ -11,7 +11,7 @@ export interface ShadowChaseVoiceContext {
   version: 1
   phase: 'planning' | 'running'
   strategy: CompanionIntent
-  allowedStrategies: ['follow', 'split', 'decoy']
+  allowedStrategies: ['support', 'scout', 'anchor']
   map: { id: string; width: number; height: number; walls: Coordinate[] }
   objectives: Array<{ id: string; position: Coordinate }>
   collectedObjectiveIds: string[]
@@ -25,17 +25,18 @@ export const SHADOW_CHASE_VOICE_MANUAL: GameVoiceManualData = {
     [SHADOW_CHASE_RULES_SECTION]: {
       goal: 'Collect all three light cores, survive until the moon gate opens, and exit together.',
       authority:
-        'The deterministic engine owns movement, collision, pursuit, rescue, cooldowns, and outcomes.',
+        'The deterministic engine owns movement, collision, pursuit, rescue, swap charges, and outcomes.',
       pursuerRule: PURSUER_RULE_COPY,
       pursuerContract: PURSUER_RULE_CONTRACT,
       strategies: {
-        follow: 'Stay near the player and prioritize rescue and joint exit.',
-        split: 'Take a separate objective route while deterministic safety rules remain active.',
-        decoy:
-          'Move the deterministic companion toward a visible lane where it can become the nearer free shadow. The command itself gives the pursuer no knowledge.',
+        support: 'Stay near the player to shorten rescue routes, while avoiding pursuer contact.',
+        scout:
+          'Move near the next light core without collecting it so the player can plan a route.',
+        anchor:
+          'Move far from the player to create a strong swap destination at the cost of rescue time.',
       },
       voiceCommands:
-        'Only an explicit final player utterance may request follow, split, or decoy. Assistant prose is informational.',
+        'Only an explicit final player utterance may request support, scout, or anchor. Assistant prose is informational.',
     },
   },
 }
@@ -50,7 +51,7 @@ export function buildShadowChaseVoiceContext(
     version: 1,
     phase,
     strategy,
-    allowedStrategies: ['follow', 'split', 'decoy'],
+    allowedStrategies: ['support', 'scout', 'anchor'],
     map: {
       id: map.id,
       width: map.width,

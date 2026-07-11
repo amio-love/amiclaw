@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { CompanionIntent } from '../engine/types'
 import { useShadowChaseVoice, type ShadowVoiceSource } from './useShadowChaseVoice'
 
 function VoiceHarness({
@@ -8,7 +9,7 @@ function VoiceHarness({
   onStrategy,
 }: {
   source: ShadowVoiceSource
-  onStrategy(intent: 'follow' | 'split' | 'decoy'): void
+  onStrategy(intent: CompanionIntent): void
 }) {
   useShadowChaseVoice(source, onStrategy)
   return null
@@ -19,13 +20,13 @@ describe('Shadow voice authority seam', () => {
     const onStrategy = vi.fn()
     const source: ShadowVoiceSource = {
       status: 'listening',
-      playerTranscript: '分头行动',
-      companionText: '我建议分头行动',
-      finalPlayerUtterance: { sequence: 7, text: '分头行动' },
+      playerTranscript: '去光核探路',
+      companionText: '我建议去光核探路',
+      finalPlayerUtterance: { sequence: 7, text: '去光核探路' },
     }
     const view = render(<VoiceHarness source={source} onStrategy={onStrategy} />)
     expect(onStrategy).toHaveBeenCalledTimes(1)
-    expect(onStrategy).toHaveBeenCalledWith('split')
+    expect(onStrategy).toHaveBeenCalledWith('scout')
     view.rerender(<VoiceHarness source={{ ...source }} onStrategy={onStrategy} />)
     expect(onStrategy).toHaveBeenCalledTimes(1)
   })
@@ -37,7 +38,7 @@ describe('Shadow voice authority seam', () => {
         source={{
           status: 'speaking',
           playerTranscript: '',
-          companionText: '我建议去诱敌',
+          companionText: '我建议去远处架点',
         }}
         onStrategy={onStrategy}
       />
