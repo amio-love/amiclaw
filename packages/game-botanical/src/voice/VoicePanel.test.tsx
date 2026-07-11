@@ -1,19 +1,23 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { GameState, ManualData } from '@amiclaw/platform-ai/contract'
-import type { UseVoiceSessionResult } from './useVoiceSession'
+import type {
+  GameVoiceManualData,
+  GameVoiceState,
+  UseGameVoiceSessionResult,
+} from '@shared/voice/use-game-voice-session'
 import VoicePanel from './VoicePanel'
 
-// Mock the hook so the panel can be driven through every status / phase without a
-// real WebSocket, mic, or AudioContext (those are the browser-only play-green).
-vi.mock('./useVoiceSession', () => ({ useVoiceSession: vi.fn() }))
-import { useVoiceSession } from './useVoiceSession'
-const mockHook = vi.mocked(useVoiceSession)
+// Mock the shared game-voice hook so the panel can be driven through every status
+// / phase without a real WebSocket, mic, or AudioContext (browser-only play-green).
+vi.mock('@shared/voice/use-game-voice-session', () => ({ useGameVoiceSession: vi.fn() }))
+import { useGameVoiceSession } from '@shared/voice/use-game-voice-session'
+const mockHook = vi.mocked(useGameVoiceSession)
 
 const endSession = vi.fn()
 const sendText = vi.fn()
+const openSession = vi.fn()
 
-function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessionResult {
+function hookState(partial: Partial<UseGameVoiceSessionResult> = {}): UseGameVoiceSessionResult {
   return {
     status: 'ready',
     conversationPhase: 'listening',
@@ -22,29 +26,48 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
     playerTranscript: '',
     isAiSpeaking: false,
     error: null,
+    errorCode: null,
     summary: null,
-    endSession,
+    openSession,
+    closeSession: vi.fn(),
+    updateGameState: vi.fn(),
     sendText,
+    endSession,
+    requestClosing: vi.fn().mockResolvedValue(undefined),
     ...partial,
   }
 }
 
-const manualData: ManualData = { version: '1.1.0', sections: { objective: { lines: [] } } }
-const gameState: GameState = { relevantSections: ['objective'] }
+const manualData: GameVoiceManualData = { version: '1.1.0', sections: { objective: { lines: [] } } }
+const gameState: GameVoiceState = { relevantSections: ['objective'] }
 
-function renderPanel(partial: Partial<UseVoiceSessionResult> = {}) {
+function renderPanel(partial: Partial<UseGameVoiceSessionResult> = {}) {
   mockHook.mockReturnValue(hookState(partial))
-  return render(<VoicePanel manualData={manualData} gameState={gameState} />)
+  return render(<VoicePanel manualData={manualData} gameState={gameState} gameId="demo-mock" />)
 }
 
 beforeEach(() => {
   mockHook.mockReset()
   endSession.mockReset()
   sendText.mockReset()
+  openSession.mockReset()
+})
+
+describe('VoicePanel — start gate (mic gesture)', () => {
+  it('shows the 开始对话 button while idle and opens the session on click (user gesture)', () => {
+    renderPanel({ status: 'idle' })
+    fireEvent.click(screen.getByRole('button', { name: '开始对话' }))
+    expect(openSession).toHaveBeenCalledOnce()
+  })
+
+  it('does not show the live 3-state UI before the session starts', () => {
+    renderPanel({ status: 'idle' })
+    expect(screen.queryByText('聆听中')).not.toBeInTheDocument()
+  })
 })
 
 describe('VoicePanel — status + 3-state phase', () => {
-  it('shows the connecting status before live', () => {
+  it('shows the connecting status after start, before live', () => {
     renderPanel({ status: 'connecting' })
     expect(screen.getByText('连接中')).toBeInTheDocument()
   })

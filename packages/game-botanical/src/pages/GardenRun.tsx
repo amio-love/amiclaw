@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Level } from '@amiclaw/creation'
-import type { GameState } from '@amiclaw/platform-ai/contract'
+import type { GameVoiceState } from '@shared/voice/use-game-voice-session'
 import styles from './GamePage.module.css'
 import { botanicalGameType } from '@/data/load'
 import { useGardenSession, type CareOutcome } from '@/game/useGardenSession'
@@ -16,9 +16,9 @@ import Stopwatch from '@/components/Stopwatch'
 import GardenGrid from '@/components/GardenGrid'
 import VerbCards from '@/components/VerbCards'
 import ResultsOverlay from '@/components/ResultsOverlay'
-import VoicePanel from '@/voice/VoicePanel'
+import BotanistChannel from '@/voice/BotanistChannel'
 import { buildBotanicalManualData } from '@/voice/manual-data'
-import { gardenStateToRelevantSections } from '@/voice/relevant-sections'
+import { buildBotanicalVoiceState } from '@/voice/botanical-voice-context'
 
 const GOAL_TEXT = '目标 · 所有存活植株≥稳定，且至少一株开花'
 
@@ -79,15 +79,19 @@ export function GardenRun({ level, gameId, e2e = false }: GardenRunProps) {
   // joined key is stable across frames. Memoize gameState on that key so the
   // memoized VoicePanel (and its live session) re-render / steer only on a real
   // change; the key round-trips through split(',') since section ids carry no comma.
-  const sectionsKey = gardenStateToRelevantSections({
+  const sectionsKey = buildBotanicalVoiceState({
     plants: session.plants.map((p) => ({ id: p.id, species: p.species, health: p.health })),
     focusedId: selectedId,
     availableSectionIds,
-  }).join(',')
-  const gameState = useMemo<GameState>(
+  }).relevantSections.join(',')
+  const gameState = useMemo<GameVoiceState>(
     () => ({ relevantSections: sectionsKey === '' ? [] : sectionsKey.split(',') }),
     [sectionsKey]
   )
+  // The account companion is the botanist in production (`botanical-garden`); a
+  // local dev / demo session uses the credential-free `demo-mock` mock provider.
+  const voiceGameId = gameId ?? (import.meta.env.DEV ? 'demo-mock' : 'botanical-garden')
+  const manualTo = `/manual?level=${level.metadata.id}`
 
   const handleSelect = (elementId: string) => {
     setSelectedId(elementId)
@@ -156,7 +160,14 @@ export function GardenRun({ level, gameId, e2e = false }: GardenRunProps) {
         >
           {voiceOpen ? '关闭语音' : '呼叫植物学家'}
         </button>
-        {voiceOpen && <VoicePanel manualData={manualData} gameState={gameState} gameId={gameId} />}
+        {voiceOpen && (
+          <BotanistChannel
+            manualData={manualData}
+            gameState={gameState}
+            gameId={voiceGameId}
+            manualTo={manualTo}
+          />
+        )}
       </div>
 
       <ResultsOverlay

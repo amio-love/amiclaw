@@ -138,6 +138,26 @@ describe('resolveConfig — shadow chase voice', () => {
   })
 })
 
+describe('resolveConfig — botanical-garden', () => {
+  it('resolves the companion-botanist persona: a manual-grounded botanist on the verified voice stack', () => {
+    const resolved = resolveConfig('botanical-garden')
+    expect(resolved.gameId).toBe('botanical-garden')
+    expect(resolved.llm).toEqual({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+    expect(resolved.stt).toEqual({ provider: 'volcengine', model: 'bigmodel' })
+    expect(resolved.tts).toEqual({ provider: 'volcengine', model: '' })
+    expect(resolved.systemPromptConfig.role).toContain('植物园养护')
+    expect(resolved.systemPromptConfig.role).toContain('植物学家')
+    const rules = resolved.systemPromptConfig.ruleTemplate.join('\n')
+    // Grounded strictly on the injected manual (the manual is ground truth)...
+    expect(rules).toContain('养护手册')
+    // ...and it frames the botanist duty (one action, warn about irreversibility)
+    // rather than restating specific care rules (which live in the manual).
+    expect(rules).toContain('一次只')
+    expect(rules).toContain('不可逆')
+    expect(resolved.systemPromptConfig.ruleTemplate.length).toBeGreaterThanOrEqual(5)
+  })
+})
+
 describe('resolveConfig — miss', () => {
   it('throws an explicit error on an unregistered gameId (no silent fallback)', () => {
     expect(() => resolveConfig('not-a-real-game')).toThrowError(

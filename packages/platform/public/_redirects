@@ -36,5 +36,15 @@
 # Both rules precede the catch-all so the more specific /bombsquad/ prefix wins.
 /bombsquad/assets/* /bombsquad/assets/:splat 200
 /bombsquad/* /bombsquad/ 200
+# Botanical Garden is a separate sub-app (BrowserRouter under /botanical/, base
+# /botanical/, deep route /botanical/manual), so it needs the same two rules as
+# BombSquad — asset pass-through FIRST (or the broad 200 rewrite shadows the real
+# /botanical/assets/* bundle and serves index HTML in its place), then the SPA
+# fallback to the /botanical/ directory (NOT /botanical/index.html, which would
+# 308-bounce to the platform shell). Oracle / Shadow Chase are HashRouter and
+# need no such guard (their deep routes live in the #-fragment, never hitting the
+# server), which is why only BombSquad and Botanical appear here.
+/botanical/assets/* /botanical/assets/:splat 200
+/botanical/* /botanical/ 200
 # Everything else falls back to the platform shell (BrowserRouter at the root).
 /* /index.html 200

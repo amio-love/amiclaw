@@ -1,20 +1,7 @@
 /* Botanical Garden — global base. Dark-only by product mandate; no light mode.
-   Garden-tinted surface tokens layered on top of the shared @amiclaw/ui tokens
-   so the player app reads as a living greenhouse, not the platform chrome. */
-:root {
-  --bg-garden: #0b120d;
-  --bg-garden-2: #0e1712;
-  --garden-line: #24382a;
-  --garden-ink: #dfe9df;
-  --garden-ink-dim: #8ba393;
-  --garden-accent: #7fd4a3;
-  --garden-warn: #e8a13c;
-  --health-dead: #6b6b6b;
-  --health-critical: #e5565b;
-  --health-wilting: #c7a24b;
-  --health-stable: #5fb267;
-  --health-thriving: #8fe08a;
-}
+   Design tokens live in ./tokens.css (the registered garden accent layer); the
+   Atlas cosmic shell (gradient stops, text, borders, semantics) is inherited
+   from @amiclaw/ui, imported before this file. */
 
 * {
   box-sizing: border-box;
@@ -30,8 +17,18 @@ body {
   min-height: 100dvh;
   color: var(--garden-ink);
   font-family: var(--font-body, 'Noto Sans SC', system-ui, sans-serif);
+  /* Atlas four-stop cosmic gradient (the platform's "every page" background)
+     with a bounded garden-green wash layered at the top — a registered-accent
+     tint, not a replacement of the platform background. */
   background:
-    radial-gradient(120% 90% at 50% 0%, rgba(16, 32, 23, 0) 0%, #0b120d 70%), var(--bg-garden);
+    radial-gradient(120% 80% at 50% 0%, var(--garden-accent-soft) 0%, transparent 55%),
+    linear-gradient(
+      180deg,
+      var(--bg-grad-start) 0%,
+      var(--bg-grad-mid-1) 30%,
+      var(--bg-grad-mid-2) 68%,
+      var(--bg-grad-end) 100%
+    );
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

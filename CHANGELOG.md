@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Botanical Garden joins Arcade** - A new co-op care game: you tend a night
+garden of five species while plants decay in real time, and your AI companion
+becomes the botanist who holds the care manual. Signed in, your existing
+companion (same identity, voice, and memory) advises over the platform voice
+channel, with a typed-text fallback for quiet environments; anonymous players
+get the full care manual to consult solo or share with their own AI. Two
+levels ship: a gentle rescue tutorial and a five-plant greenhouse shift with
+shade-lockout traps and a companion-planting bonus. Win by bringing every
+plant to stable with at least one in bloom; lose a plant to neglect and the
+run ends.
+
 **Botanical Garden becomes a playable game on its own probe branch** - Internal
 change. The creation engine's botanical-garden case grows from a dev-harness
 data table into a real player-facing game (`packages/game-botanical`): a night

@@ -962,3 +962,48 @@ describe('shared game voice session — Shadow Chase surface', () => {
     expect(secondSocket.readyState).toBe(MockWebSocket.OPEN)
   })
 })
+
+describe('useGameVoiceSession — text fallback (sendText)', () => {
+  // `sendText` is a shared-hook capability (the BombSquad adapter narrows it away),
+  // so drive the shared hook directly — mirroring the "Shadow Chase surface" block.
+  async function readyShared() {
+    const rendered = renderHook(() =>
+      useGameVoiceSession({
+        gameRunId: 'run-voice',
+        manualData: manualData(),
+        gameState: gameState(),
+      })
+    )
+    const ws = lastSocket()
+    act(() => ws.fireOpen())
+    await act(async () => {
+      ws.fireMessage({ type: 'created', sessionId: 'sess-1' })
+    })
+    await waitFor(() => captureProcessor())
+    return { ...rendered, ws }
+  }
+
+  it('sends a typed question as a text-turn on the live socket', async () => {
+    const { result, ws } = await readyShared()
+    act(() => result.current.sendText('先给兰花遮一次光吗'))
+    expect(ws.controlMessages()).toContainEqual({ type: 'text-turn', text: '先给兰花遮一次光吗' })
+  })
+
+  it('trims/ignores empty text and caps over-long text at the server ceiling (2000)', async () => {
+    const { result, ws } = await readyShared()
+    act(() => result.current.sendText('   '))
+    expect(ws.controlMessages().some((m) => m.type === 'text-turn')).toBe(false)
+    act(() => result.current.sendText('兰'.repeat(5000)))
+    const sent = ws.controlMessages().find((m) => m.type === 'text-turn')
+    expect((sent?.text as string).length).toBe(2000)
+  })
+
+  it('does not send a text-turn before the session is live', () => {
+    const { result } = renderHook(() =>
+      useGameVoiceSession({ manualData: manualData(), gameState: gameState() })
+    )
+    const ws = lastSocket() // connecting: socket not OPEN yet
+    act(() => result.current.sendText('在吗'))
+    expect(ws.controlMessages().some((m) => m.type === 'text-turn')).toBe(false)
+  })
+})

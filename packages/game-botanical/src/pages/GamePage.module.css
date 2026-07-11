@@ -29,7 +29,7 @@
 .levelChip[aria-current='true'] {
   border-color: var(--garden-accent);
   color: var(--garden-accent);
-  background: rgba(127, 212, 163, 0.08);
+  background: rgba(var(--garden-accent-rgb), 0.08);
 }
 
 .voice {
