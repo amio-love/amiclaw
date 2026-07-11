@@ -30,9 +30,9 @@ export function StartScreen(props: StartScreenProps) {
             value={props.difficulty}
             onChange={(event) => props.onDifficultyChange(event.target.value as Difficulty)}
           >
-            <option value="relaxed">轻松</option>
-            <option value="standard">标准</option>
-            <option value="intense">紧张</option>
+            <option value="relaxed">轻松 · 每 2 秒多走 1 格</option>
+            <option value="standard">标准 · 每 1.5 秒多走 1 格</option>
+            <option value="intense">紧张 · 每 1 秒多走 1 格</option>
           </select>
         </label>
         <label>

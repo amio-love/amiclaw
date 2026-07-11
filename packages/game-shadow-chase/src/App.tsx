@@ -31,8 +31,8 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
   const [planning] = useState(() => createPlanningController())
   const planningState = usePlanningController(planning)
   const state = useGameStore(store)
-  const [pendingStrategy, setPendingStrategy] = useState<CompanionIntent>('follow')
-  const pendingStrategyRef = useRef<CompanionIntent>('follow')
+  const [pendingStrategy, setPendingStrategy] = useState<CompanionIntent>('support')
+  const pendingStrategyRef = useRef<CompanionIntent>('support')
   const settledRuns = useRef(new Set<string>())
 
   const selectStrategy = useCallback(
@@ -52,8 +52,8 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
 
   const beginPlanning = useCallback(
     (runStore: GameStore) => {
-      pendingStrategyRef.current = 'follow'
-      setPendingStrategy('follow')
+      pendingStrategyRef.current = 'support'
+      setPendingStrategy('support')
       setSessionPhase('planning')
       planning.begin(() => {
         runStore.dispatch({

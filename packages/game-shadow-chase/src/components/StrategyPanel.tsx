@@ -2,9 +2,9 @@ import type { CompanionIntent, SimulationState } from '../engine/types'
 import type { ShadowVoiceView } from '../voice/useShadowChaseVoice'
 
 const STRATEGIES: Array<{ intent: CompanionIntent; label: string; effect: string }> = [
-  { intent: 'follow', label: '跟随', effect: '伙伴保持在你附近，优先协助救援和共同撤离。' },
-  { intent: 'split', label: '分头', effect: '伙伴选择另一条路线收集光核，扩大行动范围。' },
-  { intent: 'decoy', label: '诱敌', effect: '伙伴主动吸引追兵，为你腾出移动空间。' },
+  { intent: 'support', label: '接应', effect: '伙伴保持在你附近，缩短被捕后的救援路线。' },
+  { intent: 'scout', label: '探路', effect: '伙伴前往下一枚光核附近，为你的收集路线预先站位。' },
+  { intent: 'anchor', label: '架点', effect: '伙伴远离你建立换位落点，但救援赶路更久。' },
 ]
 
 const VOICE_STATUS: Record<ShadowVoiceView['status'], string> = {
@@ -43,10 +43,9 @@ export function StrategyPanel({
   const recommendation = state.activeModelLease
     ? strategy(state.activeModelLease.intent).label
     : '确定性伙伴会根据追兵与救援状态自行判断'
-  const swapTicks = Math.max(0, state.cooldowns.swapReadyTick - state.tick)
   const swapDisabled =
     planning ||
-    swapTicks > 0 ||
+    state.swapCharges === 0 ||
     state.actors.player.status === 'captured' ||
     state.actors.companion.status === 'captured'
 
@@ -87,14 +86,14 @@ export function StrategyPanel({
         ) : null}
         <p>
           <strong>你说的话：</strong>
-          {voice.playerTranscript || '可使用“跟着我”“分头行动”“去诱敌”明确下令。'}
+          {voice.playerTranscript || '可使用“过来接应”“去光核探路”“去远处架点”明确下令。'}
         </p>
         <p>
           <strong>伙伴字幕：</strong>
           {voice.companionText || '语音不可用时，策略按钮仍然完整可用。'}
         </p>
         {voice.commandResult?.kind === 'clarify' && (
-          <p className="voice-clarify">请只说一种明确策略：跟随、分头或诱敌。</p>
+          <p className="voice-clarify">请只说一种明确策略：接应、探路或架点。</p>
         )}
         {voice.statusMessage && <p className="voice-status-message">{voice.statusMessage}</p>}
       </div>
@@ -105,16 +104,16 @@ export function StrategyPanel({
         aria-describedby="swap-reason"
         onClick={onSwap}
       >
-        交换位置
+        交换位置 · {state.swapCharges}
       </button>
       <span id="swap-reason" className="control-reason">
         {planning
           ? '追逃开始后才能交换。'
-          : swapTicks > 0
-            ? `交换冷却还剩 ${(swapTicks / 4).toFixed(1)} 秒。`
+          : state.swapCharges === 0
+            ? '每收集一枚光核获得一次交换。'
             : swapDisabled
               ? '双方都未被捕获时才能交换。'
-              : '现在可以交换位置。'}
+              : `现在可交换 ${state.swapCharges} 次。`}
       </span>
     </section>
   )

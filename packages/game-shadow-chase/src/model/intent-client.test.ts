@@ -11,13 +11,13 @@ function request(epoch: number): IntentRequest {
     decisionEpoch: epoch,
     observedTick: epoch,
     difficulty: 'standard',
-    command: 'follow',
+    command: 'support',
     actors: [],
     pursuer: { x: 1, y: 1 },
     objectives: [],
     exit: { x: 1, y: 1 },
-    cooldowns: { swapReadyTick: 0 },
-    allowedIntents: ['follow', 'split', 'decoy'],
+    swapCharges: 0,
+    allowedIntents: ['support', 'scout', 'anchor'],
   }
 }
 
@@ -56,7 +56,7 @@ describe('one-in-flight intent coordinator', () => {
       requestId: value.requestId,
       runId: value.runId,
       decisionEpoch: 1,
-      proposal: { intent: 'follow' },
+      proposal: { intent: 'support' },
       leaseTicks: 8,
     })
     await Promise.resolve()

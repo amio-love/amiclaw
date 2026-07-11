@@ -5,24 +5,21 @@ import { nextStepOnShortestPath } from './pathfinding'
 import type { WalkableMap } from './rules'
 import type { Coordinate, ShadowActor, SimulationState } from './types'
 
-export type PursuerShadowId = ShadowActor['id']
+export type PursuerShadowId = 'player'
 export type PursuerDestination = PursuerShadowId | 'moon-gate'
 
 export interface PursuerObservation {
   readonly map: WalkableMap & { readonly moonGate: Coordinate }
   readonly pursuer: Coordinate
-  readonly shadows: readonly {
-    readonly id: PursuerShadowId
+  readonly player: {
     readonly position: Coordinate
     readonly status: ShadowActor['status']
-  }[]
-  readonly previousTarget: PursuerShadowId | null
+  }
 }
 
 export interface PursuerDecision {
   readonly visibleCandidates: readonly PursuerShadowId[]
   readonly destination: PursuerDestination
-  readonly targetMemory: PursuerShadowId | null
 }
 
 function immutableCoordinate(position: Coordinate): Coordinate {
@@ -49,48 +46,20 @@ export function buildPursuerObservation(state: SimulationState): PursuerObservat
   return Object.freeze({
     map: immutableObservationMap(map),
     pursuer: immutableCoordinate(state.actors.pursuer.position),
-    shadows: Object.freeze(
-      (['player', 'companion'] as const).map((id) =>
-        Object.freeze({
-          id,
-          position: immutableCoordinate(state.actors[id].position),
-          status: state.actors[id].status,
-        })
-      )
-    ),
-    previousTarget: state.actors.pursuer.target,
+    player: Object.freeze({
+      position: immutableCoordinate(state.actors.player.position),
+      status: state.actors.player.status,
+    }),
   })
 }
 
 export function selectPursuerDecision(observation: PursuerObservation): PursuerDecision {
-  const visibleCandidates = observation.shadows.filter(
-    (actor) =>
-      actor.status === 'free' &&
-      hasLineOfSight(observation.map, observation.pursuer, actor.position)
-  )
-  let destination: PursuerDestination = 'moon-gate'
-  let targetMemory = observation.previousTarget
-  if (visibleCandidates.length > 0) {
-    const distances = visibleCandidates.map((actor) => ({
-      actor,
-      // A visible actor shares an unobstructed row or column with the pursuer,
-      // so this direct segment is also the map's shortest walkable path.
-      distance:
-        Math.abs(observation.pursuer.x - actor.position.x) +
-        Math.abs(observation.pursuer.y - actor.position.y),
-    }))
-    const nearestDistance = Math.min(...distances.map((candidate) => candidate.distance))
-    const nearest = distances
-      .filter((candidate) => candidate.distance === nearestDistance)
-      .map((candidate) => candidate.actor.id)
-    destination =
-      targetMemory !== null && nearest.includes(targetMemory) ? targetMemory : nearest[0]
-    targetMemory = destination
-  }
+  const playerVisible =
+    observation.player.status === 'free' &&
+    hasLineOfSight(observation.map, observation.pursuer, observation.player.position)
   return Object.freeze({
-    visibleCandidates: Object.freeze(visibleCandidates.map((actor) => actor.id)),
-    destination,
-    targetMemory,
+    visibleCandidates: Object.freeze(playerVisible ? (['player'] as const) : []),
+    destination: playerVisible ? 'player' : 'moon-gate',
   })
 }
 
@@ -99,9 +68,7 @@ export function nextPursuerStep(
   decision: PursuerDecision
 ): Coordinate {
   const destinationPosition =
-    decision.destination === 'moon-gate'
-      ? observation.map.moonGate
-      : observation.shadows.find((actor) => actor.id === decision.destination)!.position
+    decision.destination === 'moon-gate' ? observation.map.moonGate : observation.player.position
   return (
     nextStepOnShortestPath(observation.map, observation.pursuer, destinationPosition) ??
     observation.pursuer
@@ -110,7 +77,7 @@ export function nextPursuerStep(
 
 function applyPursuerDecision(state: SimulationState, decision: PursuerDecision): void {
   state.actors.pursuer.destination = decision.destination
-  if (decision.targetMemory !== null) state.actors.pursuer.target = decision.targetMemory
+  state.actors.pursuer.target = 'player'
 }
 
 export function refreshPursuerDecision(state: SimulationState): PursuerDecision {
@@ -119,11 +86,24 @@ export function refreshPursuerDecision(state: SimulationState): PursuerDecision 
   return decision
 }
 
-export function pursuerNextStep(state: SimulationState, nextTick: number): Coordinate {
+export function pursuerStepPath(state: SimulationState, nextTick: number): readonly Coordinate[] {
   const observation = buildPursuerObservation(state)
   const decision = selectPursuerDecision(observation)
   applyPursuerDecision(state, decision)
-  return nextTick % DIFFICULTY_CONFIG[state.difficulty].pursuerCadence === 0
-    ? nextPursuerStep(observation, decision)
-    : state.actors.pursuer.position
+  const first = nextPursuerStep(observation, decision)
+  const path = [first]
+  const interval = DIFFICULTY_CONFIG[state.difficulty].pursuerBonusStepInterval
+  if (nextTick % interval === 0) {
+    const advancedObservation: PursuerObservation = Object.freeze({
+      ...observation,
+      pursuer: immutableCoordinate(first),
+    })
+    path.push(nextPursuerStep(advancedObservation, selectPursuerDecision(advancedObservation)))
+  }
+  return Object.freeze(path)
+}
+
+export function pursuerNextStep(state: SimulationState, nextTick: number): Coordinate {
+  const path = pursuerStepPath(state, nextTick)
+  return path[path.length - 1]
 }

@@ -29,7 +29,7 @@ export interface IntentRequest {
   pursuer: Coordinate
   objectives: Array<{ id: string; position: Coordinate; collected: boolean }>
   exit: Coordinate
-  cooldowns: { swapReadyTick: number }
+  swapCharges: number
   allowedIntents: CompanionIntent[]
 }
 
@@ -97,18 +97,18 @@ export function parseIntentResponse(text: string): IntentParseResult {
   }
   const proposal = value.proposal as Record<string, unknown>
   const intent = proposal.intent
-  if (!['follow', 'split', 'decoy'].includes(String(intent))) {
+  if (!['support', 'scout', 'anchor'].includes(String(intent))) {
     return { ok: false, reason: 'schema' }
   }
   const allowedKeys =
-    intent === 'split' ? ['intent', 'targetObjectiveId', 'bark'] : ['intent', 'bark']
+    intent === 'scout' ? ['intent', 'targetObjectiveId', 'bark'] : ['intent', 'bark']
   if (Object.keys(proposal).some((key) => !allowedKeys.includes(key))) {
     return { ok: false, reason: 'schema' }
   }
-  if (intent === 'split' && typeof proposal.targetObjectiveId !== 'string') {
+  if (intent === 'scout' && typeof proposal.targetObjectiveId !== 'string') {
     return { ok: false, reason: 'schema' }
   }
-  if ((intent === 'follow' || intent === 'decoy') && proposal.targetObjectiveId !== undefined) {
+  if ((intent === 'support' || intent === 'anchor') && proposal.targetObjectiveId !== undefined) {
     return { ok: false, reason: 'schema' }
   }
   let bark: string | undefined
@@ -165,7 +165,7 @@ export function buildIntentRequest(state: SimulationState): IntentRequest {
       collected: objective.collected,
     })),
     exit: { ...state.exit.position },
-    cooldowns: { ...state.cooldowns },
-    allowedIntents: ['follow', 'split', 'decoy'],
+    swapCharges: state.swapCharges,
+    allowedIntents: ['support', 'scout', 'anchor'],
   }
 }

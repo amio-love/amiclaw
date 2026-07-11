@@ -45,8 +45,8 @@ describe('seeded engine properties', () => {
         expect(
           Math.abs(previousPursuer.x - state.actors.pursuer.position.x) +
             Math.abs(previousPursuer.y - state.actors.pursuer.position.y)
-        ).toBeLessThanOrEqual(1)
-        expect(['player', 'companion', 'moon-gate']).toContain(state.actors.pursuer.destination)
+        ).toBeLessThanOrEqual(2)
+        expect(['player', 'moon-gate']).toContain(state.actors.pursuer.destination)
         if (state.actors.pursuer.destination !== 'moon-gate') {
           const destination = state.actors[state.actors.pursuer.destination]
           expect(destination.status).toBe('free')

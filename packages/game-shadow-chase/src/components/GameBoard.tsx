@@ -64,12 +64,7 @@ export function GameBoard({
     displayedDestination === 'moon-gate'
       ? state.exit.position
       : state.actors[displayedDestination].position
-  const destinationName =
-    displayedDestination === 'moon-gate'
-      ? '月门'
-      : displayedDestination === 'player'
-        ? '你'
-        : 'AI 伙伴'
+  const destinationName = displayedDestination === 'moon-gate' ? '月门' : '你'
   const destinationDescriptionId = `pursuer-destination-${state.runId}`
   const arrowheadId = `pursuer-arrowhead-${state.runId}`
   const gesture = useRef<{ pointerId: number; start: Coordinate } | null>(null)

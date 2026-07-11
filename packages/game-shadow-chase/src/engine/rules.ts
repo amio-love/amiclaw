@@ -84,8 +84,8 @@ export function createRunningState(
       collected: false,
     })),
     exit: { position: { ...map.exit }, enabled: false },
-    command: { intent: 'follow' },
-    cooldowns: { swapReadyTick: 0 },
+    command: { intent: 'support' },
+    swapCharges: 0,
     decisionEpoch: 0,
     eventLog: [],
   }

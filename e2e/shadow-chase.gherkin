@@ -22,8 +22,8 @@ Feature: Dual Shadow Chase deterministic solo play
     And Shadow Chase exposes no multiplayer affordance
     And Shadow Chase pursuit is active when the chase starts
 
-    When I click "诱敌"
-    Then the Shadow Chase command "诱敌" is active
+    When I click "架点"
+    Then the Shadow Chase command "架点" is active
 
   # Source: shadow-chase-mobile-controls
   @playwright

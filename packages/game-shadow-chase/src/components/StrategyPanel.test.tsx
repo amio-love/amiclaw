@@ -19,7 +19,7 @@ function panel(activeVoice: ShadowVoiceView) {
   return (
     <StrategyPanel
       state={createRunningState('courtyard', 'standard', 7)}
-      activeIntent="follow"
+      activeIntent="support"
       planning={false}
       voice={activeVoice}
       onStrategy={vi.fn()}
@@ -39,7 +39,7 @@ describe('StrategyPanel voice controls', () => {
       expect(button.className).toContain('voice-control')
       fireEvent.click(button)
       expect(stop).toHaveBeenCalledTimes(1)
-      for (const label of ['跟随', '分头', '诱敌']) {
+      for (const label of ['接应', '探路', '架点']) {
         expect(screen.getByRole('button', { name: label })).toBeTruthy()
       }
     }

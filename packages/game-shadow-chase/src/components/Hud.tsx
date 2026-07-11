@@ -13,11 +13,14 @@ export function Hud({ state }: { state: SimulationState }) {
   const captured = (['player', 'companion'] as const)
     .map((id) => ({ id, ticks: rescueTicksRemaining(state.actors[id], state.tick) }))
     .find((entry) => entry.ticks !== null)
+  const recentRescue = [...state.eventLog]
+    .reverse()
+    .find((event) => event.type === 'rescue' && state.tick - event.tick <= 8)
   const gateStatus = state.exit.enabled
     ? '已开启'
     : allCoresCollected
       ? `${formatTime(Math.max(0, MIN_RUN_TICKS - state.tick))} 后开启`
-      : '还需收集 3 枚光核'
+      : `还需收集 ${state.objectives.length - collected} 枚光核`
   return (
     <header className="hud" aria-label="追逃状态">
       <div>
@@ -33,12 +36,20 @@ export function Hud({ state }: { state: SimulationState }) {
         <span className="hud-label">月门</span>
         <strong className="hud-value">{gateStatus}</strong>
       </div>
+      <div>
+        <span className="hud-label">换位</span>
+        <strong className="hud-value">{state.swapCharges} 次</strong>
+      </div>
       <div className={captured ? 'rescue-alert' : ''}>
         <span className="hud-label">救援</span>
         <strong className="hud-value">
           {captured
-            ? `${captured.id === 'player' ? '你' : '伙伴'} · ${((captured.ticks ?? 0) * TICK_MS) / 1000} 秒`
-            : '双方安全'}
+            ? `${recentRescue?.actorId === captured.id ? (captured.id === 'player' ? '你再次被捕' : '伙伴再次被捕') : captured.id === 'player' ? '你' : '伙伴'} · ${((captured.ticks ?? 0) * TICK_MS) / 1000} 秒`
+            : recentRescue
+              ? recentRescue.actorId === 'player'
+                ? '伙伴刚救下你'
+                : '你刚救下伙伴'
+              : '双方安全'}
         </strong>
       </div>
     </header>

@@ -6,7 +6,7 @@ function causalBeat(state: SimulationState): string {
     .find((candidate) => ['rescue', 'swap', 'core-collected'].includes(candidate.type))
   if (!event) return '即使模型没有连接，确定性伙伴也始终在行动。'
   if (event.type === 'rescue') return '这次救援让两道影子都留在了追逃中。'
-  if (event.type === 'swap') return '交换位置改变了追兵施压的目标。'
+  if (event.type === 'swap') return '有限换位把你送到了伙伴预先建立的落点。'
   return '两条路线配合收集了最后一枚光核。'
 }
 

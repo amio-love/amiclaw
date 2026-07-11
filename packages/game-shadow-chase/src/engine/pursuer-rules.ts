@@ -1,20 +1,18 @@
 export const PURSUER_RULE_COPY =
-  '追兵能看见整条没有墙遮挡的横竖直线：它追最近且未被捕获的可见影子，距离相同时不换目标；谁都看不见就返回月门。同格或迎面交叉会被捕获。诱敌只改变伙伴走位，难度只改变追兵速度和救援时间。'
+  '追兵只锁定你：横竖直线没有墙遮挡时追向你，看不见你就返回月门。它始终比你和伙伴略快；接触或迎面交叉仍会捕获任何一方。每收集一枚光核获得一次换位。'
 
 export const PURSUER_RULE_CONTRACT = Object.freeze({
-  eligibility: 'free-visible-shadows',
+  eligibility: 'free-visible-player-only',
   vision: Object.freeze({
     alignment: 'same-row-or-column',
     blocker: 'wall-between',
     range: 'full-map',
   }),
   selection: Object.freeze({
-    metric: 'shortest-path-distance',
-    tie: 'retain-last-eligible-actor-target',
-    initialFallback: 'player',
+    target: 'player-only',
   }),
   noVisibleDestination: 'moon-gate',
   capture: Object.freeze(['same-cell', 'opposite-edge-crossing']),
-  difficultyEffects: Object.freeze(['movement-cadence', 'rescue-time']),
-  decoyAuthority: 'companion-movement-only',
+  difficultyEffects: Object.freeze(['bonus-step-interval', 'rescue-time']),
+  swapEconomy: 'one-charge-per-collected-core',
 })

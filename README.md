@@ -33,25 +33,27 @@ solo real-time grid chase for one human and the existing AI companion.
 - Inspect the complete frozen map during a 20-second tactical-planning phase;
   adjust it from 5 to 60 seconds in five-second steps or start early
 - Collect three cores and reach the exit while a pursuer searches the map
-- Plan against one public pursuer rule: unobstructed row/column sight, nearest
-  visible uncaptured shadow, stable equal-distance ties, and moon-gate return
-  when neither shadow is visible
-- Command the companion to follow, split, or decoy; swap positions when ready
+- Plan against one public pursuer rule: unobstructed row/column sight, the
+  player as the only pursuit target, and moon-gate return when the player is hidden
+- Command the companion to support, scout the next core, or establish a distant anchor
+- Earn one position swap for every collected core
 - Rescue a captured shadow before its deadline
 - Queue rapid movement inputs FIFO, tap a persistent destination path, and see
   why a blocked move was rejected
 - Optionally discuss strategy by voice with the authenticated account companion;
-  only an explicit final player command can select follow, split, or decoy
+  only an explicit final player command can select support, scout, or anchor
 - Keep playing through anonymous, microphone, provider, model, or network failure
 
 Voice reuses the platform's existing companion identity, voice, provider adapters,
 and memory boundary. It is opt-in and bounded; neither voice nor model work can
 pause planning or frame-level play. The deterministic engine owns movement and
 outcomes, and the Chinese strategy buttons remain authoritative fallback controls.
-The pursuer cannot read those strategy buttons or model output. Decoy changes
-only companion movement and succeeds when that movement makes the companion the
-nearer visible shadow. Difficulty changes pursuer cadence and rescue time, not
-visibility or target selection.
+The pursuer cannot read those strategy buttons, model output, or the companion's
+position when selecting a destination. It moves every tick and takes a public,
+difficulty-dependent bonus step often enough to stay slightly faster than both
+shadows. The companion is never targeted, but same-cell contact and opposite-edge
+crossing still capture it. Difficulty changes the bonus-step interval and rescue
+time, not visibility or target selection.
 
 On the Arcade homepage, BombSquad remains the sole featured game. Dual Shadow
 Chase and the Yijing Oracle appear together in the playable peer grid. Arcade

@@ -54,7 +54,7 @@ describe('assembleLlmContext — manual subset selection by game state', () => {
       manualData,
       gameState: {
         relevantSections: [],
-        publicContext: { version: 1, phase: 'planning', strategy: 'follow' },
+        publicContext: { version: 1, phase: 'planning', strategy: 'support' },
       },
     })
     expect(messages[0].content).toContain(PUBLIC_GAME_CONTEXT_FENCE_OPEN)

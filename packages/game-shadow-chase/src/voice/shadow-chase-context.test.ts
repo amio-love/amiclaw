@@ -18,7 +18,7 @@ describe('Shadow Chase voice context', () => {
     state.objectives[0].collected = true
     state.actors.companion.status = 'captured'
 
-    const context = buildShadowChaseVoiceContext(state, 'planning', 'split')
+    const context = buildShadowChaseVoiceContext(state, 'planning', 'scout')
 
     expect(Object.keys(context)).toEqual([
       'version',
@@ -34,8 +34,8 @@ describe('Shadow Chase voice context', () => {
     expect(context).toMatchObject({
       version: 1,
       phase: 'planning',
-      strategy: 'split',
-      allowedStrategies: ['follow', 'split', 'decoy'],
+      strategy: 'scout',
+      allowedStrategies: ['support', 'scout', 'anchor'],
       map: { id: 'courtyard', width: 7, height: 7 },
       collectedObjectiveIds: ['core-aurora'],
       actors: [
@@ -62,28 +62,26 @@ describe('Shadow Chase voice context', () => {
       ).pursuerContract
     ).toEqual(PURSUER_RULE_CONTRACT)
     expect(PURSUER_RULE_CONTRACT).toEqual({
-      eligibility: 'free-visible-shadows',
+      eligibility: 'free-visible-player-only',
       vision: {
         alignment: 'same-row-or-column',
         blocker: 'wall-between',
         range: 'full-map',
       },
       selection: {
-        metric: 'shortest-path-distance',
-        tie: 'retain-last-eligible-actor-target',
-        initialFallback: 'player',
+        target: 'player-only',
       },
       noVisibleDestination: 'moon-gate',
       capture: ['same-cell', 'opposite-edge-crossing'],
-      difficultyEffects: ['movement-cadence', 'rescue-time'],
-      decoyAuthority: 'companion-movement-only',
+      difficultyEffects: ['bonus-step-interval', 'rescue-time'],
+      swapEconomy: 'one-charge-per-collected-core',
     })
   })
 
   it('ignores frame-only movement while tracking material game changes', () => {
     const base = createRunningState('crossroads', 'standard', 11)
     const baseline = shadowChaseVoiceStateSignature(
-      buildShadowChaseVoiceState(base, 'planning', 'follow')
+      buildShadowChaseVoiceState(base, 'planning', 'support')
     )
     const frameOnly = {
       ...base,
@@ -97,13 +95,13 @@ describe('Shadow Chase voice context', () => {
     }
 
     expect(
-      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(frameOnly, 'planning', 'follow'))
+      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(frameOnly, 'planning', 'support'))
     ).toBe(baseline)
     expect(
-      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(base, 'running', 'follow'))
+      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(base, 'running', 'support'))
     ).not.toBe(baseline)
     expect(
-      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(base, 'planning', 'decoy'))
+      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(base, 'planning', 'anchor'))
     ).not.toBe(baseline)
 
     const collected = {
@@ -114,7 +112,7 @@ describe('Shadow Chase voice context', () => {
       })),
     }
     expect(
-      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(collected, 'planning', 'follow'))
+      shadowChaseVoiceStateSignature(buildShadowChaseVoiceState(collected, 'planning', 'support'))
     ).not.toBe(baseline)
   })
 })

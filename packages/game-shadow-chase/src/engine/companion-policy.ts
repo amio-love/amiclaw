@@ -1,6 +1,13 @@
+import { DIFFICULTY_CONFIG } from './config'
 import { getMap } from './maps'
-import { visibleSightCells } from './line-of-sight'
-import { neighbors, nextStepOnShortestPath, pathDistance } from './pathfinding'
+import {
+  coordinateKey,
+  neighbors,
+  nextStepOnShortestPath,
+  pathDistance,
+  shortestPath,
+} from './pathfinding'
+import { coordinatesEqual, isWalkable, type WalkableMap } from './rules'
 import type { Coordinate, SimulationState } from './types'
 
 function nearestObjective(state: SimulationState): Coordinate | null {
@@ -13,6 +20,24 @@ function nearestObjective(state: SimulationState): Coordinate | null {
     return distance || left.id.localeCompare(right.id)
   })
   return available[0]?.position ?? null
+}
+
+function objectiveApproach(state: SimulationState, objective: Coordinate): Coordinate {
+  const map = getMap(state.mapId)
+  const companion = state.actors.companion.position
+  const candidates = neighbors(map, objective)
+  const playerRoute = shortestPath(map, state.actors.player.position, objective) ?? []
+  const playerRouteKeys = new Set(playerRoute.map(coordinateKey))
+  const offRoute = candidates.filter((candidate) => !playerRouteKeys.has(coordinateKey(candidate)))
+  const available = offRoute.length > 0 ? offRoute : candidates
+  available.sort((left, right) => {
+    const travelDistance = pathDistance(map, companion, left) - pathDistance(map, companion, right)
+    const pursuerDistance =
+      pathDistance(map, right, state.actors.pursuer.position) -
+      pathDistance(map, left, state.actors.pursuer.position)
+    return travelDistance || pursuerDistance || left.y - right.y || left.x - right.x
+  })
+  return available[0] ?? companion
 }
 
 function evade(state: SimulationState): Coordinate | null {
@@ -28,48 +53,62 @@ function evade(state: SimulationState): Coordinate | null {
   return options[0] ?? null
 }
 
-function decoyStep(state: SimulationState): Coordinate {
+function mapAvoiding(map: WalkableMap, blocked: readonly Coordinate[]): WalkableMap {
+  return {
+    width: map.width,
+    height: map.height,
+    walls: [...map.walls, ...blocked],
+  }
+}
+
+function rescueStep(state: SimulationState): Coordinate {
   const map = getMap(state.mapId)
   const companion = state.actors.companion.position
-  const pursuer = state.actors.pursuer.position
   const player = state.actors.player.position
-  const playerDistance = pathDistance(map, pursuer, player)
-  const candidates = visibleSightCells(map, pursuer)
-    .filter(
-      (candidate) =>
-        (candidate.x !== player.x || candidate.y !== player.y) &&
-        (candidate.x !== pursuer.x || candidate.y !== pursuer.y)
-    )
-    .map((candidate) => ({
-      candidate,
-      companionDistance: pathDistance(map, companion, candidate),
-      pursuerDistance: pathDistance(map, pursuer, candidate),
-    }))
-    .filter((candidate) => Number.isFinite(candidate.companionDistance))
+  const pursuer = state.actors.pursuer.position
+  const pursuerFirst = nextStepOnShortestPath(map, pursuer, state.exit.position) ?? pursuer
+  const pursuerPath = [pursuer, pursuerFirst]
+  const bonusInterval = DIFFICULTY_CONFIG[state.difficulty].pursuerBonusStepInterval
+  if ((state.tick + 1) % bonusInterval === 0) {
+    pursuerPath.push(nextStepOnShortestPath(map, pursuerFirst, state.exit.position) ?? pursuerFirst)
+  }
+  if (pursuerPath.some((position) => coordinatesEqual(player, position))) {
+    return evade(state) ?? companion
+  }
+  const safeMap = mapAvoiding(map, pursuerPath)
+  return nextStepOnShortestPath(safeMap, companion, player) ?? evade(state) ?? companion
+}
+
+function farAnchor(state: SimulationState): Coordinate {
+  const map = getMap(state.mapId)
+  const companion = state.actors.companion.position
+  const candidates: Coordinate[] = []
+  for (let y = 0; y < map.height; y += 1) {
+    for (let x = 0; x < map.width; x += 1) {
+      const candidate = { x, y }
+      if (isWalkable(map, candidate)) candidates.push(candidate)
+    }
+  }
   candidates.sort((left, right) => {
-    const leftNearer = left.pursuerDistance < playerDistance ? 0 : 1
-    const rightNearer = right.pursuerDistance < playerDistance ? 0 : 1
+    const playerDistance =
+      pathDistance(map, right, state.actors.player.position) -
+      pathDistance(map, left, state.actors.player.position)
+    const pursuerDistance =
+      pathDistance(map, right, state.actors.pursuer.position) -
+      pathDistance(map, left, state.actors.pursuer.position)
+    const travelDistance = pathDistance(map, companion, left) - pathDistance(map, companion, right)
     return (
-      leftNearer - rightNearer ||
-      left.companionDistance - right.companionDistance ||
-      left.pursuerDistance - right.pursuerDistance ||
-      left.candidate.y - right.candidate.y ||
-      left.candidate.x - right.candidate.x
+      playerDistance || pursuerDistance || travelDistance || left.y - right.y || left.x - right.x
     )
   })
-  const target = candidates[0]?.candidate
-  return target ? (nextStepOnShortestPath(map, companion, target) ?? companion) : companion
+  return candidates[0] ?? companion
 }
 
 export function companionNextStep(state: SimulationState): Coordinate {
   const actor = state.actors.companion
   if (actor.status === 'captured' || state.phase !== 'running') return actor.position
   const map = getMap(state.mapId)
-  if (state.actors.player.status === 'captured') {
-    return (
-      nextStepOnShortestPath(map, actor.position, state.actors.player.position) ?? actor.position
-    )
-  }
+  if (state.actors.player.status === 'captured') return rescueStep(state)
   const evasive = evade(state)
   if (evasive) return evasive
   if (state.exit.enabled) {
@@ -77,26 +116,20 @@ export function companionNextStep(state: SimulationState): Coordinate {
   }
   const lease = state.activeModelLease
   const leasedIntent = lease && lease.expiryTick >= state.tick + 1 ? lease : undefined
-  const intent = state.command.intent !== 'follow' ? state.command : (leasedIntent ?? state.command)
-  if (intent.intent === 'split') {
+  const intent =
+    state.command.intent !== 'support' ? state.command : (leasedIntent ?? state.command)
+  if (intent.intent === 'scout') {
     const objective = state.objectives.find(
       (candidate) => candidate.id === intent.targetObjectiveId && !candidate.collected
     )
-    const target = objective?.position ?? nearestObjective(state)
+    const objectivePosition = objective?.position ?? nearestObjective(state)
+    const target = objectivePosition ? objectiveApproach(state, objectivePosition) : null
     return target
       ? (nextStepOnShortestPath(map, actor.position, target) ?? actor.position)
       : actor.position
   }
-  if (intent.intent === 'decoy') {
-    return decoyStep(state)
-  }
-  const uncollected = nearestObjective(state)
-  if (
-    uncollected &&
-    pathDistance(map, actor.position, uncollected) + 2 <
-      pathDistance(map, actor.position, state.actors.player.position)
-  ) {
-    return nextStepOnShortestPath(map, actor.position, uncollected) ?? actor.position
+  if (intent.intent === 'anchor') {
+    return nextStepOnShortestPath(map, actor.position, farAnchor(state)) ?? actor.position
   }
   return nextStepOnShortestPath(map, actor.position, state.actors.player.position) ?? actor.position
 }

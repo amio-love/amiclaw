@@ -184,8 +184,8 @@ describe('real VoiceSessionDO — update-gamestate (continuous run, module advan
     const context = {
       version: 1,
       phase: 'planning',
-      strategy: 'follow',
-      allowedStrategies: ['follow', 'split', 'decoy'],
+      strategy: 'support',
+      allowedStrategies: ['support', 'scout', 'anchor'],
       map: { id: 'courtyard', width: 9, height: 9, walls: [{ x: 2, y: 2 }] },
       objectives: [{ id: 'core-a', position: { x: 1, y: 2 } }],
       collectedObjectiveIds: [],

@@ -19,7 +19,7 @@ const OBJECTIVE_COUNT = 3
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const STABLE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
 
-export type ShadowChaseIntent = 'follow' | 'split' | 'decoy'
+export type ShadowChaseIntent = 'support' | 'scout' | 'anchor'
 export type ShadowChaseDifficulty = 'relaxed' | 'standard' | 'intense'
 
 export interface ShadowChaseCoordinate {
@@ -51,7 +51,7 @@ export interface ShadowChaseIntentRequest {
   pursuer: ShadowChaseCoordinate
   objectives: ShadowChaseIntentObjective[]
   exit: ShadowChaseCoordinate
-  cooldowns: { swapReadyTick: number }
+  swapCharges: number
   allowedIntents: ShadowChaseIntent[]
 }
 
@@ -106,7 +106,7 @@ function isStableId(value: unknown): value is string {
 }
 
 function isIntent(value: unknown): value is ShadowChaseIntent {
-  return value === 'follow' || value === 'split' || value === 'decoy'
+  return value === 'support' || value === 'scout' || value === 'anchor'
 }
 
 function isDifficulty(value: unknown): value is ShadowChaseDifficulty {
@@ -158,7 +158,7 @@ export function validateShadowChaseIntentRequest(
       'pursuer',
       'objectives',
       'exit',
-      'cooldowns',
+      'swapCharges',
       'allowedIntents',
     ])
   ) {
@@ -202,12 +202,8 @@ export function validateShadowChaseIntentRequest(
   if (!isCoordinate(value.exit)) {
     return { ok: false, reason: 'exit' }
   }
-  if (
-    !isRecord(value.cooldowns) ||
-    !hasExactKeys(value.cooldowns, ['swapReadyTick']) ||
-    !isSafeIntegerBetween(value.cooldowns.swapReadyTick, 0, Number.MAX_SAFE_INTEGER)
-  ) {
-    return { ok: false, reason: 'cooldowns' }
+  if (!isSafeIntegerBetween(value.swapCharges, 0, OBJECTIVE_COUNT)) {
+    return { ok: false, reason: 'swapCharges' }
   }
   if (
     !Array.isArray(value.allowedIntents) ||
@@ -261,7 +257,7 @@ export function parseShadowChaseIntentResponse(
   if (!isIntent(intent) || !request.allowedIntents.includes(intent)) {
     return { ok: false, reason: 'intent' }
   }
-  const targetExpected = intent === 'split'
+  const targetExpected = intent === 'scout'
   const proposalKeys = Object.keys(proposal)
   const allowedKeys = targetExpected
     ? new Set(['intent', 'targetObjectiveId', 'bark'])
@@ -391,8 +387,8 @@ function buildMessages(
     runId: request.runId,
     decisionEpoch: request.decisionEpoch,
     proposal: {
-      intent: 'follow | split | decoy',
-      targetObjectiveId: 'required only for split',
+      intent: 'support | scout | anchor',
+      targetObjectiveId: 'required only for scout',
       bark: `optional, at most ${MAX_BARK_CODEPOINTS} Unicode code points`,
     },
     leaseTicks: `${LEASE_MIN_TICKS}..${LEASE_MAX_TICKS}`,
