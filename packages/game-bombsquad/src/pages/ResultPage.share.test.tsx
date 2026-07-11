@@ -30,6 +30,13 @@ vi.mock('@/utils/event-log', () => ({ logEvent: vi.fn() }))
 vi.mock('@/utils/survey', () => ({ hasAnsweredSurvey: () => true, markSurveyAnswered: vi.fn() }))
 vi.mock('@amiclaw/arcade-profile/api-client', () => ({
   submitArcadeProfileEvent: vi.fn().mockResolvedValue({ kind: 'anon' }),
+  // A returning signed-in read so the won daily run resolves + the loop card
+  // (which carries 分享今日成绩) renders; the share ladder is orthogonal to it.
+  fetchArcadeProfile: vi.fn().mockResolvedValue({
+    kind: 'ok',
+    profile: undefined,
+    publicProfile: { claimed: true, public_label: '小红' },
+  }),
 }))
 
 import ResultPage from './ResultPage'

@@ -228,10 +228,13 @@ describe('LeaderboardPage optimistic flow', () => {
       .toISOString()
       .slice(0, 10)
     await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(oldest))
-    // The retention boundary is stated honestly under the board.
+    // The retention boundary is stated honestly — relocated behind the ⓘ next
+    // to the date (rc §3 progressive disclosure), not on the default surface.
+    expect(screen.queryByText(/每日榜只保留今天和昨天/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '日榜刷新与保留说明' }))
     expect(
       screen.getByText(
-        '每日榜只保留今天和昨天，更早的日榜未保存；个人记录在「我的」页保留最近 7 天。'
+        /每日榜只保留今天和昨天，更早的日榜未保存；个人记录在「我的」页保留最近 7 天。/
       )
     ).toBeInTheDocument()
   })

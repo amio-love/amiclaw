@@ -234,12 +234,18 @@
   color: var(--soft);
 }
 
-/* The deferred leaderboard-gate CTA inside the rank card — the fill-and-rank
-   entry a first-win player uses after (or instead of) skipping the modal. */
-.boardCta {
-  display: block;
+/* The inline login / set-a-name invite inside the rank card — the calm, single
+   affordance a signed-out (or name-less) win uses to get on the board (ruling B
+   / U13). ≥44px touch target (U14). fit-content + margin auto keeps the pill
+   centered while the flex box guarantees the height. */
+.inviteCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 44px;
   margin: 10px auto 0;
-  padding: 8px 16px;
+  padding: 8px 20px;
   border: 1px solid rgba(255, 229, 62, 0.4);
   border-radius: 999px;
   background: rgba(255, 229, 62, 0.1);
@@ -251,12 +257,60 @@
     border-color 0.2s;
 }
 
-.boardCta:hover {
+.inviteCta:hover {
   background: rgba(255, 229, 62, 0.18);
   border-color: var(--y);
 }
 
-.boardCta:focus-visible {
+.inviteCta:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+}
+
+/* The inline AI-tool ask (first-time BYO win, nothing inferable / stored) — one
+   row of SSOT chips the player taps once; the pick is remembered and the run
+   auto-submits. No popup (ruling B). */
+.toolAsk {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toolAskLabel {
+  font: 500 13px var(--font-body);
+  color: var(--soft);
+}
+
+.toolChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ≥44px touch target (U14). */
+.toolChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 229, 62, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 229, 62, 0.06);
+  color: var(--y);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.toolChip:hover {
+  background: rgba(255, 229, 62, 0.16);
+  border-color: var(--y);
+}
+
+.toolChip:focus-visible {
   outline: 2px solid var(--y);
   outline-offset: 2px;
 }
@@ -342,13 +396,6 @@
   outline-offset: 2px;
 }
 
-/* Day-boundary hint under the daily-loop status text. */
-.loopHint {
-  margin: 8px 0 0;
-  font: 400 11px / 1.4 var(--font-body);
-  color: rgba(255, 255, 255, 0.4);
-}
-
 .loopActions {
   display: flex;
   flex: 0 0 132px;
@@ -356,8 +403,13 @@
   gap: 8px;
 }
 
+/* ≥44px touch target (U14 / Layout §Touch targets). */
 .loopAction {
-  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
@@ -479,6 +531,36 @@
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* U13 fold-in survey entry — a calm, low-emphasis link-button at the very
+   bottom of the settlement, well beneath 再来一局. It only appears once the
+   settlement has settled, and taps open the survey modal; it never competes
+   with the celebration CTA or stacks over the consolation moment. */
+.surveyEntry {
+  align-self: center;
+  margin-top: 4px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: var(--soft);
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.surveyEntry:hover {
+  color: #fff;
+}
+
+.surveyEntry:focus-visible {
+  outline: 2px solid var(--y);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 /* ----------  no-data recovery state  ----------

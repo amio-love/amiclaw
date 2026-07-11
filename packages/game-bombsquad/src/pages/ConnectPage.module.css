@@ -60,11 +60,18 @@
   width: 44px;
 }
 
-/* ----------  connect body  ---------- */
+/* ----------  connect body  ----------
+   U5 (rc §2.3): the content used to stack at the top with the CTA pinned to the
+   far bottom (`.cta { margin-top: auto }`), leaving a ~35% void in the middle of
+   the 844px screen. Centering the whole group turns that void into balanced,
+   deliberate framing whitespace above and below — the rhythm reads intentional,
+   and the「再来一局 / 开始」CTA sits close to the content it acts on. Connect
+   screens are short, so centering never clips. */
 .connect {
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 18px;
   padding: 8px 24px max(28px, env(safe-area-inset-bottom));
 }
@@ -414,9 +421,11 @@
   border-radius: 4px;
 }
 
-/* ----------  bottom CTA  ---------- */
+/* ----------  CTA  ----------
+   No longer pinned to the far bottom (U5): the parent `.connect` centers the
+   whole group, so the CTA rides just below the content with a modest gap. */
 .cta {
-  margin-top: auto;
+  margin-top: 6px;
   padding-top: 8px;
   display: flex;
   flex-direction: column;

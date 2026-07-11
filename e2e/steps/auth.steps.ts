@@ -63,7 +63,7 @@ Then('I see the account login guide and no fake profile', async ({ page }) => {
   // 登录 / 注册 auth entry (substring-matched by name '登录'), so page-wide
   // role/text queries would be ambiguous.
   const main = page.getByRole('main')
-  await expect(main.getByText('本设备的星轨。')).toBeVisible()
+  await expect(main.getByText('你的星轨。')).toBeVisible()
   await expect(main.getByText('保存到账号', { exact: true })).toBeVisible()
   await expect(
     main.getByText('登录后可以把这台设备上的 BombSquad 和卦签记录保存到账号。')

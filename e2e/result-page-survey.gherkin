@@ -1,16 +1,15 @@
-# Result-page endgame survey — the once-per-device PostGameModal survey shown
-# after any game outcome. The survey delay starts only once the celebration
-# beat has settled: on a first daily win that means after the deferred
-# leaderboard gate (opened from the rank-card CTA) is filled and the rank
-# outcome arrives — the survey can never stack over the rank reveal. It then
-# follows as a separate dialog. Submitting posts a `survey_submit` event to
-# /api/events; submitting or skipping both retire the survey for the device.
+# Result-page endgame survey — the once-per-device survey shown after any game
+# outcome. The survey is never an auto-opening modal: after the settlement has
+# settled, a calm「聊聊这一局」entry folds in at the very bottom, and tapping it
+# opens the survey (audit U13 — it can never stack over the celebration, the
+# consolation, or the rank/login state). Submitting posts a `survey_submit` event
+# to /api/events; submitting or skipping both retire the survey for the device.
 #
 # Gated by localStorage['bombsquad-survey-answered'] (packages/game-bombsquad/src/utils/
 # survey.ts). The shared harness fixture seeds that flag as already-answered
-# for every other scenario so the modal never interferes with their result-page
+# for every other scenario so the survey never interferes with their result-page
 # steps; this file's scenario carries the @survey-fresh tag to opt out of the
-# seed so the modal actually appears.
+# seed so the entry actually folds in.
 
 Feature: Result-page endgame survey
   As the BombSquad internal-beta team
@@ -19,15 +18,14 @@ Feature: Result-page endgame survey
 
   # Source: result-page-survey
   @playwright @survey-fresh
-  Scenario Outline: The endgame survey shows once per device and records a submission
+  Scenario Outline: The endgame survey folds in once per device and records a submission
     Given I have finished a "<mode>" run on a survey-fresh device and the result page is open
-    And any required leaderboard gate is completed before the survey
-    Then the post-game modal opens as a single dialog showing the survey questions
-    When I <interaction>
-    Then the post-game modal closes
+    When the endgame survey entry folds in and I open it
+    And I <interaction>
+    Then the survey dialog closes
     And <events>
     When I revisit the result page
-    Then no post-game survey modal appears
+    Then the endgame survey entry does not fold in
 
     Examples:
       | mode     | interaction                       | events                                            |

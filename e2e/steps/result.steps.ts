@@ -72,56 +72,39 @@ Then('the module breakdown lists all 4 modules without horizontal overflow', asy
   expect(overflow).toBeLessThanOrEqual(1)
 })
 
-Then('the result page shows the honest not-on-board notice', async ({ page }) => {
-  // Rank-reveal-first (audit F1): no auto-opened modal over the celebration;
-  // the rank card states the run is not on the board and offers the fill CTA.
+Given('I am signed in with the leaderboard name {string}', async ({ world }, name: string) => {
+  // signIn + a public label BEFORE the result page mounts, so the page's
+  // identity resolution (fetchArcadeProfile) reads a signed-in account whose
+  // won daily run auto-submits under this name (ruling B). Set here rather than
+  // in the Background so the homepage still renders its anonymous hero for the
+  // run-entry CTAs; the result page reads the live world state at submit time.
+  world.signIn({ user_id: 'e2e-user', email: 'e2e@amio.fans' })
+  world.publicLabel = name
+})
+
+Then('the result page asks which AI I played with', async ({ page }) => {
+  // First-time BYO signed-in win: the tool is not inferable and none is stored,
+  // so the settlement shows ONE inline row of SSOT chips — no popup, no gate.
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByText('这局成绩还没上榜')).toBeVisible()
-  await expect(page.getByRole('button', { name: '填写并上榜' })).toBeVisible()
+  await expect(page.getByText('和哪个 AI 一起玩的？')).toBeVisible()
 })
 
-When('I open the leaderboard submission modal', async ({ page }) => {
-  await page.getByRole('button', { name: '填写并上榜' }).click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('给自己起个名字')).toBeVisible()
+When('I pick AI assistant {string} in the settlement', async ({ page }, assistant: string) => {
+  await page.getByRole('button', { name: assistant, exact: true }).click()
 })
 
-Then('the leaderboard modal can be deferred and reopened', async ({ page }) => {
-  // Skip path: 稍后再说 closes the gate, the run stays off the board with the
-  // CTA still offered; deferred-fill path: the CTA reopens the same gate.
-  const dialog = page.getByRole('dialog')
-  await dialog.getByRole('button', { name: '稍后再说', exact: true }).click()
+Then('the result page shows the login invite', async ({ page }) => {
+  // Anonymous win (ruling B / U13): ONE calm login invite, never a free-nickname
+  // gate. Declining leaves the run off the board.
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByText('这局成绩还没上榜')).toBeVisible()
-  await page.getByRole('button', { name: '填写并上榜' }).click()
-  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByText('登录后自动记录成绩')).toBeVisible()
+  await expect(page.getByRole('button', { name: /登录/ })).toBeVisible()
 })
 
-When('I type a nickname into the NicknameModal input', async ({ page }) => {
-  await page.getByRole('dialog').getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
-})
-
-When(
-  'I type the Chinese nickname {string} into the NicknameModal input',
-  async ({ page }, nickname: string) => {
-    await page.getByRole('dialog').getByRole('textbox', { name: '昵称' }).fill(nickname)
-  }
-)
-
-When('I choose AI assistant {string}', async ({ page }, assistant: string) => {
-  await page.getByRole('dialog').getByRole('button', { name: assistant, exact: true }).click()
-})
-
-When('I type AI model {string}', async ({ page }, model: string) => {
-  await page
-    .getByRole('dialog')
-    .getByRole('textbox', { name: /具体模型/ })
-    .fill(model)
-})
-
-Then('the NicknameModal closes', async ({ page }) => {
-  await expect(page.getByRole('dialog')).toHaveCount(0)
+Then('no leaderboard score is submitted', async ({ world, page }) => {
+  // Give any stray submission a beat to fire, then assert none did.
+  await page.waitForTimeout(200)
+  expect(world.leaderboard.submissions).toHaveLength(0)
 })
 
 Then('the result page shows my global rank', async ({ page }) => {
@@ -151,40 +134,23 @@ Then(
 // --- Leaderboard submission assertion (shared by mobile-beta + game-modes) ----
 
 Then('the leaderboard submission carries a plausible time', async ({ world, page }) => {
-  // A first daily-win submission only fires once the deferred leaderboard
-  // gate is filled. Scenarios that do not walk the gate explicitly (e.g.
-  // game-modes "defuse all four modules") still need the POST to have
-  // happened — open the gate from the rank-card CTA when it is not already
-  // open, then confirm it, so the captured body can be asserted.
+  // A signed-in won daily run auto-submits (ruling B). When the tool was neither
+  // inferable (companion) nor stored, the run waits on the inline chip ask — pick
+  // one so the submission fires; otherwise it already auto-submitted on mount.
   if (world.leaderboard.submissions.length === 0) {
-    const dialog = page.getByRole('dialog')
-    if ((await dialog.count()) === 0) {
-      const cta = page.getByRole('button', { name: '填写并上榜' })
-      if ((await cta.count()) > 0) await cta.click()
-    }
-    if ((await dialog.count()) > 0 && (await dialog.getByRole('textbox').count()) > 0) {
-      await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
-      const assistant = dialog.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true })
-      if ((await assistant.count()) > 0) {
-        await assistant.click()
-      }
-      await dialog.getByRole('button', { name: '确认' }).click()
-    }
+    const chip = page.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true })
+    if ((await chip.count()) > 0) await chip.first().click()
     await expect.poll(() => world.leaderboard.submissions.length).toBeGreaterThan(0)
   }
   assertPlausibleSubmission(world.leaderboard.submissions.at(-1))
 })
 
 Then(
-  'the leaderboard submission carries nickname {string}, AI assistant {string}, and model {string}',
-  async ({ world }, nickname: string, aiTool: string, aiModel: string) => {
+  'the leaderboard submission carries nickname {string} and AI assistant {string}',
+  async ({ world }, nickname: string, aiTool: string) => {
     const submission = world.leaderboard.submissions.at(-1)
     assertPlausibleSubmission(submission)
-    expect(submission).toMatchObject({
-      nickname,
-      ai_tool: aiTool,
-      ai_model: aiModel,
-    })
+    expect(submission).toMatchObject({ nickname, ai_tool: aiTool })
   }
 )
 

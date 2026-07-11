@@ -19,6 +19,10 @@
 }
 
 .lead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1);
   margin: 10px 0 36px;
   max-width: 540px;
   font: 400 16px var(--font-body);

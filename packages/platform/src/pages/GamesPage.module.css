@@ -1,0 +1,36 @@
+/* Neutral hero-height placeholder held during the first async session read for
+   a returning signed-in device (auth-flash fix). It reserves the hero band so
+   the page does not jump, and shows neither the anonymous hero nor the
+   signed-in strip until `useAuth` resolves — avoiding the wrong-content flash. */
+.heroPlaceholder {
+  min-height: 320px;
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--border-hairline);
+  background: var(--glass-card);
+  backdrop-filter: var(--glass-blur);
+  animation: heroPlaceholderPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes heroPlaceholderPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@media (min-width: 900px) {
+  .heroPlaceholder {
+    min-height: 420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroPlaceholder {
+    animation: none;
+    opacity: 0.6;
+  }
+}

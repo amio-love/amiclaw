@@ -44,8 +44,10 @@ Then("the daily board shows yesterday's entry", async ({ page }) => {
 
 Then('the daily board states its retention boundary honestly', async ({ page }) => {
   // The switcher window equals the KV retention (today + yesterday); the
-  // boundary — and where older personal records live — is stated under the
-  // board instead of rendering expired days as false empty boards.
+  // boundary — and where older personal records live — is stated honestly, now
+  // relocated behind the ⓘ next to the date (rc §3 progressive disclosure). Open
+  // the disclosure, then assert the honest content is reachable and verbatim.
+  await page.getByRole('button', { name: '日榜刷新与保留说明' }).click()
   await expect(page.getByText(/每日榜只保留今天和昨天，更早的日榜未保存/)).toBeVisible()
 })
 

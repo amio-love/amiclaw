@@ -1,0 +1,71 @@
+/* Shared progressive-disclosure affordance (rc §3). The ⓘ toggle is a compact
+   glyph inside a ≥44px transparent tap area (Layout §Touch targets); the panel
+   relocates the operational caveats that used to sit inline by default. */
+
+/* The wrapper box is removed from layout — the toggle and panel become direct
+   participants of the consumer container, so the panel can break to a full
+   line in both flex-row and plain-block contexts. */
+.wrap {
+  display: contents;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Visually compact glyph, ≥44px hit area via negative margin so the padded
+     button does not disturb the surrounding line's rhythm. */
+  min-width: 44px;
+  min-height: 44px;
+  margin: -14px -12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-4);
+  cursor: pointer;
+  transition: color var(--t-fast);
+}
+
+.toggle:hover,
+.toggle[aria-expanded='true'] {
+  color: var(--text-2);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--amio-yellow);
+  outline-offset: 2px;
+  border-radius: var(--radius-pill);
+}
+
+.panel {
+  display: block;
+  /* full-width in a flex row (flex-basis) and in a plain block (width). */
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hairline);
+  background: var(--glass-soft);
+  color: var(--text-3);
+  font: var(--type-body-sm);
+  line-height: var(--lh-loose);
+  animation: disclosureIn var(--t-base);
+}
+
+@keyframes disclosureIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button } from '@amiclaw/ui'
+import { Button, Disclosure } from '@amiclaw/ui'
 import { fetchArcadeStreakLeaderboard } from '@amiclaw/arcade-profile/api-client'
 import type { ArcadeStreakLeaderboardEntry } from '@amiclaw/arcade-profile/types'
 import { getTodayString, toChineseDateString } from '@shared/date'
@@ -52,7 +52,14 @@ export default function StreakLeaderboardList() {
     )
   }
   if (entries.length === 0) {
-    return <p className={styles.status}>还没有公开连续记录。登录后保存本设备记录即可上榜。</p>
+    // rc §3: the default state is the warm invitation; the "how to get on the
+    // board" mechanics move behind the ⓘ.
+    return (
+      <p className={styles.status}>
+        还没有人上榜，第一个来占位吧。
+        <Disclosure label="怎么上榜">登录并保存本设备记录到账号后，就会公开展示上榜名。</Disclosure>
+      </p>
+    )
   }
 
   return (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, ConicAvatar, EyebrowTag, GlassCard } from '@amiclaw/ui'
+import { Button, ConicAvatar, Disclosure, EyebrowTag, GlassCard } from '@amiclaw/ui'
 import type {
   ArcadeLocalProfile,
   ArcadeProfileHistoryDay,
@@ -14,8 +14,11 @@ import {
   summarizeArcadeLocalProfile,
 } from '@amiclaw/arcade-profile/local'
 import { claimArcadeProfile, fetchArcadeProfile } from '@amiclaw/arcade-profile/api-client'
-import { readChosenArcadeNickname } from '@/lib/arcade-nickname'
-import { useGreetingName } from '@/hooks/useGreetingName'
+import {
+  isValidArcadeNickname,
+  readChosenArcadeNickname,
+  writeChosenArcadeNickname,
+} from '@/lib/arcade-nickname'
 import { formatMs } from '@shared/format-time'
 import { getDailyResetHint, toChineseDateString } from '@shared/date'
 import { useAuth, type DisplayUser } from '@/hooks/useAuth'
@@ -156,18 +159,19 @@ function SignedInProfile({
 }) {
   const { state: accountProfile, reload: reloadAccountProfile } = useAccountArcadeProfile()
 
-  // Greet by chosen nickname > companion-known name > a neutral, name-free
-  // greeting — never the account email (audit F19). The full email stays as the
-  // explicit account-identity line below (that is the account id, not a name
-  // fallback, and not a local-part fragment).
-  const greetingName = useGreetingName()
+  // The unified username — the public leaderboard handle (ruling A), editable
+  // here in /me. Seeded from the shared board-nickname key and kept in local
+  // state so an edit updates the title + card live. Never the account email
+  // (audit F19); the email stays as the explicit account-id line below.
+  const [username, setUsername] = useState<string | null>(() => readChosenArcadeNickname() ?? null)
+  const profileId = accountProfile.status === 'ok' ? accountProfile.profile.profile_id : undefined
 
   return (
     <>
       <h2 className={styles.title}>
-        {greetingName ? (
+        {username ? (
           <>
-            <span className={styles.accent}>{greetingName}</span> 的星轨。
+            <span className={styles.accent}>{username}</span> 的星轨。
           </>
         ) : (
           '你的星轨。'
@@ -180,7 +184,14 @@ function SignedInProfile({
           <div className={styles.avatar}>
             <ConicAvatar size={96} letter={user.avatarLetter} ariaHidden />
           </div>
-          {greetingName && <div className={styles.name}>{greetingName}</div>}
+          <UsernameEditor
+            username={username}
+            profileId={profileId}
+            onSaved={(name) => {
+              setUsername(name)
+              reloadAccountProfile()
+            }}
+          />
           <div className={styles.rank}>{user.email}</div>
           <Button variant="ghost" size="sm" className={styles.logout} onClick={onLogout}>
             退出登录
@@ -227,14 +238,106 @@ function SignedInProfile({
   )
 }
 
+/* The unified-username editor (ruling A). Writes the shared board-nickname key
+   (the public leaderboard handle) and, for a signed-in account, syncs the D1
+   `public_label` via a label-only claim so both boards show one name. */
+function UsernameEditor({
+  username,
+  profileId,
+  onSaved,
+}: {
+  username: string | null
+  profileId: string | undefined
+  onSaved: (name: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(username ?? '')
+  const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+
+  const startEdit = () => {
+    setDraft(username ?? '')
+    setStatus('idle')
+    setEditing(true)
+  }
+
+  const handleSave = async () => {
+    const trimmed = draft.trim()
+    if (!isValidArcadeNickname(trimmed)) {
+      setStatus('error')
+      return
+    }
+    setStatus('saving')
+    if (!writeChosenArcadeNickname(trimmed)) {
+      setStatus('error')
+      return
+    }
+    // Keep the account-side public label unified with the local handle. A
+    // failed sync still keeps the local write — the streak board picks it up on
+    // the next claim — so a network blip never blocks the rename.
+    if (profileId) {
+      await claimArcadeProfile({ profile_id: profileId, events: [], public_label: trimmed })
+    }
+    onSaved(trimmed)
+    setEditing(false)
+    setStatus('idle')
+  }
+
+  if (!editing) {
+    return (
+      <div className={styles.usernameRow}>
+        <span className={styles.name}>{username ?? '还没有上榜名'}</span>
+        <button type="button" className={styles.usernameEdit} onClick={startEdit}>
+          {username ? '改名' : '起个上榜名'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className={styles.usernameEditor}>
+      <input
+        className={styles.usernameInput}
+        value={draft}
+        maxLength={20}
+        autoFocus
+        aria-label="上榜名"
+        placeholder="上榜名"
+        onChange={(e) => {
+          setDraft(e.target.value)
+          if (status === 'error') setStatus('idle')
+        }}
+      />
+      <div className={styles.usernameActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleSave}
+          disabled={status === 'saving' || !isValidArcadeNickname(draft)}
+        >
+          {status === 'saving' ? '保存中' : '保存'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+          取消
+        </Button>
+      </div>
+      {status === 'error' && <span className={styles.usernameError}>名字需要 1–20 个字符。</span>}
+    </div>
+  )
+}
+
 /* The anonymous state reads the current device's local profile. It still routes
    to login, but the page is no longer a promise card: it shows actual local
    records or an honest empty state. */
 function SignedOutGuide({ localSummary }: { localSummary: ArcadeProfileSummary }) {
   return (
     <>
-      <h2 className={styles.title}>本设备的星轨。</h2>
-      <p className={styles.lead}>不登录也会先保存在这台设备上；登录后可以保存到账号。</p>
+      <h2 className={styles.title}>你的星轨。</h2>
+      <p className={styles.lead}>
+        这里显示你玩过的真实记录。
+        <Disclosure label="记录保存说明">
+          不登录也会先保存在这台设备上；登录后可以把这台设备上的记录保存到账号，跨设备同步。
+        </Disclosure>
+      </p>
 
       <div className={styles.signedOutGrid}>
         <ArcadeStatsCard profile={localSummary} emptyCtaHref="/bombsquad/" />
@@ -435,12 +538,14 @@ function ArcadeStatsCard({
           }
         />
       </div>
-      <p className={styles.statsHint}>{getDailyResetHint()}</p>
-      {/* B12 断签说明 — one honest line where the streak is visible. States the
-          truth of the implementation: a break restarts the count from zero, but
-          the longest record and every saved result stay, and there is no
-          penalty (companion-presence register:「不会惩罚你」). */}
-      <p className={styles.streakBreakNote}>{STREAK_BREAK_NOTE}</p>
+      {/* rc §3 progressive disclosure — the default surface shows only the
+          stats above; the operational caveats (UTC reset + the B12 断签说明,
+          honest that a break restarts the count while the longest record and
+          every saved result stay, no penalty) relocate behind the ⓘ. Honesty
+          content is not deleted, only moved off the default position. */}
+      <p className={styles.statsHint}>
+        <Disclosure label="连续打卡与刷新说明">{`${STREAK_BREAK_NOTE} ${getDailyResetHint()}`}</Disclosure>
+      </p>
       {!hasAnyRecord && (
         <a className={styles.emptyCta} href={emptyCtaHref}>
           开始玩

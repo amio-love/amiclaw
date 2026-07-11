@@ -131,16 +131,16 @@
   white-space: nowrap;
 }
 
-.note {
-  margin: 16px 0 0;
-  color: rgba(255, 255, 255, 0.48);
-  font: 400 12px var(--font-body);
-}
-
-.hint {
-  margin: 6px 0 0;
-  color: rgba(255, 255, 255, 0.38);
-  font: 400 12px var(--font-body);
+/* Default state is a single warm fact; the ⓘ carries the relocated
+   operational caveats (longest streak / UTC reset / device boundary). */
+.streakFact {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 18px 0 0;
+  color: var(--text-2);
+  font: 400 13px/1.5 var(--font-body);
 }
 
 @media (max-width: 768px) {

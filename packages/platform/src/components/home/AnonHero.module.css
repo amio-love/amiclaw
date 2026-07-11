@@ -60,13 +60,13 @@
   align-items: center;
   justify-content: center;
   height: 420px;
-  /* The whole stage is decorative / read-only (orbiting rings, the planet orb,
-     and the display-only StatPills — none is interactive). Its layers are
-     absolutely positioned and OVERFLOW the stage box: on the ≤768px single-column
-     stack the stage sits under the copy column, and a 440px ring (`.planetRing2`)
-     reached up over the「开始玩」CTA and swallowed a center tap (re-audit F1). Make
-     the entire stage pointer-inert so NO decorative layer can ever intercept a
-     touch meant for the CTA — nothing here needs pointer events. */
+  /* The orb anchors the daily-board StatPills (今日这里的动静, rc §2.1); the
+     single orbiting ring is the only remaining decoration (the static, jobless
+     560px dashed `.planetRing2` was deleted). The StatPills are display-only, so
+     the whole stage is pointer-inert: its layers overflow the box and on the
+     ≤768px single-column stack the stage sits under the copy column, where a
+     large ring once reached up over the「开始玩」CTA and swallowed a center tap
+     (re-audit F1). Nothing here needs pointer events. */
   pointer-events: none;
 }
 
@@ -114,15 +114,6 @@
   height: 8px;
   background: var(--accent-violet);
   box-shadow: 0 0 12px var(--accent-violet);
-}
-
-.planetRing2 {
-  position: absolute;
-  width: 560px;
-  height: 560px;
-  border: 1px dashed rgba(255, 255, 255, 0.05);
-  border-radius: 50%;
-  transform: rotate(35deg);
 }
 
 /* floating stat cards — StatPill supplies the card chrome; these

@@ -1,11 +1,8 @@
-/** Result-page endgame-survey steps — the once-per-device PostGameModal. */
+/** Result-page endgame-survey steps — the once-per-device fold-in survey. */
 import { expect } from '@playwright/test'
 import { Given, When, Then } from './fixtures'
 
-/** Stable test player metadata for the daily leaderboard gate — mirrors result.steps. */
-const E2E_NICKNAME = 'E2ERunner'
-const E2E_AI_ASSISTANT_LABEL = 'Claude'
-const SURVEY_DELAY_MS = 4400 // clears the longest (practice, 4200ms) celebration-to-survey delay
+const SURVEY_DELAY_MS = 4400 // clears the longest (practice, 4200ms) celebration-to-entry delay
 
 /** Answer Q1/Q2/Q3 — the three required survey questions inside an open modal. */
 async function answerRequiredSurvey(dialog: import('@playwright/test').Locator): Promise<void> {
@@ -28,38 +25,27 @@ Given(
   }
 )
 
-Given('any required leaderboard gate is completed before the survey', async ({ page, world }) => {
-  if (world.runMode !== 'daily') return
+// --- Fold-in survey entry (audit U13) ----------------------------------------
 
-  // The gate no longer auto-opens (rank-reveal-first) — open it from the
-  // rank card's CTA, then fill and confirm. The survey delay only starts
-  // once the rank outcome has settled, i.e. after this submission lands.
-  await page.getByRole('button', { name: '填写并上榜' }).click()
+When('the endgame survey entry folds in and I open it', async ({ page, world }) => {
+  // The settlement owns the first beat; the survey is never an auto-opening
+  // modal. Advance the controlled clock past the fold-in delay so the calm
+  //「聊聊这一局」entry appears, then tap it to open the survey modal.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  const entry = page.getByRole('button', { name: /聊聊这一局/ })
+  if ((await entry.count()) === 0) {
+    await world.advance(SURVEY_DELAY_MS)
+  }
+  // Nothing stacked over the celebration before the tap.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(entry).toBeVisible()
+
+  await entry.click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toHaveCount(1)
-  await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
-  await dialog.getByRole('button', { name: E2E_AI_ASSISTANT_LABEL, exact: true }).click()
-  await dialog.getByRole('button', { name: '确认', exact: true }).click()
-  await expect.poll(() => world.leaderboard.submissions.length).toBeGreaterThan(0)
-  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(dialog.getByText('你这局用的是哪个 AI 工具？')).toBeVisible()
+  await expect(dialog.getByText('难度感受')).toBeVisible()
 })
-
-Then(
-  'the post-game modal opens as a single dialog showing the survey questions',
-  async ({ page, world }) => {
-    // The result needs breathing room before the survey opens.
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    const dialog = page.getByRole('dialog')
-    if ((await dialog.count()) === 0) {
-      await world.advance(SURVEY_DELAY_MS)
-    }
-
-    // Exactly one dialog — daily leaderboard and survey gates never stack.
-    await expect(dialog).toHaveCount(1)
-    await expect(dialog.getByText('你这局用的是哪个 AI 工具？')).toBeVisible()
-    await expect(dialog.getByText('难度感受')).toBeVisible()
-  }
-)
 
 // --- Survey interactions -----------------------------------------------------
 
@@ -70,19 +56,12 @@ When('I answer and submit the survey', async ({ page }) => {
 })
 
 When('I skip the survey', async ({ page }) => {
-  // `exact` is load-bearing: the close button's aria-label is 「跳过问卷」, so a
-  // non-exact 「跳过」 match would resolve two controls.
+  // The survey's dismiss control is 跳过; the shared Modal's × is 关闭, so this
+  // resolves uniquely.
   await page.getByRole('dialog').getByRole('button', { name: '跳过', exact: true }).click()
 })
 
-When('I submit a nickname with the survey', async ({ page }) => {
-  const dialog = page.getByRole('dialog')
-  await dialog.getByRole('textbox', { name: '昵称' }).fill(E2E_NICKNAME)
-  await answerRequiredSurvey(dialog)
-  await dialog.getByRole('button', { name: '确认', exact: true }).click()
-})
-
-Then('the post-game modal closes', async ({ page }) => {
+Then('the survey dialog closes', async ({ page }) => {
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })
 
@@ -110,17 +89,18 @@ Then('no {string} event is recorded', async ({ world }, eventName: string) => {
 
 When('I revisit the result page', async ({ world }) => {
   // Reload the result page in place. The finished-game state is mirrored into
-  // sessionStorage so ResultPage re-hydrates and re-runs its mount-time survey
-  // check; the survey-answered flag written by the first interaction persists,
-  // so the modal must not reappear. (A full second run is not viable — the
-  // controlled clock cannot rewind to re-pin the run seed.)
+  // sessionStorage so ResultPage re-hydrates and re-runs its survey check; the
+  // survey-answered flag written by the first interaction persists, so the entry
+  // must not fold in again. (A full second run is not viable — the controlled
+  // clock cannot rewind to re-pin the run seed.)
   await world.page.reload()
 })
 
-Then('no post-game survey modal appears', async ({ page }) => {
+Then('the endgame survey entry does not fold in', async ({ page }) => {
   // The result heading proves ResultPage re-mounted from the persisted state;
-  // advance past the deferred survey delay before asserting absence.
+  // advance past the fold-in delay before asserting the entry never appears.
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await page.clock.runFor(SURVEY_DELAY_MS)
+  await expect(page.getByRole('button', { name: /聊聊这一局/ })).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })

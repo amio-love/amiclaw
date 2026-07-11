@@ -16,11 +16,23 @@ export const AI_TOOLS = [
   'DeepSeek',
 ] as const
 
-/* id → display label, derived from the single AI_TOOLS source. Leaderboard
-   entries / survey answers store a lowercased tool id (`claude`); this resolves
-   it back to the canonical display name so no surface hand-maintains a second
-   id→name map. Unknown ids pass through unchanged. */
-const LABEL_BY_ID = new Map<string, string>(AI_TOOLS.map((name) => [name.toLowerCase(), name]))
+/* The platform's own voice companion, tagged on a leaderboard entry when a run
+   was played with the companion's voice connected (mode②). It is NOT a BYO tool
+   the player picks — it never appears in `AI_TOOLS` (the chips / ticker), only as
+   a resolvable id → label so an inferred companion run reads honestly on the
+   board. Stable id kept out of the human-typeable space so it can never collide
+   with a free-text "其他" tool. */
+export const COMPANION_TOOL_ID = 'companion'
+const COMPANION_TOOL_LABEL = 'AMIO 语音伙伴'
+
+/* id → display label, derived from the single AI_TOOLS source (+ the companion
+   id above). Leaderboard entries / survey answers store a lowercased tool id
+   (`claude`); this resolves it back to the canonical display name so no surface
+   hand-maintains a second id→name map. Unknown ids pass through unchanged. */
+const LABEL_BY_ID = new Map<string, string>([
+  ...AI_TOOLS.map((name) => [name.toLowerCase(), name] as const),
+  [COMPANION_TOOL_ID, COMPANION_TOOL_LABEL],
+])
 export function toolLabel(id: string): string {
   return LABEL_BY_ID.get(id.toLowerCase()) ?? id
 }

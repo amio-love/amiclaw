@@ -221,6 +221,10 @@ export class World {
   /** Session identity returned by the mocked GET /api/auth/session, or null for
    *  the anonymous state. Set by `signIn` before the first navigation. */
   authIdentity: { user_id: string; email: string } | null = null
+  /** The signed-in account's public leaderboard label (ruling B: a won daily run
+   *  auto-submits under it). null keeps the account name-less so the result page
+   *  shows its 去设置名字 invite instead of auto-submitting. */
+  publicLabel: string | null = null
   /** Captured POST /api/auth/magic-link/request bodies for assertions. */
   readonly magicLinkRequests: Record<string, unknown>[] = []
   /** The route-mocked companion identity, or null for "not set up yet". POST
@@ -603,7 +607,10 @@ export const test = base.extend<{ world: World }>({
           headers: { 'Cache-Control': 'no-store' },
           body: JSON.stringify({
             profile: emptyProfile,
-            public_profile: { claimed: false, public_label: null },
+            public_profile: {
+              claimed: world.publicLabel !== null,
+              public_label: world.publicLabel,
+            },
           }),
         })
       })

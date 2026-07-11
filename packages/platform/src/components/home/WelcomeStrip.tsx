@@ -41,12 +41,14 @@ export default function WelcomeStrip({ user }: WelcomeStripProps) {
 }
 
 /* Neutral lead-in while the companion identity read is loading / errored. Greets
-   the returning player by their derived display name — companion-known name >
-   board nickname > a neutral greeting (F5), never the account email (audit
-   F19). Per-user stats stay honest: real per-user figures need the leaderboard
-   user_id migration, so the right side is a play CTA, not fabricated numbers. */
+   the returning player by the unified username — the public leaderboard handle
+   (ruling A), never the companion-given intimate name and never the account
+   email (audit F19). This greeting is outside the companion context, so it uses
+   the username, not the intimate name. Per-user stats stay honest: real
+   per-user figures need the leaderboard user_id migration, so the right side is
+   a play CTA, not fabricated numbers. */
 function GreetingFallback({ user }: { user: DisplayUser }) {
-  const greetingName = useGreetingName(true)
+  const greetingName = useGreetingName()
   return (
     <section className={styles.strip}>
       <div className={styles.left}>

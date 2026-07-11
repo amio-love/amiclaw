@@ -32,13 +32,51 @@ export type AuthState =
   | { status: 'anon'; user: null }
 
 /**
- * What `useAuth` returns: the read-only session state plus `logout`. `logout`
- * is stable across renders (`status`/`user` still narrow as before), so every
- * consumer can destructure it without breaking the existing state branches.
+ * What `useAuth` returns: the read-only session state plus `logout` and the
+ * optimistic auth hint. `logout` is stable across renders (`status`/`user`
+ * still narrow as before), so every consumer can destructure it without
+ * breaking the existing state branches.
  */
 export type UseAuthResult = AuthState & {
   /** Revoke the session server-side, then return the whole UI to anonymous. */
   logout: () => Promise<void>
+  /**
+   * Client-persisted optimistic hint (localStorage): `true` when this device
+   * last resolved to a signed-in session, so a returning signed-in visitor
+   * does NOT paint the anonymous homepage before `GET /api/auth/session`
+   * settles (auth-flash fix, rb-codescan Inv4 option 1). Only meaningful while
+   * `status === 'loading'`; once the real read resolves, `status` is
+   * authoritative and self-heals a stale hint (e.g. logged-out elsewhere).
+   */
+  optimisticAuthed: boolean
+}
+
+/**
+ * Non-sensitive boolean flag remembering that this device last saw a signed-in
+ * session. It is NOT a credential — the httpOnly session cookie remains the
+ * only source of truth; this only decides which shell to hold during the first
+ * async read so a returning signed-in user avoids the anonymous-hero flash.
+ */
+const AUTH_HINT_KEY = 'amio_auth_hint'
+
+function readAuthHint(): boolean {
+  try {
+    return localStorage.getItem(AUTH_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Sync the hint to a resolved state: set on `authed`, clear on `anon`. */
+function persistAuthHint(state: AuthState): void {
+  try {
+    if (state.status === 'authed') localStorage.setItem(AUTH_HINT_KEY, '1')
+    else if (state.status === 'anon') localStorage.removeItem(AUTH_HINT_KEY)
+  } catch {
+    // localStorage unavailable (private mode / disabled) — the hint is a pure
+    // optimization; without it the returning-authed path simply flashes as
+    // before, never an error.
+  }
 }
 
 /**
@@ -65,6 +103,12 @@ function readSessionState(): Promise<AuthState> {
           : { status: 'anon', user: null }
     )
     .catch((): AuthState => ({ status: 'anon', user: null }))
+    .then((state) => {
+      // Refresh the optimistic hint from the authoritative read (self-heals a
+      // stale hint on the same load).
+      persistAuthHint(state)
+      return state
+    })
     .finally(() => {
       sessionReadPromise = null
     })
@@ -112,6 +156,9 @@ function devBypassState(): AuthState | undefined {
 export function useAuth(): UseAuthResult {
   const bypass = devBypassState()
   const [state, setState] = useState<AuthState>(bypass ?? { status: 'loading', user: null })
+  // Read the hint once per mount. A dev bypass is already `authed`, so its
+  // optimism is trivially true; otherwise the persisted hint drives it.
+  const [optimisticAuthed] = useState<boolean>(() => (bypass ? true : readAuthHint()))
 
   /**
    * Log out: POST `/api/auth/logout` (idempotent — always clears the cookie),
@@ -146,5 +193,5 @@ export function useAuth(): UseAuthResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { ...state, logout }
+  return { ...state, logout, optimisticAuthed }
 }

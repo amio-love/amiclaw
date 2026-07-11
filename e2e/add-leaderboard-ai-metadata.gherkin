@@ -1,10 +1,12 @@
-# Leaderboard AI metadata — the score row keeps the player-facing context that
-# matters for comparing daily runs: who played, which AI assistant helped, and
-# which model was used when the player knows it.
+# Leaderboard AI metadata — under ruling B a signed-in won daily run auto-submits
+# under the account name, tagging which AI assistant helped. The tool is resolved
+# inference-first (a companion co-play is auto-tagged); when it is neither
+# inferable nor stored, the settlement asks once inline with SSOT chips and
+# remembers the pick. The redundant free-nickname + AI-model modal is retired.
 
 Feature: Leaderboard AI metadata
   As a BombSquad daily player
-  I want my leaderboard score to carry the AI assistant and model I used
+  I want my leaderboard score to carry the AI assistant I used
   So that leaderboard rows compare runs with their AI context intact
 
   Background:
@@ -13,22 +15,12 @@ Feature: Leaderboard AI metadata
 
   # Source: leaderboard-ai-metadata
   @playwright
-  Scenario: A first daily win submits and displays Chinese nickname AI metadata
-    Given I have just defused the bomb in a daily run and the result page is open
-    And no nickname is stored on this device
+  Scenario: A first daily win auto-submits under my name with the AI assistant I picked
+    Given I am signed in with the leaderboard name "小明"
+    And I have just defused the bomb in a daily run and the result page is open
     And no leaderboard AI metadata is stored on this device
-    Then the result page shows the honest not-on-board notice
+    Then the result page asks which AI I played with
 
-    When I open the leaderboard submission modal
-    And I type the Chinese nickname "小明" into the NicknameModal input
-    And I choose AI assistant "Claude"
-    And I type AI model "Claude Sonnet 4.5"
-    And I tap "确认"
-    Then the NicknameModal closes
-    And the leaderboard submission carries nickname "小明", AI assistant "claude", and model "Claude Sonnet 4.5"
-
-    When I tap "回主页"
-    Then I am back on the BombSquad landing page
-    When I tap "排行榜"
-    Then the URL path is /leaderboard
-    And the leaderboard table shows a row with nickname "小明" and AI metadata "Claude · Claude Sonnet 4.5"
+    When I pick AI assistant "Claude" in the settlement
+    Then the result page shows my global rank
+    And the leaderboard submission carries nickname "小明" and AI assistant "claude"

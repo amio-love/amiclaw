@@ -38,6 +38,7 @@ Feature: BombSquad daily challenge and practice mode
   @playwright
   Scenario: Enter the daily challenge from the homepage and defuse all four modules
     Given my viewport width is 375 pixels
+    And I am signed in with the leaderboard name "E2ERunner"
     When I enter the daily challenge from the homepage
     Then the connect-AI flow opens at step 1
     And the copy card shows the daily manual URL

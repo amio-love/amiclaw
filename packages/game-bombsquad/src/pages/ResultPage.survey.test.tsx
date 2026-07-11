@@ -1,20 +1,18 @@
 /**
- * ResultPage endgame-survey wiring tests.
+ * ResultPage endgame-survey wiring tests (audit U13 — fold-in entry).
  *
- * Covers the post-game survey integration on ResultPage:
- *   1. Any outcome on a fresh device opens the survey modal after the result
- *      feedback has had time to land.
- *   2. A device that has already answered/skipped sees no modal.
- *   3. Submitting the survey emits `survey_submit` and marks the device.
+ * The survey is no longer an auto-opening modal. After the settlement has
+ * settled, a calm 「聊聊这一局」entry folds in at the very bottom; tapping it
+ * opens the survey modal. It can never stack over the celebration, the
+ * consolation, or a server-rejection notice. Covered:
+ *   1. Any fresh-device outcome grows the fold-in entry after the settle delay.
+ *   2. A device that already answered/skipped sees no entry.
+ *   3. Submitting emits `survey_submit` and marks the device.
  *   4. Skipping marks the device WITHOUT emitting `survey_submit`.
- *   5. First daily win: nothing auto-opens over the celebration; the survey
- *      delay only starts once the rank outcome has settled (audit F13), so
- *      the questionnaire can never stack over the rank reveal.
- *   6. Skipping the leaderboard gate defers the survey to a later session.
+ *   5. A daily win defers the entry until the run's identity/rank has settled.
+ *   6. A server-rejection notice suppresses the entry (the player must read it).
  *
- * Setup mirrors the sibling ResultPage tests: pre-seed sessionStorage with a
- * finished-game state so `GameProvider`'s lazy initializer hydrates straight
- * into a renderable ResultPage.
+ * Setup mirrors the sibling ResultPage tests.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, fireEvent } from '@testing-library/react'
@@ -26,10 +24,9 @@ vi.mock('@/utils/device-fingerprint', () => ({
 
 vi.mock('@shared/leaderboard-api', () => ({
   submitScore: vi.fn(),
+  fetchLeaderboard: vi.fn(),
 }))
 
-// `logEvent` and the survey gating utils are hoisted mocks so each test can
-// assert on them and control the once-per-device flag.
 const { logEvent } = vi.hoisted(() => ({ logEvent: vi.fn() }))
 vi.mock('@/utils/event-log', () => ({ logEvent }))
 
@@ -39,35 +36,10 @@ const surveyMock = vi.hoisted(() => ({
 }))
 vi.mock('@/utils/survey', () => surveyMock)
 
-// No stored nickname — so a first daily win triggers the merged modal. The
-// other validators are simple real-equivalent impls (the workspace jsdom
-// localStorage stub is non-functional, see the sibling tests).
-vi.mock('@/utils/nickname', () => ({
-  NICKNAME_MAX_LENGTH: 20,
-  getStoredNickname: () => null,
-  isValidNickname: (value: unknown): boolean =>
-    typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 20,
-  setStoredNickname: (value: unknown): boolean =>
-    typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 20,
-}))
-
-vi.mock('@/utils/leaderboard-player-metadata', () => ({
-  LEADERBOARD_AI_MODEL_MAX_LENGTH: 80,
-  LEADERBOARD_AI_TOOL_MAX_LENGTH: 40,
-  getStoredLeaderboardPlayerMetadata: () => null,
-  isValidLeaderboardAiTool: (value: unknown): boolean =>
-    typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 40,
-  normalizeLeaderboardAiModel: (value: unknown): string | undefined => {
-    if (typeof value !== 'string') return undefined
-    const trimmed = value.trim()
-    return trimmed.length > 0 ? trimmed.slice(0, 80) : undefined
-  },
-  setStoredLeaderboardPlayerMetadata: (value: unknown): boolean =>
-    typeof value === 'object' &&
-    value !== null &&
-    'aiTool' in value &&
-    typeof (value as { aiTool?: unknown }).aiTool === 'string' &&
-    (value as { aiTool: string }).aiTool.trim().length > 0,
+const { fetchArcadeProfile } = vi.hoisted(() => ({ fetchArcadeProfile: vi.fn() }))
+vi.mock('@amiclaw/arcade-profile/api-client', () => ({
+  submitArcadeProfileEvent: vi.fn().mockResolvedValue({ kind: 'anon' }),
+  fetchArcadeProfile,
 }))
 
 import ResultPage from './ResultPage'
@@ -76,10 +48,29 @@ import { submitScore } from '@shared/leaderboard-api'
 
 const PERSISTENCE_KEY = 'bombsquad:game-state:v4'
 const RESULT_FEEDBACK_SURVEY_DELAY_MS = 1800
-// A practice win now waits a longer celebration window before the survey opens
+// A practice win waits a longer celebration window before the entry folds in
 // (audit F11). advancePastResultFeedback advances by this max, which also covers
 // the shorter daily/failure delay.
 const RESULT_PRACTICE_CELEBRATION_MS = 4200
+
+function installFakeLocalStorage() {
+  const store = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => (store.has(key) ? (store.get(key) as string) : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value))
+    },
+    removeItem: (key: string) => {
+      store.delete(key)
+    },
+    clear: () => store.clear(),
+    get length() {
+      return store.size
+    },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+  })
+  return store
+}
 
 interface FixtureOptions {
   mode: GameState['mode']
@@ -142,82 +133,93 @@ function answerRequiredSurvey({
 
 function advancePastResultFeedback() {
   act(() => {
-    // Advance by the longest survey delay (the practice celebration window) so
-    // this helper covers both the practice-win and the shorter daily/failure
-    // timings.
     vi.advanceTimersByTime(RESULT_PRACTICE_CELEBRATION_MS)
   })
 }
 
-describe('ResultPage endgame survey', () => {
+/** Open the folded-in survey entry into the modal. */
+function openSurveyEntry() {
+  fireEvent.click(screen.getByRole('button', { name: /聊聊这一局/ }))
+}
+
+describe('ResultPage endgame survey (fold-in entry)', () => {
   beforeEach(() => {
+    installFakeLocalStorage()
     vi.useFakeTimers()
     sessionStorage.clear()
     logEvent.mockReset()
     surveyMock.hasAnsweredSurvey.mockReset()
     surveyMock.markSurveyAnswered.mockReset()
+    fetchArcadeProfile.mockReset()
+    fetchArcadeProfile.mockResolvedValue({ kind: 'anon' })
     vi.mocked(submitScore).mockReset()
     vi.mocked(submitScore).mockResolvedValue({ ok: true, data: { rank: 5, total_players: 100 } })
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
     sessionStorage.clear()
   })
 
-  it('opens the survey modal after the result feedback on a fresh device', () => {
+  it('grows a fold-in entry after the settle delay, opening the survey modal on tap', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
+    // Celebration is unobstructed — no modal, and the entry has not folded in yet.
     expect(screen.getByText('拆弹成功')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
 
     advancePastResultFeedback()
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    // The calm entry folds in; tapping it — and only then — opens the modal.
+    expect(screen.getByRole('button', { name: /聊聊这一局/ })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    openSurveyEntry()
+    expect(screen.getByRole('dialog', { name: '聊聊这一局' })).toBeInTheDocument()
     expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
-    // Survey-only modal — no nickname gate for a practice run.
-    expect(screen.queryByLabelText(/昵称/)).not.toBeInTheDocument()
   })
 
-  it('practice win: the survey waits out the celebration window, not the base delay (F11)', () => {
+  it('practice win: the entry waits out the full celebration window, not the base delay (F11)', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
-    expect(screen.getByText('拆弹成功')).toBeInTheDocument()
-    // Past the base (daily/failure) delay the practice survey is STILL closed —
-    // the win payoff is not interrupted a beat after mount.
+    // Past the base (daily/failure) delay the entry is STILL absent.
     act(() => {
       vi.advanceTimersByTime(RESULT_FEEDBACK_SURVEY_DELAY_MS)
     })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
 
-    // It opens only once the full celebration window has elapsed.
+    // It folds in only once the full celebration window has elapsed.
     act(() => {
       vi.advanceTimersByTime(RESULT_PRACTICE_CELEBRATION_MS - RESULT_FEEDBACK_SURVEY_DELAY_MS)
     })
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /聊聊这一局/ })).toBeInTheDocument()
   })
 
-  it('opens the survey modal even on a failed run', () => {
+  it('folds the entry in even on a failed run, never over the consolation', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     renderResult(finishedState({ mode: 'daily', outcome: 'exploded' }))
 
     expect(screen.getByText('差一点')).toBeInTheDocument()
+    // The consolation quote owns the moment; no modal auto-opens over it.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     advancePastResultFeedback()
+    expect(screen.getByRole('button', { name: /聊聊这一局/ })).toBeInTheDocument()
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    openSurveyEntry()
     expect(screen.getByText('难度感受')).toBeInTheDocument()
   })
 
-  it('does not open any modal once the device has answered the survey', () => {
+  it('does not fold in any entry once the device has answered the survey', () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(true)
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
     advancePastResultFeedback()
 
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -226,6 +228,7 @@ describe('ResultPage endgame survey', () => {
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
     advancePastResultFeedback()
+    openSurveyEntry()
     answerRequiredSurvey()
     fireEvent.click(screen.getByRole('button', { name: '提交' }))
 
@@ -235,8 +238,9 @@ describe('ResultPage endgame survey', () => {
       difficulty: 'just-right',
     })
     expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
-    // Modal closes; the "再来一局" CTA stays reachable.
+    // Modal closes; the entry retires; the "再来一局" CTA stays reachable.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '再来一局' })).toBeInTheDocument()
   })
 
@@ -245,6 +249,7 @@ describe('ResultPage endgame survey', () => {
     renderResult(finishedState({ mode: 'practice', outcome: 'practice-cleared' }))
 
     advancePastResultFeedback()
+    openSurveyEntry()
     fireEvent.click(screen.getByRole('button', { name: '跳过' }))
 
     expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
@@ -253,96 +258,33 @@ describe('ResultPage endgame survey', () => {
     expect(screen.getByRole('button', { name: '再来一局' })).toBeInTheDocument()
   })
 
-  it('first daily win: the survey stays deferred until the rank reveal has settled', async () => {
+  it('first daily win: the entry stays deferred until the run has settled', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
+    // Anonymous → the run resolves to the login-invite state, which counts as
+    // settled; before that resolves, the settle delay must not even start.
+    fetchArcadeProfile.mockResolvedValue({ kind: 'anon' })
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
 
-    // Rank-reveal-first (audit F1): nothing auto-opens over the celebration.
-    expect(screen.getByText('拆弹成功')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(submitScore).not.toHaveBeenCalled()
-
-    // The survey delay has not even started while the run is off the board —
-    // advancing past it opens nothing (audit F13).
+    // While identity is still resolving, advancing the clock folds in nothing.
     advancePastResultFeedback()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
 
-    // Open the deferred gate from the rank-card CTA and complete it. The gate
-    // dialog carries no survey-only fun / difficulty questions.
-    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
-    expect(screen.getAllByRole('dialog')).toHaveLength(1)
-    expect(screen.getByLabelText(/昵称/)).toBeInTheDocument()
-    expect(screen.getByText('你这局用的是哪个 AI 工具？')).toBeInTheDocument()
-    expect(screen.queryByText('整体好玩程度')).not.toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
-    fireEvent.click(screen.getByRole('button', { name: '确认' }))
-
-    // Nickname / AI metadata path fires the score submission; survey has not
-    // opened yet, so no survey telemetry or answered marker fires here.
-    expect(submitScore).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
-      nickname: '小测',
-      ai_tool: 'claude',
-    })
-    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
-    expect(surveyMock.markSurveyAnswered).not.toHaveBeenCalled()
-
-    // Flush the submit promise so the rank settles and reveals.
+    // Resolve identity → the run settles → only now does the delay begin.
     await act(async () => {})
-    expect(screen.getByText('全球排名')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
 
-    // Only now does the survey delay start; after it, the survey opens alone —
-    // after the celebration beat, never over the reveal itself.
     advancePastResultFeedback()
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('整体好玩程度')).toBeInTheDocument()
-    answerRequiredSurvey()
-    fireEvent.click(screen.getByRole('button', { name: '提交' }))
-
-    expect(logEvent).toHaveBeenCalledWith('survey_submit', {
-      ai_tool: 'claude',
-      fun: 4,
-      difficulty: 'just-right',
-    })
-    expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /聊聊这一局/ })).toBeInTheDocument()
   })
 
-  it('daily leaderboard gate is confirmable without answering the deferred survey', async () => {
+  it('suppresses the entry while a server-rejection notice is showing (F8)', async () => {
     surveyMock.hasAnsweredSurvey.mockReturnValue(false)
-    renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
-
-    // Fill only the leaderboard gate; leave the survey questions for later.
-    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
-    expect(screen.getAllByRole('dialog')).toHaveLength(1)
-    fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
-    fireEvent.click(screen.getByRole('button', { name: '确认' }))
-
-    // Score submits; the survey has not shown, so the device is not marked.
-    expect(submitScore).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(submitScore).mock.calls[0][0]).toMatchObject({
-      nickname: '小测',
-      ai_tool: 'claude',
+    localStorage.setItem('bombsquad-leaderboard-ai-tool', 'claude')
+    fetchArcadeProfile.mockResolvedValue({
+      kind: 'ok',
+      profile: undefined,
+      publicProfile: { claimed: true, public_label: '公开名' },
     })
-    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
-    expect(surveyMock.markSurveyAnswered).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    // Rank settles, then the deferred survey opens and is skippable.
-    await act(async () => {})
-    advancePastResultFeedback()
-
-    fireEvent.click(screen.getByRole('button', { name: '跳过' }))
-    expect(surveyMock.markSurveyAnswered).toHaveBeenCalledTimes(1)
-    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
-  })
-
-  it('defers the survey while a server rejection notice is showing (F8)', async () => {
-    surveyMock.hasAnsweredSurvey.mockReturnValue(false)
     vi.mocked(submitScore).mockResolvedValue({
       ok: false,
       kind: 'rejected',
@@ -351,38 +293,16 @@ describe('ResultPage endgame survey', () => {
     })
     renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
 
-    // Fill the leaderboard gate to fire the submission.
-    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
-    fireEvent.change(screen.getByLabelText(/昵称/), { target: { value: '小测' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
-    fireEvent.click(screen.getByRole('button', { name: '确认' }))
-
-    // Flush the submit promise → the inline rejection notice renders (its 重试
-    // button is the reliable marker of the rejected state).
+    // Flush identity resolve + auto-submit → the inline rejection notice renders
+    // (its 重试 button is the reliable marker of the rejected state).
+    await act(async () => {})
     await act(async () => {})
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
 
-    // The survey delay elapses, but the survey must NOT stack over the
-    // rejection notice — the player has to be able to read why nothing landed.
+    // The settle delay elapses, but the entry must NOT fold in over the rejection
+    // notice — the player has to read why nothing landed.
     advancePastResultFeedback()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /聊聊这一局/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
-  })
-
-  it('skipping the leaderboard gate defers the survey to a later session', async () => {
-    surveyMock.hasAnsweredSurvey.mockReturnValue(false)
-    renderResult(finishedState({ mode: 'daily', outcome: 'defused' }))
-
-    fireEvent.click(screen.getByRole('button', { name: '填写并上榜' }))
-    fireEvent.click(screen.getByRole('button', { name: '稍后再说' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    // The run never settled on the board this session — the survey never
-    // opens and the device is NOT marked answered, so a later session can
-    // still ask once.
-    advancePastResultFeedback()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(surveyMock.markSurveyAnswered).not.toHaveBeenCalled()
-    expect(logEvent).not.toHaveBeenCalledWith('survey_submit', expect.anything())
   })
 })
