@@ -167,12 +167,15 @@ describe('voiceReducer', () => {
     expect(next.playerTranscript).toBe('no final flag here')
   })
 
-  it('audio chunks do not change aiText but their done flag closes the turn', () => {
+  it('audio chunks do not change aiText and never close the turn; the terminal text chunk does', () => {
+    // Audio frames are pinned `done: false` (the server never ends a turn on
+    // audio — only the terminal text chunk carries `done: true`).
     const next = run(
       { type: 'connecting' },
       { type: 'frame', frame: { type: 'created', sessionId: 's1' } },
       { type: 'frame', frame: { type: 'chunk', kind: 'text', text: 'ok', done: false } },
-      { type: 'frame', frame: { type: 'chunk', kind: 'audio', audio: 'AAAA', done: true } }
+      { type: 'frame', frame: { type: 'chunk', kind: 'audio', audio: 'AAAA', done: false } },
+      { type: 'frame', frame: { type: 'chunk', kind: 'text', text: '', done: true } }
     )
     expect(next.aiText).toBe('ok')
     expect(next.turnDone).toBe(true)

@@ -48,6 +48,7 @@ import {
   deriveConversationPhase,
   initialVoiceState,
   voiceReducer,
+  type CoBuildAction,
   type ConversationPhase,
   type ServerFrame,
   type VoiceStatus,
@@ -168,6 +169,14 @@ export interface UseGameVoiceSessionOptions {
   getGameState?: () => GameVoiceState
   /** Called once for the terminal transcript frame of each player utterance. */
   onFinalTranscript?: (utterance: { sequence: number; text: string }) => void
+  /**
+   * Called with the partner's structured board moves when a co_build game's server
+   * emits an `action` frame. This is the SOLE handling path for `action` frames —
+   * they never enter `voiceReducer`. Omitted by every non-co_build consumer
+   * (BombSquad / botanical / shadow-chase / lobby), for whom an `action` frame (which
+   * their server never sends anyway) is a no-op.
+   */
+  onAction?: (actions: CoBuildAction[]) => void
 }
 
 export interface UseGameVoiceSessionResult {
@@ -239,6 +248,7 @@ export function useGameVoiceSession(
     guards,
     getGameState,
     onFinalTranscript,
+    onAction,
   } = options
 
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState)
@@ -275,6 +285,7 @@ export function useGameVoiceSession(
   const streakDaysRef = useRef<number | undefined>(streakDays)
   const getGameStateRef = useRef(getGameState)
   const onFinalTranscriptRef = useRef(onFinalTranscript)
+  const onActionRef = useRef(onAction)
   useEffect(() => {
     manualDataRef.current = manualData
     gameStateRef.current = gameState
@@ -283,6 +294,7 @@ export function useGameVoiceSession(
     streakDaysRef.current = streakDays
     getGameStateRef.current = getGameState
     onFinalTranscriptRef.current = onFinalTranscript
+    onActionRef.current = onAction
   })
 
   // Side-effect handles (never trigger re-render).
@@ -654,6 +666,22 @@ export function useGameVoiceSession(
       try {
         frame = JSON.parse(event.data) as ServerFrame
       } catch {
+        return
+      }
+      if (frame.type === 'action') {
+        // The SOLE handling path for co_build `action` frames: hand the partner's
+        // structured moves to the game's callback and STOP — the frame never
+        // reaches `safeDispatch`/`voiceReducer`, so the exposed session state is
+        // untouched. Absent callback (every non-co_build game) ⇒ a pure no-op.
+        //
+        // Barge-in transactional semantics: a turn's actions share the fate of its
+        // speech. When the player barged in on this turn (`suppressTurnRef`), the
+        // reply was abandoned — its trailing chunks (text + audio) are already being
+        // dropped until its `done`, so its action frame is dropped in lockstep. The
+        // move belonged to a turn the player interrupted; delivering it would mutate
+        // the board for a reply the player chose to override.
+        if (suppressTurnRef.current) return
+        onActionRef.current?.(frame.actions)
         return
       }
       if (frame.type === 'created') {

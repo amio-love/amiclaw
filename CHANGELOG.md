@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**The platform companion learns to act in co-build games** — Added. The voice
+AI pipeline gains a backward-compatible action channel: in games flagged as
+co-build, the companion's reply can carry one structured board action
+(place/remove a piece) alongside its speech, parsed through a bounded splitter
+that never leaks protocol markers into the voice and validated against the
+game's vocabulary before it touches the board. Existing games are untouched —
+the capability is off by default per game, non-co-build replies are
+byte-identical, and a barge-in that cuts the companion off also cancels its
+pending move. Groundwork for Sound Garden, where the companion plants rhythm
+roots in your shared garden.
+
 **Shadow Chase now reads at a glance** — Improved. Setup, tactical planning, the
 live chase, and results now use the shared Atlas page, navigation, button, status,
 and icon-control grammar. Compact diagrams show that three collected cores open
