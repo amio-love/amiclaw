@@ -82,10 +82,13 @@ describe('arcade profile handlers', () => {
     vi.useRealTimers()
   })
 
-  it('requires a session for account profile reads', async () => {
+  it('answers 204 (not 401) for an anonymous account profile read so it makes no console noise (F27)', async () => {
+    // An anonymous GET has no account to resolve; the server accepts it as a
+    // no-content read rather than 401, so an anonymous player's settlement does
+    // not spray a red 401 into the console. The client reads 204 as `anon`.
     const response = await handleGetArcadeProfile(request(undefined, ''), await env())
 
-    expect(response.status).toBe(401)
+    expect(response.status).toBe(204)
   })
 
   it('claims bounded local events into the signed-in account idempotently', async () => {

@@ -415,7 +415,10 @@ describe('AccountPage /me', () => {
     expect(screen.queryByText('本设备的星轨。')).not.toBeInTheDocument()
   })
 
-  it('auto-claims the current device records into the account on login (F7)', async () => {
+  it('does NOT claim device records on load; only an explicit「保存到账号」tap claims', async () => {
+    // Product ethos: opening /me is a read, never a silent account write. The
+    // device-records card surfaces the pending count + a「保存到账号」button; the
+    // claim fires only when the player taps it.
     seedLocalProfile(localStore)
     const fetchSpy = stubApi({
       session: AUTHED,
@@ -426,7 +429,16 @@ describe('AccountPage /me', () => {
     })
     renderAccount('/me')
 
-    // No manual tap — the claim fires automatically once signed in.
+    // The card renders and names the pending records, but no claim has fired on
+    // load — /me stayed read-only.
+    const saveButton = await screen.findByRole('button', { name: '保存到账号' })
+    expect(screen.queryByText('已保存')).not.toBeInTheDocument()
+    expect(
+      fetchSpy.mock.calls.some((call) => urlOf(call[0]).includes('/api/arcade/profile/claim'))
+    ).toBe(false)
+
+    // The explicit tap claims and confirms.
+    fireEvent.click(saveButton)
     expect(await screen.findByText('已保存')).toBeInTheDocument()
     await waitFor(() => {
       expect(

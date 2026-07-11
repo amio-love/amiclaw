@@ -23,7 +23,7 @@
  *     so the modal never interferes with non-survey result-page journeys.
  */
 import { test as base, createBdd } from 'playwright-bdd'
-import type { Page } from '@playwright/test'
+import type { Page, TestInfo } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -212,6 +212,9 @@ interface LeaderboardState {
 /** Per-test shared state + run-driving helpers. */
 export class World {
   readonly page: Page
+  /** The running test's info — used only for per-test screenshot output paths.
+   *  Assigned by the fixture wiring right after construction. */
+  testInfo!: TestInfo
   readonly answers = ANSWERS
   readonly seedT = ANSWERS.seed
   readonly leaderboard: LeaderboardState
@@ -291,6 +294,17 @@ export class World {
   /** Jump the controlled clock forward, firing each due timer at most once. */
   async fastForwardPast(ms: number): Promise<void> {
     await this.page.clock.fastForward(ms)
+  }
+
+  /**
+   * Capture a settlement-state screenshot into this test's own output dir —
+   * free evidence for preview rounds (the three identity states: anonymous,
+   * signed-in AI-ask, signed-in rank). `testInfo.outputPath` gives each test a
+   * unique directory, so parallel workers never race on a shared file. Purely
+   * evidence: no assertion depends on it, so it stays cheap and non-flaky.
+   */
+  async captureSettlement(state: string): Promise<void> {
+    await this.page.screenshot({ path: this.testInfo.outputPath(`settlement-${state}.png`) })
   }
 
   scene(): RunScene {
@@ -486,6 +500,7 @@ export const test = base.extend<{ world: World }>({
   world: [
     async ({ page, context }, use, testInfo) => {
       const world = new World(page)
+      world.testInfo = testInfo
 
       await context.grantPermissions(['clipboard-read', 'clipboard-write'])
 
@@ -565,9 +580,15 @@ export const test = base.extend<{ world: World }>({
 
       // Arcade profile — the static-build harness has no D1 or auth cookie
       // runtime. Signed-in scenarios get an honest empty account profile; signed-
-      // out scenarios get the same 401 shape as production.
+      // out scenarios mirror production: an anonymous GET profile answers 204
+      // (no account to resolve, no console-noise 401 — audit F27); an anonymous
+      // claim stays 401.
       await page.route('**/api/arcade/profile**', async (route) => {
         if (!world.authIdentity) {
+          if (route.request().method() === 'GET') {
+            await route.fulfill({ status: 204, headers: { 'Cache-Control': 'no-store' } })
+            return
+          }
           await route.fulfill({
             status: 401,
             contentType: 'application/json',

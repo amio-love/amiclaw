@@ -82,11 +82,13 @@ Given('I am signed in with the leaderboard name {string}', async ({ world }, nam
   world.publicLabel = name
 })
 
-Then('the result page asks which AI I played with', async ({ page }) => {
+Then('the result page asks which AI I played with', async ({ page, world }) => {
   // First-time BYO signed-in win: the tool is not inferable and none is stored,
   // so the settlement shows ONE inline row of SSOT chips — no popup, no gate.
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByText('和哪个 AI 一起玩的？')).toBeVisible()
+  // Identity-state evidence: signed-in first-BYO win (AI-tool ask).
+  await world.captureSettlement('signed-in-ai-ask')
 })
 
 When('I pick AI assistant {string} in the settlement', async ({ page }, assistant: string) => {
@@ -107,10 +109,12 @@ Then('no leaderboard score is submitted', async ({ world, page }) => {
   expect(world.leaderboard.submissions).toHaveLength(0)
 })
 
-Then('the result page shows my global rank', async ({ page }) => {
+Then('the result page shows my global rank', async ({ page, world }) => {
   // The Atlas result page shows the rank in a card — a "全球排名" label cell
   // and a "#N / total" value cell — rather than the old "全球排名：#N" line.
   await expect(page.getByText('全球排名')).toBeVisible()
+  // Identity-state evidence: signed-in win with a resolved leaderboard rank.
+  await world.captureSettlement('signed-in-rank')
 })
 
 Then('the leaderboard table renders without horizontal overflow', async ({ page }) => {

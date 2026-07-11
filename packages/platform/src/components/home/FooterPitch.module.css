@@ -7,7 +7,14 @@
   padding: 60px 40px;
   border: 1px solid var(--border-yellow-soft);
   border-radius: var(--radius-3xl);
-  background: linear-gradient(135deg, rgba(255, 229, 62, 0.08), rgba(180, 120, 255, 0.04));
+  /* Faint yellow→violet wash, derived from the brand tokens (was raw
+     rgba(255,229,62,.08) / rgba(180,120,255,.04)). color-mix keeps the stops
+     tied to --amio-yellow / --accent-violet so a brand-hue change carries. */
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--amio-yellow) 8%, transparent),
+    color-mix(in srgb, var(--accent-violet) 4%, transparent)
+  );
   text-align: center;
 }
 
