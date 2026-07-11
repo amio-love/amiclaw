@@ -14,11 +14,11 @@ Then('the Shadow Chase opening rule is complete', async ({ page }) => {
   const copy = await page.locator('body').innerText()
   expect(copy).toContain('战术准备结束后追兵立即行动')
   expect(copy).toContain('收集三枚光核')
-  expect(copy).toContain('02:00 开启')
+  expect(copy).toContain('月门会立即开启')
   expect(copy).toContain('完成救援')
-  expect(copy).toContain('一起撤离')
+  expect(copy).toContain('抵达出口撤离')
   expect(copy).toContain(
-    '追兵只锁定你：横竖直线没有墙遮挡时追向你，看不见你就返回月门。它始终比你和伙伴略快；接触或迎面交叉仍会捕获任何一方。每收集一枚光核获得一次换位。'
+    '追兵始终以略快速度走最短路：玩家自由时只追玩家，玩家被捕时转追伙伴，玩家获救后立即转回。碰到任意一方都会捕获；每枚光核提供一次换位，三枚集齐后月门立即开启。'
   )
   const pursuerRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
   await page.locator('html').evaluate((element, rule) => {
@@ -38,8 +38,7 @@ Then('the Shadow Chase planning map is visible and frozen', async ({ page }) => 
   const planningRule = await page.getByRole('region', { name: '追兵规则' }).locator('p').innerText()
   expect(planningRule).toBe(setupRule)
   const board = page.getByRole('application', { name: '双影追逃地图' })
-  await expect(board).toHaveAccessibleDescription('追兵当前目标：月门')
-  expect(await page.locator('.sight-lane').count()).toBe(4)
+  await expect(board).toHaveAccessibleDescription('追兵当前目标：你')
 })
 
 Then('the Shadow Chase board and essential controls are visible', async ({ page }) => {
@@ -59,12 +58,14 @@ Then('Shadow Chase exposes no multiplayer affordance', async ({ page }) => {
 
 Then('Shadow Chase pursuit is active when the chase starts', async ({ page, world }) => {
   const pursuer = page.getByLabel('追兵')
-  const startingTransform = await pursuer.getAttribute('transform')
-  await world.advance(600)
+  await world.advance(1100)
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toBeVisible()
+  await expect(page.locator('.hud').getByText('00:01')).toBeVisible()
   await expect(page.locator('.hud').getByText('双方安全')).toBeVisible()
   await expect(pursuer).toHaveAttribute('class', 'pursuer board-overlay')
-  expect(await pursuer.getAttribute('transform')).not.toBe(startingTransform)
+  await expect(page.getByRole('application', { name: '双影追逃地图' })).toHaveAccessibleDescription(
+    '追兵当前目标：你'
+  )
 })
 
 Then('the Shadow Chase command {string} is active', async ({ page, world }, label: string) => {
@@ -102,17 +103,13 @@ Then('Shadow Chase accepts a path target through an overlay', async ({ page, wor
   await expect(page.locator('.path-target')).toBeVisible()
 })
 
-Then('Shadow Chase shows nonblocking pursuer sight and target', async ({ page }) => {
-  const lanes = page.locator('.sight-lane')
-  expect(await lanes.count()).toBe(4)
+Then('Shadow Chase shows a nonblocking pursuer target', async ({ page }) => {
   const indicator = page.locator('.pursuer-destination-indicator')
   await expect(indicator).toHaveCount(1)
   await expect(indicator).toBeVisible()
   await expect(page.getByRole('application', { name: '双影追逃地图' })).toHaveAccessibleDescription(
-    /追兵当前目标：(你|AI 伙伴|月门)/
+    /追兵当前目标：(你|AI 伙伴)/
   )
-  for (const overlay of [lanes.first(), indicator]) {
-    await expect(overlay).toHaveCSS('pointer-events', 'none')
-    await expect(overlay).toHaveAttribute('aria-hidden', 'true')
-  }
+  await expect(indicator).toHaveCSS('pointer-events', 'none')
+  await expect(indicator).toHaveAttribute('aria-hidden', 'true')
 })

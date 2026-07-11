@@ -16,15 +16,15 @@ describe('pacing feedback', () => {
     expect(screen.getByText('1 次')).toBeTruthy()
   })
 
-  it('shows the deterministic moon-gate countdown after all cores are collected early', () => {
+  it('shows the moon gate open as soon as all cores are collected', () => {
     const state = createRunningState('courtyard', 'relaxed', 7)
     state.tick = 100
     state.objectives.forEach((objective) => {
       objective.collected = true
     })
-    state.exit.enabled = false
+    state.exit.enabled = true
     render(<Hud state={state} />)
-    expect(screen.getByText('01:35 后开启')).toBeTruthy()
+    expect(screen.getByText('已开启')).toBeTruthy()
   })
 
   it('makes a rescue and immediate recapture visible', () => {

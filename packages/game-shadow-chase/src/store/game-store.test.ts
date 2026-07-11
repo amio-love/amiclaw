@@ -86,6 +86,7 @@ describe('fixed-step external store', () => {
       scheduler,
       seed: 5,
       mapId: 'courtyard',
+      difficulty: 'intense',
       fetchIntent: () => new Promise(() => undefined),
     })
     store.start()

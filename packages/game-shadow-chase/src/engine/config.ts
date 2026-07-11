@@ -1,5 +1,4 @@
 export const TICK_MS = 250
-export const MIN_RUN_TICKS = 480
 export const RUN_CAP_TICKS = 1200
 export const OBJECTIVE_COUNT = 3
 export const MAP_MIN_SIZE = 7

@@ -66,11 +66,11 @@ function rescueStep(state: SimulationState): Coordinate {
   const companion = state.actors.companion.position
   const player = state.actors.player.position
   const pursuer = state.actors.pursuer.position
-  const pursuerFirst = nextStepOnShortestPath(map, pursuer, state.exit.position) ?? pursuer
+  const pursuerFirst = nextStepOnShortestPath(map, pursuer, companion) ?? pursuer
   const pursuerPath = [pursuer, pursuerFirst]
   const bonusInterval = DIFFICULTY_CONFIG[state.difficulty].pursuerBonusStepInterval
   if ((state.tick + 1) % bonusInterval === 0) {
-    pursuerPath.push(nextStepOnShortestPath(map, pursuerFirst, state.exit.position) ?? pursuerFirst)
+    pursuerPath.push(nextStepOnShortestPath(map, pursuerFirst, companion) ?? pursuerFirst)
   }
   if (pursuerPath.some((position) => coordinatesEqual(player, position))) {
     return evade(state) ?? companion

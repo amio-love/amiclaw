@@ -1,4 +1,4 @@
-import { DIFFICULTY_CONFIG, MIN_RUN_TICKS, RUN_CAP_TICKS, isSafeTick } from './config'
+import { DIFFICULTY_CONFIG, RUN_CAP_TICKS, isSafeTick } from './config'
 import { companionNextStep } from './companion-policy'
 import { validateModelProposal } from './intent-legality'
 import { getMap } from './maps'
@@ -330,8 +330,7 @@ export function advance(
       }
     }
   }
-  next.exit.enabled =
-    next.objectives.every((objective) => objective.collected) && nextTick >= MIN_RUN_TICKS
+  next.exit.enabled = next.objectives.every((objective) => objective.collected)
 
   const bothCaptured =
     next.actors.player.status === 'captured' && next.actors.companion.status === 'captured'

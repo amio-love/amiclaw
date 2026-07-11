@@ -1,24 +1,25 @@
 import { DIFFICULTY_CONFIG } from './config'
-import { hasLineOfSight } from './line-of-sight'
 import { getMap } from './maps'
 import { nextStepOnShortestPath } from './pathfinding'
 import type { WalkableMap } from './rules'
 import type { Coordinate, ShadowActor, SimulationState } from './types'
 
-export type PursuerShadowId = 'player'
-export type PursuerDestination = PursuerShadowId | 'moon-gate'
+export type PursuerDestination = 'player' | 'companion'
 
 export interface PursuerObservation {
-  readonly map: WalkableMap & { readonly moonGate: Coordinate }
+  readonly map: WalkableMap
   readonly pursuer: Coordinate
   readonly player: {
+    readonly position: Coordinate
+    readonly status: ShadowActor['status']
+  }
+  readonly companion: {
     readonly position: Coordinate
     readonly status: ShadowActor['status']
   }
 }
 
 export interface PursuerDecision {
-  readonly visibleCandidates: readonly PursuerShadowId[]
   readonly destination: PursuerDestination
 }
 
@@ -35,7 +36,6 @@ function immutableObservationMap(map: ReturnType<typeof getMap>): PursuerObserva
     width: map.width,
     height: map.height,
     walls: Object.freeze(map.walls.map(immutableCoordinate)),
-    moonGate: immutableCoordinate(map.exit),
   })
   OBSERVATION_MAPS.set(map, observationMap)
   return observationMap
@@ -50,16 +50,16 @@ export function buildPursuerObservation(state: SimulationState): PursuerObservat
       position: immutableCoordinate(state.actors.player.position),
       status: state.actors.player.status,
     }),
+    companion: Object.freeze({
+      position: immutableCoordinate(state.actors.companion.position),
+      status: state.actors.companion.status,
+    }),
   })
 }
 
 export function selectPursuerDecision(observation: PursuerObservation): PursuerDecision {
-  const playerVisible =
-    observation.player.status === 'free' &&
-    hasLineOfSight(observation.map, observation.pursuer, observation.player.position)
   return Object.freeze({
-    visibleCandidates: Object.freeze(playerVisible ? (['player'] as const) : []),
-    destination: playerVisible ? 'player' : 'moon-gate',
+    destination: observation.player.status === 'free' ? 'player' : 'companion',
   })
 }
 
@@ -67,8 +67,7 @@ export function nextPursuerStep(
   observation: PursuerObservation,
   decision: PursuerDecision
 ): Coordinate {
-  const destinationPosition =
-    decision.destination === 'moon-gate' ? observation.map.moonGate : observation.player.position
+  const destinationPosition = observation[decision.destination].position
   return (
     nextStepOnShortestPath(observation.map, observation.pursuer, destinationPosition) ??
     observation.pursuer
@@ -77,7 +76,7 @@ export function nextPursuerStep(
 
 function applyPursuerDecision(state: SimulationState, decision: PursuerDecision): void {
   state.actors.pursuer.destination = decision.destination
-  state.actors.pursuer.target = 'player'
+  state.actors.pursuer.target = decision.destination
 }
 
 export function refreshPursuerDecision(state: SimulationState): PursuerDecision {

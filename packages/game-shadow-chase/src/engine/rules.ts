@@ -75,7 +75,7 @@ export function createRunningState(
         id: 'pursuer',
         position: { ...map.pursuerSpawn },
         target: 'player',
-        destination: 'moon-gate',
+        destination: 'player',
       },
     },
     objectives: map.objectives.map((objective) => ({

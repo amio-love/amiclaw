@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 
 import { getMap } from '../engine/maps'
-import { sightLanes } from '../engine/line-of-sight'
 import {
   buildPursuerObservation,
   selectPursuerDecision,
@@ -55,16 +54,12 @@ export function GameBoard({
 }) {
   const map = getMap(state.mapId)
   const pursuer = state.actors.pursuer
-  const lanes = sightLanes(map, pursuer.position)
   const displayedDestination: PursuerDestination =
     !interactive || state.tick === 0
       ? selectPursuerDecision(buildPursuerObservation(state)).destination
       : pursuer.destination
-  const destinationPosition =
-    displayedDestination === 'moon-gate'
-      ? state.exit.position
-      : state.actors[displayedDestination].position
-  const destinationName = displayedDestination === 'moon-gate' ? '月门' : '你'
+  const destinationPosition = state.actors[displayedDestination].position
+  const destinationName = displayedDestination === 'player' ? '你' : 'AI 伙伴'
   const destinationDescriptionId = `pursuer-destination-${state.runId}`
   const arrowheadId = `pursuer-arrowhead-${state.runId}`
   const gesture = useRef<{ pointerId: number; start: Coordinate } | null>(null)
@@ -152,18 +147,6 @@ export function GameBoard({
           />
         )
       })}
-      {lanes.map((lane) => (
-        <line
-          key={lane.id}
-          className="sight-lane board-overlay"
-          data-direction={lane.id}
-          x1={pursuer.position.x * CELL + CELL / 2}
-          y1={pursuer.position.y * CELL + CELL / 2}
-          x2={lane.end.x * CELL + CELL / 2}
-          y2={lane.end.y * CELL + CELL / 2}
-          aria-hidden="true"
-        />
-      ))}
       <g className="pursuer-destination-indicator board-overlay" aria-hidden="true">
         <line
           x1={pursuer.position.x * CELL + CELL / 2}

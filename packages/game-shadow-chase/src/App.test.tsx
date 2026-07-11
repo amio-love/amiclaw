@@ -35,6 +35,7 @@ describe('playable shell semantics', () => {
     }
     fireEvent.click(screen.getByRole('button', { name: '立即出发' }))
     expect(screen.getByRole('button', { name: '交换位置 · 0' })).toBeTruthy()
+    expect(screen.getByText('键盘可用 WASD、方向键，空格换位')).toBeTruthy()
   })
 
   it('adjusts the same planning duration before and during the frozen phase', () => {

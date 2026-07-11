@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { getMap } from './maps'
-import { nextStepOnShortestPath } from './pathfinding'
 import {
   buildPursuerObservation,
   nextPursuerStep,
@@ -11,8 +9,8 @@ import {
 } from './pursuer-policy'
 import { createRunningState } from './rules'
 
-describe('player-only pursuer policy', () => {
-  it('targets a visible player and ignores a nearer companion and private intent', () => {
+describe('priority pursuer policy', () => {
+  it('targets the player even through walls and with a nearer companion', () => {
     const state = createRunningState('crossroads', 'standard', 17)
     state.actors.pursuer.position = { x: 4, y: 0 }
     state.actors.player.position = { x: 0, y: 0 }
@@ -27,30 +25,25 @@ describe('player-only pursuer policy', () => {
 
     const decision = selectPursuerDecision(buildPursuerObservation(state))
 
-    expect(decision).toEqual({ visibleCandidates: ['player'], destination: 'player' })
+    expect(decision).toEqual({ destination: 'player' })
     expect(nextPursuerStep(buildPursuerObservation(state), decision)).toEqual({ x: 3, y: 0 })
   })
 
-  it('returns to the moon gate when the player is hidden even if the companion is visible', () => {
+  it('keeps pursuing the player without a visibility state', () => {
     const state = createRunningState('crossroads', 'standard', 17)
-    state.actors.companion.position = { x: 7, y: 4 }
-    const expected = nextStepOnShortestPath(
-      getMap(state.mapId),
-      state.actors.pursuer.position,
-      state.exit.position
-    )
+    state.actors.pursuer.position = { x: 4, y: 0 }
+    state.actors.player.position = { x: 4, y: 4 }
 
-    expect(pursuerStepPath(state, 1)).toEqual([expected])
-    expect(state.actors.pursuer.destination).toBe('moon-gate')
+    expect(selectPursuerDecision(buildPursuerObservation(state)).destination).toBe('player')
   })
 
-  it('returns to the moon gate after capturing the player', () => {
+  it('targets the companion only after the player is captured', () => {
     const state = createRunningState('crossroads', 'standard', 17)
     state.actors.pursuer.position = { x: 4, y: 0 }
     state.actors.player.position = { x: 2, y: 0 }
     state.actors.player.status = 'captured'
 
-    expect(selectPursuerDecision(buildPursuerObservation(state)).destination).toBe('moon-gate')
+    expect(selectPursuerDecision(buildPursuerObservation(state)).destination).toBe('companion')
   })
 
   it('takes one step every tick and one bonus step at the difficulty interval', () => {
@@ -71,12 +64,6 @@ describe('player-only pursuer policy', () => {
 
   it('builds a narrow observation without reading the companion or private fields', () => {
     const state = createRunningState('crossroads', 'standard', 17)
-    Object.defineProperty(state.actors, 'companion', {
-      configurable: true,
-      get: () => {
-        throw new Error('forbidden companion read')
-      },
-    })
     for (const field of [
       'command',
       'activeModelLease',
@@ -102,14 +89,7 @@ describe('player-only pursuer policy', () => {
   it('keeps the pure selector isolated from poisoned private fields', () => {
     const observation = buildPursuerObservation(createRunningState('crossroads', 'standard', 17))
     const poisoned = { ...observation } as PursuerObservation & Record<string, unknown>
-    for (const field of [
-      'companion',
-      'command',
-      'modelLease',
-      'difficulty',
-      'objectives',
-      'voice',
-    ]) {
+    for (const field of ['command', 'modelLease', 'difficulty', 'objectives', 'voice']) {
       Object.defineProperty(poisoned, field, {
         get: () => {
           throw new Error(`forbidden read: ${field}`)

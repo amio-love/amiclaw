@@ -29,6 +29,14 @@ function panel(activeVoice: ShadowVoiceView) {
 }
 
 describe('StrategyPanel voice controls', () => {
+  it('exposes Space as the swap keyboard shortcut', () => {
+    render(panel(voice('unavailable', {})))
+
+    expect(
+      screen.getByRole('button', { name: '交换位置 · 0' }).getAttribute('aria-keyshortcuts')
+    ).toBe('Space')
+  })
+
   it.each(['connecting', 'ready', 'listening', 'thinking', 'speaking'] as const)(
     'offers a 44px manual stop control while voice is %s',
     (status) => {
