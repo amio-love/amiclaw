@@ -34,6 +34,19 @@
 export type SessionSummaryPayload = unknown
 
 /**
+ * One co_build partner board move. A STRUCTURAL mirror of the server's
+ * `@amiclaw/platform-ai` `CoBuildAction` — re-declared here (not imported) so
+ * `shared/` stays free of any `@amiclaw/*` workspace dependency, exactly as the
+ * server envelope shapes are. A co_build game re-narrows to the concrete type at
+ * its own boundary; other games never see an `action` frame at all.
+ */
+export interface CoBuildAction {
+  op: 'place' | 'remove'
+  pieceType: string
+  slot: number
+}
+
+/**
  * Connection lifecycle surfaced to the panel. This is the SOCKET state, distinct
  * from the in-conversation `ConversationPhase` (listening / thinking / speaking)
  * which the hands-free model layers on top of a live `ready` session.
@@ -91,12 +104,25 @@ export function deriveConversationPhase(s: PhaseSignals): ConversationPhase {
  * channel), `summary` on `end`, and a non-fatal in-band `error` (e.g.
  * `turn_in_flight`, `already_created`) that does NOT close the socket. `final` is
  * optional; a missing flag is treated as a non-terminal interim.
+ *
+ * The `action` frame carries a co_build partner's structured board moves (co_build
+ * games only). It is its OWN frame — NOT a `chunk` — and carries no `done` (the AI
+ * reply's terminal text `chunk` still closes the turn). It is handled by the hook's
+ * single explicit `onAction` branch and NEVER reaches `voiceReducer`; a game without
+ * an `onAction` callback ignores it (a no-op, not an unknown-frame surfacing).
+ *
+ * Turn termination is a TEXT event: the `text` chunk is the only variant that can
+ * carry `done: true`. The `audio` chunk is pinned `done: false` (audio frames never
+ * close a turn — they interleave with text and the turn ends on the terminal text
+ * chunk), matching the server contract; `transcript` and `action` carry no `done`
+ * at all. So the type structurally guarantees no non-text frame can end a turn.
  */
 export type ServerFrame =
   | { type: 'created'; sessionId: string }
   | { type: 'transcript'; text: string; final?: boolean }
   | { type: 'chunk'; kind: 'text'; text?: string; done: boolean }
-  | { type: 'chunk'; kind: 'audio'; audio?: string; done: boolean }
+  | { type: 'chunk'; kind: 'audio'; audio?: string; done: false }
+  | { type: 'action'; actions: CoBuildAction[] }
   | { type: 'summary'; summary: SessionSummaryPayload }
   | { type: 'error'; code?: string; message?: string }
 

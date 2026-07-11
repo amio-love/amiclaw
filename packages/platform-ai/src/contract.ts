@@ -74,12 +74,33 @@ export interface GameState {
 }
 
 /**
+ * One partner build move on the co_build channel. Verb vocabulary is aligned to
+ * the future MCP tool surface (`place` / `remove` / `get_state`); `slot` is a
+ * 1-based timeline index. Emitted by a co_build-capable game's partner inside a
+ * fenced action block in the LLM stream, extracted server-side, and delivered to
+ * the client as an `action` chunk — never spoken.
+ */
+export interface CoBuildAction {
+  op: 'place' | 'remove'
+  pieceType: string
+  slot: number
+}
+
+/**
  * One chunk of the AI's streamed response. A turn produces an ordered stream of
  * these: a leading STREAMING series of `transcript` chunks carrying the player's
  * recognized utterance as it is recognized, then the incremental assistant text
- * plus the synthesized audio frames pushed back over the same WebSocket. `kind`
- * discriminates them; `done` marks the final chunk of a turn so the consumer can
- * close out the turn without a separate end signal.
+ * plus the synthesized audio frames pushed back over the same WebSocket, and —
+ * for a co_build-capable game — an optional `action` chunk carrying the partner's
+ * structured board moves. `kind` discriminates them; `done` marks the final chunk
+ * of a turn so the consumer can close out the turn without a separate end signal.
+ *
+ * This is a discriminated union on `kind`. Every pre-existing runtime yield
+ * already conforms to a variant shape, so the migration from the prior
+ * optional-field interface is type-level only. The `done` contract is structural:
+ * ONLY the AI reply's terminal `text` chunk carries `done: true` and closes the
+ * turn; `audio`, `transcript`, and `action` are pinned `done: false`, so none of
+ * them can ever terminate a turn — turn termination is always a text event.
  *
  * The `transcript` variant is the PLAYER's own recognized speech (the STT
  * result), surfaced BEFORE the AI reply streams so the client can build a live
@@ -87,29 +108,18 @@ export interface GameState {
  * chunks (`final: false`) each carrying the running CUMULATIVE recognized text
  * (not a delta) as the ASR stabilizes more of the utterance, then exactly one
  * terminal chunk (`final: true`) carrying the COMPLETE utterance once STT
- * finishes. A benign no-speech turn streams none. Transcript chunks never carry
- * AI text and never set `done` (the turn's terminal `done` is always the AI
- * reply's last `text` chunk).
+ * finishes. A benign no-speech turn streams none.
+ *
+ * The `action` variant is emitted at most once per turn (when the partner's reply
+ * contained a valid, non-empty fenced action block), after the speech/audio and
+ * before the terminal `done` chunk. Absent for every game without a co_build
+ * capability, so those games' streams are byte-identical to before.
  */
-export interface AiResponseChunk {
-  /** Which modality this chunk carries. */
-  kind: 'text' | 'audio' | 'transcript'
-  /**
-   * Incremental assistant text (present when `kind === 'text'`), or the player's
-   * running/complete recognized utterance (present when `kind === 'transcript'`).
-   */
-  text?: string
-  /** Synthesized TTS audio frame (present when `kind === 'audio'`). */
-  audio?: Uint8Array
-  /**
-   * For a `transcript` chunk: `false` on an interim running-text update, `true`
-   * on the terminal complete-utterance chunk. Absent for `text` / `audio` chunks
-   * (those use `done` for turn termination, not `final`).
-   */
-  final?: boolean
-  /** True on the last chunk of the current turn. */
-  done: boolean
-}
+export type AiResponseChunk =
+  | { kind: 'text'; text: string; done: boolean } // done:true only on the terminal chunk
+  | { kind: 'audio'; audio: Uint8Array; done: false }
+  | { kind: 'transcript'; text: string; final: boolean; done: false }
+  | { kind: 'action'; actions: CoBuildAction[]; done: false } // never closes the turn
 
 /**
  * Returned by `endSession`. Carries session metadata and the metering mount
@@ -217,8 +227,10 @@ export interface VoiceSessionContract {
 
   /**
    * Subscribe to the session's AI response stream — incremental assistant text
-   * and synthesized audio frames. Semantic placeholder: does not promise a
-   * synchronous or one-shot shape.
+   * and synthesized audio frames, plus (for a co_build-capable game) at most one
+   * `action` chunk carrying the partner's structured board moves, yielded after
+   * the speech/audio and before the terminal `done` text chunk. Semantic
+   * placeholder: does not promise a synchronous or one-shot shape.
    */
   onAiResponse(sessionId: SessionId): AsyncIterable<AiResponseChunk>
 

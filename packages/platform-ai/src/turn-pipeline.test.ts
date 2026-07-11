@@ -5,12 +5,14 @@ import {
   CLOSING_DIRECTIVE_TIMEOUT,
   closingDirectiveFor,
   OPENING_DIRECTIVE,
+  runClosingTurn,
   runOpeningTurn,
   runTurn,
   splitSentences,
   type SessionState,
   type TurnProviders,
 } from './turn-pipeline'
+import { CO_BUILD_VERBS, parseCoBuildActions } from './sound-garden-action'
 import { createDeepSeekLlmProvider } from './providers/deepseek'
 import type { AiResponseChunk, AudioChunk, ManualData } from './contract'
 import type {
@@ -181,7 +183,10 @@ describe('runTurn', () => {
     // Text chunks arrive, audio chunks arrive, exactly one terminal done chunk.
     const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
     const audioChunks = chunks.filter((c) => c.kind === 'audio')
-    expect(textChunks.map((c) => c.text)).toEqual(['Cut the ', 'blue wire.'])
+    expect(textChunks.map((c) => (c.kind === 'text' ? c.text : ''))).toEqual([
+      'Cut the ',
+      'blue wire.',
+    ])
     expect(audioChunks.length).toBeGreaterThan(0)
 
     const doneChunks = chunks.filter((c) => c.done)
@@ -288,7 +293,10 @@ describe('runTurn', () => {
     // terminal done — the transcript chunk (kind 'transcript', done false) is not
     // counted among them.
     const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
-    expect(textChunks.map((c) => c.text)).toEqual(['Cut the ', 'blue wire.'])
+    expect(textChunks.map((c) => (c.kind === 'text' ? c.text : ''))).toEqual([
+      'Cut the ',
+      'blue wire.',
+    ])
     expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
     expect(chunks.filter((c) => c.done)).toHaveLength(1)
     expect(chunks.at(-1)?.done).toBe(true)
@@ -712,7 +720,7 @@ describe('runTurn', () => {
     expect(ttsReceived).toEqual(['Cut the tail.'])
     // It also surfaces as a text chunk (not the empty terminal one).
     const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
-    expect(textChunks.map((c) => c.text)).toEqual(['Cut the ', 'tail.'])
+    expect(textChunks.map((c) => (c.kind === 'text' ? c.text : ''))).toEqual(['Cut the ', 'tail.'])
   })
 
   it('cleans up the TTS side when a provider rejects mid-turn', async () => {
@@ -833,7 +841,10 @@ describe('runOpeningTurn', () => {
 
     // The greeting streams as text + audio chunks plus exactly one terminal done.
     const textChunks = chunks.filter((c) => c.kind === 'text' && !c.done)
-    expect(textChunks.map((c) => c.text)).toEqual(['你好！', '请描述你看到的。'])
+    expect(textChunks.map((c) => (c.kind === 'text' ? c.text : ''))).toEqual([
+      '你好！',
+      '请描述你看到的。',
+    ])
     expect(chunks.filter((c) => c.kind === 'audio').length).toBeGreaterThan(0)
     expect(chunks.filter((c) => c.done)).toHaveLength(1)
     expect(ttsReceived).toEqual(['你好！', '请描述你看到的。'])
@@ -907,5 +918,62 @@ describe('closingDirectiveFor — outcome-aware recap register', () => {
     ]) {
       expect(d).toMatch(/name (a |the )specific module/)
     }
+  })
+})
+
+// --- co_build turn gating: opening + regular emit actions; closing never does --
+
+/** A co_build-capable state (the game's `coBuild` capability wired onto config). */
+function coBuildState(): SessionState {
+  const base = freshState()
+  return {
+    ...base,
+    config: {
+      ...base.config,
+      coBuild: { verbs: CO_BUILD_VERBS, parse: parseCoBuildActions },
+    },
+  }
+}
+
+/** An LLM that speaks then appends a valid trailing fenced action block. */
+function fenceLlm(): LlmProvider {
+  return rawLlm([
+    { content: '好的，', done: false },
+    { content: '我放个底鼓打底。', done: false },
+    {
+      content: '<<<ACTIONS>>>[{"op":"place","piece_type":"kick","slot":1}]<<<END_ACTIONS>>>',
+      done: true,
+    },
+  ])
+}
+
+describe('co_build turn gating', () => {
+  it('the closing recap emits ZERO action frames (partner does not move during goodbye)', async () => {
+    const chunks = await collect(
+      runClosingTurn({ llm: fenceLlm(), tts: mockTts([]) }, coBuildState())
+    )
+    expect(chunks.filter((c) => c.kind === 'action')).toHaveLength(0)
+  })
+
+  it('the opening greeting DOES emit an action frame (gate is closing-only)', async () => {
+    const chunks = await collect(
+      runOpeningTurn({ llm: fenceLlm(), tts: mockTts([]) }, coBuildState())
+    )
+    const actions = chunks.filter((c) => c.kind === 'action')
+    expect(actions).toHaveLength(1)
+    expect(actions[0].kind === 'action' && actions[0].actions).toEqual([
+      { op: 'place', pieceType: 'kick', slot: 1 },
+    ])
+  })
+
+  it('a regular player turn DOES emit an action frame', async () => {
+    const chunks = await collect(
+      runTurn(
+        providers(mockStt([{ text: '放个底鼓', isFinal: true }]), fenceLlm(), mockTts([])),
+        coBuildState(),
+        fromArray<AudioChunk>([new Uint8Array([1])])
+      )
+    )
+    expect(chunks.filter((c) => c.kind === 'action')).toHaveLength(1)
   })
 })

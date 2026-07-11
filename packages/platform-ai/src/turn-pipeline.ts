@@ -25,7 +25,7 @@
  */
 
 import type { CompanionContext } from '../../companion-memory/src/types'
-import type { AiResponseChunk, AudioChunk, RecapOutcome } from './contract'
+import type { AiResponseChunk, AudioChunk, CoBuildAction, RecapOutcome } from './contract'
 import type {
   ChatMessage,
   LlmProvider,
@@ -35,8 +35,9 @@ import type {
   TtsProvider,
 } from './providers/types'
 import { assembleLlmContext, type GameState } from './manual-injection'
-import type { ResolvedConfig } from './provider-config'
+import type { CoBuildConfig, ResolvedConfig } from './provider-config'
 import type { ManualData } from './contract'
+import { CoBuildSplitter, buildCoBuildInstruction } from './cobuild-splitter'
 import { traceTurn } from './trace'
 
 /** Usage counters accumulated across a session (mirrors `SessionSummary.usage`). */
@@ -293,14 +294,33 @@ interface LlmTtsResult {
   ttsFrameCount: number
 }
 
-/** Assemble the deterministic server-side system message(s) for a turn. */
-function assembleSystem(state: SessionState): ChatMessage[] {
-  return assembleLlmContext({
+/**
+ * Assemble the deterministic server-side system message(s) for a turn. The
+ * `coBuild` argument is the co_build capability ACTIVE FOR THIS TURN (not simply
+ * `state.config.coBuild`): the opening greeting and regular player turns pass the
+ * game's capability, but the closing recap passes `undefined` so the partner is
+ * neither invited to move nor able to — its goodbye stays action-free.
+ */
+function assembleSystem(state: SessionState, coBuild: CoBuildConfig | undefined): ChatMessage[] {
+  const messages = assembleLlmContext({
     systemPromptConfig: state.config.systemPromptConfig,
     manualData: state.manualData,
     gameState: state.gameState,
     ...(state.companionContext !== undefined ? { companionContext: state.companionContext } : {}),
   })
+  // Co_build-active turn: append the fenced action-output instruction to the
+  // system message. Gated on the per-turn capability, so a game without `coBuild`
+  // (and the closing recap, which passes `undefined`) gets a byte-identical
+  // prompt — the block is never added. This is the OUTPUT-protocol directive; it
+  // stays out of `assembleLlmContext` (which owns INPUT context).
+  if (coBuild !== undefined && messages.length > 0) {
+    const [system, ...rest] = messages
+    return [
+      { ...system, content: `${system.content}\n\n${buildCoBuildInstruction(coBuild)}` },
+      ...rest,
+    ]
+  }
+  return messages
 }
 
 /** Apply the LLM token usage + TTS output-seconds of a settled turn to state. */
@@ -351,21 +371,38 @@ function applySttUsage(
  * chunks (NO terminal `done` — the caller emits that after its own settle). It
  * is I/O-free beyond driving the injected LLM/TTS providers, and reports the
  * per-turn tally as the generator's return value so the caller can settle usage
- * and history. Reused by both `runTurn` (player-audio turn) and
- * `runOpeningTurn` (the AI-first greeting).
+ * and history. Reused by `runReply` (player-audio turn), `runOpeningTurn` (the
+ * AI-first greeting), and `runClosingTurn` (the settlement recap).
+ *
+ * Co_build (`coBuild` present): every LLM delta passes through the bounded fence
+ * splitter, so only SPEECH reaches the text/TTS stream; the partner's structured
+ * moves surface as AT MOST ONE `{kind:'action'}` chunk yielded AFTER all speech
+ * and audio, BEFORE the caller's terminal `done` text chunk (`action` is pinned
+ * `done: false`, so it never ends the turn). With `coBuild` absent the splitter
+ * never runs, no action chunk is ever produced, and the text stream is unchanged.
  */
 async function* streamLlmTts(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
   model: string,
   messages: ChatMessage[],
   turnStart: number,
-  traceSessionId?: string
+  traceSessionId?: string,
+  coBuild?: CoBuildConfig
 ): AsyncGenerator<AiResponseChunk, LlmTtsResult> {
   // LLM + TTS run concurrently: the LLM loop segments text into sentences and
   // feeds a queue the TTS provider drains. We interleave text chunks (as the
   // LLM streams) with audio chunks (as TTS produces them).
   const sentenceQueue = new SentenceQueue()
   const ttsIterator = providers.tts.synthesize(sentenceQueue)[Symbol.asyncIterator]()
+
+  // Co_build fence splitter: for a co_build-capable game, every LLM delta passes
+  // through the splitter, which returns only the SPEECH portion (the fence markers
+  // and action-block content are captured, never spoken). Absent for every other
+  // game, so `toSpeech` is the identity and the text stream is unchanged. The
+  // parsed actions (if any) surface as a single `action` chunk after the loop.
+  const splitter = coBuild ? new CoBuildSplitter(coBuild.parse) : undefined
+  const toSpeech = (raw: string): string => (splitter ? splitter.push(raw) : raw)
+  let pendingActions: CoBuildAction[] = []
 
   // Turn-trace counters for the LLM->TTS boundary (the deploy task's last
   // sighting put the park here). Pure instrumentation: counting + first-event
@@ -433,8 +470,6 @@ async function* streamLlmTts(
           nextLlmPromise = undefined
           if (!result.done && result.value.content.length > 0) {
             const delta = result.value.content
-            assistantText += delta
-            pending += delta
             llmDeltaCount += 1
             if (!firstDeltaTraced) {
               firstDeltaTraced = true
@@ -443,7 +478,24 @@ async function* streamLlmTts(
                 elapsedMs: Date.now() - turnStart,
               })
             }
-            yield { kind: 'text', text: delta, done: false }
+            const speech = toSpeech(delta)
+            if (speech.length > 0) {
+              assistantText += speech
+              pending += speech
+              yield { kind: 'text', text: speech, done: false }
+            }
+          }
+          // Flush the splitter at stream end: release any held trailing speech
+          // (SPEECH state — no fence ever came) and capture the parsed actions.
+          // A no-coBuild turn has no splitter, so this is skipped entirely.
+          if (splitter) {
+            const flushed = splitter.flush()
+            if (flushed.speech.length > 0) {
+              assistantText += flushed.speech
+              pending += flushed.speech
+              yield { kind: 'text', text: flushed.speech, done: false }
+            }
+            pendingActions = flushed.actions
           }
           const { sentences, remainder } = splitSentences(pending)
           for (const sentence of sentences) queueSentence(sentence)
@@ -466,8 +518,6 @@ async function* streamLlmTts(
         } else {
           const delta = result.value.content
           if (delta.length > 0) {
-            assistantText += delta
-            pending += delta
             llmDeltaCount += 1
             if (!firstDeltaTraced) {
               firstDeltaTraced = true
@@ -476,10 +526,15 @@ async function* streamLlmTts(
                 elapsedMs: Date.now() - turnStart,
               })
             }
-            yield { kind: 'text', text: delta, done: false }
-            const { sentences, remainder } = splitSentences(pending)
-            for (const sentence of sentences) queueSentence(sentence)
-            pending = remainder
+            const speech = toSpeech(delta)
+            if (speech.length > 0) {
+              assistantText += speech
+              pending += speech
+              yield { kind: 'text', text: speech, done: false }
+              const { sentences, remainder } = splitSentences(pending)
+              for (const sentence of sentences) queueSentence(sentence)
+              pending = remainder
+            }
           }
           nextLlmPromise = llmStream.next()
         }
@@ -521,6 +576,15 @@ async function* streamLlmTts(
     sentenceQueue.close()
     await ttsIterator.return?.(undefined)
     await llmStream.return?.(undefined)
+  }
+
+  // The partner's structured board moves (co_build only), emitted as ONE `action`
+  // chunk AFTER all speech/audio and BEFORE the caller's terminal `done` chunk.
+  // Only a co_build turn that produced a valid, non-empty action set reaches here
+  // with actions; every other turn skips this (`pendingActions` stays empty), so
+  // the chunk stream is unchanged.
+  if (pendingActions.length > 0) {
+    yield { kind: 'action', actions: pendingActions, done: false }
   }
 
   return { assistantText, ttsAudioBytes, llmDeltaCount, sentenceCount, ttsFrameCount }
@@ -611,7 +675,11 @@ export async function* runReply(
   // Inject: deterministic system message (role + rules + manual subset), then the
   // rolling history, then this turn's player utterance.
   const userMessage: ChatMessage = { role: 'user', content: playerText }
-  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+  const messages: ChatMessage[] = [
+    ...assembleSystem(state, state.config.coBuild),
+    ...state.history,
+    userMessage,
+  ]
 
   // LLM + TTS run concurrently via the shared half.
   const result = yield* streamLlmTts(
@@ -619,7 +687,8 @@ export async function* runReply(
     state.config.llm.model,
     messages,
     turnStart,
-    state.traceSessionId
+    state.traceSessionId,
+    state.config.coBuild
   )
 
   // Settle turn state: record history, count, and usage; emit the terminal chunk
@@ -752,14 +821,25 @@ export async function* runClosingTurn(
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const userMessage: ChatMessage = { role: 'user', content: closingDirectiveFor(outcome) }
-  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+  // coBuild = undefined for the recap: no action instruction in the prompt AND no
+  // splitter, so the goodbye is fully action-free (see the streamLlmTts call below).
+  const messages: ChatMessage[] = [
+    ...assembleSystem(state, undefined),
+    ...state.history,
+    userMessage,
+  ]
 
+  // Co_build is DELIBERATELY off for the closing recap (coBuild = undefined): the
+  // partner says goodbye, it does not make board moves during the settlement.
+  // Actions are enabled for the opening greeting and regular player turns only, so
+  // no `action` frame can be emitted here even if the model tries a fence.
   const result = yield* streamLlmTts(
     providers,
     state.config.llm.model,
     messages,
     turnStart,
-    state.traceSessionId
+    state.traceSessionId,
+    undefined
   )
 
   // Settle: the closing directive is synthetic and must never leak into history
@@ -802,14 +882,19 @@ export async function* runOpeningTurn(
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const userMessage: ChatMessage = { role: 'user', content: OPENING_DIRECTIVE }
-  const messages: ChatMessage[] = [...assembleSystem(state), ...state.history, userMessage]
+  const messages: ChatMessage[] = [
+    ...assembleSystem(state, state.config.coBuild),
+    ...state.history,
+    userMessage,
+  ]
 
   const result = yield* streamLlmTts(
     providers,
     state.config.llm.model,
     messages,
     turnStart,
-    state.traceSessionId
+    state.traceSessionId,
+    state.config.coBuild
   )
 
   // Settle. The opening directive is synthetic and must never leak into history

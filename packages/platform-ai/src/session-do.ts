@@ -95,6 +95,7 @@ import type { ProviderEnv } from './providers/factory'
 import { assembleSession } from './session-assembly'
 import { traceTurn, traceTurnError } from './trace'
 import { validateShadowChaseVoiceContext } from './shadow-chase-voice-context'
+import { validateSoundGardenVoiceContext } from './sound-garden-voice-context'
 import {
   runClosingTurn,
   runOpeningTurn,
@@ -260,12 +261,29 @@ function normalizeVoiceGameState(gameId: string, gameState: GameState | undefine
   ) {
     throw new Error('session-do: invalid game state')
   }
-  if (gameId !== 'shadow-chase') return { relevantSections: [...relevantSections] }
-  const validated = validateShadowChaseVoiceContext(gameState?.publicContext)
-  if (!validated.ok) {
-    throw new Error(`session-do: invalid shadow chase context (${validated.reason})`)
+  if (gameId === 'shadow-chase') {
+    const validated = validateShadowChaseVoiceContext(gameState?.publicContext)
+    if (!validated.ok) {
+      throw new Error(`session-do: invalid shadow chase context (${validated.reason})`)
+    }
+    return { relevantSections: [...relevantSections], publicContext: validated.value }
   }
-  return { relevantSections: [...relevantSections], publicContext: validated.value }
+  if (gameId === 'sound-garden') {
+    // The board snapshot is optional at the protocol layer: absent = no board
+    // injected this turn (the game always pushes one in normal play, but a bare
+    // `create` without one is benign). When present it is UNTRUSTED input that
+    // gets injected into the prompt, so it is validated + bounded before it is
+    // trusted; an invalid board is rejected loudly.
+    if (gameState?.publicContext === undefined) {
+      return { relevantSections: [...relevantSections] }
+    }
+    const validated = validateSoundGardenVoiceContext(gameState.publicContext)
+    if (!validated.ok) {
+      throw new Error(`session-do: invalid sound garden context (${validated.reason})`)
+    }
+    return { relevantSections: [...relevantSections], publicContext: validated.value }
+  }
+  return { relevantSections: [...relevantSections] }
 }
 
 /**
@@ -1139,11 +1157,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           ws.send(
             JSON.stringify({
               type: 'transcript',
-              text: chunk.text ?? '',
-              final: chunk.final ?? false,
+              text: chunk.text,
+              final: chunk.final,
             })
           )
-        } else if (chunk.kind === 'audio' && chunk.audio) {
+        } else if (chunk.kind === 'audio') {
           ws.send(
             JSON.stringify({
               type: 'chunk',
@@ -1152,12 +1170,24 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
               done: chunk.done,
             })
           )
+        } else if (chunk.kind === 'action') {
+          // The partner's structured board moves (co_build games only) — its OWN
+          // wire frame, NOT a `chunk`: `{type:'action', actions}`. It carries no
+          // `done` (pinned `done:false` in the union), so the AI reply's terminal
+          // text `chunk` still closes the turn. Absent for every non-co_build
+          // game, so those games' wire streams are unchanged.
+          ws.send(
+            JSON.stringify({
+              type: 'action',
+              actions: chunk.actions,
+            })
+          )
         } else {
           ws.send(
             JSON.stringify({
               type: 'chunk',
               kind: 'text',
-              text: chunk.text ?? '',
+              text: chunk.text,
               done: chunk.done,
             })
           )

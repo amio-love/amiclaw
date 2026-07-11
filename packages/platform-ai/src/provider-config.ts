@@ -24,7 +24,8 @@
  * the timeout + fallback followup is actually implemented and wired.
  */
 
-import type { GameId } from './contract'
+import type { CoBuildAction, GameId } from './contract'
+import { CO_BUILD_VERBS, parseCoBuildActions } from './sound-garden-action'
 
 /** The three pipeline layers a provider can be selected for. */
 export type ProviderLayer = 'stt' | 'llm' | 'tts'
@@ -59,12 +60,27 @@ export interface SystemPromptConfig {
   ruleTemplate: string[]
 }
 
+/**
+ * Per-game co_build capability. Present only for a game whose partner emits
+ * structured board moves alongside speech (Sound Garden); ABSENT for every other
+ * game, so the fence splitter never runs, no action instruction is added to the
+ * prompt, and their voice streams stay byte-identical.
+ */
+export interface CoBuildConfig {
+  /** Verb vocabulary offered to the model in the prompt and accepted by `parse`. */
+  verbs: readonly string[]
+  /** Strict parse-guard: raw fence body → validated actions, or null to drop the set. */
+  parse: (raw: string) => CoBuildAction[] | null
+}
+
 /** Full per-game provider configuration, keyed by `gameId` in the registry. */
 export interface ProviderConfig {
   systemPromptConfig: SystemPromptConfig
   llm: LayerSelection
   stt: LayerSelection
   tts: LayerSelection
+  /** Optional co_build capability. Absent = no structured action channel. */
+  coBuild?: CoBuildConfig
 }
 
 /**
@@ -306,6 +322,37 @@ const PROVIDER_REGISTRY: Record<GameId, ProviderConfig> = {
     stt: { provider: 'volcengine', model: 'bigmodel' },
     tts: { provider: 'volcengine', model: '' },
   },
+  'sound-garden': {
+    systemPromptConfig: {
+      // Chinese, agent-voice: the player's existing companion, here as their
+      // 园丁伙伴 co-building a singing garden. This is the ONLY game with a
+      // co_build capability — the partner both speaks AND places/removes pieces on
+      // the shared timeline. The harmony matrix + live board ride in as injected
+      // manual + public game context (server-side ground truth); this prompt
+      // frames the duty + tone and defers every relation to the injected data.
+      // The fenced action-output contract is added separately, gated by `coBuild`
+      // (see `buildCoBuildInstruction`), so it is never restated here.
+      role: '你是玩家的既有 AI 伙伴，此刻在《声音花园》里当他的园丁搭档。你们在一条 8 拍的时间线上，一人负责节奏根、一人负责旋律花，一起种出一座会唱歌的花园。你手里有这一关的和声矩阵和当前公开局面，玩家只能看到花园本身；你通过语音和亲手放置元素，引导你们把和声总分种到目标、让花园绽放。',
+      ruleTemplate: [
+        '只依据上下文注入的和声矩阵与公开局面作答，绝不编造关系或分数；矩阵是唯一事实来源，你只把它翻成一句此刻能执行的口语建议，绝不复述矩阵原文、规则表或内部字段。',
+        '你只负责自己那一侧（节奏根或旋律花）的元素，只放置或移除你这一侧、且还有剩余材料的元素；玩家负责另一侧，你可以建议但不替他放。',
+        '同一拍两侧都有元素才计分：synergy 最好、compatible 次之、neutral 平淡、incompatible 会倒扣要避开；用有限的材料把它们放在最能共鸣的拍上，帮玩家避开刺耳组合，朝目标分推进。',
+        '这是自由流、无失败的玩法——绽放是奖励不是终点；养到开花就一起高兴一句，分数暂时落后也只沉着地把当前局面说清，不安慰、不打气、不列清单。',
+        '你的语音回复会被原样朗读，只输出纯口语：不要括号、方括号、星号或任何 markdown，不要念字段名、英文值或坐标；元素、拍号都用中文自然说出来（说「第一拍放个底鼓打底」而不是「slot 1 place kick」）。',
+        '作为玩家的老搭档，语气温暖、简洁、笃定；可以自然带一句你们的相处，但绝不编造没发生过的事，也绝不喋喋不休、不硬找话题。',
+        '始终用中文，口语、自然、精确。',
+      ],
+    },
+    // Same verified DeepSeek + Volcengine stack as `bombsquad` / `botanical-garden`
+    // (see the `demo` entry for the per-layer rationale).
+    llm: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    stt: { provider: 'volcengine', model: 'bigmodel' },
+    tts: { provider: 'volcengine', model: '' },
+    // The co_build capability: the partner emits `place` / `remove` moves inside a
+    // fenced action block, extracted by the bounded splitter and validated by the
+    // strict parse-guard before reaching the client.
+    coBuild: { verbs: CO_BUILD_VERBS, parse: parseCoBuildActions },
+  },
 }
 
 const INTENT_PROVIDER_REGISTRY: Record<GameId, IntentProviderConfig> = {
@@ -359,6 +406,11 @@ export function resolveConfig(gameId: GameId): ResolvedConfig {
     llm: cloneLayer(config.llm),
     stt: cloneLayer(config.stt),
     tts: cloneLayer(config.tts),
+    // Pass the co_build capability through by reference: it is an immutable
+    // registry object (a readonly verb list + a pure parse-guard function), so
+    // handing out the reference cannot corrupt the registry the way a mutable
+    // layer selection could.
+    ...(config.coBuild !== undefined ? { coBuild: config.coBuild } : {}),
   }
 }
 

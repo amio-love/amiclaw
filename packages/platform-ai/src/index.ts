@@ -18,6 +18,7 @@ export type {
   ManualData,
   GameState,
   AiResponseChunk,
+  CoBuildAction,
   SessionSummary,
   VoiceSessionContract,
 } from './contract'
@@ -43,6 +44,7 @@ export type {
   ProviderLayer,
   LayerSelection,
   SystemPromptConfig,
+  CoBuildConfig,
   ProviderConfig,
   ResolvedConfig,
 } from './provider-config'
