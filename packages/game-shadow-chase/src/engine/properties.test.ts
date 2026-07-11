@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { RUN_CAP_TICKS } from './config'
-import { hasLineOfSight } from './line-of-sight'
 import { getMap } from './maps'
 import { advance } from './reducer'
 import { isWalkable } from './rules'
@@ -46,14 +45,10 @@ describe('seeded engine properties', () => {
           Math.abs(previousPursuer.x - state.actors.pursuer.position.x) +
             Math.abs(previousPursuer.y - state.actors.pursuer.position.y)
         ).toBeLessThanOrEqual(2)
-        expect(['player', 'moon-gate']).toContain(state.actors.pursuer.destination)
-        if (state.actors.pursuer.destination !== 'moon-gate') {
-          const destination = state.actors[state.actors.pursuer.destination]
-          expect(destination.status).toBe('free')
-          expect(hasLineOfSight(map, state.actors.pursuer.position, destination.position)).toBe(
-            true
-          )
-        }
+        expect(['player', 'companion']).toContain(state.actors.pursuer.destination)
+        expect(state.actors.pursuer.destination).toBe(
+          state.actors.player.status === 'free' ? 'player' : 'companion'
+        )
         const nextCollected = state.objectives.filter((objective) => objective.collected).length
         expect(nextCollected).toBeGreaterThanOrEqual(collected)
         collected = nextCollected

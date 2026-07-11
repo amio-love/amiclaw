@@ -18,6 +18,15 @@ that visit is read-only: the「本设备记录」card shows how many records are
 and you save them with an explicit「保存到账号」tap. Nothing is saved without your
 action.
 
+**Shadow Chase no longer stalls at a sealed or guarded exit** — Fix. The moon
+gate now opens on the same simulation tick that the player collects the third
+core, with no two-minute minimum. The pursuer has no visibility, patrol, spawn,
+or exit state: it always walks a deterministic shortest path to the free player,
+switches to the companion only while the player is captured, and switches back
+after rescue. Player copy, the map target marker, rescue prediction, voice
+context, and the Platform AI rule contract now share that rule. Space is a new
+shortcut for consuming one earned position swap.
+
 **Botanical Garden joins Arcade** - A new co-op care game: you tend a night
 garden of five species while plants decay in real time, and your AI companion
 becomes the botanist who holds the care manual. Signed in, your existing
@@ -51,8 +60,8 @@ Companion strategies are now Support, Scout, and Anchor. The companion can stand
 near a core but only the player can collect it, preventing an idle player from
 outsourcing the objective. The strategies trade rescue distance, route setup,
 and swap distance without giving the pursuer any private strategy knowledge.
-Rescue coverage now includes a live pursuer returning to the moon gate instead
-of relying on a frozen-pursuer fixture. Chinese setup, HUD, buttons, voice
+Rescue coverage now includes a live pursuer hunting the companion instead of
+relying on a frozen-pursuer fixture. Chinese setup, HUD, buttons, voice
 commands, and the Platform AI contract share the new rules.
 
 **Your rank sticks after a reload, and a storage-blocked browser no longer hangs
@@ -69,7 +78,7 @@ went on the board.
 pursuer no longer reads the private follow, split, or decoy command, any model
 lease, or a hidden shadow's live position. It sees the full unobstructed row and
 column, chases the nearest visible uncaptured shadow, keeps its current actor on
-an equal-distance tie, and returns toward the moon gate when nobody is visible.
+an equal-distance tie, and returns toward its spawn when nobody is visible.
 Difficulty changes only movement cadence and rescue time. Decoy now works by
 moving the companion into a nearer visible lane, so the same rule explains why
 the pursuer changes course.
@@ -78,7 +87,7 @@ Setup and tactical planning show the exact pursuer rule that is injected into
 the AI companion manual. The board also renders low-contrast cardinal sight
 lanes and one truthful current-destination marker without taking pointer input.
 This makes pursuit, wall cover, decoy timing, capture by same-cell contact or
-opposite-edge crossing, and moon-gate return planable from shared information.
+opposite-edge crossing, and spawn return planable from shared information.
 
 **One name across the whole arcade** — Improvement. Your leaderboard handle,
 the home greeting, and your /me page now all show the same name, and you can

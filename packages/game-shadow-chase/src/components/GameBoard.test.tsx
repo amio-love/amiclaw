@@ -35,7 +35,7 @@ describe('whole-board target ownership', () => {
     expect(onTarget).not.toHaveBeenCalled()
   })
 
-  it('renders non-intercepting sight lanes and a visible current target indicator', () => {
+  it('renders one non-intercepting current target indicator', () => {
     const state = createRunningState('courtyard', 'standard', 7)
     state.tick = 1
     state.actors.pursuer.position = { x: 0, y: 0 }
@@ -44,10 +44,7 @@ describe('whole-board target ownership', () => {
     const onTarget = vi.fn()
     const view = render(<GameBoard state={state} onTarget={onTarget} />)
 
-    const lanes = document.querySelectorAll('.sight-lane.board-overlay')
-    expect(lanes).toHaveLength(4)
-    expect(document.querySelector('[data-direction="up"]')?.getAttribute('y2')).toBe('24')
-    expect(document.querySelector('[data-direction="right"]')?.getAttribute('x2')).toBe('312')
+    expect(document.querySelectorAll('.sight-lane')).toHaveLength(0)
     const target = document.querySelector('.pursuer-destination-indicator')!
     expect(document.querySelectorAll('.pursuer-destination-indicator')).toHaveLength(1)
     expect(target.classList.contains('board-overlay')).toBe(true)
@@ -62,10 +59,10 @@ describe('whole-board target ownership', () => {
     fireEvent.pointerUp(target, { pointerId: 2, clientX: 120, clientY: 72 })
     expect(onTarget).toHaveBeenCalledWith({ x: 2, y: 1 })
 
-    state.actors.pursuer.destination = 'moon-gate'
+    state.actors.pursuer.destination = 'companion'
     view.rerender(<GameBoard state={state} onTarget={onTarget} />)
     expect(document.querySelectorAll('.pursuer-destination-indicator')).toHaveLength(1)
-    expect(description?.textContent).toBe('追兵当前目标：月门')
+    expect(description?.textContent).toBe('追兵当前目标：AI 伙伴')
   })
 
   it('derives a truthful planning destination before the first policy tick', () => {
@@ -73,7 +70,7 @@ describe('whole-board target ownership', () => {
     state.actors.pursuer.position = { x: 4, y: 0 }
     state.actors.player.position = { x: 2, y: 0 }
     state.actors.companion.position = { x: 1, y: 2 }
-    state.actors.pursuer.destination = 'moon-gate'
+    state.actors.pursuer.destination = 'companion'
 
     render(<GameBoard state={state} interactive={false} onTarget={vi.fn()} />)
 
@@ -93,6 +90,6 @@ describe('whole-board target ownership', () => {
 
     const board = screen.getByRole('application', { name: '双影追逃地图' })
     const description = document.getElementById(board.getAttribute('aria-describedby')!)
-    expect(description?.textContent).toBe('追兵当前目标：月门')
+    expect(description?.textContent).toBe('追兵当前目标：AI 伙伴')
   })
 })

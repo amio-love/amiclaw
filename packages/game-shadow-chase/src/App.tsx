@@ -9,6 +9,7 @@ import { ResultScreen } from './components/ResultScreen'
 import { StartScreen } from './components/StartScreen'
 import { StrategyPanel } from './components/StrategyPanel'
 import type { CompanionIntent, Difficulty } from './engine/types'
+import { resolveGameShortcut } from './keyboard-shortcuts'
 import { createPlanningController } from './planning/planning-controller'
 import { usePlanningController } from './planning/react'
 import { handoffSettlement } from './settlement/settlement-client'
@@ -73,6 +74,17 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
   useEffect(() => {
     if (sessionPhase !== 'running') return
     const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+      const focusedControl =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName))
+      const shortcut = resolveGameShortcut(event.code, event.repeat, focusedControl)
+      if (shortcut) {
+        event.preventDefault()
+        store.dispatch(shortcut)
+        return
+      }
       if (event.repeat) return
       store.setHeldKey(event.code, true)
       if (event.code.startsWith('Arrow')) event.preventDefault()
@@ -183,7 +195,7 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
                 <MoveControls
                   onMove={(direction) => store.dispatch({ type: 'player-move', direction })}
                 />
-                <p className="keyboard-hint">键盘可用 WASD 或方向键</p>
+                <p className="keyboard-hint">键盘可用 WASD、方向键，空格换位</p>
               </>
             )}
           </aside>

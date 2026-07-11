@@ -19,8 +19,7 @@ export function StartScreen(props: StartScreenProps) {
       <h1>双影追逃</h1>
       <p className="secondary-title">Dual Shadow Chase</p>
       <p className="start-rule">
-        收集三枚光核，坚持到月门在 02:00
-        开启，与伙伴一起撤离。战术准备结束后追兵立即行动；任何一方被捕获，都要在倒计时结束前完成救援。
+        收集三枚光核，月门会立即开启，再与伙伴一起抵达出口撤离。战术准备结束后追兵立即行动；任何一方被捕获，都要在倒计时结束前完成救援。
       </p>
       <PursuerRule />
       <div className="start-options" aria-label="本局设置">
@@ -54,7 +53,9 @@ export function StartScreen(props: StartScreenProps) {
       <button className="primary-button" type="button" onClick={props.onStart}>
         查看地图并制定策略
       </button>
-      <p className="control-hint">追逃开始后可用 WASD、方向键、方向按钮或点击地图移动。</p>
+      <p className="control-hint">
+        追逃开始后可用 WASD、方向键、方向按钮或点击地图移动，按空格交换位置。
+      </p>
     </main>
   )
 }

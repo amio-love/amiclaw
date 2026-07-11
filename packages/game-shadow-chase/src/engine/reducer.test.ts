@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MIN_RUN_TICKS, RUN_CAP_TICKS } from './config'
-import { pursuerNextStep } from './pursuer-policy'
+import { RUN_CAP_TICKS } from './config'
 import { createRunningState } from './rules'
 import { advance } from './reducer'
 import type { QueuedAction, SimulationState } from './types'
@@ -46,7 +45,7 @@ describe('ten-phase reducer contract', () => {
     ])
     expect(next.command.intent).toBe('anchor')
     expect(next.actors.pursuer.target).toBe('player')
-    expect(next.actors.pursuer.destination).toBe('moon-gate')
+    expect(next.actors.pursuer.destination).toBe('player')
     expect(next.decisionEpoch).toBe(1)
   })
 
@@ -58,8 +57,8 @@ describe('ten-phase reducer contract', () => {
 
     expect(contacted.actors.pursuer.position).toEqual(state.actors.pursuer.position)
     expect(contacted.actors.player.status).toBe('captured')
-    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
-    expect(contacted.actors.pursuer.target).toBe('player')
+    expect(contacted.actors.pursuer.destination).toBe('companion')
+    expect(contacted.actors.pursuer.target).toBe('companion')
   })
 
   it('reconciles destination after same-cell capture while retaining actor tie memory', () => {
@@ -72,8 +71,8 @@ describe('ten-phase reducer contract', () => {
 
     expect(contacted.actors.pursuer.position).toEqual({ x: 1, y: 1 })
     expect(contacted.actors.player.status).toBe('captured')
-    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
-    expect(contacted.actors.pursuer.target).toBe('player')
+    expect(contacted.actors.pursuer.destination).toBe('companion')
+    expect(contacted.actors.pursuer.target).toBe('companion')
   })
 
   it('captures opposite-edge crossing', () => {
@@ -93,28 +92,8 @@ describe('ten-phase reducer contract', () => {
     )
 
     expect(crossed.actors.player.status).toBe('captured')
-    expect(crossed.actors.pursuer.destination).toBe('moon-gate')
-    expect(crossed.actors.pursuer.target).toBe('player')
-  })
-
-  it('captures contact while returning to the moon gate', () => {
-    const state = createRunningState('courtyard', 'intense', 7)
-    state.actors.pursuer.position = { x: 1, y: 6 }
-    state.actors.player.position = { x: 0, y: 5 }
-    state.actors.companion.position = { x: 6, y: 0 }
-
-    const contacted = advance(
-      state,
-      [action(state, 1, { type: 'player-move', direction: 'down' })],
-      {
-        companion: (current) => current.actors.companion.position,
-        pursuer: pursuerNextStep,
-      }
-    )
-
-    expect(contacted.actors.pursuer.destination).toBe('moon-gate')
-    expect(contacted.actors.pursuer.position).toEqual(state.exit.position)
-    expect(contacted.actors.player.status).toBe('captured')
+    expect(crossed.actors.pursuer.destination).toBe('companion')
+    expect(crossed.actors.pursuer.target).toBe('companion')
   })
 
   it('moves the pursuer and resolves contact on the first chase tick', () => {
@@ -164,7 +143,7 @@ describe('ten-phase reducer contract', () => {
     expect(advance(win, []).phase).toBe('win')
   })
 
-  it('keeps the moon gate sealed until two minutes even for a 71-tick shortest trace', () => {
+  it('opens the moon gate immediately when all cores are collected', () => {
     let state = createRunningState('courtyard', 'relaxed', 7)
     state.tick = 70
     state.objectives.forEach((objective) => {
@@ -180,13 +159,6 @@ describe('ten-phase reducer contract', () => {
 
     state = advance(state, [], stationaryPolicies)
     expect(state.tick).toBe(71)
-    expect(state.exit.enabled).toBe(false)
-    expect(state.phase).toBe('running')
-
-    while (state.phase === 'running' && state.tick < MIN_RUN_TICKS) {
-      state = advance(state, [], stationaryPolicies)
-    }
-    expect(state.tick).toBe(MIN_RUN_TICKS)
     expect(state.exit.enabled).toBe(true)
     expect(state.phase).toBe('win')
   })

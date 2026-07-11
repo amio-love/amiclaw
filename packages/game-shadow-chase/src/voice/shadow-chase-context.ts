@@ -23,7 +23,7 @@ export const SHADOW_CHASE_VOICE_MANUAL: GameVoiceManualData = {
   version: 'shadow-chase-voice-v1',
   sections: {
     [SHADOW_CHASE_RULES_SECTION]: {
-      goal: 'Collect all three light cores, survive until the moon gate opens, and exit together.',
+      goal: 'Collect all three light cores to open the moon gate immediately, then exit together.',
       authority:
         'The deterministic engine owns movement, collision, pursuit, rescue, swap charges, and outcomes.',
       pursuerRule: PURSUER_RULE_COPY,

@@ -101,6 +101,7 @@ export function StrategyPanel({
         className="swap-button"
         type="button"
         disabled={swapDisabled}
+        aria-keyshortcuts="Space"
         aria-describedby="swap-reason"
         onClick={onSwap}
       >
@@ -113,7 +114,7 @@ export function StrategyPanel({
             ? '每收集一枚光核获得一次交换。'
             : swapDisabled
               ? '双方都未被捕获时才能交换。'
-              : `现在可交换 ${state.swapCharges} 次。`}
+              : `现在可交换 ${state.swapCharges} 次；按空格可快速交换。`}
       </span>
     </section>
   )

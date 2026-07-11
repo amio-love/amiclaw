@@ -1,4 +1,4 @@
-import { MIN_RUN_TICKS, RUN_CAP_TICKS, TICK_MS } from '../engine/config'
+import { RUN_CAP_TICKS, TICK_MS } from '../engine/config'
 import { rescueTicksRemaining } from '../engine/reducer'
 import type { SimulationState } from '../engine/types'
 
@@ -9,7 +9,6 @@ function formatTime(tick: number): string {
 
 export function Hud({ state }: { state: SimulationState }) {
   const collected = state.objectives.filter((objective) => objective.collected).length
-  const allCoresCollected = collected === state.objectives.length
   const captured = (['player', 'companion'] as const)
     .map((id) => ({ id, ticks: rescueTicksRemaining(state.actors[id], state.tick) }))
     .find((entry) => entry.ticks !== null)
@@ -18,9 +17,7 @@ export function Hud({ state }: { state: SimulationState }) {
     .find((event) => event.type === 'rescue' && state.tick - event.tick <= 8)
   const gateStatus = state.exit.enabled
     ? '已开启'
-    : allCoresCollected
-      ? `${formatTime(Math.max(0, MIN_RUN_TICKS - state.tick))} 后开启`
-      : `还需收集 ${state.objectives.length - collected} 枚光核`
+    : `还需收集 ${state.objectives.length - collected} 枚光核`
   return (
     <header className="hud" aria-label="追逃状态">
       <div>

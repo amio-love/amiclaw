@@ -326,13 +326,6 @@ select {
   pointer-events: none;
 }
 
-.sight-lane {
-  stroke: rgba(255, 107, 157, 0.2);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-dasharray: 3 8;
-}
-
 .pursuer-destination-indicator line,
 .pursuer-destination-indicator circle {
   fill: none;

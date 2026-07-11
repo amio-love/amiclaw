@@ -62,19 +62,16 @@ describe('Shadow Chase voice context', () => {
       ).pursuerContract
     ).toEqual(PURSUER_RULE_CONTRACT)
     expect(PURSUER_RULE_CONTRACT).toEqual({
-      eligibility: 'free-visible-player-only',
-      vision: {
-        alignment: 'same-row-or-column',
-        blocker: 'wall-between',
-        range: 'full-map',
-      },
+      tracking: 'full-current-position',
+      path: 'deterministic-shortest',
       selection: {
-        target: 'player-only',
+        primary: 'player',
+        whilePlayerCaptured: 'companion',
       },
-      noVisibleDestination: 'moon-gate',
       capture: ['same-cell', 'opposite-edge-crossing'],
       difficultyEffects: ['bonus-step-interval', 'rescue-time'],
       swapEconomy: 'one-charge-per-collected-core',
+      exitUnlock: 'all-cores-collected',
     })
   })
 

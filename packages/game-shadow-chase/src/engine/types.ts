@@ -43,10 +43,10 @@ export interface ShadowActor {
 export interface PursuerActor {
   id: 'pursuer'
   position: Coordinate
-  /** The pursuer only locks onto the human-controlled shadow. */
-  target: 'player'
+  /** The pursuer prefers the player and targets the companion only during player rescue. */
+  target: 'player' | 'companion'
   /** Actual movement destination selected by the latest observation. */
-  destination: 'player' | 'moon-gate'
+  destination: 'player' | 'companion'
 }
 
 export interface ObjectiveState extends ObjectiveDefinition {
