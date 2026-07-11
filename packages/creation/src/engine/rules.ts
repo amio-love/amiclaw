@@ -58,6 +58,7 @@ import type {
   LevelRule,
   RuleTemplate,
   StateEffect,
+  TimedEmitter,
 } from '../schema/types'
 import { archetypesById, elementsById, isMappingValue, templatesById } from '../validate/helpers'
 
@@ -343,6 +344,56 @@ export function evaluateWin(ctx: RuleContext, states: ElementStates): boolean {
   return false
 }
 
+/**
+ * Lose evaluation over runtime states — the failure-mode mirror of
+ * evaluateWin. Implemented: any_element_state_equals (lost when ANY element
+ * has `state === value`) and score_below (lost when currentScore < target).
+ * No lose_condition → never lost (games without a failure path). Any
+ * unrecognized lose type is false here.
+ */
+export function evaluateLose(ctx: RuleContext, states: ElementStates): boolean {
+  const lose = ctx.level.lose_condition
+  if (!lose) return false
+  if (lose.type === 'any_element_state_equals') {
+    const stateName = lose.params.state
+    const value = lose.params.value
+    if (typeof stateName !== 'string' || typeof value !== 'string') return false
+    for (const machine of states.values()) {
+      if (machine.get(stateName) === value) return true
+    }
+    return false
+  }
+  if (lose.type === 'score_below') {
+    const target = lose.params.target_score
+    if (typeof target !== 'number') return false
+    const score = currentScore(ctx, states)
+    return score !== undefined && score < target
+  }
+  return false
+}
+
+/**
+ * Whether an element sits in a terminal LOST state per the level's
+ * lose_condition — a game-agnostic "frozen" predicate. For
+ * any_element_state_equals { state, value }, an element whose `state === value`
+ * is terminal (e.g. a dead plant): its state machine must not advance, so a
+ * later heal/advance_state cannot resurrect it. score_below is a global (not
+ * per-element) condition and freezes no individual element. No lose_condition
+ * → never frozen (sibling games are unaffected).
+ */
+export function isElementTerminallyLost(
+  ctx: RuleContext,
+  states: ElementStates,
+  elementId: string
+): boolean {
+  const lose = ctx.level.lose_condition
+  if (!lose || lose.type !== 'any_element_state_equals') return false
+  const stateName = lose.params.state
+  const value = lose.params.value
+  if (typeof stateName !== 'string' || typeof value !== 'string') return false
+  return states.get(elementId)?.get(stateName) === value
+}
+
 function evaluateOptimizationTarget(ctx: RuleContext, states: ElementStates): boolean {
   const params = ctx.level.win_condition.params
   const atLeast = Array.isArray(params.all_states_at_least) ? params.all_states_at_least : []
@@ -494,10 +545,33 @@ export function executeTemporalStep(
     const archetype = target ? ctx.archetypes.get(target.archetype) : undefined
     const machine = states.get(targetId)
     if (!target || !archetype || !machine) continue
+    if (isElementTerminallyLost(ctx, states, targetId)) continue // dead is terminal: no advance
     if (applyStateEffect(archetype, machine, stepAction?.state_effect)) changed = true
   }
   stepsUsed.set(rule.id, used + 1)
   return changed
+}
+
+/**
+ * Element instance ids a TimedEmitter ticks (game-agnostic; shared by the
+ * engine's timer construction and the validator's reachability check):
+ * - kind 'archetype' → every element of that archetype (whether or not it has
+ *   a consuming rule — the reason emitter_target_reaches_terminal exists).
+ * - kind 'all' → every element carried by a level rule of target_template.
+ * Order is deterministic (element declaration order / rule iteration order).
+ */
+export function emitterTargetElementIds(level: Level, emitter: TimedEmitter): string[] {
+  if (emitter.target?.kind === 'archetype') {
+    const archetype = emitter.target.archetype
+    return level.elements.filter((element) => element.archetype === archetype).map((e) => e.id)
+  }
+  const valid = new Set(level.elements.map((element) => element.id))
+  const ids = new Set<string>()
+  for (const rule of level.rules) {
+    if (rule.template !== emitter.target_template) continue
+    for (const id of rule.target_elements) if (valid.has(id)) ids.add(id)
+  }
+  return [...ids]
 }
 
 /** Fire a state_transition rule on one element under one event. */
@@ -543,6 +617,7 @@ export function executeConditionAction(
     const archetype = target ? ctx.archetypes.get(target.archetype) : undefined
     const machine = states.get(targetId)
     if (!target || !archetype || !machine) continue
+    if (isElementTerminallyLost(ctx, states, targetId)) continue // dead is terminal: no revive
     if (!evaluatePredicates(rule, archetype, target.params, machine)) continue
     if (applyStateEffect(archetype, machine, verbAction?.state_effect)) changed = true
   }
@@ -630,6 +705,7 @@ export function executeInteractionMatrix(
       const archetype = member ? ctx.archetypes.get(member.archetype) : undefined
       const machine = states.get(memberId)
       if (!member || !archetype || !machine) continue
+      if (isElementTerminallyLost(ctx, states, memberId)) continue // dead is terminal: no revive
       if (applyStateEffect(archetype, machine, effectAction?.state_effect)) changed = true
     }
   }

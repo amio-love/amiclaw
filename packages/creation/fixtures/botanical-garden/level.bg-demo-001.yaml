@@ -11,7 +11,7 @@ Level:
   metadata:
     id: bg-demo-001
     game_type: botanical-garden
-    game_type_version: '1.0.0'
+    game_type_version: '1.1.0' # lockstep with the v1.1.0 GameType (decay + dead + lose)
     title: 小花圃急救
     author: ai-author-002
     created_at: '2026-07-02T22:00:00+08:00'
@@ -47,6 +47,7 @@ Level:
         soil_type: peaty
       position: { slot: 1 }
       initial_states: { health: wilting, effective_light: partial_shade } # north zone: partial_shade
+      initial_timers: { decay: { offset_ms: 0 } } # staggered decay phase (fires last)
     - id: plant-2
       archetype: plant
       params:
@@ -55,6 +56,7 @@ Level:
         soil_type: sandy
       position: { slot: 5 }
       initial_states: { health: stable, effective_light: full_sun } # center zone: full_sun
+      initial_timers: { decay: { offset_ms: 20000 } } # staggered decay phase
     - id: plant-3
       archetype: plant
       params:
@@ -63,6 +65,7 @@ Level:
         soil_type: loamy
       position: { slot: 6 }
       initial_states: { health: wilting, effective_light: full_sun } # center zone: full_sun
+      initial_timers: { decay: { offset_ms: 40000 } } # staggered decay phase (fires first)
     - id: zone-north
       archetype: environment_zone
       params:
@@ -128,6 +131,9 @@ Level:
       target_elements: [plant-1, plant-2, plant-3]
     - id: rule-health
       template: health_response
+      # v1.1.0: covers ALL plants (the archetype-scoped decay emitter targets
+      # every plant, so each must carry a health_response rule) and the neglect
+      # ladder walks the whole way to `dead` so no decay ring lies.
       bindings:
         transitions:
           - [wilting, correct_care, stable]
@@ -138,7 +144,9 @@ Level:
           - [wilting, wrong_care, critical]
           - [thriving, neglect, stable]
           - [stable, neglect, wilting]
-      target_elements: [plant-1, plant-2]
+          - [wilting, neglect, critical]
+          - [critical, neglect, dead]
+      target_elements: [plant-1, plant-2, plant-3]
     - id: rule-growth
       template: growth_advancement
       bindings:
@@ -195,3 +203,8 @@ Level:
         - { state: health, value: stable } # every plant health >= stable (declared-order rank)
       count_states_equal:
         - { state: growth_stage, value: flowering, count: 1 } # >= 1 plant flowering
+
+  # v1.1.0: any plant reaching `dead` (via the neglect decay ladder) loses.
+  lose_condition:
+    type: any_element_state_equals
+    params: { state: health, value: dead }

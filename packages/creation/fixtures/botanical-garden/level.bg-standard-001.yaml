@@ -1,0 +1,276 @@
+# Botanical Garden standard Level (bg-standard-001). Bigger than the tutorial:
+# 5 plants (one per species — the GameType's shared_label_attributes: [species]
+# renders instance labels from species alone, so same-species plants would
+# collide on rendered_label_unique / instance_label_unique; 5 distinct species
+# is the feasible maximum under the current vocabulary — see r5-produce report
+# §Fork Point on the design's 6-8 target) across the 3 zones, exercising:
+#   - REACHABLE mis-care danger (the R5-fix): the harm a player can actually
+#     cause with the shipped verbs (water/shade/fertilize/repot/bloom) is
+#     REMOVING a heal via mis-shading — decay then does the killing (the only
+#     player-reachable health-decline; see r5-fix1 report for the engine
+#     boundary). Two distinct reachable traps:
+#       · orchid — starts full_sun, heals ONLY at partial_shade: care it BEFORE
+#         shading and nothing happens (wasted turns); shade it TWICE and it
+#         locks into full_shade where it can never heal again (irreversible —
+#         no verb raises light). "遮光后再养护，别遮过头."
+#       · fern — starts partial_shade (the right light), heals ONLY at
+#         partial_shade: shade it even ONCE and it drops to full_shade, locked
+#         out of healing. "蕨类已在正确光照，别再遮光."
+#   - synergy heal: moss + succulent are a synergy pair; caring for one heals
+#     BOTH one step (the GameType's synergy effect_schema advance_state) — a
+#     plant you did not touch gets healed. The matrix genuinely affects play.
+#   - timed decay + death: every plant decays (archetype-scoped emitter);
+#     initial_timers stagger the phase and put the orchid on a faster interval
+#     (the high-maintenance plant); any plant reaching `dead` loses.
+#   - growth to flowering: the orchid grows seedling→flowering.
+# Win: all plants health >= stable AND >= 1 flowering. Lose: any plant dead.
+Level:
+  metadata:
+    id: bg-standard-001
+    game_type: botanical-garden
+    game_type_version: '1.1.0'
+    title: 温室轮值
+    author: ai-author-002
+    created_at: '2026-07-10T21:00:00+08:00'
+
+  # partition_complexity is GameType-derived (same partition template as the
+  # tutorial) → 2.7. total_score = 8*0.8 + 7*1.2 + 2.7*2.0 = 6.4 + 8.4 + 5.4.
+  difficulty:
+    element_count: 8 # 5 plants + zone-north/center/south
+    rule_count: 7 # light + orchid-care + fern-care + health + health-shaded + growth + compatibility
+    partition_complexity: 2.7
+    total_score: 20.2
+
+  # round_trips = ceil(light 0.5 + orchid-care 2.0 + fern-care 2.0 + health 0.5
+  #             + health-shaded 0.5 + growth 1.0 + compatibility 0.5 = 7.0) = 7
+  communication_estimate:
+    round_trips: 7
+    estimated_seconds: 70
+    time_limit_seconds: 480
+    feasibility: feasible # 70 <= 480*0.75 = 360
+
+  elements:
+    - id: plant-orchid
+      archetype: plant
+      params:
+        species: orchid
+        pot_position: 4
+        soil_type: loamy
+      position: { slot: 4 }
+      initial_states: { health: wilting, effective_light: full_sun } # center zone; must shade ONCE to heal
+      initial_timers: { decay: { interval_ms: 40000, offset_ms: 0 } } # fragile: faster decay
+    - id: plant-fern
+      archetype: plant
+      params:
+        species: fern
+        pot_position: 1
+        soil_type: peaty
+      position: { slot: 1 }
+      initial_states: { health: wilting, effective_light: partial_shade } # north zone; already right light — do NOT shade
+      initial_timers: { decay: { offset_ms: 10000 } }
+    - id: plant-moss
+      archetype: plant
+      params:
+        species: moss
+        pot_position: 2
+        soil_type: peaty
+      position: { slot: 2 }
+      initial_states: { health: stable, effective_light: partial_shade } # north zone; synergy partner, water-healed
+      initial_timers: { decay: { offset_ms: 20000 } }
+    - id: plant-succulent
+      archetype: plant
+      params:
+        species: succulent
+        pot_position: 5
+        soil_type: sandy
+      position: { slot: 5 }
+      initial_states: { health: stable, effective_light: full_sun } # center zone; synergy partner, water-healed
+      initial_timers: { decay: { offset_ms: 30000 } }
+    - id: plant-vine
+      archetype: plant
+      params:
+        species: vine
+        pot_position: 7
+        soil_type: loamy
+      position: { slot: 7 }
+      initial_states: { health: thriving, effective_light: full_shade } # south zone; already healthy
+      initial_timers: { decay: { offset_ms: 45000 } }
+    - id: zone-north
+      archetype: environment_zone
+      params:
+        zone_id: north
+        light_level: partial_shade
+        temperature: cool
+        covers_positions: ['1', '2', '3']
+    - id: zone-center
+      archetype: environment_zone
+      params:
+        zone_id: center
+        light_level: full_sun
+        temperature: warm
+        covers_positions: ['4', '5', '6']
+    - id: zone-south
+      archetype: environment_zone
+      params:
+        zone_id: south
+        light_level: full_shade
+        temperature: moderate
+        covers_positions: ['7', '8', '9']
+
+  rules:
+    # rule-light precedes the care rules so one apply_care(shade) sets the new
+    # light THEN the needs-rule re-evaluates against it (the over-shade trap:
+    # once a plant drops to full_shade its heal rule stops firing, and no verb
+    # raises light again).
+    - id: rule-light
+      template: light_adjustment
+      bindings:
+        transitions:
+          - [full_sun, shade_applied, partial_shade]
+          - [partial_shade, shade_applied, full_shade]
+      target_elements: [plant-orchid, plant-fern]
+    - id: rule-orchid-care
+      template: needs_rule
+      # Orchid heals ONLY under partial_shade. Care it at full_sun → nothing
+      # (must shade first); shade twice → full_shade → this rule stops firing.
+      bindings:
+        predicates:
+          [
+            { name: species_is, species: orchid },
+            { name: light_is, effective_light: partial_shade },
+          ]
+        combinator: AND
+        action: { verb: heal }
+      target_elements: [plant-orchid]
+    - id: rule-fern-care
+      template: needs_rule
+      # Fern heals ONLY under partial_shade (its starting light). Shade it and
+      # it drops to full_shade → this rule stops firing → locked out of healing.
+      bindings:
+        predicates:
+          [{ name: species_is, species: fern }, { name: light_is, effective_light: partial_shade }]
+        combinator: AND
+        action: { verb: heal }
+      target_elements: [plant-fern]
+    - id: rule-health
+      template: health_response
+      # Water-healed plants (moss/succulent/vine): correct_care recovery
+      # (reachable via the `water` verb) + the neglect decay ladder to `dead`.
+      # No wrong_care rows: no shipped verb produces wrong_care, so every
+      # transition here is reachable in real play.
+      bindings:
+        transitions:
+          - [wilting, correct_care, stable]
+          - [stable, correct_care, thriving]
+          - [critical, correct_care, wilting]
+          - [thriving, neglect, stable]
+          - [stable, neglect, wilting]
+          - [wilting, neglect, critical]
+          - [critical, neglect, dead]
+      target_elements: [plant-moss, plant-succulent, plant-vine]
+    - id: rule-health-shaded
+      template: health_response
+      # The shade-healed plants (orchid + fern) heal ONLY through their
+      # needs-rules, so this rule carries just the neglect decay ladder to
+      # `dead` (the decay-coverage requirement); watering them is inert.
+      bindings:
+        transitions:
+          - [thriving, neglect, stable]
+          - [stable, neglect, wilting]
+          - [wilting, neglect, critical]
+          - [critical, neglect, dead]
+      target_elements: [plant-orchid, plant-fern]
+    - id: rule-growth
+      template: growth_advancement
+      # Only the orchid grows to flowering (the win's flowering candidate).
+      bindings:
+        transitions:
+          - [seedling, fertilize_correct, juvenile]
+          - [juvenile, repot_correct, mature]
+          - [mature, bloom_correct, flowering]
+      target_elements: [plant-orchid]
+    - id: rule-compatibility
+      template: compatibility_matrix
+      # moss + succulent = synergy (heals both, via the GameType's active
+      # synergy effect) — caring for either lifts the other. moss + vine and
+      # succulent + vine bind change_health (no state_effect) so they stay
+      # informational.
+      bindings:
+        matrix:
+          - [moss, succulent, synergy]
+          - [succulent, vine, compatible]
+          - [moss, vine, neutral]
+      target_elements: [plant-moss, plant-succulent, plant-vine]
+
+  information_partition:
+    role_assignments:
+      - role: gardener
+        element_views:
+          - {
+              element_id: plant-orchid,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-fern,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-moss,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-succulent,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: plant-vine,
+              visible_attributes: [species, pot_position],
+              visible_states: [health, growth_stage, effective_light],
+            }
+          - {
+              element_id: zone-north,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+          - {
+              element_id: zone-center,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+          - {
+              element_id: zone-south,
+              visible_attributes: [zone_id, light_level, temperature, covers_positions],
+              visible_states: [],
+            }
+      - role: botanist
+        element_views:
+          - {
+              element_id: plant-orchid,
+              visible_attributes: [species, soil_type],
+              visible_states: [],
+            }
+          - { element_id: plant-fern, visible_attributes: [species, soil_type], visible_states: [] }
+          - { element_id: plant-moss, visible_attributes: [species, soil_type], visible_states: [] }
+          - {
+              element_id: plant-succulent,
+              visible_attributes: [species, soil_type],
+              visible_states: [],
+            }
+          - { element_id: plant-vine, visible_attributes: [species, soil_type], visible_states: [] }
+
+  win_condition:
+    type: optimization_target
+    params:
+      all_states_at_least:
+        - { state: health, value: stable } # every plant health >= stable
+      count_states_equal:
+        - { state: growth_stage, value: flowering, count: 1 } # >= 1 plant flowering
+
+  # Any plant reaching `dead` (via the neglect decay ladder) loses.
+  lose_condition:
+    type: any_element_state_equals
+    params: { state: health, value: dead }

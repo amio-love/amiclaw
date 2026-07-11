@@ -1,0 +1,36 @@
+.verbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.verb {
+  flex: 1 1 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 6px;
+  border: 1px solid var(--garden-line);
+  border-radius: 10px;
+  background: #12201a;
+  color: var(--garden-ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.06s ease;
+}
+
+.verb:active:not(:disabled) {
+  transform: scale(0.96);
+  border-color: var(--garden-accent);
+}
+
+.verb:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,38 @@
+# Dev-only local Worker config for the Botanical Garden AI botanist.
+#
+# Runs the REAL @amiclaw/platform-ai Worker (../../platform-ai/src/worker.ts —
+# relative to THIS file) with demo-mock + DEV_AUTH_BYPASS so the voice + text
+# botanist work end-to-end with NO credentials.
+#
+# NO [assets] block on purpose: wrangler 4.x drives the platform-ai
+# demo/wrangler.dev.toml [assets] block into a file-watch reload loop that
+# drops the WebSocket mid-turn. The game serves its own app via `vite dev`, so
+# this Worker only needs to own `/ai-ws/*`.
+#
+# Boot with:  pnpm --filter @amiclaw/game-botanical ai:dev
+# It binds :8787 to match the game dev server's `/ai-ws` proxy default
+# (packages/game-botanical/vite.config.ts AI_WS_TARGET).
+name = "botanical-ai-local"
+main = "../../platform-ai/src/worker.ts"
+compatibility_date = "2026-06-08"
+# Required by the Agents SDK (VoiceSessionDO extends `Agent`, which imports
+# node:async_hooks) — matches the production + demo wrangler configs.
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8787
+
+# Per-session voice pipeline DO (same class as production).
+[[durable_objects.bindings]]
+name = "VOICE_SESSION"
+class_name = "VoiceSessionDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceSessionDO"]
+
+[vars]
+# Dev auth bypass ON for local play only — never set in production. The demo-mock
+# gameId (chosen client-side) selects the deterministic mock provider on all three
+# layers, so no DeepSeek / Volcengine keys are read or required.
+DEV_AUTH_BYPASS = "true"

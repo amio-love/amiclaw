@@ -5,6 +5,17 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.0.0...HEAD)
 
+**Botanical Garden becomes a playable game on its own probe branch** - Internal
+change. The creation engine's botanical-garden case grows from a dev-harness
+data table into a real player-facing game (`packages/game-botanical`): a night
+garden scene with zone light bands and per-plant decay rings, verb-card care
+actions, an in-app AI botanist over the platform voice contract (voice primary,
+typed text fallback via a probe-only additive `text-turn` message), real-time
+neglect decay with a lose condition, and two machine-validated levels. The
+engine gains game-agnostic timed-emitter and lose-condition extensions with
+validator checks; sibling game fixtures are untouched. Not wired into the
+production arcade; playable via local dev only.
+
 **The Shadow Chase pursuer now obeys only visible world rules** — Fix. The
 pursuer no longer reads the private follow, split, or decoy command, any model
 lease, or a hidden shadow's live position. It sees the full unobstructed row and
@@ -53,7 +64,6 @@ to sign in — decline and the run simply stays off the board. The celebration a
 「再来一局」 lead the first screen, with the profile and module-breakdown cards
 below. The post-game survey no longer opens over your celebration or a near-miss:
 it waits as a quiet 「聊聊这一局」 link at the bottom once everything has settled.
-
 **Dual Shadow Chase now starts with a real tactical conversation** — Improvement.
 The new two-to-five-minute solo game now uses Chinese-first player copy and shows
 the complete frozen map before the chase. Tactical planning defaults to 20 seconds,
@@ -120,7 +130,6 @@ games now draw from one shared set of components and design tokens instead of
 per-screen copies. The visible result is a steadier, more finished feel; the
 Oracle's violet-gold and cinnabar-seal styling is now a registered part of that
 system rather than one-off colors.
-
 **A first-time player learns how BombSquad is played before the manual step** - Fix.
 An anonymous newcomer was dropped straight onto 「把手册发给你的 AI」 with no
 explanation of the unusual premise — you and a separate voice AI split the bomb

@@ -11,7 +11,7 @@
 # target-language instantiation DATA; comments are English per repo policy.
 GameType:
   id: botanical-garden
-  version: '1.0.0'
+  version: '1.1.0' # v1.1.0: adds timed decay + lose condition + the dead health state
   display_name: 植物园养护
   description: 视觉多实体并行管理——一方看植物园场景，另一方持养护手册
 
@@ -49,9 +49,13 @@ GameType:
       states:
         # RESTRUCTURE: health ordered worst→best so advance_state = heal, and
         # so optimization_target's `at_least` ranks by declared order.
+        # v1.1.0: `dead` prepended as the worst end (timed-decay terminal). The
+        # prepend shifts every index +1 but advance_state (relative step) and
+        # optimization_target rank checks (indexOf on the same shifted order)
+        # are order-invariant, so existing win semantics are unchanged.
         - name: health
           type: enum
-          values: [critical, wilting, stable, thriving]
+          values: [dead, critical, wilting, stable, thriving]
           initial: stable
           verbal_template: '健康状态{health}'
         - name: growth_stage
@@ -180,8 +184,15 @@ GameType:
             effect: change_health
             params: [{ name: delta, type: string }]
           - relation: synergy
-            effect: change_health
-            params: [{ name: delta, type: string }]
+            # ACTIVE effect (standard-level play): synergy pairs heal each other
+            # one step (advance_state) on every apply_care. Safe on bg-demo-001:
+            # its matrix has no synergy pair present (the [fern, moss, synergy]
+            # row never matches — the tutorial has no moss), so this stays inert
+            # there. compatible/incompatible/neutral MUST stay change_health
+            # (no state_effect) — they are GameType-shared and a synergy-style
+            # heal on `compatible` would retroactively alter bg-demo-001.
+            effect: heal
+            params: []
           - relation: neutral
             effect: change_health
             params: [{ name: delta, type: string }]
@@ -190,7 +201,9 @@ GameType:
     - id: health_response
       type: state_transition
       transition_table_schema:
-        states: [critical, wilting, stable, thriving]
+        # v1.1.0: `dead` added so a decay row can reach it (the template's
+        # declared state list must include every value a transition row reaches).
+        states: [dead, critical, wilting, stable, thriving]
         events: [correct_care, wrong_care, neglect]
       communication_weight: 0.5
 
@@ -285,6 +298,23 @@ GameType:
   win_condition_type:
     type: optimization_target
     description: 所有植株健康达到 stable 或更高，且至少一株生长阶段达到 flowering
+
+  # v1.1.0: any plant reaching `dead` (枯死) ends the run as a loss.
+  lose_condition_type:
+    type: any_element_state_equals
+    description: 任一植株健康状态跌至 dead 即败局（枯死）
+
+  # v1.1.0: timed decay — `neglect` fires automatically on every plant as
+  # simulated time advances (host-injected via GameSession.advanceTime; the
+  # engine reads no wall-clock). Gentle tutorial pacing (60s base); per-plant
+  # staggering lives in the Level's initial_timers.
+  timed_emitters:
+    - id: decay
+      event: neglect
+      target_template: health_response
+      target: { kind: archetype, archetype: plant }
+      interval_ms: 60000
+      warning_lead_ms: 8000
 
   difficulty_budget:
     element_count:

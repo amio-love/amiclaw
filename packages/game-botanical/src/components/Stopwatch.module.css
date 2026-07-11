@@ -1,0 +1,12 @@
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--garden-ink);
+  font-family: var(--font-numeric, 'Inter', system-ui, sans-serif);
+}
+
+.running {
+  color: var(--garden-ink);
+}

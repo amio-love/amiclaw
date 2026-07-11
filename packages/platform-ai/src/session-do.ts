@@ -186,6 +186,22 @@ interface TurnMessage {
   type: 'turn'
 }
 
+/**
+ * The player typed a question instead of speaking — the text fallback (FP1
+ * option A, probe-branch only). Feeds `text` DIRECTLY to the LLM as the turn's
+ * transcript, skipping STT entirely, then runs the SAME LLM+TTS reply path a
+ * voice `turn` uses (`runReply`) — including the terminal transcript frame (the
+ * typed text echoed) and usage accounting (STT cost is zero: no audio).
+ * Game-agnostic and additive: it needs no prior `speech-start` and does not
+ * touch the live-utterance / ASR path. Serial with voice turns (rejected with
+ * `turn_in_flight` mid-reply); an empty/whitespace `text` is a benign no-op; a
+ * `text-turn` with no live session fail-louds exactly like `turn`.
+ */
+interface TextTurnMessage {
+  type: 'text-turn'
+  text: string
+}
+
 interface EndSessionMessage {
   type: 'end'
 }
@@ -218,10 +234,20 @@ interface ClosingSessionMessage {
   outcome?: RecapOutcome
 }
 
+/**
+ * Server-side cap on a `text-turn`'s typed text. A botanist question is a short
+ * prompt; a client caps it too, but the DO must not trust the client — an
+ * over-long payload is TRUNCATED (not rejected) so a benign over-run still gets
+ * answered, and a hostile one cannot bloat the LLM context. Generous vs the
+ * client bound so normal input is never clipped.
+ */
+const MAX_TEXT_TURN_CHARS = 2000
+
 type ControlMessage =
   | CreateSessionMessage
   | SpeechStartMessage
   | TurnMessage
+  | TextTurnMessage
   | EndSessionMessage
   | UpdateGameStateMessage
   | ClosingSessionMessage
@@ -1382,6 +1408,40 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // (see its docstring), so a mid-reply `end`/owner close cancels cleanly and
         // a stale `finally` cannot clobber a newer session's guard.
         const turn = runReply(this.providers, this.sessionState, result)[Symbol.asyncIterator]()
+        await this.streamTurn(ws, turn)
+        return
+      }
+      case 'text-turn': {
+        // The text fallback (FP1 A): typed input bypasses STT. Same gates as a
+        // voice `turn` (owner + live session), the same serial in-flight guard,
+        // and the same reply path — only the transcript source differs (the
+        // typed text, not ASR). Additive: it neither requires nor disturbs the
+        // live-utterance / ASR path, so it works with no prior `speech-start`.
+        const sessionId = this.sessionId
+        if (!this.sessionState || !socketUserId || sessionId === undefined || !this.providers) {
+          ws.close(1008, safeCloseReason('text-turn before create'))
+          return
+        }
+        this.assertOwner(sessionId, socketUserId)
+        if (this.turnInFlight) {
+          this.sendError(ws, 'turn_in_flight', 'a turn is already in progress')
+          return
+        }
+        // Truncate defensively: never trust the client's length cap.
+        const text =
+          typeof msg.text === 'string' ? msg.text.trim().slice(0, MAX_TEXT_TURN_CHARS) : ''
+        if (text.length === 0) {
+          // Empty/whitespace typed input: benign no-op (the typed analog of a
+          // no-speech turn) — no reply, no state, no turn counted.
+          return
+        }
+        traceTurn('turn', 'text-start', { sessionId })
+        // Feed the typed text as the turn's transcript directly (audioBytes: 0,
+        // so STT usage is zero), reusing the voice reply path wholesale.
+        const turn = runReply(this.providers, this.sessionState, {
+          transcript: text,
+          audioBytes: 0,
+        })[Symbol.asyncIterator]()
         await this.streamTurn(ws, turn)
         return
       }

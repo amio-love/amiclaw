@@ -21,7 +21,14 @@ import type {
   Violation,
 } from '../schema/types'
 import { PARTITION_REQUIRED_CO_PLAY_FORMS } from '../schema/types'
-import { archetypesById, attributeNames, buildCheckResult, stateNames, WILDCARD } from './helpers'
+import {
+  archetypesById,
+  attributeNames,
+  buildCheckResult,
+  stateNames,
+  templatesById,
+  WILDCARD,
+} from './helpers'
 
 export function validateGameType(gameType: GameType): CheckResult {
   const violations: Violation[] = []
@@ -141,6 +148,137 @@ export function validateGameType(gameType: GameType): CheckResult {
         }
       })
     }
+  })
+
+  // timed_emitters: registration-time referential integrity (game-agnostic
+  // timed decay). Mirrors the trigger/state_effect guards. ABSENT → no checks,
+  // so games without the field are wholly unaffected.
+  const templatesMap = templatesById(gameType)
+  const emitterIds = new Map<string, number>()
+  ;(gameType.timed_emitters ?? []).forEach((emitter, i) => {
+    const base = `game_type.timed_emitters[${i}]`
+    const firstIndex = emitterIds.get(emitter.id)
+    if (firstIndex !== undefined) {
+      violations.push({
+        severity: 'error',
+        field_path: `${base}.id`,
+        constraint: 'emitter_id_unique',
+        expected: 'a GameType-unique timed_emitter id',
+        actual: `"${emitter.id}" already declared at game_type.timed_emitters[${firstIndex}]`,
+        suggestion:
+          'Rename one of the emitters — ids key initial_timers overrides and the runtime charge map, so collisions silently merge charge',
+      })
+    } else {
+      emitterIds.set(emitter.id, i)
+    }
+
+    const kind = templateKinds.get(emitter.target_template)
+    const target = templatesMap.get(emitter.target_template)
+    if (kind === undefined) {
+      violations.push({
+        severity: 'error',
+        field_path: `${base}.target_template`,
+        constraint: 'emitter_template_registered',
+        expected: `one of [${[...templateIds].join(', ')}]`,
+        actual: emitter.target_template,
+        suggestion: 'Reference a registered state_transition RuleTemplate id',
+      })
+    } else if (kind !== 'state_transition') {
+      violations.push({
+        severity: 'error',
+        field_path: `${base}.target_template`,
+        constraint: 'emitter_template_kind',
+        expected:
+          'a state_transition template (advanceTime fires the event through executeStateTransition)',
+        actual: `"${emitter.target_template}" is a ${kind} template`,
+        suggestion:
+          'Point the emitter at a state_transition template; only those consume timed events',
+      })
+    } else if (target?.type === 'state_transition') {
+      const events = target.transition_table_schema.events
+      if (!events.includes(emitter.event)) {
+        violations.push({
+          severity: 'error',
+          field_path: `${base}.event`,
+          constraint: 'emitter_event_in_table',
+          expected: `one of [${events.join(', ')}]`,
+          actual: emitter.event,
+          suggestion: `Use an event declared in "${emitter.target_template}".transition_table_schema.events, or add it there`,
+        })
+      }
+    }
+
+    if (emitter.target?.kind === 'archetype' && !archetypes.has(emitter.target.archetype)) {
+      violations.push({
+        severity: 'error',
+        field_path: `${base}.target.archetype`,
+        constraint: 'emitter_target_archetype',
+        expected: `one of [${[...archetypes.keys()].join(', ')}]`,
+        actual: emitter.target.archetype,
+        suggestion: 'Reference a registered ElementArchetype id',
+      })
+    }
+
+    const intervalValid =
+      typeof emitter.interval_ms === 'number' &&
+      Number.isFinite(emitter.interval_ms) &&
+      emitter.interval_ms > 0
+    if (!intervalValid) {
+      violations.push({
+        severity: 'error',
+        field_path: `${base}.interval_ms`,
+        constraint: 'emitter_interval_positive',
+        expected: 'a finite number > 0',
+        actual: String(emitter.interval_ms),
+        suggestion: 'Set interval_ms to a positive number of milliseconds between ticks',
+      })
+    }
+
+    if (emitter.warning_lead_ms !== undefined) {
+      const lead = emitter.warning_lead_ms
+      const leadValid =
+        typeof lead === 'number' &&
+        Number.isFinite(lead) &&
+        lead >= 0 &&
+        (!intervalValid || lead < emitter.interval_ms)
+      if (!leadValid) {
+        violations.push({
+          severity: 'error',
+          field_path: `${base}.warning_lead_ms`,
+          constraint: 'emitter_warning_lead_bounds',
+          expected: `0 <= warning_lead_ms < interval_ms (${emitter.interval_ms})`,
+          actual: String(lead),
+          suggestion: 'Set warning_lead_ms within [0, interval_ms)',
+        })
+      }
+    }
+  })
+
+  // state_values_unique (F2/TC-06): a duplicate value in a state enum silently
+  // corrupts every indexOf-based rank comparison (stateValueOrder,
+  // applyStateEffect, evaluateOptimizationTarget) — advance_state and the
+  // optimization_target ranking both read the FIRST index of a value. Mirrors
+  // the emitter_id_unique dedup idea.
+  gameType.element_archetypes.forEach((archetype, ai) => {
+    ;(archetype.states ?? []).forEach((state, si) => {
+      if (!state.values) return
+      const seen = new Map<string, number>()
+      state.values.forEach((value, vi) => {
+        const first = seen.get(value)
+        if (first !== undefined) {
+          violations.push({
+            severity: 'error',
+            field_path: `game_type.element_archetypes[${ai}].states[${si}].values[${vi}]`,
+            constraint: 'state_values_unique',
+            expected: `each value of state "${state.name}" declared at most once`,
+            actual: `"${value}" already declared at index ${first}`,
+            suggestion: `Remove the duplicate "${value}" — duplicate state values corrupt every indexOf-based rank comparison (advance_state, optimization_target)`,
+          })
+        } else {
+          seen.set(value, vi)
+        }
+      })
+    })
   })
 
   const template = gameType.information_partition_template

@@ -20,8 +20,11 @@ import {
   applyConstruction,
   buildRuleContext,
   currentScore,
+  emitterTargetElementIds,
+  evaluateLose,
   evaluateWin,
   executeConditionAction,
+  isElementTerminallyLost,
   executeInteractionMatrix,
   executeStateTransition,
   executeTemporalStep,
@@ -31,7 +34,15 @@ import {
 
 export interface EngineSnapshot {
   elements: Record<string, Record<string, unknown>>
+  /**
+   * The RESOLVED win flag: true only when the win condition is met AND the run
+   * is not lost. Encodes the "lose wins ties" precedence (a corpse never shows
+   * a win), so a host can render this directly. The raw predicates isWon() /
+   * isLost() stay independent (both can be true in a tie).
+   */
   won: boolean
+  /** True when the lose condition is met (raw predicate). */
+  lost: boolean
 }
 
 export interface RoleElementView {
@@ -51,6 +62,45 @@ export interface RoleView {
 }
 
 export type ActionResult = { ok: true; effects: string[] } | { ok: false; reason: string }
+
+/**
+ * One (emitter, element) result of an advanceTime call — emitted only when the
+ * accumulated charge crossed the interval this advance. `fired` is whether a
+ * matching state_transition row actually changed state (false = the event was
+ * inert on the element, e.g. no consuming rule — the case the validator's
+ * emitter_target_reaches_terminal check prevents shipping).
+ */
+export interface TimedTick {
+  elementId: string
+  emitterId: string
+  event: string
+  fired: boolean
+}
+
+/** Per-(emitter, element) countdown for the pre-decay warning UI (pure read). */
+export interface TimerStatus {
+  elementId: string
+  emitterId: string
+  /** Milliseconds until the next tick (0 when due); never negative. */
+  msUntilTick: number
+  /** True once msUntilTick <= the emitter's warning_lead_ms. */
+  warning: boolean
+}
+
+/**
+ * One resolved (emitter, element) timer. `charge` is the only mutable field;
+ * `interval` folds in any per-instance initial_timers.interval_ms override,
+ * `warningLead` comes from the emitter (initial_timers carries no lead field).
+ */
+interface TimerEntry {
+  emitterId: string
+  event: string
+  targetTemplate: string
+  elementId: string
+  interval: number
+  warningLead: number
+  charge: number
+}
 
 export interface PerformActionArgs {
   element_id?: string
@@ -74,10 +124,41 @@ export class GameSession {
   private readonly ctx: RuleContext
   private readonly states: ElementStates
   private readonly stepsUsed = new Map<string, number>()
+  /** Resolved (emitter, element) timers; empty when no timed_emitters. */
+  private readonly timers: TimerEntry[]
 
   constructor(gameType: GameType, level: Level) {
     this.ctx = buildRuleContext(gameType, level)
     this.states = initialElementStates(gameType, level)
+    this.timers = this.buildTimers()
+  }
+
+  /**
+   * Resolve one TimerEntry per (emitter, targeted element), folding in
+   * per-instance initial_timers overrides. Initial charge = offset_ms (phase).
+   * Deterministic order (emitter order × resolved element order).
+   */
+  private buildTimers(): TimerEntry[] {
+    const timers: TimerEntry[] = []
+    for (const emitter of this.ctx.gameType.timed_emitters ?? []) {
+      const warningLead = emitter.warning_lead_ms ?? 0
+      for (const elementId of emitterTargetElementIds(this.ctx.level, emitter)) {
+        const override = this.ctx.elements.get(elementId)?.initial_timers?.[emitter.id]
+        const interval =
+          typeof override?.interval_ms === 'number' ? override.interval_ms : emitter.interval_ms
+        const offset = typeof override?.offset_ms === 'number' ? override.offset_ms : 0
+        timers.push({
+          emitterId: emitter.id,
+          event: emitter.event,
+          targetTemplate: emitter.target_template,
+          elementId,
+          interval,
+          warningLead,
+          charge: offset,
+        })
+      }
+    }
+    return timers
   }
 
   getState(): EngineSnapshot {
@@ -85,7 +166,9 @@ export class GameSession {
     for (const [elementId, machine] of this.states) {
       elements[elementId] = Object.fromEntries(machine)
     }
-    return { elements, won: this.isWon() }
+    const lost = this.isLost()
+    // Tie-break: lose wins ties — a dead plant never shows a win.
+    return { elements, won: this.isWon() && !lost, lost }
   }
 
   /**
@@ -222,6 +305,11 @@ export class GameSession {
     return evaluateWin(this.ctx, this.states)
   }
 
+  /** Failure-mode mirror of isWon (raw predicate; independent of isWon). */
+  isLost(): boolean {
+    return evaluateLose(this.ctx, this.states)
+  }
+
   /** Current score (score_threshold levels); undefined without a scoring rule. */
   score(): number | undefined {
     return currentScore(this.ctx, this.states)
@@ -230,6 +318,82 @@ export class GameSession {
   /** Spec remaining-steps metric; undefined without a construction/slot model. */
   remainingSteps(): number | undefined {
     return remainingSteps(this.ctx, this.states)
+  }
+
+  /**
+   * Advance simulated time by `dtMs`, firing any (emitter, element) whose
+   * accumulated charge crosses its interval. Deterministic: reads NO
+   * wall-clock, so the same call sequence yields the same result. Each
+   * (emitter, element) fires AT MOST ONCE per call — the documented
+   * once-per-advance tick cap (a large dt spanning many intervals still fires
+   * once and does NOT accumulate residual charge; charge is capped at
+   * interval). Returns one TimedTick per crossing for the host to render.
+   *
+   * Contracts (manager-pinned):
+   * - non-finite or negative dtMs → THROW (a host bug; fail loud).
+   * - dtMs === 0 → no-op (zero elapsed time changes nothing; idempotent).
+   * - after the run has ended (isWon OR isLost) → no-op freeze (timers stop;
+   *   timerStatus stays readable). The tick during which death occurs is fully
+   *   processed — isLost is false at its start — and only subsequent calls
+   *   freeze, so the run ends the instant a plant hits its terminal state.
+   */
+  advanceTime(dtMs: number): TimedTick[] {
+    if (!Number.isFinite(dtMs) || dtMs < 0) {
+      throw new RangeError(`advanceTime requires a finite dtMs >= 0, got ${dtMs}`)
+    }
+    if (dtMs === 0) return []
+    if (this.isWon() || this.isLost()) return []
+    const ticks: TimedTick[] = []
+    for (const timer of this.timers) {
+      timer.charge = Math.min(timer.charge + dtMs, timer.interval)
+      if (timer.charge < timer.interval) continue
+      const fired = this.fireEmitterEvent(timer.elementId, timer.targetTemplate, timer.event)
+      timer.charge = 0
+      ticks.push({
+        elementId: timer.elementId,
+        emitterId: timer.emitterId,
+        event: timer.event,
+        fired,
+      })
+    }
+    return ticks
+  }
+
+  /**
+   * Per-(emitter, element) countdown for the warning UI. Pure read: never
+   * advances charge, always readable (including after the run ends).
+   */
+  timerStatus(): TimerStatus[] {
+    return this.timers.map((timer) => {
+      const msUntilTick = Math.max(0, timer.interval - timer.charge)
+      return {
+        elementId: timer.elementId,
+        emitterId: timer.emitterId,
+        msUntilTick,
+        warning: msUntilTick <= timer.warningLead,
+      }
+    })
+  }
+
+  /**
+   * Fire one emitter event on every level rule of `targetTemplate` targeting
+   * the element, through the SAME executeStateTransition core a player-driven
+   * event uses. Returns whether any rule actually changed state.
+   */
+  private fireEmitterEvent(elementId: string, targetTemplate: string, event: string): boolean {
+    // A terminally-lost element never transitions out (mirrors the player-event
+    // guard); the advanceTime freeze makes this unreachable in practice, but it
+    // keeps the terminal-is-irreversible contract total across both callers.
+    if (isElementTerminallyLost(this.ctx, this.states, elementId)) return false
+    let changed = false
+    for (const rule of this.ctx.level.rules) {
+      if (rule.template !== targetTemplate) continue
+      if (!rule.target_elements.includes(elementId)) continue
+      const template = this.ctx.templates.get(rule.template)
+      if (!template || template.type !== 'state_transition') continue
+      if (executeStateTransition(rule, this.states, event, elementId)) changed = true
+    }
+    return changed
   }
 
   /**
@@ -252,7 +416,15 @@ export class GameSession {
       if (!template) continue
       if (template.type === 'state_transition') {
         const event = actionEvent(this.ctx.gameType, template.id, actionType)
-        if (event && executeStateTransition(rule, this.states, event, elementId)) {
+        // Dead is terminal on the transition path too: a lost element never
+        // transitions out (blocks a `[dead, correct_care, wilting]` revival via
+        // performAction, which isLost does not freeze). Mirrors the
+        // applyStateEffect resurrection guard.
+        if (
+          event &&
+          !isElementTerminallyLost(this.ctx, this.states, elementId) &&
+          executeStateTransition(rule, this.states, event, elementId)
+        ) {
           effects.push(`${rule.id}: event ${event}`)
         }
         continue

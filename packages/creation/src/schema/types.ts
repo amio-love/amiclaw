@@ -406,6 +406,30 @@ export interface WinConditionType {
   description: string
 }
 
+/**
+ * Lose-condition type ids — the failure-mode mirror of WinConditionTypeId.
+ * Seed set, open like the win side; a game with no failure path omits it
+ * (radio-cipher / sound-garden).
+ */
+export type LoseConditionTypeId = 'any_element_state_equals' | 'score_below'
+
+export interface LoseConditionType {
+  type: LoseConditionTypeId
+  description: string
+}
+
+/**
+ * Level-side lose condition (mirrors WinCondition). Seed semantics:
+ * - any_element_state_equals — params { state, value } → lost when ANY element
+ *   has `state === value` (e.g. botanical { state: health, value: dead }).
+ * - score_below — params { target_score } → lost when currentScore < target.
+ */
+export interface LoseCondition {
+  /** References GameType.lose_condition_type. */
+  type: string
+  params: Record<string, unknown>
+}
+
 /** One entry of the GameType-global action verb registry. */
 export interface ActionDefinition {
   name: string
@@ -456,6 +480,41 @@ export interface CommunicationBudget {
  */
 export type ActionEventMappingEntry = { action_type: string } & Record<string, string>
 
+// ---------------------------------------------------------------------------
+// Timed event emitters (game-agnostic timed decay — engine extension)
+// ---------------------------------------------------------------------------
+
+/** Which elements one TimedEmitter ticks. */
+export type TimedEmitterTarget =
+  /** Every element carried by a level rule of the emitter's target_template. */
+  | { kind: 'all' }
+  /** Every element instance of one archetype. */
+  | { kind: 'archetype'; archetype: string }
+
+/**
+ * Declares a game event fired automatically as simulated time advances.
+ * Game-agnostic: a crossed emitter emits its `event` on the target element's
+ * rules of `target_template`, identical to a player action producing an event
+ * — only the source differs (the host-injected clock, not an action). The
+ * engine reads no wall-clock; the host drives elapsed time via
+ * GameSession.advanceTime. ABSENT `timed_emitters` = no timed events (games
+ * with neither field are byte-for-byte unaffected).
+ */
+export interface TimedEmitter {
+  /** Unique across the GameType's timed_emitters; keys initial_timers + diagnostics. */
+  id: string
+  /** Event name; MUST appear in target_template's transition_table_schema.events. */
+  event: string
+  /** MUST resolve to a registered state_transition RuleTemplate id. */
+  target_template: string
+  /** Which elements tick. */
+  target: TimedEmitterTarget
+  /** Base milliseconds between ticks per element; MUST be > 0. */
+  interval_ms: number
+  /** Optional pre-tick warning window for warning UI; 0 <= lead < interval_ms. */
+  warning_lead_ms?: number
+}
+
 export interface GameType {
   /** Unique id, kebab-case. */
   id: string
@@ -473,6 +532,12 @@ export interface GameType {
    */
   information_partition_template?: InformationPartitionTemplate
   win_condition_type: WinConditionType
+  /**
+   * Optional lose-condition type (mirror of win_condition_type). ABSENT = the
+   * game has no failure path (radio-cipher / sound-garden). A Level's
+   * lose_condition.type must match this when both are present.
+   */
+  lose_condition_type?: LoseConditionType
   difficulty_budget: DifficultyBudget
   action_registry: ActionDefinition[]
   /**
@@ -483,6 +548,12 @@ export interface GameType {
    * player action into the named event for each state_transition template.
    */
   action_event_mapping?: ActionEventMappingEntry[]
+  /**
+   * Optional game-agnostic timed event emitters (timed decay). ABSENT = no
+   * timed events; the engine has no time concept without it. Registration-time
+   * referential integrity is checked by validateGameType.
+   */
+  timed_emitters?: TimedEmitter[]
   communication_budget: CommunicationBudget
   /**
    * Solvability solver strategy id (e.g. "exhaustive_path_search", "csp").
@@ -567,6 +638,14 @@ export interface LevelElement {
    * initial.
    */
   initial_states?: Record<string, unknown>
+  /**
+   * Optional per-instance timer overrides, keyed by TimedEmitter.id (mirrors
+   * initial_states). `interval_ms` overrides the emitter's base interval for
+   * THIS element; `offset_ms` seeds the initial accumulated charge (a phase
+   * within one period — a larger offset ticks sooner), enabling staggered
+   * decay. Absent → base interval, phase 0. Validated by schema_conformance.
+   */
+  initial_timers?: Record<string, { interval_ms?: number; offset_ms?: number }>
   position?: ElementPosition
 }
 
@@ -636,6 +715,11 @@ export interface Level {
   rules: LevelRule[]
   information_partition: LevelInformationPartition
   win_condition: WinCondition
+  /**
+   * Optional lose condition (mirror of win_condition). ABSENT = no failure
+   * path. Its `type` must match GameType.lose_condition_type.type.
+   */
+  lose_condition?: LoseCondition
   /**
    * Optional — auto-generated for hidden_info_coop (surface generation
    * contract); shared-state forms may omit or generate symmetric surfaces.

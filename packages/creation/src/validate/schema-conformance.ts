@@ -30,8 +30,11 @@ import type {
   RuleTemplate,
   StateDefinition,
   StateTransitionRuleTemplate,
+  TimedEmitter,
   Violation,
 } from '../schema/types'
+import type { ElementStates } from '../engine/rules'
+import { emitterTargetElementIds, initialElementStates } from '../engine/rules'
 import {
   archetypesById,
   attributeNames,
@@ -246,6 +249,7 @@ export function checkSchemaConformance(
   const archetypes = archetypesById(gameType)
   const templates = templatesById(gameType)
   const elements = elementsById(level)
+  const emitterIds = new Set((gameType.timed_emitters ?? []).map((emitter) => emitter.id))
 
   if (level.metadata.game_type !== gameType.id) {
     violations.push({
@@ -393,6 +397,64 @@ export function checkSchemaConformance(
       const stateViolation = checkStateValue(state, value, path)
       if (stateViolation) violations.push(stateViolation)
     }
+    // Per-instance initial_timers overrides (mirrors initial_states): each key
+    // must name a declared TimedEmitter id, and interval_ms / offset_ms stay in
+    // bounds (interval_ms > 0, offset_ms >= 0).
+    if (isMappingValue(element.initial_timers)) {
+      for (const [key, value] of Object.entries(element.initial_timers)) {
+        const path = `elements[${i}].initial_timers.${key}`
+        if (!emitterIds.has(key)) {
+          violations.push({
+            severity: 'error',
+            field_path: path,
+            constraint: 'timer_override_emitter_registered',
+            expected: `one of [${[...emitterIds].join(', ')}]`,
+            actual: key,
+            suggestion: `Remove "${key}" or key the override by a declared game_type.timed_emitters id`,
+          })
+          continue
+        }
+        if (!isMappingValue(value)) {
+          violations.push({
+            severity: 'error',
+            field_path: path,
+            constraint: 'timer_override_bounds',
+            expected: 'a mapping { interval_ms?, offset_ms? }',
+            actual: formatValue(value),
+            suggestion: 'Provide the override as { interval_ms?: number, offset_ms?: number }',
+          })
+          continue
+        }
+        const interval = value.interval_ms
+        if (
+          interval !== undefined &&
+          !(typeof interval === 'number' && Number.isFinite(interval) && interval > 0)
+        ) {
+          violations.push({
+            severity: 'error',
+            field_path: `${path}.interval_ms`,
+            constraint: 'timer_override_bounds',
+            expected: 'a finite number > 0',
+            actual: formatValue(interval),
+            suggestion: 'Set interval_ms to a positive number of milliseconds, or omit it',
+          })
+        }
+        const offset = value.offset_ms
+        if (
+          offset !== undefined &&
+          !(typeof offset === 'number' && Number.isFinite(offset) && offset >= 0)
+        ) {
+          violations.push({
+            severity: 'error',
+            field_path: `${path}.offset_ms`,
+            constraint: 'timer_override_bounds',
+            expected: 'a finite number >= 0',
+            actual: formatValue(offset),
+            suggestion: 'Set offset_ms to a non-negative number of milliseconds, or omit it',
+          })
+        }
+      }
+    }
   })
 
   level.rules.forEach((rule, i) => {
@@ -422,6 +484,116 @@ export function checkSchemaConformance(
       }
     })
   })
+
+  // emitter_target_reaches_terminal (§5 decay-coverage invariant): every
+  // element a timed emitter targets MUST be able to walk to the run's lose
+  // terminal via the emitter's event — otherwise the element renders a decay
+  // countdown that never reaches its terminal ("the ring lies"). When the
+  // level declares no matching lose terminal, it falls back to event
+  // consumability (the emitter's event must at least fire on the element).
+  // Skips emitters whose target_template is not a state_transition
+  // (validateGameType flags those).
+  if ((gameType.timed_emitters ?? []).length > 0) {
+    const initialStates = initialElementStates(gameType, level)
+    ;(gameType.timed_emitters ?? []).forEach((emitter, ei) => {
+      const template = templates.get(emitter.target_template)
+      if (!template || template.type !== 'state_transition') return
+      for (const elementId of emitterTargetElementIds(level, emitter)) {
+        const { hasEdges, reachable } = emitterTerminalReachability(
+          level,
+          template,
+          emitter,
+          elementId,
+          initialStates
+        )
+        if (reachable) continue
+        const detail = hasEdges
+          ? `cannot reach the lose terminal via "${emitter.event}" (the decay ladder is incomplete)`
+          : `has no rule consuming "${emitter.event}" (its decay timer would render but never fire)`
+        violations.push({
+          severity: 'error',
+          field_path: `game_type.timed_emitters[${ei}]`,
+          constraint: 'emitter_target_reaches_terminal',
+          expected: `element "${elementId}" can reach the emitter's terminal state via "${emitter.event}"`,
+          actual: `"${elementId}" ${detail}`,
+          suggestion: `Give "${elementId}" a ${emitter.target_template} rule whose "${emitter.event}" rows walk it to the terminal, or narrow the emitter's target`,
+          related_elements: [elementId],
+        })
+      }
+    })
+  }
+
+  // lose_condition (§3): its type matches the GameType's declared type, and
+  // any_element_state_equals params reference a declared state + a legal value.
+  if (level.lose_condition) {
+    const lose = level.lose_condition
+    const declaredType = gameType.lose_condition_type?.type
+    if (declaredType !== undefined && lose.type !== declaredType) {
+      violations.push({
+        severity: 'error',
+        field_path: 'lose_condition.type',
+        constraint: 'lose_condition_type_match',
+        expected: declaredType,
+        actual: String(lose.type),
+        suggestion: `Use the GameType's declared lose condition type "${declaredType}"`,
+      })
+    }
+    if (lose.type === 'any_element_state_equals') {
+      const stateName = lose.params.state
+      const stateDef = typeof stateName === 'string' ? findStateDef(gameType, stateName) : undefined
+      if (!stateDef) {
+        violations.push({
+          severity: 'error',
+          field_path: 'lose_condition.params.state',
+          constraint: 'lose_condition_state_declared',
+          expected: 'a state declared on some archetype',
+          actual: formatValue(stateName),
+          suggestion: 'Reference a declared state name (e.g. a plant health/growth state)',
+        })
+      } else if (stateDef.type === 'enum') {
+        const value = lose.params.value
+        const legal = stateDef.values ?? []
+        if (typeof value !== 'string' || !legal.includes(value)) {
+          violations.push({
+            severity: 'error',
+            field_path: 'lose_condition.params.value',
+            constraint: 'lose_condition_value_in_enum',
+            expected: `one of [${legal.join(', ')}]`,
+            actual: formatValue(value),
+            suggestion: `Set value to a declared value of state "${String(stateName)}"`,
+          })
+        }
+      }
+    }
+
+    // terminal_state_no_exit (F3): a lose-condition terminal state is
+    // irreversible, so NO state_transition row may transition OUT of it — a
+    // `[dead, correct_care, wilting]` row would resurrect a lost element via
+    // performAction (which isLost does not freeze). Static mirror of the engine
+    // isElementTerminallyLost guard: a transition INTO the terminal
+    // (`[critical, neglect, dead]`) is fine; only rows whose `from` is the
+    // terminal are rejected.
+    if (lose.type === 'any_element_state_equals' && typeof lose.params.value === 'string') {
+      const terminal = lose.params.value
+      level.rules.forEach((rule, ri) => {
+        if (templates.get(rule.template)?.type !== 'state_transition') return
+        const rows = Array.isArray(rule.bindings.transitions)
+          ? (rule.bindings.transitions as unknown[])
+          : []
+        rows.forEach((row, rowIndex) => {
+          if (!Array.isArray(row) || row.length !== 3 || row[0] !== terminal) return
+          violations.push({
+            severity: 'error',
+            field_path: `rules[${ri}].bindings.transitions[${rowIndex}]`,
+            constraint: 'terminal_state_no_exit',
+            expected: `no transition OUT of the lose terminal "${terminal}" (it is irreversible)`,
+            actual: `row transitions from "${terminal}" to "${String(row[2])}"`,
+            suggestion: `Remove this row — a lose-condition terminal state ("${terminal}") must have no outgoing transition, or a lost element could be resurrected`,
+          })
+        })
+      })
+    }
+  }
 
   const roles = new Set(
     (gameType.information_partition_template?.roles ?? []).map((role) => role.id)
@@ -486,6 +658,87 @@ export function checkSchemaConformance(
   }
 
   return buildCheckResult('schema_conformance', violations)
+}
+
+/** A declared state of any archetype by name (states are GameType-unique by convention). */
+function findStateDef(gameType: GameType, stateName: string): StateDefinition | undefined {
+  for (const archetype of gameType.element_archetypes) {
+    const state = (archetype.states ?? []).find((s) => s.name === stateName)
+    if (state) return state
+  }
+  return undefined
+}
+
+/**
+ * Whether a timed emitter's event can walk `elementId` to the run's lose
+ * terminal (§5 decay-coverage invariant). Builds the emitter-event transition
+ * graph from the element's target_template rules, then:
+ * - when the level's lose_condition names a terminal value in the template's
+ *   states, BFS from the element's initial governed-state value to that
+ *   terminal (the full ladder-completeness walk);
+ * - otherwise fall back to event consumability (at least one consuming row).
+ * `hasEdges` distinguishes "no consuming rule at all" from "ladder incomplete".
+ */
+function emitterTerminalReachability(
+  level: Level,
+  template: StateTransitionRuleTemplate,
+  emitter: TimedEmitter,
+  elementId: string,
+  initialStates: ElementStates
+): { hasEdges: boolean; reachable: boolean } {
+  const edges = new Map<string, Set<string>>()
+  for (const rule of level.rules) {
+    if (rule.template !== emitter.target_template) continue
+    if (!rule.target_elements.includes(elementId)) continue
+    const rows = Array.isArray(rule.bindings.transitions)
+      ? (rule.bindings.transitions as unknown[])
+      : []
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length !== 3 || row[1] !== emitter.event) continue
+      const from = String(row[0])
+      const to = String(row[2])
+      const set = edges.get(from) ?? new Set<string>()
+      set.add(to)
+      edges.set(from, set)
+    }
+  }
+  const hasEdges = edges.size > 0
+
+  const lose = level.lose_condition
+  const declaredStates = template.transition_table_schema.states
+  const terminal =
+    lose &&
+    lose.type === 'any_element_state_equals' &&
+    typeof lose.params.value === 'string' &&
+    declaredStates.includes(lose.params.value)
+      ? lose.params.value
+      : undefined
+  if (terminal === undefined) return { hasEdges, reachable: hasEdges } // R1 fallback: consumability
+
+  const machine = initialStates.get(elementId)
+  let start: string | undefined
+  for (const value of machine?.values() ?? []) {
+    if (typeof value === 'string' && declaredStates.includes(value)) {
+      start = value
+      break
+    }
+  }
+  if (start === undefined) return { hasEdges, reachable: false }
+  if (start === terminal) return { hasEdges, reachable: true }
+
+  const seen = new Set<string>([start])
+  const queue: string[] = [start]
+  while (queue.length > 0) {
+    const current = queue.shift() as string
+    for (const next of edges.get(current) ?? []) {
+      if (next === terminal) return { hasEdges, reachable: true }
+      if (!seen.has(next)) {
+        seen.add(next)
+        queue.push(next)
+      }
+    }
+  }
+  return { hasEdges, reachable: false }
 }
 
 function checkAttributeValue(

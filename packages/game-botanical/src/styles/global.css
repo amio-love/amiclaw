@@ -1,0 +1,47 @@
+/* Botanical Garden — global base. Dark-only by product mandate; no light mode.
+   Garden-tinted surface tokens layered on top of the shared @amiclaw/ui tokens
+   so the player app reads as a living greenhouse, not the platform chrome. */
+:root {
+  --bg-garden: #0b120d;
+  --bg-garden-2: #0e1712;
+  --garden-line: #24382a;
+  --garden-ink: #dfe9df;
+  --garden-ink-dim: #8ba393;
+  --garden-accent: #7fd4a3;
+  --garden-warn: #e8a13c;
+  --health-dead: #6b6b6b;
+  --health-critical: #e5565b;
+  --health-wilting: #c7a24b;
+  --health-stable: #5fb267;
+  --health-thriving: #8fe08a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100dvh;
+  color: var(--garden-ink);
+  font-family: var(--font-body, 'Noto Sans SC', system-ui, sans-serif);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(16, 32, 23, 0) 0%, #0b120d 70%), var(--bg-garden);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
