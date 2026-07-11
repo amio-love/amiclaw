@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ArcadeStreakLeaderboardResponse } from '@amiclaw/arcade-profile/types'
+import type {
+  ArcadeProfileEventResponse,
+  ArcadeStreakLeaderboardResponse,
+} from '@amiclaw/arcade-profile/types'
 import { createTestDb } from '../../../arcade-profile/src/test-support/sqlite-db'
 import { FakeKV } from '../auth/fake-kv'
 import {
@@ -231,5 +234,125 @@ describe('arcade profile handlers', () => {
     expect(response.status).toBe(200)
     expect(body.entries).toHaveLength(1)
     expect(body.entries[0].public_label).toBe('海阔天空')
+  })
+})
+
+describe('arcade profile check-in reward (reward-economy §4)', () => {
+  // Check-in credits on the same physical D1 as the account tables, so the test
+  // DB must carry the companion-memory asset_entry migration (0001) alongside
+  // the arcade ones. The default arcade test DB omits it; the handler's
+  // fail-open catch keeps the OTHER arcade tests green without it.
+  const TODAY = '2026-07-06'
+  const FULL_MIGRATIONS = [
+    '0001_companion_memory.sql',
+    '0002_arcade_profile.sql',
+    '0003_arcade_public_profile.sql',
+    '0005_arcade_community_like.sql',
+  ]
+
+  function dailyDefusedEvent(runId: string, finishedAt = `${TODAY}T08:00:00.000Z`): unknown {
+    return {
+      kind: 'bombsquad_run',
+      run: {
+        source_key: `bombsquad:${runId}`,
+        run_id: runId,
+        mode: 'daily',
+        outcome: 'defused',
+        duration_ms: 45_000,
+        attempt_number: 1,
+        module_count: 4,
+        completed_modules: 4,
+        strike_count: 0,
+        finished_at: finishedAt,
+      },
+    }
+  }
+
+  const practiceRun = {
+    kind: 'bombsquad_run',
+    run: {
+      source_key: 'bombsquad:run-p',
+      run_id: 'run-p',
+      mode: 'practice',
+      outcome: 'practice-cleared',
+      duration_ms: 45_000,
+      attempt_number: 1,
+      module_count: 2,
+      completed_modules: 2,
+      strike_count: 0,
+      finished_at: `${TODAY}T08:00:00.000Z`,
+    },
+  }
+
+  const explodedRun = {
+    kind: 'bombsquad_run',
+    run: {
+      source_key: 'bombsquad:run-e',
+      run_id: 'run-e',
+      mode: 'daily',
+      outcome: 'exploded',
+      duration_ms: 45_000,
+      attempt_number: 1,
+      module_count: 4,
+      completed_modules: 2,
+      strike_count: 3,
+      finished_at: `${TODAY}T08:00:00.000Z`,
+    },
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(`${TODAY}T08:00:00.000Z`))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function ledgerEnv(): Promise<ArcadeProfileApiEnv> {
+    return env(createTestDb({ migrations: FULL_MIGRATIONS }))
+  }
+
+  it('credits +3 on the first qualified activity of the day, then not on the second', async () => {
+    const testEnv = await ledgerEnv()
+
+    const first = await handlePostArcadeProfileEvent(request(dailyDefusedEvent('run-1')), testEnv)
+    expect(first.status).toBe(200)
+    expect(((await first.json()) as ArcadeProfileEventResponse).checkin_reward).toEqual({
+      credited: true,
+      amount: 3,
+      balance: 3,
+    })
+
+    // A second qualified daily win the same day makes an attempt that no-ops on
+    // the `checkin:{user}:{day}` unique key: field present, credited false.
+    const second = await handlePostArcadeProfileEvent(request(dailyDefusedEvent('run-2')), testEnv)
+    expect(((await second.json()) as ArcadeProfileEventResponse).checkin_reward).toEqual({
+      credited: false,
+      amount: 0,
+      balance: 3,
+    })
+  })
+
+  it.each([
+    ['practice run', practiceRun],
+    ['exploded daily run', explodedRun],
+    ['past-dated daily win', dailyDefusedEvent('run-old', '2026-07-05T08:00:00.000Z')],
+  ])('does not attempt a check-in for a non-qualified %s', async (_name, event) => {
+    const testEnv = await ledgerEnv()
+
+    const response = await handlePostArcadeProfileEvent(request(event), testEnv)
+
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as ArcadeProfileEventResponse).checkin_reward).toBeUndefined()
+  })
+
+  it('never credits for an anonymous settlement (204 path unchanged)', async () => {
+    const response = await handlePostArcadeProfileEvent(
+      request(dailyDefusedEvent('run-anon'), ''),
+      await ledgerEnv()
+    )
+
+    expect(response.status).toBe(204)
   })
 })

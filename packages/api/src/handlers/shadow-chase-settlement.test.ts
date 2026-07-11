@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { WinReward } from '../../../../shared/reward-types'
+import type { CompanionDb } from '../../../companion-memory/src/db'
 import { createSession, buildSessionCookie } from '../auth/session'
 import { FakeKV } from '../auth/fake-kv'
 import { createTestDb } from '../../../companion-memory/src/test-support/sqlite-db'
@@ -77,7 +79,9 @@ describe('handlePostShadowChaseSettlement', () => {
     )
 
     expect(response.status).toBe(202)
-    expect(await response.json()).toEqual({ accepted: true })
+    // A win now also carries the credited reward; this test pins owner
+    // derivation + capture scheduling, so match the envelope loosely.
+    expect(await response.json()).toMatchObject({ accepted: true })
     expect(scheduler.promises).toHaveLength(1)
     await Promise.all(scheduler.promises)
 
@@ -266,6 +270,96 @@ describe('handlePostShadowChaseSettlement', () => {
         )
       ).status
     ).toBe(500)
+  })
+
+  it('credits +5 for a win and returns the reward in the 202 body', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    const db = createTestDb()
+    const scheduler = collectingScheduler()
+
+    const response = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win' }), { Cookie: cookie }),
+      { AUTH: auth.asKV(), COMPANION_DB: db },
+      { scheduler, now: () => NOW }
+    )
+
+    expect(response.status).toBe(202)
+    const json = (await response.json()) as { accepted: true; reward?: WinReward }
+    expect(json.accepted).toBe(true)
+    expect(json.reward).toEqual({
+      asset_type: 'starburst',
+      amount: 5,
+      status: 'credited',
+      balance: 5,
+    })
+    const row = await db
+      .prepare("SELECT amount, source_key FROM asset_entry WHERE source_key GLOB 'win:*'")
+      .first<{ amount: number; source_key: string }>()
+    expect(row?.amount).toBe(5)
+    expect(row?.source_key).toBe(`win:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', RUN_ID)}`)
+  })
+
+  it('does not credit a loss and returns no reward', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    const db = createTestDb()
+
+    const response = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'loss' }), { Cookie: cookie }),
+      { AUTH: auth.asKV(), COMPANION_DB: db },
+      { scheduler: collectingScheduler(), now: () => NOW }
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ accepted: true })
+    const rows = await db
+      .prepare("SELECT amount FROM asset_entry WHERE source_key GLOB 'win:*'")
+      .all()
+    expect(rows.results).toHaveLength(0)
+  })
+
+  it('derives the win source_key from the converged settlementIdFor (parity with the pre-swap local copy)', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    const db = createTestDb()
+
+    await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win' }), { Cookie: cookie }),
+      { AUTH: auth.asKV(), COMPANION_DB: db },
+      { scheduler: collectingScheduler(), now: () => NOW }
+    )
+
+    // The deleted handler-local settlementIdFor produced exactly this string;
+    // the imported companion-memory copy must reproduce it byte-for-byte so the
+    // win-reward key never drifts from what earlier runs would have written.
+    const preSwapLiteral = `${SHADOW_CHASE_GAME_ID}:${'user-a'.length}:user-a:${RUN_ID}`
+    expect(settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', RUN_ID)).toBe(preSwapLiteral)
+    const row = await db
+      .prepare("SELECT source_key FROM asset_entry WHERE source_key GLOB 'win:*'")
+      .first<{ source_key: string }>()
+    expect(row?.source_key).toBe(`win:${preSwapLiteral}`)
+  })
+
+  it('keeps a win settlement successful with no reward when the ledger throws', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    // A ledger that throws on every statement. A no-op capture keeps the
+    // failure isolated to the synchronous win credit, which is fail-open —
+    // the settlement must still 202 with no reward field.
+    const throwingDb = {
+      prepare() {
+        throw new Error('D1 unavailable')
+      },
+      batch() {
+        return Promise.reject(new Error('D1 unavailable'))
+      },
+    } as unknown as CompanionDb
+
+    const response = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win' }), { Cookie: cookie }),
+      { AUTH: auth.asKV(), COMPANION_DB: throwingDb },
+      { scheduler: collectingScheduler(), now: () => NOW, capture: async () => ({}) }
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ accepted: true })
   })
 
   it('keeps a post-202 D1 rejection contained and logs only a run-scoped redacted reference', async () => {

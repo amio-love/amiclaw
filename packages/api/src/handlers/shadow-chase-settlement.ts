@@ -1,7 +1,19 @@
+import { getTodayString } from '../../../../shared/date'
+import type { WinReward } from '../../../../shared/reward-types'
 import { captureSettlementEvent } from '../../../companion-memory/src/capture'
 import type { CompanionDb } from '../../../companion-memory/src/db'
+import { ASSET_TYPE_STARBURST } from '../../../companion-memory/src/economy'
+import { settlementIdFor } from '../../../companion-memory/src/idempotency'
+import { creditWinReward } from '../../../companion-memory/src/ledger'
 import type { SettlementCaptureInput } from '../../../companion-memory/src/types'
 import { requireSession } from '../auth/require-session'
+
+// The stable (game, user, run) identity is owned by companion-memory's
+// idempotency module — the win-reward `win:{settlementId}` key derives from the
+// same helper, so the settlement capture id and the reward key can never drift.
+// Re-exported here to keep this handler's module surface (and its callers) stable
+// after the convergence (design §9 PR-3 CONVERGENCE).
+export { settlementIdFor } from '../../../companion-memory/src/idempotency'
 
 export const SHADOW_CHASE_GAME_ID = 'shadow-chase'
 export const MAX_SETTLEMENT_REQUEST_BYTES = 2_048
@@ -121,11 +133,6 @@ function defaultLogger(entry: ShadowChaseSettlementLog): void {
   console.error(JSON.stringify(entry))
 }
 
-/** Stable source identity. The length prefix prevents delimiter ambiguity. */
-export function settlementIdFor(gameId: string, userId: string, runId: string): string {
-  return `${gameId}:${userId.length}:${userId}:${runId}`
-}
-
 export async function handlePostShadowChaseSettlement(
   request: Request,
   env: ShadowChaseSettlementEnv,
@@ -153,6 +160,7 @@ export async function handlePostShadowChaseSettlement(
   if (!env.AUTH || !env.COMPANION_DB || !options.scheduler) {
     return jsonResponse({ error: 'settlement service unavailable' }, 503)
   }
+  const companionDb = env.COMPANION_DB
 
   let required: Awaited<ReturnType<typeof requireSession>>
   try {
@@ -188,7 +196,7 @@ export async function handlePostShadowChaseSettlement(
   const background = registrationGate
     .then(async () => {
       if (!registered) return
-      await capture(env.COMPANION_DB as CompanionDb, captureInput)
+      await capture(companionDb, captureInput)
     })
     .catch(() => {
       logger({
@@ -208,5 +216,30 @@ export async function handlePostShadowChaseSettlement(
   }
   registered = true
   release()
-  return jsonResponse({ accepted: true }, 202)
+
+  // Only a WIN credits the +5 win reward, synchronously (awaited) before the
+  // response so the exact reward rides back on the 202 (design §3). Memory
+  // capture stays backgrounded above via the scheduler. creditWinReward is
+  // internally fail-open — an 'error' status omits the reward field so the
+  // settlement always succeeds. The win-reward key derives from the same
+  // idempotency `settlementIdFor`, matching the capture id byte-for-byte.
+  let reward: WinReward | undefined
+  if (body.outcome === 'win') {
+    const result = await creditWinReward(companionDb, {
+      userId: required.session.user_id,
+      gameId: SHADOW_CHASE_GAME_ID,
+      runId: body.runId,
+      today: getTodayString(new Date(occurredAt)),
+      deps: { now: () => occurredAt, newId: () => crypto.randomUUID() },
+    })
+    if (result.status !== 'error') {
+      reward = {
+        asset_type: ASSET_TYPE_STARBURST,
+        amount: result.amount,
+        status: result.status,
+        balance: result.balance,
+      }
+    }
+  }
+  return jsonResponse({ accepted: true, ...(reward ? { reward } : {}) }, 202)
 }

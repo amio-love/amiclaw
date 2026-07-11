@@ -10,6 +10,8 @@
    localStorage) and stay visible via the /me 7-day history; they cannot
    reconstruct the public board (anonymous submissions never reach D1, and
    account rows carry no public nickname). */
+import type { WinReward } from './reward-types'
+
 export const LEADERBOARD_RETENTION_DAYS = 2
 
 export interface ScoreSubmission {
@@ -33,6 +35,9 @@ export interface ScoreSubmissionResponse {
   /** Attempt number on which the personal_best was set today.
    *  Optional because legacy KV records pre-dating this field have no attempt_number. */
   personal_best_attempt?: number
+  /** Win reward credited for this authenticated settlement (reward-economy §3).
+   *  Absent for anonymous submitters and when the ledger credit fails (fail-open). */
+  reward?: WinReward
 }
 
 export interface LeaderboardEntry {

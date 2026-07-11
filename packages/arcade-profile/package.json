@@ -8,6 +8,7 @@
     "./companion-streak": "./src/companion-streak.ts",
     "./local": "./src/local.ts",
     "./store": "./src/store.ts",
+    "./summary": "./src/summary.ts",
     "./types": "./src/types.ts",
     "./validation": "./src/validation.ts"
   },
