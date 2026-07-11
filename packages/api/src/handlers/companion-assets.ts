@@ -9,7 +9,7 @@
  * action is viewing their balance self-heals the grant — then returns the
  * current balance and a keyset page of recent ledger entries. `welcome_granted`
  * is set true ONLY on the request that actually mints the grant, driving a
- * one-time "+10 见面礼" UI beat; every later read omits it.
+ * one-time "+10 welcome grant" UI beat; every later read omits it.
  *
  * The grant is fail-open: a D1 failure while minting never blocks the balance
  * read (welcome_granted just stays false). The row `id` is never exposed — it

@@ -208,7 +208,7 @@ export interface AssetEntryView {
 /**
  * Body of `GET /api/companion/assets` — the reward-economy balance plus a
  * keyset page of recent ledger entries (design §2). Balance is the SUM over the
- * append-only ledger; `starburst` is the only asset type in v1 (UI renders 星芒).
+ * append-only ledger; `starburst` is the only asset type in v1 (the UI renders the localized currency name; see docs/DesignSystem.md).
  * Owner identity is server-derived (require-session guard); no inbound
  * `user_id`.
  */
