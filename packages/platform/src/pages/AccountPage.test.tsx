@@ -522,8 +522,10 @@ describe('AccountPage /me', () => {
     expect(await screen.findByText('你的星轨。')).toBeInTheDocument()
     expect(screen.queryByText('白舟', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('nova', { exact: true })).not.toBeInTheDocument()
-    // The companion card still names the companion itself (小南).
-    expect(screen.getByText('小南')).toBeInTheDocument()
+    // The companion card still names the companion itself (小南). Await it:
+    // the shared companion store resolves async and CI runners are slower
+    // than the local dev machine (the card renders a skeleton until then).
+    expect(await screen.findByText('小南')).toBeInTheDocument()
   })
 
   it('signs out via POST /api/auth/logout and returns to the anonymous state', async () => {
