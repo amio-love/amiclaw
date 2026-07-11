@@ -288,7 +288,7 @@ describe('GamesPage homepage', () => {
     // The hero's static platform stat counts playable games, not supported AI
     // tools.
     expect(
-      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, '') === '5已上线游戏')
+      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, '') === '6已上线游戏')
     ).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /双影追逃/ })).toHaveLength(1)
     expect(screen.getByRole('link', { name: /易经签卜/ })).toHaveAttribute('href', '/oracle/#/home')

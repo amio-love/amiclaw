@@ -147,6 +147,19 @@
     var(--bg-grad-mid-2);
 }
 
+/* Sound Garden — a blooming garden in platform hues (bounded-accent rule: the
+   game's warm melody/rhythm palette stays inside the game). A gold bloom accent
+   (🌸) warms the upper garden over the cosmic base, garden-green growth settles
+   below, and a soft violet music haze threads between — distinct from .garden
+   (green + blue) and .radio (violet + a blue band). CSS gradients only. */
+.sound {
+  background:
+    radial-gradient(circle at 38% 38%, rgba(255, 229, 62, 0.36), transparent 52%),
+    radial-gradient(circle at 70% 70%, rgba(75, 210, 102, 0.32), transparent 55%),
+    radial-gradient(circle at 54% 56%, rgba(180, 120, 255, 0.16), transparent 60%),
+    var(--bg-grad-mid-2);
+}
+
 .artLabel {
   /* Sits above the (optional) .artShot gameplay capture. */
   position: relative;

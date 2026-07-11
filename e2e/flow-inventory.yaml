@@ -21,9 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 34 active flows <-> 34 journey
-# scenarios, the regression size budget is 68 (2026-07-11, after the Radio
-# Cipher listener-run flow landed as a @playwright journey).
+# 2 x the journey-scenario count. With 35 active flows <-> 35 journey
+# scenarios, the regression size budget is 70 (2026-07-11, after the Sound
+# Garden anon-run flow landed as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -513,4 +513,30 @@ flows:
       shareable decoder codebook then teaches the finals-ring cipher and channel
       protocol while leaking no listener-side plaintext answer.
     steps: [radio-listener-open, onboarding-dismiss, tutorial-decrypt, run-won, codebook-partition]
+    status: active
+
+  # === Sound Garden flows =====================================================
+  # The /sound-garden/ single-screen SPA. A co-build music game: on the anon tier
+  # (no platform worker → voice eligibility fails) the offline scripted partner
+  # runs entirely client-side, seeding the garden with an opening rhythm root and
+  # answering each melody plant with a synergizing root, so a no-account visitor
+  # can co-build a garden to bloom with no live session.
+
+  - id: sound-garden-anon-run
+    name: Sound Garden anon co-build bloom
+    description: >-
+      An anonymous visitor opens Sound Garden and starts the 学步 level; the
+      offline scripted partner seeds the garden with an opening rhythm root, then
+      answers the visitor's three planted melody flowers with synergizing rhythm
+      roots until the shared harmony reaches the target and the garden blooms — a
+      no-fail co-build entirely client-side (no account, no worker, no session).
+    steps:
+      [
+        sound-garden-open,
+        sound-garden-start,
+        partner-seed,
+        plant-melody,
+        partner-rhythm,
+        garden-bloom,
+      ]
     status: active

@@ -8,12 +8,14 @@ const yijingDistDir = resolve('packages/game-yijing/dist')
 const shadowChaseDistDir = resolve('packages/game-shadow-chase/dist')
 const botanicalDistDir = resolve('packages/game-botanical/dist')
 const radioCipherDistDir = resolve('packages/game-radio-cipher/dist')
+const soundGardenDistDir = resolve('packages/game-sound-garden/dist')
 const manualTargetDir = resolve(platformDistDir, 'manual')
 const bombsquadTargetDir = resolve(platformDistDir, 'bombsquad')
 const yijingTargetDir = resolve(platformDistDir, 'oracle')
 const shadowChaseTargetDir = resolve(platformDistDir, 'shadow-chase')
 const botanicalTargetDir = resolve(platformDistDir, 'botanical')
 const radioCipherTargetDir = resolve(platformDistDir, 'radio-cipher')
+const soundGardenTargetDir = resolve(platformDistDir, 'sound-garden')
 
 if (!existsSync(platformDistDir)) {
   throw new Error(`Platform build output not found: ${platformDistDir}`)
@@ -43,6 +45,10 @@ if (!existsSync(radioCipherDistDir)) {
   throw new Error(`Radio Cipher build output not found: ${radioCipherDistDir}`)
 }
 
+if (!existsSync(soundGardenDistDir)) {
+  throw new Error(`Sound Garden build output not found: ${soundGardenDistDir}`)
+}
+
 rmSync(manualTargetDir, { recursive: true, force: true })
 mkdirSync(manualTargetDir, { recursive: true })
 cpSync(manualDistDir, manualTargetDir, { recursive: true })
@@ -67,9 +73,14 @@ rmSync(radioCipherTargetDir, { recursive: true, force: true })
 mkdirSync(radioCipherTargetDir, { recursive: true })
 cpSync(radioCipherDistDir, radioCipherTargetDir, { recursive: true })
 
+rmSync(soundGardenTargetDir, { recursive: true, force: true })
+mkdirSync(soundGardenTargetDir, { recursive: true })
+cpSync(soundGardenDistDir, soundGardenTargetDir, { recursive: true })
+
 console.log(`Assembled Cloudflare Pages assets in ${manualTargetDir}`)
 console.log(`Assembled Cloudflare Pages assets in ${bombsquadTargetDir}`)
 console.log(`Assembled Cloudflare Pages assets in ${yijingTargetDir}`)
 console.log(`Assembled Cloudflare Pages assets in ${shadowChaseTargetDir}`)
 console.log(`Assembled Cloudflare Pages assets in ${botanicalTargetDir}`)
 console.log(`Assembled Cloudflare Pages assets in ${radioCipherTargetDir}`)
+console.log(`Assembled Cloudflare Pages assets in ${soundGardenTargetDir}`)

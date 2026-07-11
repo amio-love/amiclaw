@@ -61,6 +61,11 @@ jobs:
           mkdir -p packages/platform/dist/radio-cipher
           cp -r packages/game-radio-cipher/dist/. packages/platform/dist/radio-cipher/
 
+      - name: Merge game-sound-garden build into platform/dist under /sound-garden/
+        run: |
+          mkdir -p packages/platform/dist/sound-garden
+          cp -r packages/game-sound-garden/dist/. packages/platform/dist/sound-garden/
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:

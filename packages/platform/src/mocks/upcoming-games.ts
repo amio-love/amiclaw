@@ -4,7 +4,15 @@
    components/home/UpcomingGames. */
 
 export type GameStatus = 'soon' | 'dev' | 'live'
-export type GameArtVariant = 'shadow' | 'oracle' | 'garden' | 'radio' | 'echo' | 'draw' | 'lab'
+export type GameArtVariant =
+  | 'shadow'
+  | 'oracle'
+  | 'garden'
+  | 'radio'
+  | 'sound'
+  | 'echo'
+  | 'draw'
+  | 'lab'
 
 export interface UpcomingGame {
   id: string
@@ -58,6 +66,14 @@ export const upcomingGames: UpcomingGame[] = [
     status: 'live',
     artVariant: 'radio',
     href: '/radio-cipher/',
+  },
+  {
+    id: 'sound-garden',
+    name: '声音花园',
+    blurb: '和你的 AI 伙伴，把 8 拍时间线种成一座会唱歌的花园。',
+    status: 'live',
+    artVariant: 'sound',
+    href: '/sound-garden/',
   },
   {
     id: 'echo',
