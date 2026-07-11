@@ -5,6 +5,22 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Sound Garden joins AMIO Arcade** — Added. A new co-build voice game at
+`claw.amio.fans/sound-garden`. You plant melody flowers along an 8-beat timeline
+while your companion plants rhythm roots on the same beats; a root and a flower
+sharing a beat harmonize — synergy, compatible, neutral, or a harsh clash — and
+when the harmony score reaches the level's target the garden blooms. Signed-in
+players with a named companion co-build by voice: the companion speaks its
+guidance AND places its own rhythm roots on your shared board through the new
+co_build action channel — its moves pass the same client-side legality guard your
+own plants do, and it never moves during its closing recap. Everyone else —
+anonymous, no companion, or a standalone build with no platform worker — plays an
+offline scripted partner over the browser's own voice, which opens the garden with
+a seed move and answers each plant. It is a no-fail sandbox: a clashing pair only
+sounds harsh, nothing detonates, and bloom is a reward you can keep playing past.
+Ships with three levels, dark-only, CSS-only animation, running on the shared
+creation engine.
+
 **The platform companion learns to act in co-build games** — Added. The voice
 AI pipeline gains a backward-compatible action channel: in games flagged as
 co-build, the companion's reply can carry one structured board action
