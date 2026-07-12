@@ -58,6 +58,12 @@ codebook page to hand your partner, a per-segment transcription pad, first-run
 onboarding, and a count-up stopwatch with a wrong-answer time penalty. Dark-only,
 CSS-only animation, running on the shared creation engine.
 
+### Bug Fixes
+
+- **Sound Garden browser verification** — Anonymous co-build checks now advance
+  the controlled browser clock through the scripted partner's debounce, so the
+  real seed, response, and bloom journey can guard releases without false stalls.
+
 <!-- Add every change that will land on main directly below this header. -->
 <!-- Entries below are maintained manually -->
 

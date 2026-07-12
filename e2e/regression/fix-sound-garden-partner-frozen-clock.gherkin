@@ -1,0 +1,17 @@
+# bug: GitHub Actions run 29155916878 left the anonymous scripted partner at
+# one opening rhythm root after the player planted melody. Shared navigation
+# paused Playwright's controlled clock, so the product's 600ms debounce never
+# fired and wall-time polling could not observe an answer.
+# fix: e2e/steps/sound-garden.steps.ts advances the controlled clock through the
+# real partner debounce before asserting the resulting board state.
+
+Feature: Sound Garden scripted partner survives the controlled e2e clock
+
+  @playwright
+  Scenario: A single melody plant receives a scripted rhythm answer
+    Given I open /sound-garden/
+    When I start Sound Garden level "学步"
+    Then the Sound Garden partner seeds the garden with an opening root
+
+    When I plant Sound Garden melody "风铃" on beat 2
+    Then the Sound Garden partner answers with rhythm roots
