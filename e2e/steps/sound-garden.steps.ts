@@ -37,12 +37,14 @@ When(
 
 Then('the Sound Garden partner answers with rhythm roots', async ({ page, world }) => {
   // The scripted partner (debounced) lays synergizing rhythm roots under the new
-  // melody flowers, so the rhythm lane grows past the single pre-seed root. Shared
+  // melody flowers, so the rhythm lane grows beyond its opening state. Shared
   // navigation pauses Playwright's controlled clock at the deterministic seed;
   // explicitly advance the product debounce instead of waiting on wall time, which
   // cannot fire a timer on that paused clock.
+  const filledPartnerCells = page.locator('.sg-cell.rhythm.filled')
+  const filledBeforeResponse = await filledPartnerCells.count()
   await world.advance(PARTNER_DEBOUNCE_MS)
-  await expect.poll(() => page.locator('.sg-cell.rhythm.filled').count()).toBeGreaterThanOrEqual(2)
+  await expect.poll(() => filledPartnerCells.count()).toBeGreaterThan(filledBeforeResponse)
 })
 
 Then('the Sound Garden blooms', async ({ page }) => {
