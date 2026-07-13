@@ -50,6 +50,10 @@ export interface TraceFields {
   sentenceCount?: number
   frameCount?: number
   ttsFrameCount?: number
+  /** Number of parsed co_build actions a turn emitted (0 on drop / no move). */
+  actionCount?: number
+  /** Char length of a co_build fence body (a count of the JSON, never its text). */
+  bodyChars?: number
 
   // --- Lengths / byte tallies (counts of content, never the content) ---
   transcriptChars?: number

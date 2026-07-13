@@ -8,8 +8,9 @@ import {
 /**
  * The strict co_build parse-guard: valid moves parse (accepting either wire
  * `piece_type` or `pieceType`), a validly-empty array yields `[]`, and ANY
- * structural violation drops the WHOLE set (`null`) — never throws. Game-specific
- * legality (lane / range / material) is NOT enforced here; only shape.
+ * structural or exactly-one-move violation drops the WHOLE set (`null`) — never
+ * throws. Game-specific legality (lane / range / material) is NOT enforced here;
+ * only shape.
  */
 describe('parseCoBuildActions', () => {
   it('exposes the aligned verb vocabulary', () => {
@@ -43,15 +44,12 @@ describe('parseCoBuildActions', () => {
     ])
   })
 
-  it('parses multiple valid actions preserving order', () => {
+  it('rejects an otherwise-valid two-action array', () => {
     expect(
       parseCoBuildActions(
         '[{"op":"place","piece_type":"kick","slot":1},{"op":"remove","piece_type":"snare","slot":3}]'
       )
-    ).toEqual([
-      { op: 'place', pieceType: 'kick', slot: 1 },
-      { op: 'remove', pieceType: 'snare', slot: 3 },
-    ])
+    ).toBeNull()
   })
 
   it('accepts camelCase pieceType as well as snake_case piece_type', () => {
@@ -95,6 +93,29 @@ describe('parseCoBuildActions', () => {
     expect(parseCoBuildActions('[{"op":"place","slot":1}]')).toBeNull()
   })
 
+  it('accepts vocabulary display labels and normalizes them to enum ids', () => {
+    const labelToId: Array<[string, string]> = [
+      ['底鼓', 'kick'],
+      ['军鼓', 'snare'],
+      ['踩镲', 'hihat'],
+      ['拍掌', 'clap'],
+      ['铃铛', 'bell'],
+      ['风铃', 'chime'],
+      ['笛音', 'flute'],
+      ['竖琴', 'harp'],
+    ]
+    for (const [label, id] of labelToId) {
+      expect(parseCoBuildActions(`[{"op":"place","piece_type":"${label}","slot":1}]`)).toEqual([
+        { op: 'place', pieceType: id, slot: 1 },
+      ])
+    }
+  })
+
+  it('rejects a Chinese label outside the vocabulary', () => {
+    expect(parseCoBuildActions('[{"op":"place","piece_type":"小提琴","slot":1}]')).toBeNull()
+    expect(parseCoBuildActions('[{"op":"place","piece_type":"鼓","slot":1}]')).toBeNull()
+  })
+
   it('rejects a forged piece type outside the vocabulary', () => {
     expect(parseCoBuildActions('[{"op":"place","piece_type":"drum","slot":1}]')).toBeNull()
     expect(parseCoBuildActions('[{"op":"place","piece_type":"guitar","slot":1}]')).toBeNull()
@@ -109,27 +130,11 @@ describe('parseCoBuildActions', () => {
     expect(parseCoBuildActions('[{"op":"place","piece_type":" kick","slot":1}]')).toBeNull()
   })
 
-  it('drops the whole set when one action names an unknown element', () => {
-    expect(
-      parseCoBuildActions(
-        '[{"op":"place","piece_type":"kick","slot":1},{"op":"place","piece_type":"tuba","slot":2}]'
-      )
-    ).toBeNull()
-  })
-
   it('rejects a non-integer / non-positive slot (1-based)', () => {
     expect(parseCoBuildActions('[{"op":"place","piece_type":"kick","slot":1.5}]')).toBeNull()
     expect(parseCoBuildActions('[{"op":"place","piece_type":"kick","slot":0}]')).toBeNull()
     expect(parseCoBuildActions('[{"op":"place","piece_type":"kick","slot":-2}]')).toBeNull()
     expect(parseCoBuildActions('[{"op":"place","piece_type":"kick","slot":"1"}]')).toBeNull()
-  })
-
-  it('drops the WHOLE set when any one action is invalid (reject-on-invalid)', () => {
-    expect(
-      parseCoBuildActions(
-        '[{"op":"place","piece_type":"kick","slot":1},{"op":"place","piece_type":"snare","slot":0}]'
-      )
-    ).toBeNull()
   })
 
   it('rejects a non-object array element', () => {
