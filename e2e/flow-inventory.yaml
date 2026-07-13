@@ -21,9 +21,10 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 35 active flows <-> 35 journey
-# scenarios, the regression size budget is 70 (2026-07-11, after the Sound
-# Garden anon-run flow landed as a @playwright journey).
+# 2 x the journey-scenario count. With 39 active flows <-> 39 journey
+# scenarios, the regression size budget is 78 (2026-07-13, after the Sound
+# Garden anon-run flow and the four companion-proxy-social flows landed as
+# @playwright journeys).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -539,4 +540,59 @@ flows:
         partner-rhythm,
         garden-bloom,
       ]
+    status: active
+
+  # === mode② companion proxy social flows =====================================
+  # The invite-bar second pillar (spec arch-component-proxy-social): a companion
+  # authors the first cross-player line. Only mode② (logged-in) is affected; the
+  # anonymous mode① feed is unchanged. The static build has no D1 / Workers
+  # runtime, so the community feed and the two /ai-intent/* generation routes are
+  # route-mocked like the auth session. Per the spec §E2E Acceptance Mapping the
+  # Playwright layer verifies 屏 A/B/C + the CTA variants against mocked-identity
+  # fixtures (甲 / 乙 / 无伙伴乙 / 匿名); the real dual-account login round is a
+  # production smoke, structurally impossible on the login-less preview domain.
+
+  - id: companion-proxy-reply-closure
+    name: Companion proxy reply one-round closure
+    description: >-
+      The event owner (乙), signed in WITH a companion, opens /community and sees
+      the companion proxy line another player's companion (甲's) left on their
+      event — signed 「伙伴名 ✦ 主人昵称 的伙伴」, body server-generated. The owner
+      one-taps 「让我的伙伴回一句」; their companion's reply is written server-side
+      and rendered verbatim after the feed refetch, the round seals with
+      「✦ 一轮对话已完成」, and the reply CTA is gone (一轮封顶 — the DB PK backstop is
+      unit-tested, here the closure is the absent affordance). The reply request
+      carries only the opaque message_id — zero user free text.
+    steps: [community-page, proxy-thread-render, owner-reply-cta, reply-sent, round-sealed]
+    status: active
+
+  - id: companion-proxy-no-companion-cta
+    name: Companion-less owner create-a-companion guide
+    description: >-
+      The event owner (乙), signed in WITHOUT a companion, opens /community and
+      sees the proxy line, but where the reply CTA would be gets the point-of-need
+      「创建你的伙伴来回应 →」onboarding hook (routes to /me/companion) instead — the
+      invite-bar conversion钩子, never a reply affordance.
+    steps: [community-page, proxy-thread-render, no-companion-guide-cta]
+    status: active
+
+  - id: companion-proxy-anon-login-hint
+    name: Anonymous passer-by proxy login invitation
+    description: >-
+      An anonymous visitor opens /community and sees the public proxy line
+      (mode① readers see the thread), and in place of a reply affordance gets the
+      honest 「登录，让你的伙伴回应。」login invitation — never a fabricated reply path.
+    steps: [community-page, proxy-thread-render, anon-login-invite]
+    status: active
+
+  - id: companion-proxy-author-transparency
+    name: Author-side proxy transparency dock line
+    description: >-
+      The author (甲), signed in WITH a companion, opens the lobby homepage; the
+      best-effort V1 background trigger reports the companion autonomously left a
+      public line, so the single dismissible 屏 C dock transparency line renders —
+      filled verbatim from the returned target_event facts (naming the greeted
+      player, no second feed read) — and its 「→ 看看我说了什么」link anchors at the
+      exact event via /community?event=<event_id>.
+    steps: [lobby-homepage, proxy-v1-triggered, transparency-line, anchored-event-link]
     status: active

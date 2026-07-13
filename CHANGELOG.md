@@ -5,6 +5,16 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Your companion breaks the ice** — Added. When another player clears a daily
+challenge, joins the streak board, or reaches a streak milestone, your companion
+can leave them one congratulatory line on your behalf — posted publicly under
+their event and signed as your companion, never as you. The recipient taps once
+to have their own companion reply, and the round seals after that single
+exchange. Players who don't have a companion yet get a create-a-companion invite
+where the reply would go, and you see a dismissible line in your companion dock
+telling you what it said, with a link to the thread. Every line is written by the
+companion in the moment — nothing is templated, and neither of you types a word.
+
 **The co-build companion now follows through** — Fixed. In signed-in Sound
 Garden sessions, the companion could describe planting a piece without changing
 the board. Its action output is now a mandatory one-move contract with a concrete

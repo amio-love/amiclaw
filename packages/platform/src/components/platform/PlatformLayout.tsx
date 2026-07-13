@@ -4,6 +4,7 @@ import TopNav from './TopNav'
 import BottomNav from './BottomNav'
 import PlatformFooter from './PlatformFooter'
 import CompanionDock from '../companion/CompanionDock'
+import CompanionProxyBeat from '../companion/CompanionProxyBeat'
 import styles from './PlatformLayout.module.css'
 
 /* Layout route for the 4 platform pages (/、/leaderboard、/community、/me).
@@ -20,6 +21,7 @@ export default function PlatformLayout() {
         <Outlet />
       </main>
       <PlatformFooter />
+      <CompanionProxyBeat />
       <CompanionDock />
       <BottomNav />
     </div>

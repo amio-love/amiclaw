@@ -22,9 +22,20 @@ import { VoiceSessionDO } from './session-do'
 import { CompanionConsolidatorDO } from './consolidator-do'
 import { resolveSessionReader, type AuthSeamEnv } from './auth-seam'
 import { resolveCompanionContext } from '../../companion-memory/src/resolver'
+import {
+  countAuthorProxyMessagesForDay,
+  findInWindowCommunityEvent,
+  insertProxyMessage,
+  insertProxyReply,
+  loadProxyMessage,
+  readArcadePublicProfile,
+  readProxyCandidateEvents,
+  type ArcadeProfileDb,
+} from '../../arcade-profile/src/store'
 import { resolveIntentConfig } from './provider-config'
 import { createIntentLlmProvider, type ProviderEnv } from './providers/factory'
 import { handleShadowChaseIntent } from './shadow-chase-intent'
+import { handleCompanionProxyMessage, handleCompanionProxyReply } from './companion-proxy-intent'
 import { KvIntentRateLimiter } from './shadow-chase-intent-rate-limit'
 
 /** Worker env: the Agent namespace bindings + auth seam + provider creds. */
@@ -46,6 +57,16 @@ export interface WorkerEnv extends Omit<AuthSeamEnv, 'AUTH'>, ProviderEnv {
 /** WS route prefix this Worker owns; pinned at L2 and must not drift. */
 const AI_WS_PREFIX = '/ai-ws/'
 const SHADOW_CHASE_INTENT_PATH = '/ai-intent/shadow-chase'
+/** Companion-proxy-social bounded routes (L2 §Interface). Dispatched by this
+    Worker's fetch handler alongside the shadow-chase intent, before the WS branch.
+    Each path is registered as a same-zone path-exact `[[routes]]` pattern in
+    `wrangler.toml` (parallel to `/ai-intent/shadow-chase`) so the chain is live
+    in prod and the session cookie rides along on the POST. */
+const COMPANION_PROXY_MESSAGE_PATH = '/ai-intent/companion-proxy-message'
+const COMPANION_PROXY_REPLY_PATH = '/ai-intent/companion-proxy-reply'
+/** Distinct KV rate-limit namespace so proxy calls do not share the shadow-chase
+    per-user budget. */
+const PROXY_RATE_LIMIT_PREFIX = 'ratelimit:proxy-social:user:'
 
 /**
  * Derive the DO session name from the request path. Everything after the
@@ -97,6 +118,75 @@ export default {
       // deployment is misconfigured; the handler returns 503 only after those
       // bounded checks and never receives an LLM dependency.
       return handleShadowChaseIntent(request, {})
+    }
+
+    // Companion-proxy-social V1 (甲's companion authors one public line). All
+    // reads/writes are wired to arcade-profile store fns; the companion read
+    // omits gameId (account-global identity + cross-game memory). Same fail-closed
+    // shape as shadow-chase: missing bindings → the handler's post-bounded 503.
+    if (url.pathname === COMPANION_PROXY_MESSAGE_PATH) {
+      if (env.AUTH && env.COMPANION_DB) {
+        try {
+          const db = env.COMPANION_DB as ArcadeProfileDb
+          const llm = createIntentLlmProvider(resolveIntentConfig('companion-proxy-message'), env)
+          return handleCompanionProxyMessage(request, {
+            sessionReader: resolveSessionReader(env),
+            rateLimiter: new KvIntentRateLimiter(env.AUTH, PROXY_RATE_LIMIT_PREFIX),
+            resolveCompanionContext: (userId) =>
+              resolveCompanionContext(env.COMPANION_DB as D1Database, userId),
+            readPublicProfile: (userId) => readArcadePublicProfile(db, userId),
+            readCandidates: (userId) => readProxyCandidateEvents(db, userId),
+            countAuthorMessagesForDay: (userId) => countAuthorProxyMessagesForDay(db, userId),
+            insertMessage: (input) => insertProxyMessage(db, input),
+            newMessageId: () => crypto.randomUUID(),
+            llm,
+          })
+        } catch {
+          console.error(
+            JSON.stringify({
+              event: 'companion-proxy-message',
+              outcome: 'configuration-unavailable',
+            })
+          )
+        }
+      } else {
+        console.error(
+          JSON.stringify({ event: 'companion-proxy-message', outcome: 'binding-unavailable' })
+        )
+      }
+      return handleCompanionProxyMessage(request, {})
+    }
+
+    // Companion-proxy-social V2 (乙's companion replies once). Loads the message +
+    // reply-existence flag, guards the 14-day anchor window via the live feed, and
+    // writes the single reply. User-initiated → the handler returns explicit codes.
+    if (url.pathname === COMPANION_PROXY_REPLY_PATH) {
+      if (env.AUTH && env.COMPANION_DB) {
+        try {
+          const db = env.COMPANION_DB as ArcadeProfileDb
+          const llm = createIntentLlmProvider(resolveIntentConfig('companion-proxy-reply'), env)
+          return handleCompanionProxyReply(request, {
+            sessionReader: resolveSessionReader(env),
+            rateLimiter: new KvIntentRateLimiter(env.AUTH, PROXY_RATE_LIMIT_PREFIX),
+            resolveCompanionContext: (userId) =>
+              resolveCompanionContext(env.COMPANION_DB as D1Database, userId),
+            readPublicProfile: (userId) => readArcadePublicProfile(db, userId),
+            loadMessage: (id) => loadProxyMessage(db, id),
+            findInWindowEvent: (eventId) => findInWindowCommunityEvent(db, eventId),
+            insertReply: (input) => insertProxyReply(db, input),
+            llm,
+          })
+        } catch {
+          console.error(
+            JSON.stringify({ event: 'companion-proxy-reply', outcome: 'configuration-unavailable' })
+          )
+        }
+      } else {
+        console.error(
+          JSON.stringify({ event: 'companion-proxy-reply', outcome: 'binding-unavailable' })
+        )
+      }
+      return handleCompanionProxyReply(request, {})
     }
 
     // Only the same-origin WS route is served by this Worker.

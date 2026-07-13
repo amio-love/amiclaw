@@ -214,3 +214,26 @@ describe('resolveConfig — switchability and isolation', () => {
     expect(second.systemPromptConfig.role).toContain('manual-explainer')
   })
 })
+
+describe('resolveIntentConfig — companion proxy social personas', () => {
+  it.each(['companion-proxy-message', 'companion-proxy-reply'] as const)(
+    'resolves the %s persona with the DeepSeek intent stack',
+    (persona) => {
+      const resolved = resolveIntentConfig(persona)
+      expect(resolved.gameId).toBe(persona)
+      expect(resolved.llm).toEqual({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+      // Persona forbids impersonation and injecting private profile.
+      expect(resolved.systemPromptConfig.role).toContain('伙伴')
+      const rules = resolved.systemPromptConfig.ruleTemplate.join('\n')
+      expect(rules).toContain('绝不冒充主人')
+      expect(rules).toContain('画像')
+      // Body-only signature contract: the UI renders the signature separately, so
+      // the model writes ONLY the body and is told not to sign itself. There must
+      // be exactly one, non-contradictory signature instruction.
+      expect(rules).toContain('单独渲染署名')
+      expect(rules).toContain('绝不自己写署名')
+      // The old contradictory "署名是「…」" (asserting the model SHOULD sign) is gone.
+      expect(rules).not.toContain('署名是「')
+    }
+  )
+})

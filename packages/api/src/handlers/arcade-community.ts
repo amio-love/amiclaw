@@ -21,8 +21,11 @@ const FEED_MAX_LIMIT = 50
  * GET /api/arcade/community/feed — the real, derived community event stream.
  *
  * Anonymous is legal: the feed is public and identifies players only by the
- * privacy-vetted public_label. A session, when present, is read ONLY to mark
- * which items the viewer liked — it is never required and never gates the read.
+ * privacy-vetted public_label. A session, when present, is read to derive the
+ * viewer's per-item state server-side — `liked`, `viewer_is_owner`,
+ * `viewer_has_companion`, and each proxy thread's `can_reply` — never to gate the
+ * read and never required. The response never exposes `user_id`, email, or
+ * `profile_id`.
  */
 export async function handleGetArcadeCommunityFeed(
   request: Request,

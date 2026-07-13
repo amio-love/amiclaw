@@ -77,3 +77,20 @@ export function createTestDb(options: { migrations?: string[] } = {}): ArcadePro
   }
   return new SqliteArcadeProfileDb(db)
 }
+
+// Proxy-social tests need the companion table (0001) + the arcade tables the
+// feed derives from + the 0007 proxy tables. One shared helper so every proxy
+// suite consumes the same migration list instead of duplicating it. (The
+// missing-0007 degrade path deliberately uses the default `createTestDb()`,
+// whose set omits 0007.)
+const PROXY_SOCIAL_MIGRATIONS = [
+  '0001_companion_memory.sql',
+  '0002_arcade_profile.sql',
+  '0003_arcade_public_profile.sql',
+  '0005_arcade_community_like.sql',
+  '0007_companion_proxy_social.sql',
+]
+
+export function createProxySocialTestDb(): ArcadeProfileDb {
+  return createTestDb({ migrations: PROXY_SOCIAL_MIGRATIONS })
+}

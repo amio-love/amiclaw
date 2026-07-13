@@ -76,9 +76,10 @@ migrations_dir = "../companion-memory/migrations"
 
 # --- AUTH KV: shared session keyspace owned by auth-session ---
 # The Worker self-binds the auth-session AUTH namespace and reuses the shared
-# session-reader during the WS upgrade handshake and HTTP intent route. The
-# intent route also writes coarse, non-atomic per-user cost-throttle counters
-# under `ratelimit:shadow-intent:user:*`; it never mutates session records.
+# session-reader during the WS upgrade handshake and the HTTP intent routes. Those
+# routes also write coarse, non-atomic per-user cost-throttle counters under
+# `ratelimit:shadow-intent:user:*` (shadow-chase) and `ratelimit:proxy-social:user:*`
+# (companion-proxy-social) — independent budgets; neither mutates session records.
 [[kv_namespaces]]
 binding = "AUTH"
 id = "c4a64d33de2f406e825e6249e828f84d"
@@ -109,6 +110,16 @@ zone_name = "amio.fans"
 
 [[routes]]
 pattern = "claw.amio.fans/ai-intent/shadow-chase"
+zone_name = "amio.fans"
+
+# Companion-proxy-social bounded intent routes — same-zone, path-exact (mirrors
+# the shadow-chase route above) so the session cookie rides along on the POST.
+[[routes]]
+pattern = "claw.amio.fans/ai-intent/companion-proxy-message"
+zone_name = "amio.fans"
+
+[[routes]]
+pattern = "claw.amio.fans/ai-intent/companion-proxy-reply"
 zone_name = "amio.fans"
 
 # --- Plain-text vars ---
