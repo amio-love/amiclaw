@@ -8,7 +8,8 @@
  * Chase's reject-on-invalid stance (`shadow-chase-intent.ts`
  * `parseShadowChaseIntentResponse`): any violation — non-array body, unknown verb,
  * a piece type outside the fixed Sound Garden vocabulary, non-integer / non-positive
- * slot — drops the WHOLE action set (the partner still speaks) and never throws.
+ * slot, or more than one move — drops the WHOLE action set (the partner still
+ * speaks) and never throws.
  *
  * Board-state legality (piece belongs to THIS partner's lane, slot in range,
  * material still available) is NOT checked here — that stays client-side in the
@@ -50,11 +51,42 @@ export const SOUND_GARDEN_PIECE_TYPES = [
 
 const PIECE_TYPE_SET = new Set<string>(SOUND_GARDEN_PIECE_TYPES)
 
+type SoundGardenPieceType = (typeof SOUND_GARDEN_PIECE_TYPES)[number]
+
+/**
+ * Display-label → enum-id aliases, mirroring the `display_labels` map in the
+ * game-type SSOT (`packages/creation/fixtures/sound-garden/game-type.yaml`). The
+ * real partner (DeepSeek) speaks Chinese, so it emits the piece's Chinese name
+ * (e.g. 军鼓) in the fence rather than the `snare` id; this maps those back to the
+ * canonical id. It stays VOCABULARY-BOUNDED — a token outside both the id set and
+ * this alias map still rejects, so a hallucinated element cannot slip through.
+ */
+const PIECE_ALIASES = new Map<string, SoundGardenPieceType>([
+  ['底鼓', 'kick'],
+  ['军鼓', 'snare'],
+  ['踩镲', 'hihat'],
+  ['拍掌', 'clap'],
+  ['铃铛', 'bell'],
+  ['风铃', 'chime'],
+  ['笛音', 'flute'],
+  ['竖琴', 'harp'],
+])
+
+/**
+ * Resolve a raw piece token to a canonical id, or null if outside the vocabulary.
+ * Uses a `Map` (not a plain-object lookup) so a token like `__proto__` cannot
+ * resolve to a prototype value and slip past the vocabulary guard.
+ */
+function resolvePieceType(raw: string): SoundGardenPieceType | null {
+  if (PIECE_TYPE_SET.has(raw)) return raw as SoundGardenPieceType
+  return PIECE_ALIASES.get(raw) ?? null
+}
+
 /**
  * Parse and validate the raw fence body into a list of co_build actions.
  *
  * Tolerates an optional ```json code fence around the array (the model
- * occasionally wraps it), then requires a JSON array whose every element is a
+ * occasionally wraps it), then requires a JSON array containing zero or one
  * well-shaped action. Returns `null` on ANY violation so the caller drops the
  * entire set; returns `[]` for a validly-empty array (no move this turn). Never
  * throws.
@@ -76,15 +108,20 @@ export function parseCoBuildActions(raw: string): CoBuildAction[] | null {
     return null
   }
   if (!Array.isArray(parsed)) return null
+  if (parsed.length > 1) return null
   const actions: CoBuildAction[] = []
   for (const entry of parsed) {
     if (typeof entry !== 'object' || entry === null) return null
     const record = entry as Record<string, unknown>
     const op = record.op
-    const pieceType = record.piece_type ?? record.pieceType
+    const rawPiece = record.piece_type ?? record.pieceType
     const slot = record.slot
     if (typeof op !== 'string' || !VERB_SET.has(op)) return null
-    if (typeof pieceType !== 'string' || !PIECE_TYPE_SET.has(pieceType)) return null
+    if (typeof rawPiece !== 'string') return null
+    // Accept the enum id OR a vocabulary display label (军鼓 → snare); anything
+    // else is out-of-vocabulary and drops the whole set.
+    const pieceType = resolvePieceType(rawPiece)
+    if (pieceType === null) return null
     if (typeof slot !== 'number' || !Number.isInteger(slot) || slot < 1) return null
     actions.push({ op: op as 'place' | 'remove', pieceType, slot })
   }

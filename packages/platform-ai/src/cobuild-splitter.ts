@@ -55,12 +55,30 @@ function longestOpenPrefixSuffix(s: string): number {
   return 0
 }
 
+/**
+ * Outcome of a turn's action channel — a bounded diagnostic for the production
+ * breadcrumb (turn-pipeline logs it via `traceTurn`). `no-fence` means no action
+ * block was emitted; it can represent either a legitimate no-move turn or the
+ * observed narrate-without-acting symptom. `parse-reject` means a block was
+ * emitted but failed the strict parser.
+ */
+export type CoBuildDiagnostic =
+  | 'no-fence'
+  | 'parse-reject'
+  | 'discard-overflow'
+  | 'emitted'
+  | 'empty'
+
 /** The trailing speech + parsed actions produced when the LLM stream ends. */
 export interface CoBuildFlushResult {
   /** Trailing speech to emit (the held carry in SPEECH state; '' otherwise). */
   speech: string
   /** Parsed actions, or `[]` on discard / parse-reject / no fence. */
   actions: CoBuildAction[]
+  /** Bounded outcome for the observability breadcrumb. */
+  diagnostic: CoBuildDiagnostic
+  /** Char length of the raw fence body (0 when no fence was seen). */
+  bodyChars: number
 }
 
 export class CoBuildSplitter {
@@ -116,18 +134,32 @@ export class CoBuildSplitter {
    * → `[]`). Idempotent.
    */
   flush(): CoBuildFlushResult {
-    if (this.ended) return { speech: '', actions: [] }
+    if (this.ended) return { speech: '', actions: [], diagnostic: 'empty', bodyChars: 0 }
     this.ended = true
     if (this.state === 'speech') {
       const speech = this.carry
       this.carry = ''
-      return { speech, actions: [] }
+      // No fence ever came. This can be an intentional no-move turn or the
+      // narrate-without-acting symptom; the breadcrumb records the observation
+      // without trying to infer intent.
+      return { speech, actions: [], diagnostic: 'no-fence', bodyChars: 0 }
     }
     if (this.state === 'discard') {
-      return { speech: '', actions: [] }
+      return { speech: '', actions: [], diagnostic: 'discard-overflow', bodyChars: 0 }
     }
     const body = this.actionBuf.split(CO_BUILD_CLOSE)[0]
-    return { speech: '', actions: this.parse(body) ?? [] }
+    const parsed = this.parse(body)
+    if (parsed === null) {
+      // A fence WAS emitted but failed the strict parser (bad token / shape) — the
+      // second failure mode. The body length is logged, never the body text.
+      return { speech: '', actions: [], diagnostic: 'parse-reject', bodyChars: body.length }
+    }
+    return {
+      speech: '',
+      actions: parsed,
+      diagnostic: parsed.length > 0 ? 'emitted' : 'empty',
+      bodyChars: body.length,
+    }
   }
 }
 
@@ -138,15 +170,29 @@ export class CoBuildSplitter {
  * the model and the parser can never drift.
  */
 export function buildCoBuildInstruction(coBuild: { verbs: readonly string[] }): string {
+  // Positioned LAST in the system message (see assembleSystem) for recency, framed
+  // as a hard contract because the real model (DeepSeek) otherwise NARRATES the
+  // move in prose and never emits the block — which changes nothing on the board.
   return [
-    'Co-build channel: besides speaking, you may place or remove pieces on the shared board.',
-    'To do so, append EXACTLY ONE fenced action block at the very END of your reply, after all',
-    'your spoken words. The block is a JSON array of moves. Format:',
-    `${CO_BUILD_OPEN}[{"op":"place","piece_type":"kick","slot":1}]${CO_BUILD_CLOSE}`,
-    `- "op" is one of: ${coBuild.verbs.join(', ')}.`,
-    '- "piece_type" is the piece to place or remove; "slot" is a 1-based integer.',
-    '- The fenced block is parsed as structured moves and is NEVER read aloud: keep every',
-    '  human-facing word in your speech, and put ONLY the JSON array inside the fence.',
-    '- Omit the fence entirely on a turn where you make no move. Never emit more than one fence.',
+    '━━━ ACTION-OUTPUT CONTRACT — read this last, obey it exactly ━━━',
+    'You do NOT move a piece by describing it. A move happens ONLY when you emit a',
+    'fenced action block. If your words say you placed or removed a piece but you do',
+    'NOT emit the block, the board does not change and the player sees nothing happen',
+    '— that is a CONTRACT VIOLATION, a broken promise. Therefore:',
+    'WHENEVER your reply places or removes a piece, you MUST end the reply — after all',
+    'your spoken words — with EXACTLY ONE action block, in this EXACT syntax:',
+    '',
+    `${CO_BUILD_OPEN}[{"op":"place","piece_type":"snare","slot":3}]${CO_BUILD_CLOSE}`,
+    '',
+    `- "op": exactly one of ${coBuild.verbs.join(' / ')}.`,
+    '- "piece_type": the piece\'s short id (kick / snare / hihat / clap / bell / chime /',
+    '  flute / harp), NOT its Chinese name.',
+    '- "slot": the 1-based beat number.',
+    '- Put EXACTLY ONE move in the array (one element) — never batch several.',
+    '- The block is parsed as data and is NEVER read aloud, so keep every human-facing',
+    '  word in your speech and put ONLY the JSON array inside the fence.',
+    '- Make no move this turn? Then say so in words and emit NO block. Never emit two.',
+    'Worked example (speech, then the mandatory block):',
+    `好，第三拍我给你放一个军鼓打底。${CO_BUILD_OPEN}[{"op":"place","piece_type":"snare","slot":3}]${CO_BUILD_CLOSE}`,
   ].join('\n')
 }

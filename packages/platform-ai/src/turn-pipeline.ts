@@ -496,6 +496,17 @@ async function* streamLlmTts(
               yield { kind: 'text', text: flushed.speech, done: false }
             }
             pendingActions = flushed.actions
+            // Permanent observability breadcrumb for the co_build action channel:
+            // one `turn-trace` line per co_build turn recording the outcome —
+            // `no-fence` (including legitimate no-move turns), `parse-reject` (a
+            // block was emitted but failed the strict parser), or `emitted`.
+            // The diagnostic records the wire outcome without inferring model
+            // intent. Only bounded counts ride the fields (never the fence text).
+            traceTurn('cobuild', flushed.diagnostic, {
+              sessionId: traceSessionId,
+              actionCount: flushed.actions.length,
+              bodyChars: flushed.bodyChars,
+            })
           }
           const { sentences, remainder } = splitSentences(pending)
           for (const sentence of sentences) queueSentence(sentence)

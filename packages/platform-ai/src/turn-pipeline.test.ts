@@ -13,6 +13,7 @@ import {
   type TurnProviders,
 } from './turn-pipeline'
 import { CO_BUILD_VERBS, parseCoBuildActions } from './sound-garden-action'
+import { CO_BUILD_CLOSE } from './cobuild-splitter'
 import { createDeepSeekLlmProvider } from './providers/deepseek'
 import type { AiResponseChunk, AudioChunk, ManualData } from './contract'
 import type {
@@ -975,5 +976,18 @@ describe('co_build turn gating', () => {
       )
     )
     expect(chunks.filter((c) => c.kind === 'action')).toHaveLength(1)
+  })
+
+  it('assembles the strengthened action contract into the system prompt, positioned LAST for recency', async () => {
+    let captured: LlmCompletionRequest | undefined
+    const llm = mockLlm(['好。'], { capture: (r) => (captured = r) })
+    await collect(runOpeningTurn({ llm, tts: mockTts([]) }, coBuildState()))
+
+    const system = captured?.messages[0]
+    expect(system?.role).toBe('system')
+    expect(system?.content).toContain('ACTION-OUTPUT CONTRACT')
+    expect(system?.content).toMatch(/MUST/)
+    expect(system?.content).toMatch(/CONTRACT VIOLATION/)
+    expect(system?.content.trimEnd().endsWith(CO_BUILD_CLOSE)).toBe(true)
   })
 })
