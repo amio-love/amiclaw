@@ -1452,31 +1452,43 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           })
           abortController.abort()
           void turn.return?.(undefined)
-          // INVARIANT: a turn that no longer owns the epoch touches NOTHING on the
-          // session. `return()` cannot interrupt a pending provider `await`, so this
-          // deadline can fire LATE — after a barge-in / `end` advanced `turnEpoch`
-          // and possibly rebound the DO to a NEW session. In that stale case, bumping
-          // the generation or emitting a frame would corrupt the NEW session (its
-          // legitimate turn would skip history/usage/terminal `done`). So gate every
-          // session-facing write on `turnEpoch === myEpoch`. NB: when still current,
-          // `turnEpoch` is deliberately NOT bumped — the `finally` must see
+          // Fence a LATE settle: bump the turn generation ONLY while this turn still
+          // owns the epoch. `return()` cannot interrupt a pending provider `await`, so
+          // this deadline can fire LATE. A same-session barge-in ALREADY bumped the
+          // generation (double-bumping would fence a NEW turn on the same session), and
+          // a rebind must not touch the new session — so key the bump on the epoch. NB:
+          // `turnEpoch` is deliberately NOT bumped here — the `finally` must see
           // `turnEpoch === myEpoch` to release the guard and fire a deferred wind-down.
-          if (this.turnEpoch === myEpoch) {
-            // Fence a LATE settle: bump the turn generation so this turn's generator,
-            // if its provider `await` resolves after the guard released, sees a stale
-            // generation and SKIPS its commit (no `history` / usage / `turnCount`
-            // mutation for the abandoned turn).
-            if (this.sessionState) this.sessionState.turnGeneration += 1
-            // Unstick the client (it clears mid-stream state only on a `done` frame
-            // or a socket close): emit a terminal `done:true` if a chunk actually
-            // streamed, so a partial-then-hung reply does not leave it stuck.
-            if (deliveredChunk) {
-              ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
-            }
+          if (this.turnEpoch === myEpoch && this.sessionState) {
+            this.sessionState.turnGeneration += 1
+          }
+          // Emit a terminal `done` on the SAME session's socket so the client clears
+          // its stream/suppression state — NEVER on a rebind (a different socket).
+          // Two triggers: (a) a partial-then-hung reply that still owns the turn
+          // (`deliveredChunk`, epoch current) clears the client's mid-stream
+          // `turnStreamingRef`; (b) a same-session barge-in superseded this stuck turn
+          // (epoch advanced) — clear the barge-in `suppressTurnRef` regardless of
+          // delivery, else the next real answer's chunks are dropped until its own done.
+          if (this.sessionId === mySessionId && (this.turnEpoch !== myEpoch || deliveredChunk)) {
+            ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
           }
           break
         }
-        if (step.done) break
+        if (step.done) {
+          // A same-session barge-in superseded this turn: its generator returned via
+          // the cancellation `return()` WITHOUT yielding its terminal `done` chunk (the
+          // `return()` pre-empts the terminal yield), so the client's barge-in
+          // `suppressTurnRef` would stay stuck and DROP the next real answer's chunks
+          // until its own done. Emit a terminal `done` so suppression clears — the
+          // state/usage commit stays fenced in the generator (turnGeneration mismatch).
+          // Same session only (a rebind is a different socket); a NORMAL completion has
+          // an unchanged epoch and already streamed its own terminal `done`, so it is
+          // skipped here (no double-send).
+          if (this.sessionId === mySessionId && this.turnEpoch !== myEpoch) {
+            ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
+          }
+          break
+        }
         // INVARIANT: a turn whose provider resolved a chunk LATE, after the DO was
         // REBOUND to a DIFFERENT session (`end`/close ran `clearSession` and a new
         // `create` bound a new `sessionId`), must touch NOTHING on that new session —
@@ -1937,16 +1949,25 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // close must not. Set after a successful create so a rejected create
         // (`already_created`) never repoints the owner.
         this.ownerSocket = ws
-        ws.send(JSON.stringify({ type: 'created', sessionId }))
-        // Arm the burn-through wind-down DO alarm (L2 §5; FIX 1). Migrated off the
-        // WS-resident `setTimeout` to the Agents-SDK durable `schedule()` — the DO
-        // `alarm()` handler is RESERVED by the Agent base, so we drive a durable
-        // schedule row (`onBurnThroughAlarm` at `budgetMinutes × burnSecondsPerMinute`
-        // seconds) that survives an isolate eviction. The payload carries the
-        // identity + budget so the depleted session is billed even on a fresh
-        // post-eviction instance. Only for a finite, positive budget: a dev/demo
-        // priceless session never depletes. Canceled on any earlier teardown
-        // (`clearSession`). Still per-session wall-clock, still no per-minute writes.
+        // Arm the burn-through wind-down DO alarm (L2 §5; FIX 1) BEFORE the session is
+        // exposed as ready (before the `created` ack). Migrated off the WS-resident
+        // `setTimeout` to the Agents-SDK durable `schedule()` — the DO `alarm()`
+        // handler is RESERVED by the Agent base, so we drive a durable schedule row
+        // (`onBurnThroughAlarm` at `budgetMinutes × burnSecondsPerMinute` seconds) that
+        // survives an isolate eviction. The payload carries the identity + budget so
+        // the depleted session is billed even on a fresh post-eviction instance. Only
+        // for a finite, positive budget: a dev/demo priceless session never depletes.
+        // Canceled on any earlier teardown (`clearSession`).
+        //
+        // Arming FIRST (round 3 #1): this `await` must NOT sit between the `created`
+        // ack and the AI-first greeting launch. If it did, the owner (having seen
+        // `created`) could send a `text-turn`/`speech-start` during the await, and the
+        // resumed handler would then launch the greeting concurrently with that live
+        // turn — overwriting `activeTurn` / speaking over the utterance. With the await
+        // ahead of `created`, the ack + greeting launch are synchronous and atomic:
+        // the greeting synchronously claims `turnInFlight`/`activeTurn` before any
+        // client turn can arrive, so a premature turn is handled by the normal
+        // in-flight guard instead of racing.
         if (Number.isFinite(budget) && budget > 0) {
           const schedule = await this.schedule<BurnThroughPayload>(
             budget * this.burnSecondsPerMinute,
@@ -1967,19 +1988,22 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           // close could have torn THIS session down while it armed. If the bound
           // session is no longer this one, cancel the orphan schedule so it never
           // fires against a dead / replaced session (the async-arming analog of the
-          // create branch's post-await re-checks above).
-          if (this.sessionId === sessionId) {
-            this.burnScheduleId = schedule.id
-          } else {
+          // create branch's post-await re-checks above). The `created` ack below is
+          // gated on the same check, so a torn-down create never acks.
+          if (this.sessionId !== sessionId) {
             void this.cancelSchedule(schedule.id).catch(() => {})
+            return
           }
+          this.burnScheduleId = schedule.id
         }
+        ws.send(JSON.stringify({ type: 'created', sessionId }))
         // AI speaks first: fire the opening greeting (LLM->TTS, no player audio)
         // in the background, when enabled (default on — AI-first is the product
-        // behaviour). `runOpeningGreeting` owns its own errors (fail-loud 1008 on
-        // a provider error) and is epoch-fenced, so it is fire-and-forget; a
-        // mid-greeting `end`/owner close cancels it through the same
-        // `activeTurn`/`turnEpoch` machinery as a client turn.
+        // behaviour). Launched SYNCHRONOUSLY with the `created` ack (no await between),
+        // so it claims `turnInFlight`/`activeTurn` before any client turn can arrive.
+        // `runOpeningGreeting` owns its own errors (fail-loud 1008 on a provider error)
+        // and is epoch-fenced, so it is fire-and-forget; a mid-greeting `end`/owner
+        // close cancels it through the same `activeTurn`/`turnEpoch` machinery.
         if (msg.opening ?? true) void this.runOpeningGreeting(ws)
         return
       }

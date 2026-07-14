@@ -1310,3 +1310,93 @@ describe('VoiceSessionDO pricing gate — PR #257 codex round-2 fixes', () => {
     expect(db.deductRows()).toHaveLength(0)
   })
 })
+
+// --- PR #257 codex round 3 — create-ordering + superseded terminal-done ----------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-3 fixes', () => {
+  it('round3 #1 — a text-turn fired right after create does not overwrite the AI-first greeting (schedule armed before ready)', async () => {
+    // FIX 1's awaited `schedule()` used to sit BETWEEN the `created` ack and the
+    // greeting launch: the owner could fire a turn in that gap (the SDK's async
+    // `onMessage` interleaves across awaits) and the resumed handler would launch the
+    // greeting concurrently, overwriting `activeTurn`. Arming the schedule BEFORE
+    // `created` closes the gap — the greeting claims the turn synchronously with
+    // `created`, so a premature turn hits the in-flight guard. A DELIBERATELY SLOW
+    // `schedule()` here widens the arming window so the race is exercised deterministically
+    // (with the fix, the slow arming just delays `created`; the greeting still wins).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb() // a finite budget → the schedule is actually armed
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      const realSchedule = instance.schedule.bind(instance)
+      vi.spyOn(instance, 'schedule').mockImplementation((...args) =>
+        new Promise((resolve) => setTimeout(resolve, 150)).then(() => realSchedule(...args))
+      )
+    })
+    const socket = await openSocket(handle, 'user-A')
+
+    // Create WITH the greeting, then fire a text-turn the moment `created` is seen. The
+    // create handler's schedule arm is in-flight; the text-turn interleaves. With the
+    // arm BEFORE `created`, the greeting already owns the turn, so the text-turn is
+    // REJECTED as turn-in-flight and does NOT start a second (overwriting) reply.
+    await createSessionOverWs(socket, 'demo-mock', { opening: true })
+    socket.send(JSON.stringify({ type: 'text-turn', text: 'hello there' }))
+    await waitFor(
+      () => messagesOfType(socket, 'error').some((e) => e.code === 'turn_in_flight'),
+      'the premature text-turn was rejected (greeting owns the turn)'
+    )
+    await settle()
+    expect(kit.llmTurns).toHaveLength(1) // ONLY the greeting ran — no overwrite
+  })
+
+  it('round3 #2 — a barged-in (superseded) turn still emits a terminal done so client suppression clears, while its state stays FENCED', async () => {
+    // The generation/identity fence stops a superseded turn's state commit, but the
+    // client sets barge-in suppression and clears it only on a later `chunk.done`. A
+    // superseded turn that drains after cancellation must STILL emit a terminal done,
+    // or the next real answer's chunks are dropped until its own done.
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo() // priceless — this is about the wire + the fence
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // A reply parks at the gated LLM and streams a partial chunk to the client.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('partial answer')
+    })
+    await waitFor(
+      () =>
+        messagesOfType(socket, 'chunk').some(
+          (c) => c.kind === 'text' && c.text === 'partial answer'
+        ),
+      'partial chunk streamed'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-stream — no terminal yet
+
+    // The client BARGES IN (speech-start) → the reply is superseded (epoch advances,
+    // state commit fenced) and a fresh recognizer opens.
+    socket.send(JSON.stringify({ type: 'speech-start' }))
+    await waitFor(() => kit.sttCalls() === 1, 'barge-in opened a fresh recognizer')
+
+    // The superseded reply drains after cancellation — it MUST still emit a terminal
+    // done so the client's barge-in suppression clears.
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('.')
+      kit.llmTurns[0].finishStream()
+    })
+    await waitFor(() => sawDoneChunk(socket), 'the superseded turn emitted a terminal done', 4000)
+
+    // Its state/usage commit stayed FENCED — no history, no turnCount for the
+    // superseded turn.
+    await settle()
+    const state = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(state.turnCount).toBe(0) // superseded reply did NOT settle
+    expect(state.historyLen).toBe(0)
+  })
+})
