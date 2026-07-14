@@ -82,6 +82,8 @@ const INSERT_COLUMNS = [
  */
 class FakeCompanionDb implements CompanionDb {
   readonly rows: LedgerRow[] = []
+  /** When true, every statement throws — a transient D1 outage the test toggles. */
+  failReads = false
 
   /** Seed a row directly (test setup — pre-existing ledger state). */
   seed(row: Omit<LedgerRow, 'id'> & { id?: string }): void {
@@ -117,6 +119,7 @@ class FakeCompanionDb implements CompanionDb {
   // --- statement executors (called by FakeStatement) ---
 
   execFirst(sql: string, values: unknown[]): unknown {
+    if (this.failReads) throw new Error('transient d1 outage')
     if (sql.includes('COALESCE(SUM(amount)')) {
       const [userId, assetType] = values as [string, string]
       return { balance: this.balanceOf(userId, assetType) }
@@ -126,6 +129,7 @@ class FakeCompanionDb implements CompanionDb {
   }
 
   execRun(sql: string, values: unknown[]): CompanionDbRunResult {
+    if (this.failReads) throw new Error('transient d1 outage')
     if (!sql.includes('INSERT INTO asset_entry')) return { meta: { changes: 0 } }
     const row = this.buildInsertRow(sql, values)
     if (this.rows.some((r) => r.source_key === row.source_key)) {
@@ -439,6 +443,42 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
     // A NaN amount would permanently poison SUM(amount): the DO refuses to write.
     expect(db.deductRows()).toHaveLength(0)
   })
+
+  it('writes NO deduct row when the gate read threw (priceless admit) even if D1 recovers by teardown', async () => {
+    // Gate/deduct fail-open SYMMETRY (F2): COMPANION_DB is bound, but the balance
+    // read transiently throws at create → the session is admitted priceless (no
+    // budgetMinutes). If D1 recovers by teardown, the deduct must STILL write
+    // nothing — never bill the uncapped full elapsed for a session priced at zero.
+    const db = new FakeCompanionDb()
+    db.failReads = true // transient outage during the create-gate read
+    const handle = makeSessionDo()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await injectCompanionDb(handle, db)
+    const socket = await openSocket(handle, 'user-A')
+
+    const sessionId = await createSessionOverWs(socket)
+    // Admitted priceless: no budget threaded.
+    const budgetMinutes = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.budgetMinutes
+    )
+    expect(budgetMinutes).toBeUndefined()
+
+    // D1 recovers, and the session ran long enough that an UNCAPPED elapsed would
+    // be a large charge — the fix must skip it entirely.
+    db.failReads = false
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      if (view.sessionState) view.sessionState.startedAtMs = Date.now() - 90 * 60_000
+    })
+
+    socket.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socket, 'summary')
+    await settle()
+
+    expect(sessionId).not.toBe('')
+    expect(db.deductRows()).toHaveLength(0) // fail-open, symmetric with the gate
+    expect(warn).toHaveBeenCalled()
+  })
 })
 
 // --- burn-through wind-down: the timer actually fires (§11.iv L3 obligation) -------
@@ -478,5 +518,31 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
     expect(db.deductRows()).toHaveLength(1)
     expect(db.deductRows()[0].source_key).toBe(`session:${sessionId}`)
     expect(db.deductRows()[0].amount).toBeLessThan(0)
+  })
+
+  it('bills the FULL budget at production arithmetic when the budget elapses (magnitude + cap)', async () => {
+    // F3: the accelerated end-to-end test above floors in-test elapsed to 1 minute
+    // (shrunk burnMinuteMs), so it only locks amount < 0. This locks the magnitude
+    // the burn-through path actually bills: at real 60_000 ms/min arithmetic, a
+    // session whose whole budget has elapsed bills exactly -budget, capped there.
+    const BUDGET = 3
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+
+    await handle.run((instance) => {
+      const sid = instance.createSession('demo-mock', 'user-A', MANUAL, undefined, {
+        budgetMinutes: BUDGET,
+      })
+      // Backdate the start past the whole budget (budget minutes + 30 s): the raw
+      // elapsed ceils to BUDGET + 1, so the deduct proves BOTH that a burn-through
+      // bills the full budget AND that the cap holds (min(elapsed, budget) = budget).
+      const view = asPrivate(instance)
+      if (view.sessionState) view.sessionState.startedAtMs = Date.now() - (BUDGET * 60_000 + 30_000)
+      instance.endSession(sid, 'user-A')
+    })
+
+    await waitFor(() => db.deductRows().length === 1, 'one deduct row')
+    expect(db.deductRows()[0].amount).toBe(-BUDGET)
   })
 })

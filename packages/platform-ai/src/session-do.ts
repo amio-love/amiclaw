@@ -1168,10 +1168,16 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * across the two terminal boundaries (L2 §5, finding 8). Billed minutes =
    * `min(ceil(elapsed / 60_000), budgetMinutes)` with a floor of 1 — any
    * established session bills at least a minute (its opening greeting is real
-   * LLM+TTS cost, finding iii). Absent `budgetMinutes` (dev/demo) is uncapped.
+   * LLM+TTS cost, finding iii).
    *
    * Fail-open, undercount-only, non-blocking:
    *  - no `COMPANION_DB` binding (dev/demo) -> skip (a priceless session);
+   *  - no `budgetMinutes` established -> skip (gate/deduct fail-open SYMMETRY): a
+   *    transient D1 failure in the create-gate admits the session priceless
+   *    (`readSessionBudgetBestEffort` returns Infinity, so no `budgetMinutes` is
+   *    threaded), so the deduct must also fail open — otherwise it would bill the
+   *    UNCAPPED full elapsed if D1 recovered by teardown, an asymmetry that
+   *    charges the user for a session the gate priced at zero;
    *  - a non-finite `startedAtMs` -> skip (the NaN-poison invariant, finding 9 —
    *    a NaN amount would permanently poison `SUM(amount)` and can never be
    *    written; `deductSessionMinutes` refuses it too, belt and braces);
@@ -1190,9 +1196,12 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     const userId = this.userId
     if (db === undefined || !state || sessionId === undefined || userId === undefined) return
     if (!Number.isFinite(state.startedAtMs)) return
+    // Symmetry with the fail-open create-gate: a session admitted priceless (no
+    // budget established because the balance read threw) is never billed. This is
+    // distinct from the dev/demo no-COMPANION_DB case, which already returned above.
+    if (state.budgetMinutes === undefined) return
     const elapsed = Math.max(1, Math.ceil((Date.now() - state.startedAtMs) / 60_000))
-    const minutes =
-      state.budgetMinutes === undefined ? elapsed : Math.min(elapsed, state.budgetMinutes)
+    const minutes = Math.min(elapsed, state.budgetMinutes)
     if (!Number.isFinite(minutes) || minutes <= 0) return
     traceTurn('session', 'deduct', { sessionId, minutes })
     this.ctx.waitUntil(
