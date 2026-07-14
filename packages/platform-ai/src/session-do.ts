@@ -250,6 +250,39 @@ interface ClosingSessionMessage {
  */
 const MAX_TEXT_TURN_CHARS = 2000
 
+/**
+ * Hard per-turn wall-clock cap, in milliseconds. A single provider turn (opening
+ * greeting, player reply, closing recap, or burn-through wind-down) that overruns
+ * this bound is force-canceled by `streamTurn` (hardening batch B FIX 2). The
+ * provider adapters already bound their CONNECT / FIRST-RESPONSE / inter-chunk
+ * idle windows (`providers/timeout.ts`), so a hung provider normally fails loud
+ * within ~20 s; this is the generic OUTER belt for the residual case a provider's
+ * `await` escapes those guards (an un-wrapped mock in a test, or a producer that
+ * trickles chunks slowly forever). Its load-bearing job: a STUCK turn must not
+ * pin `turnInFlight` forever, because a burn-through wind-down deferred behind a
+ * live turn (finding 1) only fires when that turn's `streamTurn` finally releases
+ * the guard — a never-releasing turn would leak free minutes past a depleted
+ * budget. 120 s is far above any healthy voice turn (a spoken-Chinese reply is a
+ * few seconds of TTS) yet bounds a runaway to a small, one-time overage. Named
+ * (not magic) so it is one-line tunable, mirroring `providers/timeout.ts`.
+ */
+const MAX_TURN_DURATION_MS = 120_000
+
+/**
+ * Durable payload carried by the burn-through wind-down DO alarm (hardening batch
+ * B FIX 1). The Agents-SDK `schedule()` persists this as a JSON row in the DO's
+ * SQLite storage, so it survives an isolate eviction: when the alarm fires on a
+ * FRESH instance (in-memory `sessionState` gone), the callback still has the
+ * identity + budget it needs to bill the depleted session durably. Kept minimal —
+ * only what the eviction-path deduct requires.
+ */
+interface BurnThroughPayload {
+  sessionId: string
+  userId: string
+  budgetMinutes: number
+  fundingSource: string
+}
+
 type ControlMessage =
   | CreateSessionMessage
   | SpeechStartMessage
@@ -491,21 +524,47 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private deductFlushed = false
   /**
-   * The burn-through wind-down timer, armed at `create` when the session has a
-   * finite starburst budget (L2 §5). A single WS-resident `setTimeout` (the DO
-   * stays resident with hibernation off) stands in for per-minute ticking — no
-   * per-minute DB writes. Fires the narrative wind-down at the budget boundary;
-   * cleared on any earlier teardown (`clearSession`). NOT the DO `alarm()`
-   * (accepted decision — SDK collision risk).
+   * Whether THIS session ever DELIVERED at least one turn's output to the player —
+   * set true the first time `streamTurn` sends any chunk (the opening greeting OR
+   * any player / closing / wind-down turn). Gates the 1-minute billing floor in
+   * `finalizeSessionAccounting` (hardening batch B FIX 3): a session that closed
+   * before ANY turn delivered (e.g. the opening greeting threw before its first
+   * chunk) is billed ZERO — the floor's justification (the greeting is real
+   * LLM+TTS cost) only holds once the greeting actually delivered. Reset at
+   * `create` / `clearSession`, so it never bleeds across the session generation.
    */
-  private burnTimer: ReturnType<typeof setTimeout> | undefined
+  private hasDeliveredTurn = false
   /**
-   * Wall-clock ms per billed minute — the burn-through timer basis (budget
-   * minutes × this). `60_000` in production; a workerd timer test overrides it
-   * to a small value so a real `setTimeout` fires the wind-down deterministically
-   * fast (the L3 timer-fire obligation), without fake timers.
+   * The burn-through wind-down alarm's schedule id, set at `create` when the
+   * session has a finite starburst budget (L2 §5). Migrated from a WS-resident
+   * `setTimeout` to the Agents-SDK durable `schedule()` API (hardening batch B
+   * FIX 1): the Agent base RESERVES the DO `alarm()` handler for its own
+   * scheduling, so we do NOT override `alarm()` — we drive `this.schedule(delay,
+   * 'onBurnThroughAlarm', payload)`, which persists a SQLite schedule row that
+   * survives an isolate eviction. So a depleted budget still tears down + deducts
+   * even if the DO was evicted mid-session (the eviction undercount the setTimeout
+   * left is now closed). `undefined` when no budget alarm is armed; cleared /
+   * canceled on any earlier teardown (`clearSession`) and when the alarm fires
+   * (`onBurnThroughAlarm`).
    */
-  private burnMinuteMs = 60_000
+  private burnScheduleId: string | undefined
+  /**
+   * Seconds of wall-clock per billed minute — the burn-through alarm delay basis
+   * (`budgetMinutes × this`, in SECONDS, as the SDK `schedule()` number form
+   * expects). `60` in production; a workerd test overrides it to a small value so
+   * a real schedule fires the wind-down deterministically fast (the §11.iv alarm
+   * fire obligation), without fake timers. The SDK stores schedule `time` at
+   * 1-second granularity, so sub-second acceleration is not meaningful — the
+   * deterministic suites drive `onBurnThroughAlarm` / `runDurableObjectAlarm`
+   * directly rather than racing a fractional-second wall clock.
+   */
+  private burnSecondsPerMinute = 60
+  /**
+   * Hard per-turn wall-clock cap in ms (hardening batch B FIX 2), initialized from
+   * {@link MAX_TURN_DURATION_MS}. A workerd test overrides it to a small value so a
+   * stuck-turn force-cancel fires fast with a real timer (no fake timers).
+   */
+  private maxTurnMs = MAX_TURN_DURATION_MS
   /** Wired providers for the session. */
   private providers: TurnProviders | undefined
   /**
@@ -815,6 +874,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.sessionState = assembled.state
     this.usageFlushed = false
     this.deductFlushed = false
+    this.hasDeliveredTurn = false
     return assembled.sessionId
   }
 
@@ -1094,11 +1154,17 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private clearSession(): void {
     this.turnEpoch += 1
-    // Cancel the burn-through wind-down timer for this now-torn generation. A
-    // clear on a timer that already fired is a harmless no-op.
-    if (this.burnTimer !== undefined) {
-      clearTimeout(this.burnTimer)
-      this.burnTimer = undefined
+    // Cancel the burn-through wind-down alarm for this now-torn generation (FIX 1).
+    // Best-effort + idempotent: `cancelSchedule` deletes the durable schedule row,
+    // registered on the DO lifecycle via `ctx.waitUntil` so the delete completes
+    // without blocking the (synchronous) teardown. A cancel that races a
+    // just-fired alarm is harmless — `onBurnThroughAlarm` already cleared the id
+    // and its work is idempotent on `session:{sessionId}`. Skipped when no alarm
+    // is armed or it already fired (`burnScheduleId` undefined).
+    if (this.burnScheduleId !== undefined) {
+      const scheduleId = this.burnScheduleId
+      this.burnScheduleId = undefined
+      this.ctx.waitUntil(this.cancelSchedule(scheduleId).catch(() => {}))
     }
     // Drop any deferred wind-down (finding 1): the session is torn down, so a
     // pending wind-down must never fire against the next generation.
@@ -1116,6 +1182,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.ownerSocket = undefined
     this.usageFlushed = false
     this.deductFlushed = false
+    this.hasDeliveredTurn = false
     this.prerollFrames = []
     this.prerollBytes = 0
   }
@@ -1195,6 +1262,13 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    *  - a non-finite `startedAtMs` -> skip (the NaN-poison invariant, finding 9 —
    *    a NaN amount would permanently poison `SUM(amount)` and can never be
    *    written; `deductSessionMinutes` refuses it too, belt and braces);
+   *  - NO turn ever delivered output -> skip (hardening batch B FIX 3): a session
+   *    that closed before a single turn's chunk reached the player (an opening
+   *    greeting that threw before its first chunk, so the player got nothing)
+   *    bills ZERO. The 1-minute floor below assumes the greeting is real LLM+TTS
+   *    cost; that assumption only holds once a turn actually delivered, so a
+   *    zero-value session is not charged the floor (consistent with the dev/demo
+   *    skip). `hasDeliveredTurn` latches true on the first `streamTurn` chunk.
    *  - the deduct rides `ctx.waitUntil` and swallows its own D1 failure, so a
    *    slow or failing ledger never blocks or delays session teardown.
    * `deductSessionMinutes` writes `source_ref = 'session:' + fundingSource`
@@ -1214,6 +1288,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     // budget established because the balance read threw) is never billed. This is
     // distinct from the dev/demo no-COMPANION_DB case, which already returned above.
     if (state.budgetMinutes === undefined) return
+    // FIX 3 — no turn ever delivered output: bill ZERO (the floor below assumes a
+    // delivered greeting's LLM+TTS cost). Skips the deduct entirely for a
+    // zero-value session, exactly like the dev/demo skip above.
+    if (!this.hasDeliveredTurn) return
     const elapsed = Math.max(1, Math.ceil((Date.now() - state.startedAtMs) / 60_000))
     const minutes = Math.min(elapsed, state.budgetMinutes)
     if (!Number.isFinite(minutes) || minutes <= 0) return
@@ -1273,16 +1351,70 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * error, cancellation) — but ONLY while this reply is still the live generation:
    * a stale `finally` whose session was already ended/dropped/superseded must not
    * null out a newer generation's `turnInFlight`/`activeTurn` (see `turnEpoch`).
+   *
+   * Hard per-turn deadline (hardening batch B FIX 2): each `turn.next()` races a
+   * single wall-clock deadline armed once per turn ({@link maxTurnMs}). If a
+   * provider turn overruns it (a hung LLM/TTS whose `await` escapes the adapters'
+   * own connect / idle guards), the loop force-cancels: it `return()`s the
+   * iterator best-effort (which cannot interrupt a pending provider `await`, so it
+   * is fire-and-forget) and breaks, so the `finally` releases `turnInFlight` and
+   * fires any DEFERRED burn-through wind-down. Without this bound a stuck turn
+   * would pin `turnInFlight` forever, and a wind-down deferred behind it (finding
+   * 1) would never fire — leaking free minutes past a depleted budget. The bound
+   * applies to EVERY turn kind and game (greeting / reply / recap / wind-down),
+   * since all of them stream through here.
+   *
+   * Delivered-turn latch (FIX 3): the first chunk sent flips `hasDeliveredTurn`,
+   * which gates the 1-minute billing floor at teardown.
+   *
+   * Takes a `makeTurn` FACTORY rather than a ready iterator so it owns the
+   * AbortSignal (FIX 2): it mints one `AbortController` per turn, hands its signal
+   * to the generator (which threads it into the LLM provider request), and aborts
+   * it when the deadline trips — so a provider adapter honoring the signal unwinds
+   * its in-flight fetch instead of leaking. The `turn.return()` + `break` still
+   * releases the guard even for a provider that ignores the signal (the mock in the
+   * stuck-turn test), so the wind-down/cutoff is never blocked either way.
    */
-  private async streamTurn(ws: Connection, turn: AsyncIterator<AiResponseChunk>): Promise<void> {
+  private async streamTurn(
+    ws: Connection,
+    makeTurn: (signal: AbortSignal) => AsyncIterator<AiResponseChunk>
+  ): Promise<void> {
     const myEpoch = this.turnEpoch
+    const abortController = new AbortController()
+    const turn = makeTurn(abortController.signal)
     this.activeTurn = turn
     this.turnInFlight = true
+    // One wall-clock deadline for the WHOLE turn (not per-chunk): armed here, raced
+    // by every `turn.next()`, cleared in the `finally`. A legitimately long stream
+    // is bounded per-chunk by the providers' own idle guards; this outer cap only
+    // trips on a turn that never terminates at all.
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<'deadline'>((resolve) => {
+      deadlineTimer = setTimeout(() => resolve('deadline'), this.maxTurnMs)
+    })
     try {
       for (;;) {
-        const next = await turn.next()
-        if (next.done) break
-        const chunk = next.value
+        const step = await Promise.race([turn.next(), deadline])
+        if (step === 'deadline') {
+          // The turn overran the hard per-turn cap (a stuck provider). Force-cancel:
+          // ABORT the signal so a signal-honoring provider unwinds its in-flight
+          // fetch, then best-effort `return()` (cannot interrupt a pending provider
+          // `await`, so do NOT await it) and break so the `finally` releases the
+          // guard and any deferred wind-down fires. The abandoned generator promise
+          // settles later, exactly like the `end`-path fire-and-forget cancel.
+          traceTurnError('turn', 'max-duration', {
+            sessionId: this.sessionId,
+            elapsedMs: this.maxTurnMs,
+          })
+          abortController.abort()
+          void turn.return?.(undefined)
+          break
+        }
+        if (step.done) break
+        const chunk = step.value
+        // A chunk is about to reach the player: this session has now delivered
+        // real turn output (FIX 3 — gates the billing floor at teardown).
+        this.hasDeliveredTurn = true
         if (chunk.kind === 'transcript') {
           // The player's recognized utterance — its OWN wire frame, NOT a
           // `chunk`: `{type:'transcript', text, final}`. Here this is the single
@@ -1332,6 +1464,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         }
       }
     } finally {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
       if (this.turnEpoch === myEpoch) {
         this.turnInFlight = false
         this.activeTurn = undefined
@@ -1367,8 +1500,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     try {
       if (!this.sessionState || !this.providers || this.sessionId === undefined) return
       traceTurn('turn', 'opening-start', { sessionId: this.sessionId })
-      const turn = runOpeningTurn(this.providers, this.sessionState)[Symbol.asyncIterator]()
-      await this.streamTurn(ws, turn)
+      const providers = this.providers
+      const state = this.sessionState
+      await this.streamTurn(ws, (signal) =>
+        runOpeningTurn(providers, state, signal)[Symbol.asyncIterator]()
+      )
     } catch (err: unknown) {
       // Skip the fail-loud close once a teardown has advanced the generation
       // (the session this greeting belonged to is gone; a newer session may own
@@ -1401,10 +1537,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     try {
       if (!this.sessionState || !this.providers || this.sessionId === undefined) return
       traceTurn('turn', 'closing-start', { sessionId: this.sessionId })
-      const turn = runClosingTurn(this.providers, this.sessionState, outcome)[
-        Symbol.asyncIterator
-      ]()
-      await this.streamTurn(ws, turn)
+      const providers = this.providers
+      const state = this.sessionState
+      await this.streamTurn(ws, (signal) =>
+        runClosingTurn(providers, state, outcome, signal)[Symbol.asyncIterator]()
+      )
     } catch (err: unknown) {
       // Skip the fail-loud close once a teardown has advanced the generation
       // (the session this recap belonged to is gone; a newer session may own
@@ -1426,27 +1563,33 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
 
   /**
    * Burn-through wind-down: the session's starburst budget elapsed while the WS
-   * was resident (reward-economy L2 §5). Fired by the `burnTimer` `setTimeout`.
-   * Run ONE narrative wind-down turn (the closing-recap path in the distinct
-   * `'depleted'` register — a warm farewell, NOT a game outcome), then tear the
-   * session down: `endSession` deducts the now-≈budget minutes + flushes usage +
-   * builds the summary, then clear and close 1000 with a `summary` frame carrying
-   * `reason: 'balance-depleted'` so the panel shows the depletion beat.
+   * was resident (reward-economy L2 §5). Fired by the durable burn-through DO
+   * alarm via {@link onBurnThroughAlarm} (hardening batch B FIX 1 — migrated off
+   * the WS-resident `setTimeout`). Run ONE narrative wind-down turn (the
+   * closing-recap path in the distinct `'depleted'` register — a warm farewell,
+   * NOT a game outcome), then tear the session down: `endSession` deducts the
+   * now-≈budget minutes + flushes usage + builds the summary, then clear and close
+   * 1000 with a `summary` frame carrying `reason: 'balance-depleted'` so the panel
+   * shows the depletion beat.
    *
-   * Serial with any live turn (finding 1): if a turn is in flight when the timer
+   * Serial with any live turn (finding 1): if a turn is in flight when the alarm
    * fires, the wind-down is DEFERRED (`pendingWindDown`) until that turn drains,
-   * so the recap never overlaps a live turn on the socket. The depletion outcome
-   * is TERMINAL (findings 2 + 3): it deducts, clears every guard timer, and closes
-   * even if a mid-farewell barge-in (`speech-start`) supersedes the recap — the
-   * teardown aborts ONLY when a competing terminal path (`end` / owner close)
-   * already unbound the session, keyed on the session identity, not the epoch (a
-   * barge-in advances the epoch but leaves the session bound). The eviction edge
-   * (isolate evicted mid-session) is handled by `onSocketClose` for the
-   * elapsed-so-far (undercount, fail-open) — DO-`alarm()` durability is a followup,
-   * not v1.
+   * so the recap never overlaps a live turn on the socket. The deferred turn is
+   * itself bounded by the per-turn hard deadline (FIX 2), so even a STUCK turn
+   * eventually releases the guard and lets this fire. The depletion outcome is
+   * TERMINAL (findings 2 + 3): it deducts, clears every guard, and closes even if a
+   * mid-farewell barge-in (`speech-start`) supersedes the recap — the teardown
+   * aborts ONLY when a competing terminal path (`end` / owner close) already
+   * unbound the session, keyed on the session identity, not the epoch (a barge-in
+   * advances the epoch but leaves the session bound).
+   *
+   * The eviction edge (isolate evicted mid-session) is now covered DURABLY by the
+   * alarm itself: {@link onBurnThroughAlarm} writes the depletion deduct from its
+   * persisted payload when the session is no longer resident, so a depleted budget
+   * is billed even when this resident recap path never runs.
    */
   private async windDown(ws: Connection): Promise<void> {
-    this.burnTimer = undefined
+    this.burnScheduleId = undefined
     const sessionId = this.sessionId
     const userId = this.userId
     if (!this.sessionState || !this.providers || sessionId === undefined || userId === undefined) {
@@ -1470,10 +1613,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     const myEpoch = this.turnEpoch
     try {
       traceTurn('turn', 'winddown-start', { sessionId })
-      const turn = runClosingTurn(this.providers, this.sessionState, 'depleted')[
-        Symbol.asyncIterator
-      ]()
-      await this.streamTurn(ws, turn)
+      const providers = this.providers
+      const state = this.sessionState
+      await this.streamTurn(ws, (signal) =>
+        runClosingTurn(providers, state, 'depleted', signal)[Symbol.asyncIterator]()
+      )
     } catch (err: unknown) {
       // A provider error during the wind-down recap: fail-loud-close like the
       // closing-recap path, epoch-fenced.
@@ -1513,6 +1657,64 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     void handOffSummaryCapture(this.env.COMPANION_CONSOLIDATOR, summary)
     ws.send(JSON.stringify({ type: 'summary', summary, reason: 'balance-depleted' }))
     ws.close(1000, safeCloseReason('balance depleted'))
+  }
+
+  /**
+   * The burn-through wind-down DO alarm's callback (hardening batch B FIX 1). The
+   * Agents-SDK `schedule()` invokes this BY NAME when the budget alarm fires — a
+   * durable dispatch that survives an isolate eviction (the schedule row + its
+   * payload persist in the DO's SQLite storage). Two paths:
+   *
+   *  - RESIDENT (the normal case): the session is still bound, still THIS session
+   *    (`sessionId` matches the payload), and the owner socket is live — run the
+   *    full narrative {@link windDown} on it, identical UX to the pre-migration
+   *    resident `setTimeout`.
+   *  - NOT RESIDENT (the durability win): the isolate was evicted between `create`
+   *    and the budget boundary, or the session already ended / a reconnect rebound
+   *    the DO. The in-memory state the resident deduct reads is gone, so bill the
+   *    depleted budget DURABLY from the persisted payload. Idempotent on
+   *    `session:{sessionId}` — a no-op if the session already deducted at a normal
+   *    teardown, so it never double-charges (fail-open, undercount-only). This is
+   *    exactly the deduct the old WS-resident `setTimeout` LOST on eviction.
+   *
+   * PUBLIC (not `private`) for two reasons the SDK forces: `schedule()` types its
+   * `callback` as `keyof this` resolved in the Agent base, which sees only public
+   * members, and `noUnusedLocals` would flag a private method that is never
+   * referenced by property access (the SDK dispatches it by string name). It is
+   * not an attack surface — the DO is reachable only through the Worker's WS
+   * upgrade + the hand-rolled control protocol, never as an arbitrary RPC method,
+   * exactly like the already-public `createSession` / `endSession`.
+   */
+  async onBurnThroughAlarm(payload: BurnThroughPayload): Promise<void> {
+    // The alarm fired: this schedule row is spent, so drop the id (a later
+    // teardown must not try to cancel an already-fired schedule).
+    this.burnScheduleId = undefined
+    if (
+      this.sessionState &&
+      this.sessionId === payload.sessionId &&
+      this.ownerSocket !== undefined
+    ) {
+      await this.windDown(this.ownerSocket)
+      return
+    }
+    // Not resident / already-ended / reconnected: bill the depleted budget from the
+    // durable payload. `deductSessionMinutes` is idempotent on `session:{sessionId}`
+    // (ON CONFLICT DO NOTHING) and refuses a non-positive/non-integer amount, so a
+    // session already deducted elsewhere is an exact no-op. Fail-open: a D1 failure
+    // is an accepted undercount, never a throw out of the alarm handler.
+    const db = this.env.COMPANION_DB
+    if (db === undefined) return
+    await deductSessionMinutes(db, {
+      userId: payload.userId,
+      sessionId: payload.sessionId,
+      minutes: payload.budgetMinutes,
+      fundingSource: payload.fundingSource,
+    }).catch((err: unknown) => {
+      console.error(
+        `platform-ai: burn-through alarm deduct failed for session:${payload.sessionId}`,
+        err
+      )
+    })
   }
 
   /**
@@ -1626,15 +1828,41 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // (`already_created`) never repoints the owner.
         this.ownerSocket = ws
         ws.send(JSON.stringify({ type: 'created', sessionId }))
-        // Arm the burn-through wind-down timer (L2 §5). A single WS-resident
-        // `setTimeout` (the DO stays resident with hibernation off) stands in for
-        // per-minute ticking — no per-minute DB writes. Only for a finite,
-        // positive budget: a dev/demo priceless session never depletes. Cleared
-        // on any earlier teardown (`clearSession`).
+        // Arm the burn-through wind-down DO alarm (L2 §5; FIX 1). Migrated off the
+        // WS-resident `setTimeout` to the Agents-SDK durable `schedule()` — the DO
+        // `alarm()` handler is RESERVED by the Agent base, so we drive a durable
+        // schedule row (`onBurnThroughAlarm` at `budgetMinutes × burnSecondsPerMinute`
+        // seconds) that survives an isolate eviction. The payload carries the
+        // identity + budget so the depleted session is billed even on a fresh
+        // post-eviction instance. Only for a finite, positive budget: a dev/demo
+        // priceless session never depletes. Canceled on any earlier teardown
+        // (`clearSession`). Still per-session wall-clock, still no per-minute writes.
         if (Number.isFinite(budget) && budget > 0) {
-          this.burnTimer = setTimeout(() => {
-            void this.windDown(ws)
-          }, budget * this.burnMinuteMs)
+          const schedule = await this.schedule<BurnThroughPayload>(
+            budget * this.burnSecondsPerMinute,
+            'onBurnThroughAlarm',
+            {
+              sessionId,
+              userId: socketUserId,
+              budgetMinutes: budget,
+              // v1 funding source is server-hardcoded 'earned' (SSOT:
+              // `assembleSession` -> `SessionState.fundingSource`). The resident
+              // wind-down reads the live `state.fundingSource`; only the durable
+              // eviction-path deduct consumes this payload copy. A future phase that
+              // varies funding updates both this literal and the assembly default.
+              fundingSource: 'earned',
+            }
+          )
+          // `schedule()` is a durable SQL write (an await), so a racing `end` / owner
+          // close could have torn THIS session down while it armed. If the bound
+          // session is no longer this one, cancel the orphan schedule so it never
+          // fires against a dead / replaced session (the async-arming analog of the
+          // create branch's post-await re-checks above).
+          if (this.sessionId === sessionId) {
+            this.burnScheduleId = schedule.id
+          } else {
+            void this.cancelSchedule(schedule.id).catch(() => {})
+          }
         }
         // AI speaks first: fire the opening greeting (LLM->TTS, no player audio)
         // in the background, when enabled (default on — AI-first is the product
@@ -1712,8 +1940,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // `streamTurn` owns the `turnInFlight`/`activeTurn`/`turnEpoch` machinery
         // (see its docstring), so a mid-reply `end`/owner close cancels cleanly and
         // a stale `finally` cannot clobber a newer session's guard.
-        const turn = runReply(this.providers, this.sessionState, result)[Symbol.asyncIterator]()
-        await this.streamTurn(ws, turn)
+        const providers = this.providers
+        const state = this.sessionState
+        await this.streamTurn(ws, (signal) =>
+          runReply(providers, state, result, signal)[Symbol.asyncIterator]()
+        )
         return
       }
       case 'text-turn': {
@@ -1743,11 +1974,13 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         traceTurn('turn', 'text-start', { sessionId })
         // Feed the typed text as the turn's transcript directly (audioBytes: 0,
         // so STT usage is zero), reusing the voice reply path wholesale.
-        const turn = runReply(this.providers, this.sessionState, {
-          transcript: text,
-          audioBytes: 0,
-        })[Symbol.asyncIterator]()
-        await this.streamTurn(ws, turn)
+        const providers = this.providers
+        const state = this.sessionState
+        await this.streamTurn(ws, (signal) =>
+          runReply(providers, state, { transcript: text, audioBytes: 0 }, signal)[
+            Symbol.asyncIterator
+          ]()
+        )
         return
       }
       case 'end': {

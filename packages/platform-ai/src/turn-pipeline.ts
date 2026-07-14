@@ -410,7 +410,8 @@ async function* streamLlmTts(
   messages: ChatMessage[],
   turnStart: number,
   traceSessionId?: string,
-  coBuild?: CoBuildConfig
+  coBuild?: CoBuildConfig,
+  signal?: AbortSignal
 ): AsyncGenerator<AiResponseChunk, LlmTtsResult> {
   // LLM + TTS run concurrently: the LLM loop segments text into sentences and
   // feeds a queue the TTS provider drains. We interleave text chunks (as the
@@ -452,6 +453,11 @@ async function* streamLlmTts(
     .streamCompletion({
       model,
       messages,
+      // Hardening batch B FIX 2: the per-turn deadline's AbortSignal, threaded from
+      // `streamTurn`. A provider adapter that honors it aborts its in-flight fetch
+      // when a hung turn is force-canceled, so the stuck request unwinds instead of
+      // leaking. `undefined` when no deadline is wired (the pipeline's own callers).
+      signal,
     })
     [Symbol.asyncIterator]()
 
@@ -674,7 +680,8 @@ export async function* runUtteranceStt(
 export async function* runReply(
   providers: TurnProviders,
   state: SessionState,
-  utterance: UtteranceResult
+  utterance: UtteranceResult,
+  signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const { transcript: playerText, audioBytes: sttAudioBytes } = utterance
@@ -722,7 +729,8 @@ export async function* runReply(
     messages,
     turnStart,
     state.traceSessionId,
-    state.config.coBuild
+    state.config.coBuild,
+    signal
   )
 
   // Settle turn state: record history, count, and usage; emit the terminal chunk
@@ -772,14 +780,15 @@ export async function* runReply(
 export async function* runTurn(
   providers: TurnProviders,
   state: SessionState,
-  audio: AsyncIterable<AudioChunk>
+  audio: AsyncIterable<AudioChunk>,
+  signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   traceTurn('turn', 'pipeline-start', {
     sessionId: state.traceSessionId,
     turnCount: state.turnCount,
   })
   const utterance = yield* runUtteranceStt(providers, audio, state.traceSessionId)
-  yield* runReply(providers, state, utterance)
+  yield* runReply(providers, state, utterance, signal)
 }
 
 /**
@@ -872,7 +881,8 @@ export function closingDirectiveFor(outcome: RecapRegister = 'defused'): string 
 export async function* runClosingTurn(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
   state: SessionState,
-  outcome: RecapRegister = 'defused'
+  outcome: RecapRegister = 'defused',
+  signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const userMessage: ChatMessage = { role: 'user', content: closingDirectiveFor(outcome) }
@@ -894,7 +904,8 @@ export async function* runClosingTurn(
     messages,
     turnStart,
     state.traceSessionId,
-    undefined
+    undefined,
+    signal
   )
 
   // Settle: the closing directive is synthetic and must never leak into history
@@ -933,7 +944,8 @@ export async function* runClosingTurn(
  */
 export async function* runOpeningTurn(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
-  state: SessionState
+  state: SessionState,
+  signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const userMessage: ChatMessage = { role: 'user', content: OPENING_DIRECTIVE }
@@ -949,7 +961,8 @@ export async function* runOpeningTurn(
     messages,
     turnStart,
     state.traceSessionId,
-    state.config.coBuild
+    state.config.coBuild,
+    signal
   )
 
   // Settle. The opening directive is synthetic and must never leak into history
