@@ -537,6 +537,17 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private activeTurn: AsyncIterator<AiResponseChunk> | undefined
   /**
+   * A deferred burn-through wind-down, set when the budget timer fires WHILE a
+   * turn is in flight (L2 §5, finding 1 — the wind-down recap must not overlap a
+   * live turn). Holds the owner socket to wind down; consumed by `streamTurn`'s
+   * `finally` the instant the in-flight turn fully drains, which re-invokes
+   * `windDown` (now with no turn in flight) so the recap runs strictly AFTER the
+   * live turn — never concurrently. Cleared on any teardown (`clearSession`), so a
+   * pending wind-down can never fire against a later session generation.
+   * `undefined` when no wind-down is pending.
+   */
+  private pendingWindDown: Connection | undefined
+  /**
    * Monotonic session-generation counter — the epoch guard that keeps a stale
    * turn-loop `finally` from clobbering a NEWER session's shared `turnInFlight`/
    * `activeTurn`.
@@ -1089,6 +1100,9 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       clearTimeout(this.burnTimer)
       this.burnTimer = undefined
     }
+    // Drop any deferred wind-down (finding 1): the session is torn down, so a
+    // pending wind-down must never fire against the next generation.
+    this.pendingWindDown = undefined
     this.sessionState = undefined
     this.userId = undefined
     this.sessionId = undefined
@@ -1321,6 +1335,18 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       if (this.turnEpoch === myEpoch) {
         this.turnInFlight = false
         this.activeTurn = undefined
+        // A budget depletion fired while this turn was streaming and DEFERRED the
+        // wind-down (finding 1: the wind-down recap must not overlap a live turn).
+        // Now that this turn has fully drained, re-invoke the deferred wind-down —
+        // with no turn in flight it proceeds straight to the recap + teardown, so
+        // the two turns are strictly serial. Gated by the epoch match above, so a
+        // stale generation's `finally` never launches a wind-down against a newer
+        // session (a torn-down session already reset `pendingWindDown`).
+        const deferred = this.pendingWindDown
+        if (deferred !== undefined) {
+          this.pendingWindDown = undefined
+          void this.windDown(deferred)
+        }
       }
     }
   }
@@ -1407,18 +1433,38 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * builds the summary, then clear and close 1000 with a `summary` frame carrying
    * `reason: 'balance-depleted'` so the panel shows the depletion beat.
    *
-   * Self-fencing exactly like `runClosingRecap`: a real `end` / owner close /
-   * barge-in during the recap advances the generation, and the epoch re-check
-   * after the recap makes this a no-op (that path already deducted + closed).
-   * The eviction edge (isolate evicted mid-session) is handled by `onSocketClose`
-   * for the elapsed-so-far (undercount, fail-open) — DO-`alarm()` durability is a
-   * followup, not v1.
+   * Serial with any live turn (finding 1): if a turn is in flight when the timer
+   * fires, the wind-down is DEFERRED (`pendingWindDown`) until that turn drains,
+   * so the recap never overlaps a live turn on the socket. The depletion outcome
+   * is TERMINAL (findings 2 + 3): it deducts, clears every guard timer, and closes
+   * even if a mid-farewell barge-in (`speech-start`) supersedes the recap — the
+   * teardown aborts ONLY when a competing terminal path (`end` / owner close)
+   * already unbound the session, keyed on the session identity, not the epoch (a
+   * barge-in advances the epoch but leaves the session bound). The eviction edge
+   * (isolate evicted mid-session) is handled by `onSocketClose` for the
+   * elapsed-so-far (undercount, fail-open) — DO-`alarm()` durability is a followup,
+   * not v1.
    */
   private async windDown(ws: Connection): Promise<void> {
     this.burnTimer = undefined
     const sessionId = this.sessionId
     const userId = this.userId
     if (!this.sessionState || !this.providers || sessionId === undefined || userId === undefined) {
+      return
+    }
+    // Serialize with an in-flight turn (finding 1): a reply / greeting / recap
+    // streaming when the budget timer fires would otherwise overlap the wind-down
+    // recap on the same socket — two concurrent `streamTurn`s clobbering the shared
+    // `activeTurn`/`turnInFlight` guard and interleaving audio. Defer rather than
+    // abruptly supersede the live turn: park the wind-down and let the running turn
+    // finish. `streamTurn`'s `finally` re-invokes `windDown` the instant that turn
+    // drains, so the recap runs strictly AFTER it and the two never overlap. (If a
+    // barge-in supersedes the live turn instead, its stale `finally` is an
+    // epoch-fenced no-op, but `pendingWindDown` survives on the still-bound session
+    // and the next turn's `finally` — or a teardown that resets it — carries it, so
+    // the wind-down is never lost or fired against a torn-down session.)
+    if (this.turnInFlight) {
+      this.pendingWindDown = ws
       return
     }
     const myEpoch = this.turnEpoch
@@ -1445,15 +1491,24 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       }
       return
     }
-    // A real teardown (end / owner close / barge-in) interleaved during the recap
-    // and advanced the generation — the session this wind-down belonged to is
-    // gone (and already deducted + closed). Nothing more to do.
-    if (this.turnEpoch !== myEpoch || this.sessionId !== sessionId) return
-    // Tear down: `endSession` finalizes accounting (deduct ≈ budget) + flushes
-    // usage + builds the summary; clear the session, hand off the capture, then
-    // send the depletion summary and close 1000. No `cancelActiveTurn`: the recap
-    // turn already completed above, so no turn is in flight.
+    // Terminal-teardown guard (finding 3): the depletion OUTCOME must be terminal.
+    // Abort ONLY when a competing TERMINAL path (a real `end` / owner-socket close)
+    // already tore this session down — detected by the bound session being gone or
+    // replaced (`clearSession` nulls `sessionId`; a reconnect binds a new one). A
+    // mid-farewell barge-in (`speech-start`) ALSO advances the epoch but leaves the
+    // session BOUND, so keying the abort on the epoch (as the prior code did)
+    // wrongly abandoned the teardown — leaving the depleted session un-deducted and
+    // un-closed. Keying on the session identity instead lets a barge-in still wind
+    // down to a terminal close.
+    if (this.sessionId !== sessionId) return
+    // Tear down exactly as a normal `end` does (finding 2): `endSession` finalizes
+    // accounting (deduct ≈ budget) + flushes usage + builds the summary + discards
+    // any open utterance; CANCEL any turn a mid-farewell barge-in may have started
+    // (the same fire-and-forget cancel the `end` path uses, so no provider stream
+    // dangles); then `clearSession` clears the burn timer + resets the turn guards.
+    // Hand off the capture, send the depletion summary, and close 1000.
     const summary = this.endSession(sessionId, userId)
+    void this.cancelActiveTurn()
     this.clearSession()
     void handOffSummaryCapture(this.env.COMPANION_CONSOLIDATOR, summary)
     ws.send(JSON.stringify({ type: 'summary', summary, reason: 'balance-depleted' }))

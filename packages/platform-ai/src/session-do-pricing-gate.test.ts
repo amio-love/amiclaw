@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Production-class tests for `VoiceSessionDO`'s reward-economy session pricing
@@ -24,7 +24,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * into `instance.env.COMPANION_DB` via the `handle.run` seam, exactly as the
  * usage-flush suite injects a USAGE KV double. So these tests exercise the genuine
  * `ledger.ts` code path, not a mock of it.
+ *
+ * The burn-through wind-down CONCURRENCY block additionally installs the gated
+ * provider bundle at the `createProviders` seam (same passthrough `vi.mock` the
+ * epoch-guard / turn-guard suites use), so a reply or the wind-down recap can be
+ * PARKED at a genuinely pending provider `await` while a control message (the
+ * budget timer firing, a barge-in) interleaves. When `providerControl.override`
+ * is undefined (the default, reset per test) `createProviders` falls through to
+ * the real demo-mock providers, so every other test keeps the real path.
  */
+
+const providerControl = vi.hoisted(() => ({
+  override: undefined as import('./turn-pipeline').TurnProviders | undefined,
+}))
+
+vi.mock('./providers/factory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./providers/factory')>()
+  return {
+    ...actual,
+    createProviders: (...args: Parameters<typeof actual.createProviders>) =>
+      providerControl.override ?? actual.createProviders(...args),
+  }
+})
 
 import type {
   CompanionDb,
@@ -35,6 +56,8 @@ import type { SessionDoEnv } from './session-do'
 import type { VoiceSessionDO } from './session-do'
 import {
   createSessionOverWs,
+  driveUtteranceToLlm,
+  makeGatedProviders,
   MANUAL,
   makeSessionDo,
   messagesOfType,
@@ -220,12 +243,43 @@ class ThrowingCompanionDb implements CompanionDb {
 interface DoPrivate {
   env: SessionDoEnv
   burnMinuteMs: number
+  burnTimer: unknown
+  pendingWindDown: unknown
+  turnInFlight: boolean
+  activeTurn: unknown
   sessionState: { startedAtMs: number; budgetMinutes?: number } | undefined
 }
 
 function asPrivate(instance: VoiceSessionDO): DoPrivate {
   return instance as unknown as DoPrivate
 }
+
+/**
+ * Poll a predicate over the DO's PRIVATE wind-down state (read inside the DO's
+ * I/O context via `handle.run`) until it holds — the async-DO-state analog of
+ * `waitFor` (which only reads synchronous client-socket state). Lets the
+ * concurrency tests synchronize on "the timer fired and deferred" /
+ * "the barge-in superseded the recap" without a fixed sleep.
+ */
+async function waitForDoState(
+  handle: SessionHandle,
+  predicate: (view: DoPrivate) => boolean,
+  label: string,
+  budgetMs = 2000
+): Promise<void> {
+  const deadline = Date.now() + budgetMs
+  for (;;) {
+    if (await handle.run((instance) => predicate(asPrivate(instance)))) return
+    if (Date.now() > deadline) throw new Error(`waitForDoState timed out: ${label}`)
+    await new Promise<void>((resolve) => setTimeout(resolve, 2))
+  }
+}
+
+beforeEach(() => {
+  // Default to the real demo-mock providers; the concurrency tests opt in to the
+  // gated bundle explicitly.
+  providerControl.override = undefined
+})
 
 /** Merge a `COMPANION_DB` into the DO's real workerd env (keep USAGE et al.). */
 async function injectCompanionDb(handle: SessionHandle, db: CompanionDb): Promise<void> {
@@ -544,5 +598,162 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
 
     await waitFor(() => db.deductRows().length === 1, 'one deduct row')
     expect(db.deductRows()[0].amount).toBe(-BUDGET)
+  })
+})
+
+// --- burn-through wind-down: the 3 concurrency edges (PR #254 codex findings) -----
+
+describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', () => {
+  it('finding 1 — a mid-turn budget-timer fire DEFERS the wind-down: the reply and the wind-down recap run strictly serially, exactly one deduct', async () => {
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10 minutes
+    const handle = makeSessionDo()
+    // Shrink the per-minute basis so the real setTimeout fires at ~10 * 10 = 100 ms,
+    // WHILE the reply below is held parked at the gated LLM.
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      view.burnMinuteMs = 10
+    })
+    const socket = await openSocket(handle, 'user-A')
+    const sessionId = await createSessionOverWs(socket)
+
+    // A voice reply is parked at the gated LLM — the turn is in flight.
+    await driveUtteranceToLlm(socket, kit, 1)
+    expect(kit.llmTurns).toHaveLength(1)
+
+    // The burn timer fires (~100 ms) WHILE the reply is parked. It must DEFER, not
+    // start a second concurrent stream: `pendingWindDown` is set and the burn timer
+    // is cleared — but NO wind-down recap has reached the LLM (no overlap) and no
+    // depletion summary has been sent (no premature teardown).
+    await waitForDoState(
+      handle,
+      (view) => view.pendingWindDown !== undefined && view.burnTimer === undefined,
+      'the mid-turn timer deferred the wind-down'
+    )
+    expect(kit.llmTurns).toHaveLength(1) // recap has NOT started → no overlap
+    expect(socket.messagesOfType('summary')).toHaveLength(0)
+
+    // Release the reply. Its `streamTurn` finally re-invokes the deferred wind-down,
+    // which only NOW starts the recap turn (llmTurns[1]).
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('reply.')
+      kit.llmTurns[0].finishStream()
+    })
+    await waitFor(() => kit.llmTurns.length === 2, 'the deferred wind-down recap started')
+    // Serialization proof: the reply fully drained BEFORE the recap started.
+    expect(kit.llmTurns[0].settled()).toBe(true)
+
+    // Release the recap. The wind-down tears down: a balance-depleted summary, a
+    // 1000 close, and exactly one deduct.
+    await handle.run(() => {
+      kit.llmTurns[1].pushDelta('farewell.')
+      kit.llmTurns[1].finishStream()
+    })
+    await waitForMessage(socket, 'summary')
+    expect(socket.messagesOfType('summary')[0].reason).toBe('balance-depleted')
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'depletion close')
+
+    await settle()
+    await waitFor(() => db.deductRows().length === 1, 'exactly one deduct row')
+    expect(db.deductRows()).toHaveLength(1)
+    expect(db.deductRows()[0].source_key).toBe(`session:${sessionId}`)
+  })
+
+  it('finding 2 — the depletion teardown clears every DO guard: after the balance-depleted close, no timer/turn state lingers and nothing fires', async () => {
+    // Real demo-mock providers (no gating) — the happy-path depletion, asserting
+    // the teardown mirrors a normal `end`: every guard cleared, nothing post-close.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      view.burnMinuteMs = 10
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // The timer fires on its own and drives the full depletion teardown.
+    await waitFor(() => socket.messagesOfType('summary').length > 0, 'burn-through summary', 4000)
+    expect(socket.messagesOfType('summary')[0].reason).toBe('balance-depleted')
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'depletion close')
+
+    const chunksAtClose = socket.messagesOfType('chunk').length
+    const summariesAtClose = socket.messagesOfType('summary').length
+
+    // Every DO-resident guard is cleared by the teardown (the burn timer, the
+    // deferred-wind-down slot, the turn guards), and the session is fully unbound —
+    // so nothing DO-side can fire after the close.
+    const state = await handle.run((instance) => {
+      const view = asPrivate(instance)
+      return {
+        burnTimer: view.burnTimer,
+        pendingWindDown: view.pendingWindDown,
+        turnInFlight: view.turnInFlight,
+        activeTurn: view.activeTurn,
+        sessionBound: view.sessionState !== undefined,
+      }
+    })
+    expect(state.burnTimer).toBeUndefined()
+    expect(state.pendingWindDown).toBeUndefined()
+    expect(state.turnInFlight).toBe(false)
+    expect(state.activeTurn).toBeUndefined()
+    expect(state.sessionBound).toBe(false)
+
+    // Give any stray timer / callback a chance to fire — nothing does.
+    await settle()
+    await settle()
+    expect(socket.messagesOfType('chunk').length).toBe(chunksAtClose)
+    expect(socket.messagesOfType('summary').length).toBe(summariesAtClose)
+    expect(db.deductRows()).toHaveLength(1) // no post-close double-deduct
+  })
+
+  it('finding 3 — a speech-start barge-in during the depletion farewell still fully tears down: deduct written, 1000 close, session terminal', async () => {
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      view.burnMinuteMs = 10
+    })
+    const socket = await openSocket(handle, 'user-A')
+    const sessionId = await createSessionOverWs(socket)
+
+    // The timer fires (no turn in flight) and the wind-down recap parks at the
+    // gated LLM — the farewell is now "playing".
+    await waitFor(
+      () => kit.llmTurns.length === 1,
+      'the wind-down recap reached the gated LLM',
+      2000
+    )
+
+    // The client VAD barges in MID-farewell: `speech-start` supersedes the recap
+    // turn (epoch bump) and opens a fresh recognizer — confirmed by the gated STT
+    // being entered (the recap is LLM+TTS only, so sttCalls was 0 until now).
+    socket.send(JSON.stringify({ type: 'speech-start' }))
+    await waitFor(() => kit.sttCalls() === 1, 'the barge-in opened a fresh recognizer', 2000)
+
+    // Release the (superseded) recap so `windDown` resumes past its `await`. The
+    // depletion outcome must STILL be terminal despite the barge-in.
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('farewell.')
+      kit.llmTurns[0].finishStream()
+    })
+
+    await waitForMessage(socket, 'summary')
+    expect(socket.messagesOfType('summary')[0].reason).toBe('balance-depleted')
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'depletion close')
+    expect(socket.closeEvents).toContainEqual({ code: 1000, reason: 'balance depleted' })
+
+    await settle()
+    await waitFor(() => db.deductRows().length === 1, 'one deduct row')
+    expect(db.deductRows()).toHaveLength(1)
+    expect(db.deductRows()[0].source_key).toBe(`session:${sessionId}`)
+    // The session is fully unbound — the depletion is terminal, not half-torn-down.
+    const bound = await handle.run((instance) => asPrivate(instance).sessionState !== undefined)
+    expect(bound).toBe(false)
   })
 })
