@@ -3,23 +3,21 @@
  * TopNav `BalanceChip` subscribes to (reward-economy §7). A module-level
  * singleton, mirroring `useAuth`'s `sessionReadPromise` convention (the platform
  * SPA shares cross-component state through module singletons, not React
- * context). `useBalance` reads it via `useSyncExternalStore`, so any update —
- * a live refetch or a pushed reward balance — repaints every subscribed chip
- * without a remount.
+ * context). `useBalance` reads it via `useSyncExternalStore`, so a live refetch
+ * repaints every subscribed chip without a remount.
  *
  * Why a store and not a per-mount fetch: the chip used to read
  * `GET /api/companion/assets` once on mount and never refresh, so a balance
  * that changed elsewhere (a win reward, a check-in, a voice-session deduct)
- * stayed stale until the component remounted. The store lets a fresh balance
- * reach the chip immediately — either the endpoint is re-read (a live event) or
- * a balance-changing response pushes its `balance` straight in.
+ * stayed stale until the component remounted. The store re-reads the endpoint
+ * on the events that mark a return, so a fresh balance reaches the chip.
  *
  * Refresh is event-driven, never polled (no interval): the hook re-reads when
  * the document regains visibility (return from a game SPA / bfcache restore /
  * tab refocus) and when the ledger drawer closes.
  */
 import type { AssetEntryView } from '@shared/companion-types'
-import { fetchAssets, type AssetsReadResult } from '@/lib/companion-api'
+import { fetchAssets } from '@/lib/companion-api'
 
 /**
  *   - `loading`     — no read has resolved yet; the chip stays empty (mirrors
@@ -79,43 +77,42 @@ export function getBalanceSnapshot(): BalanceState {
 }
 
 /**
- * Publish one `fetchAssets` result. Graceful degradation matches the chip's
- * contract:
- *   - `ok`                 → `ready` with the fresh balance / entries.
- *   - `anon` (401)         → `unavailable`, ALWAYS — even from `ready`. A 401 is
- *                            authoritative: the session is no longer signed in
- *                            (logout in another tab, expired / revoked cookie).
- *                            The chip is private, so it must clear rather than
- *                            keep another account's last-known balance on screen.
- *   - `error`, not ready   → `unavailable` (the initial-load-empty hide).
- *   - `error`, ready       → KEEP the last-known value. A transient failure
- *                            (500 / network / malformed body) on refresh must
- *                            not blank a good chip.
+ * Issue ONE read now, tagged with a fresh generation, and track it as the
+ * in-flight request. Publishing follows the chip's contract:
+ *   - `anon` (401)        → `unavailable`, ALWAYS — even from `ready` and even
+ *                           if this read is STALE. A 401 is authoritative: the
+ *                           session is gone (logout in another tab, expired /
+ *                           revoked cookie). "Session gone" outranks the
+ *                           last-issued-wins ordering, so the private chip must
+ *                           clear rather than keep an account balance on screen.
+ *   - otherwise           → only the LATEST-issued read publishes. An older read
+ *                           that resolves out of order is discarded, so it can
+ *                           never clobber a newer balance.
+ *       - `ok`            → `ready` with the fresh balance / entries.
+ *       - `error`, first  → `unavailable` (the initial-load-empty hide).
+ *       - `error`, ready  → KEEP the last-known value (a transient 500 / network
+ *                           / malformed refresh must not blank a good chip).
  */
-function applyResult(result: AssetsReadResult): void {
-  if (result.kind === 'ok') {
-    setState({
-      status: 'ready',
-      balance: result.balance,
-      entries: result.entries,
-      welcomeGranted: result.welcomeGranted,
-    })
-  } else if (result.kind === 'anon') {
-    setState({ status: 'unavailable' })
-  } else if (state.status !== 'ready') {
-    setState({ status: 'unavailable' })
-  }
-  // else: `error` while ready → keep the last-known value.
-}
-
-/** Issue ONE read now, tagged with a fresh generation, and track it as the
- *  in-flight request. Only this read publishes if it is still the latest when it
- *  resolves; an older read that resolves later is discarded. */
 function issueRead(): Promise<void> {
   const gen = ++latestGen
   const pending = fetchAssets()
     .then((result) => {
-      if (gen === latestGen) applyResult(result)
+      if (result.kind === 'anon') {
+        setState({ status: 'unavailable' })
+        return
+      }
+      if (gen !== latestGen) return
+      if (result.kind === 'ok') {
+        setState({
+          status: 'ready',
+          balance: result.balance,
+          entries: result.entries,
+          welcomeGranted: result.welcomeGranted,
+        })
+      } else if (state.status !== 'ready') {
+        setState({ status: 'unavailable' })
+      }
+      // else: `error` while ready → keep the last-known value.
     })
     .finally(() => {
       if (inFlight === pending) inFlight = null
@@ -142,21 +139,6 @@ export function reloadBalance(options?: { force?: boolean }): Promise<void> {
   if (options?.force) return issueRead()
   if (inFlight) return inFlight
   return issueRead()
-}
-
-/**
- * Push a fresh balance carried by a balance-changing response (a settlement win
- * reward, a check-in credit) so the chip reflects it immediately — no
- * round-trip. Only the numeric balance moves; the ledger `entries` and the
- * one-time `welcomeGranted` beat are left untouched (a later read refreshes the
- * ledger; the drawer already shows the credited row's source). Ignored before
- * the first successful read: the initial `reloadBalance` owns first paint, and a
- * push has no ledger context to attach to.
- */
-export function pushBalance(balance: number): void {
-  if (state.status === 'ready') {
-    setState({ ...state, balance })
-  }
 }
 
 /**

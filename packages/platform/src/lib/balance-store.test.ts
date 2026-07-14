@@ -6,13 +6,7 @@
  */
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import type { CompanionAssetsResponse } from '@shared/companion-types'
-import {
-  getBalanceSnapshot,
-  pushBalance,
-  reloadBalance,
-  resetBalanceStore,
-  subscribe,
-} from './balance-store'
+import { getBalanceSnapshot, reloadBalance, resetBalanceStore, subscribe } from './balance-store'
 
 const ASSETS: CompanionAssetsResponse = {
   asset_type: 'starburst',
@@ -133,23 +127,33 @@ describe('balance-store', () => {
     expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 17 })
   })
 
-  it('pushBalance repaints the number and preserves entries + welcome beat', async () => {
-    stubAssets(200, { ...ASSETS, balance: 10, welcome_granted: true })
-    await reloadBalance()
-
-    pushBalance(15)
-
-    expect(getBalanceSnapshot()).toEqual({
-      status: 'ready',
-      balance: 15,
-      entries: ASSETS.entries,
-      welcomeGranted: true,
+  it('a STALE anon (401) read still clears the chip, outranking last-issued-wins', async () => {
+    // Two reads race: R1 (older gen) hangs, then resolves 401; R2 (newer, the
+    // latest gen) resolves ok. A 401 is authoritative — the session is gone — so
+    // even the stale R1 must clear the chip, overriding the newer R2's balance.
+    let resolveFirst!: (res: Response) => void
+    const firstRead = new Promise<Response>((resolve) => {
+      resolveFirst = resolve
     })
-  })
+    let call = 0
+    const fetchMock = vi.fn(() => {
+      call += 1
+      return call === 1
+        ? firstRead
+        : Promise.resolve(new Response(JSON.stringify(ASSETS), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
-  it('pushBalance is a no-op before the first successful read', () => {
-    pushBalance(99)
-    expect(getBalanceSnapshot()).toEqual({ status: 'loading' })
+    const older = reloadBalance() // R1: older gen, hangs
+    const newer = reloadBalance({ force: true }) // R2: latest gen, resolves ok
+    await newer
+    expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 12 })
+
+    // R1 finally resolves as a 401 — despite being the stale/older read, it must
+    // clear the private chip rather than be discarded by the generation guard.
+    resolveFirst(new Response(null, { status: 401 }))
+    await older
+    expect(getBalanceSnapshot()).toEqual({ status: 'unavailable' })
   })
 
   it('shares one in-flight read across concurrent reloads', async () => {
@@ -172,7 +176,10 @@ describe('balance-store', () => {
 
     unsubscribe()
     listener.mockClear()
-    pushBalance(20)
+    // A further state change (a fresh read to a new balance) must not reach the
+    // unsubscribed listener.
+    stubAssets(200, { ...ASSETS, balance: 99 })
+    await reloadBalance()
     expect(listener).not.toHaveBeenCalled()
   })
 })

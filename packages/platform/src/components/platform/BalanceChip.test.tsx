@@ -12,7 +12,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import type { CompanionAssetsResponse } from '@shared/companion-types'
-import { pushBalance, reloadBalance, resetBalanceStore } from '@/lib/balance-store'
+import { reloadBalance, resetBalanceStore } from '@/lib/balance-store'
 import BalanceChip from './BalanceChip'
 
 const ASSETS: CompanionAssetsResponse = {
@@ -123,24 +123,6 @@ describe('BalanceChip', () => {
     // Opening the ledger reloads; the grant no longer re-mints, so the beat clears.
     await userEvent.click(button)
     await waitFor(() => expect(screen.queryByText(/\+10.*见面礼/)).not.toBeInTheDocument())
-  })
-
-  it('repaints the balance when a fresh value is pushed (a reward response)', async () => {
-    stubAssets(200, ASSETS)
-    render(<BalanceChip />)
-
-    // Mounts at the read-time balance (12) — the mount-once value.
-    await screen.findByRole('button', { name: /星芒余额 12/ })
-
-    // A settlement win credits +5 and the response carries the new balance; the
-    // reward-drop flow pushes it into the store, so the chip repaints WITHOUT a
-    // remount or a re-fetch (the mount-once staleness this fix removes).
-    act(() => {
-      pushBalance(17)
-    })
-
-    expect(await screen.findByRole('button', { name: /星芒余额 17/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /星芒余额 12/ })).not.toBeInTheDocument()
   })
 
   it('keeps the last-known balance when a refresh fails (never hides a good chip)', async () => {
@@ -267,6 +249,47 @@ describe('BalanceChip', () => {
       // Restore jsdom's default getter so later cases see 'visible'.
       delete (document as unknown as { visibilityState?: unknown }).visibilityState
     }
+  })
+
+  it('skips a forced refetch until the initial read lands, so the welcome beat survives', async () => {
+    // A return event that fires while the INITIAL read is still in flight must be
+    // skipped. The initial read owns first paint + the one-time +10 welcome beat;
+    // a forced read racing ahead of it would supersede it (generation guard) and
+    // drop `welcome_granted`, so the beat would never render.
+    let resolveInitial!: (res: Response) => void
+    const initialRead = new Promise<Response>((resolve) => {
+      resolveInitial = resolve
+    })
+    let call = 0
+    const fetchMock = vi.fn(() => {
+      call += 1
+      // Only the initial (call 1) read carries the +10 grant; a forced second
+      // read (which must NOT happen here) would return welcome_granted:false.
+      return call === 1
+        ? initialRead
+        : Promise.resolve(
+            new Response(JSON.stringify({ ...ASSETS, welcome_granted: false }), { status: 200 })
+          )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<BalanceChip />)
+    expect(fetchMock).toHaveBeenCalledTimes(1) // initial read in flight; chip still loading
+
+    // A visibility return fires WHILE loading — it must be skipped, not fire a
+    // second read that would race the initial one.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // The initial read lands with the mint grant → the beat renders and survives.
+    await act(async () => {
+      resolveInitial(
+        new Response(JSON.stringify({ ...ASSETS, welcome_granted: true }), { status: 200 })
+      )
+    })
+    expect(await screen.findByText(/\+10.*见面礼/)).toBeInTheDocument()
   })
 
   // --- Graceful degradation: every failure mode renders NOTHING on the INITIAL
