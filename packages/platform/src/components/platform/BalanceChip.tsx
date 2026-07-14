@@ -39,6 +39,13 @@ export default function BalanceChip() {
     setOpen(true)
   }
 
+  const closeLedger = () => {
+    setOpen(false)
+    // Re-sync on close too: the balance may have shifted while the drawer was
+    // open, and the chip should settle on the freshest value.
+    reload()
+  }
+
   return (
     <span className={styles.wrap}>
       <button
@@ -69,7 +76,7 @@ export default function BalanceChip() {
         </span>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={`${STARBURST_LABEL}明细`}>
+      <Modal open={open} onClose={closeLedger} title={`${STARBURST_LABEL}明细`}>
         <div className={styles.summary}>
           <span className={styles.summaryLabel}>当前{STARBURST_LABEL}</span>
           <span className={styles.summaryValue}>

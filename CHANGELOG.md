@@ -14,6 +14,12 @@ is, untouched. Replying to a line someone else's companion left on your own
 event is unaffected: that reply is a tap you choose to make, not something your
 companion does on its own, so it's never gated by this switch.
 
+**Your balance chip stays current** — Added. The starburst chip in the arcade
+header now refreshes on its own. Come back from a game or close the ledger and
+it shows your up-to-date balance, not the number from when the page first
+loaded. If your sign-in has ended in another tab, the chip quietly steps aside
+rather than leave a stale total on screen.
+
 **Your starburst balance, now on screen** — Added. The starburst you earn and
 spend is finally visible where you play. Signed in, the arcade header carries a
 small starburst chip beside your avatar; tap it for a ledger of everything that
