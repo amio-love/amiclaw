@@ -65,6 +65,7 @@ import {
   makeSessionDo,
   messagesOfType,
   openSocket,
+  sawDoneChunk,
   settle,
   SPEECH_START,
   TURN,
@@ -254,7 +255,15 @@ interface DoPrivate {
   pendingWindDown: unknown
   turnInFlight: boolean
   activeTurn: unknown
-  sessionState: { startedAtMs: number; budgetMinutes?: number } | undefined
+  sessionState:
+    | {
+        startedAtMs: number
+        budgetMinutes?: number
+        turnGeneration: number
+        turnCount: number
+        history: unknown[]
+      }
+    | undefined
 }
 
 /** The burn-through alarm payload the DO's `schedule()` persists + dispatches. */
@@ -1030,5 +1039,132 @@ describe('VoiceSessionDO pricing gate — stuck-turn hard deadline (FIX 2)', () 
       'the stuck turn was force-canceled and released the guard',
       4000
     )
+  })
+})
+
+// --- PR #257 codex review — 3 P2 correctness fixes -------------------------------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex P2 fixes', () => {
+  it('P2#1 — a STALE alarm for an earlier session does not clobber the bound session schedule id and bills only its own session', async () => {
+    // A reused DO: session B is bound; a stale alarm armed by an EARLIER session A
+    // fires (its own cancel raced). It must not touch B's `burnScheduleId` (which
+    // would strand B's alarm and later mis-bill B's full budget), and must bill only
+    // its own `payload.sessionId`.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+    const socket = await openSocket(handle, 'user-A')
+    const sessionB = await createSessionOverWs(socket) // binds B, arms schedule idB
+
+    const idBefore = await handle.run((instance) => asPrivate(instance).burnScheduleId)
+    expect(typeof idBefore).toBe('string')
+
+    // The stale alarm for session A fires while B is bound.
+    await fireBurnAlarm(handle, {
+      sessionId: 'stale-session-A',
+      userId: 'user-A',
+      budgetMinutes: 5,
+      fundingSource: 'earned',
+    })
+
+    // B's schedule id is UNTOUCHED — B can still cancel its own alarm on close.
+    const idAfter = await handle.run((instance) => asPrivate(instance).burnScheduleId)
+    expect(idAfter).toBe(idBefore)
+    // The stale alarm billed ONLY its own session A, never B.
+    expect(db.deductRows().map((r) => r.source_key)).toEqual(['session:stale-session-A'])
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+
+    // B delivered nothing and closes: FIX 3 zero-bill AND the (intact) alarm is
+    // canceled — so B is never mis-billed the full budget.
+    socket.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socket, 'summary')
+    await settle()
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+  })
+
+  it('P2#2 — a force-canceled turn that already streamed a chunk emits a terminal done frame (socket stays open)', async () => {
+    // The client sets its streaming flag on the first chunk and clears it only on a
+    // `done` frame or a socket close. A force-cancel after a partial stream must emit
+    // a terminal `done:true` so the client is not left mid-stream (which would
+    // suppress later utterances).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo() // priceless — this is about the wire, not billing
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 200
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // Turn parks at the gated LLM; stream ONE partial text chunk, then leave it hung.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('partial reply')
+    })
+    await waitFor(
+      () =>
+        messagesOfType(socket, 'chunk').some(
+          (c) => c.kind === 'text' && c.text === 'partial reply'
+        ),
+      'partial chunk reached the client'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-stream — no terminal frame yet
+
+    // The per-turn deadline force-cancels the hung turn → it MUST emit a terminal
+    // done frame so the client clears its streaming state.
+    await waitFor(() => sawDoneChunk(socket), 'force-cancel emitted a terminal done frame', 4000)
+    // The socket stays OPEN — the session continues, later utterances not suppressed.
+    await settle()
+    expect(socket.closeEvents).toHaveLength(0)
+  })
+
+  it('P2#3 — a force-cancel bumps the turn generation and a LATE-completing turn does not mutate state', async () => {
+    // The per-turn deadline bumps `turnGeneration`; a timed-out turn whose provider
+    // ignores the abort and completes late is fenced (its settle is a no-op), so it
+    // cannot corrupt `turnCount` / `history` for the abandoned turn. (The fence
+    // mechanism itself is unit-tested in turn-pipeline.test.ts.)
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 150
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    const before = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        turnCount: s?.turnCount ?? -1,
+        historyLen: s?.history.length ?? -1,
+        gen: s?.turnGeneration ?? -1,
+      }
+    })
+
+    // The turn parks at the gated LLM, then the per-turn deadline force-cancels it.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await waitForDoState(
+      handle,
+      (v) => v.turnInFlight === false,
+      'turn force-canceled by the deadline'
+    )
+    const genAfterCancel = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+    expect(genAfterCancel).toBe(before.gen + 1) // force-cancel bumped the generation
+
+    // The provider ignored the abort and completes LATE (after the guard released).
+    await handle.run(() => {
+      kit.llmTurns[0].finishStream()
+    })
+    await settle()
+    await settle()
+
+    const after = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(after.turnCount).toBe(before.turnCount) // no stale turnCount increment
+    expect(after.historyLen).toBe(before.historyLen) // no stale history mutation
   })
 })

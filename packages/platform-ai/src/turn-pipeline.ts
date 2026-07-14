@@ -89,6 +89,16 @@ export interface SessionState {
   history: ChatMessage[]
   /** Number of completed player->AI turns. */
   turnCount: number
+  /**
+   * Monotonic turn-abandonment generation. Each turn generator captures it at
+   * start and re-reads it before committing (settle: `history` / usage /
+   * `turnCount`); a mismatch means the turn was force-canceled (per-turn deadline)
+   * or superseded (barge-in) mid-flight, so the commit is skipped. Guards against
+   * a timed-out turn whose provider `await` resolves LATE — after the guard was
+   * released and newer turns ran — from corrupting shared session state. Bumped by
+   * the DO on force-cancel / supersession; never by the pipeline itself.
+   */
+  turnGeneration: number
   /** Accumulated usage counters. */
   usage: UsageCounters
   /**
@@ -684,6 +694,10 @@ export async function* runReply(
   signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
+  // The turn generation at start; re-checked before the settle commit so a turn
+  // force-canceled / superseded mid-flight (its provider `await` resolving LATE)
+  // cannot mutate shared session state. See `SessionState.turnGeneration`.
+  const turnGen = state.turnGeneration
   const { transcript: playerText, audioBytes: sttAudioBytes } = utterance
 
   // Benign no-speech turn: the player's utterance held nothing transcribable (a
@@ -734,7 +748,10 @@ export async function* runReply(
   )
 
   // Settle turn state: record history, count, and usage; emit the terminal chunk
-  // so the consumer can close out the turn.
+  // so the consumer can close out the turn. Skip the ENTIRE commit if this turn was
+  // force-canceled / superseded while it ran (stale generation) — a late-resolving
+  // provider must not corrupt `history` / usage / `turnCount` for the abandoned turn.
+  if (state.turnGeneration !== turnGen) return
   state.history.push(userMessage)
   state.history.push({ role: 'assistant', content: result.assistantText })
   state.turnCount += 1
@@ -885,6 +902,7 @@ export async function* runClosingTurn(
   signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
+  const turnGen = state.turnGeneration // fence a late settle (see runReply)
   const userMessage: ChatMessage = { role: 'user', content: closingDirectiveFor(outcome) }
   // coBuild = undefined for the recap: no action instruction in the prompt AND no
   // splitter, so the goodbye is fully action-free (see the streamLlmTts call below).
@@ -910,7 +928,9 @@ export async function* runClosingTurn(
 
   // Settle: the closing directive is synthetic and must never leak into history
   // (the recap it elicits is the only thing remembered). turnCount tracks
-  // player->AI turns, so the closing recap does not increment it.
+  // player->AI turns, so the closing recap does not increment it. Skip the commit
+  // if this turn was force-canceled / superseded mid-flight (stale generation).
+  if (state.turnGeneration !== turnGen) return
   state.history.push({ role: 'assistant', content: result.assistantText })
   const { outputTokens } = applyLlmTtsUsage(providers, state, result)
 
@@ -948,6 +968,7 @@ export async function* runOpeningTurn(
   signal?: AbortSignal
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
+  const turnGen = state.turnGeneration // fence a late settle (see runReply)
   const userMessage: ChatMessage = { role: 'user', content: OPENING_DIRECTIVE }
   const messages: ChatMessage[] = [
     ...assembleSystem(state, state.config.coBuild),
@@ -967,7 +988,9 @@ export async function* runOpeningTurn(
 
   // Settle. The opening directive is synthetic and must never leak into history
   // (the greeting it elicits is the only thing remembered). turnCount tracks
-  // player->AI turns, so the opening greeting does not increment it.
+  // player->AI turns, so the opening greeting does not increment it. Skip the commit
+  // if this turn was force-canceled / superseded mid-flight (stale generation).
+  if (state.turnGeneration !== turnGen) return
   state.history.push({ role: 'assistant', content: result.assistantText })
 
   const { outputTokens } = applyLlmTtsUsage(providers, state, result)

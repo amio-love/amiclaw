@@ -1112,7 +1112,15 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.turnEpoch += 1
     this.turnInFlight = false
     this.activeTurn = undefined
-    if (turn !== undefined) void turn.return?.(undefined)
+    if (turn !== undefined) {
+      // Fence a LATE settle by this barge-in'd turn whose provider ignored `return()`
+      // (a stuck `await`): bump the turn generation so its commit path is a no-op if
+      // it completes after this supersession (same fence as the force-cancel path).
+      // Only when a turn is actually superseded — a `speech-start` with nothing
+      // playing has no turn to fence, so it must not perturb the generation.
+      if (this.sessionState) this.sessionState.turnGeneration += 1
+      void turn.return?.(undefined)
+    }
   }
 
   /**
@@ -1384,6 +1392,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     const turn = makeTurn(abortController.signal)
     this.activeTurn = turn
     this.turnInFlight = true
+    // Whether a `type:'chunk'` frame (audio/text — the frames the client keys its
+    // mid-stream state on) has reached the player on THIS turn. Drives the terminal
+    // frame the force-cancel path must send so the client is not left mid-stream.
+    let deliveredChunk = false
     // One wall-clock deadline for the WHOLE turn (not per-chunk): armed here, raced
     // by every `turn.next()`, cleared in the `finally`. A legitimately long stream
     // is bounded per-chunk by the providers' own idle guards; this outer cap only
@@ -1408,6 +1420,25 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           })
           abortController.abort()
           void turn.return?.(undefined)
+          // Fence a LATE settle: bump the session's turn generation so this turn's
+          // generator — which may still complete after its provider `await` finally
+          // resolves (a provider that ignored the abort, or the TTS wait that gets
+          // no signal) — sees a stale generation and SKIPS its commit path, so it
+          // cannot mutate `history` / usage / `turnCount` for the abandoned turn
+          // after newer turns have run. NB: `turnEpoch` is deliberately NOT bumped
+          // here — the `finally` below must still see `turnEpoch === myEpoch` to
+          // release the guard and fire any deferred wind-down.
+          if (this.sessionState) this.sessionState.turnGeneration += 1
+          // Unstick the client: it set its streaming flag on the first `chunk` and
+          // clears it only on a `done` frame or a socket close. A force-cancel after
+          // a partial stream would otherwise leave the client looking mid-stream
+          // forever (suppressing later utterances). Emit a terminal `done:true` so it
+          // clears — but only if a chunk actually streamed AND this turn still owns
+          // the socket (a barge-in that advanced `turnEpoch` means a newer turn owns
+          // it now; its own terminal frame must not be pre-empted).
+          if (deliveredChunk && this.turnEpoch === myEpoch) {
+            ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
+          }
           break
         }
         if (step.done) break
@@ -1432,6 +1463,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
             })
           )
         } else if (chunk.kind === 'audio') {
+          deliveredChunk = true
           ws.send(
             JSON.stringify({
               type: 'chunk',
@@ -1453,6 +1485,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
             })
           )
         } else {
+          deliveredChunk = true
           ws.send(
             JSON.stringify({
               type: 'chunk',
@@ -1686,22 +1719,32 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * exactly like the already-public `createSession` / `endSession`.
    */
   async onBurnThroughAlarm(payload: BurnThroughPayload): Promise<void> {
-    // The alarm fired: this schedule row is spent, so drop the id (a later
-    // teardown must not try to cancel an already-fired schedule).
-    this.burnScheduleId = undefined
-    if (
-      this.sessionState &&
-      this.sessionId === payload.sessionId &&
-      this.ownerSocket !== undefined
-    ) {
-      await this.windDown(this.ownerSocket)
-      return
+    // Only act on the CURRENTLY BOUND session's own alarm. A DO is reused across
+    // sessions; a stale alarm armed by an EARLIER session can fire after the DO was
+    // rebound to a NEW session (its own cancel raced). It MUST NOT touch the new
+    // session's `burnScheduleId` or state — clearing it here would strand the new
+    // session's still-armed alarm (it could then no longer cancel it in
+    // `clearSession`), and if that new session closed having delivered nothing (the
+    // FIX 3 zero-bill path writes no `session:{id}` row) the stranded alarm would
+    // later mis-bill the FULL budget from its durable payload.
+    if (this.sessionId === payload.sessionId) {
+      // This alarm belongs to the bound session: its one-shot schedule row just
+      // fired, so drop the id (a later teardown must not cancel a spent schedule).
+      this.burnScheduleId = undefined
+      if (this.sessionState && this.ownerSocket !== undefined) {
+        await this.windDown(this.ownerSocket)
+        return
+      }
+      // Bound but no live socket (mid-teardown): fall through to the durable deduct
+      // for THIS session — idempotent, so a competing teardown deduct is a no-op.
     }
-    // Not resident / already-ended / reconnected: bill the depleted budget from the
-    // durable payload. `deductSessionMinutes` is idempotent on `session:{sessionId}`
-    // (ON CONFLICT DO NOTHING) and refuses a non-positive/non-integer amount, so a
-    // session already deducted elsewhere is an exact no-op. Fail-open: a D1 failure
-    // is an accepted undercount, never a throw out of the alarm handler.
+    // Not the currently bound session (evicted / reconnected / stale earlier-session
+    // alarm): bill ONLY the depleted budget for the alarm's OWN `payload.sessionId`,
+    // never touching the current session's `burnScheduleId` or state.
+    // `deductSessionMinutes` is idempotent on `session:{sessionId}` (ON CONFLICT DO
+    // NOTHING) and refuses a non-positive/non-integer amount, so a session already
+    // deducted elsewhere is an exact no-op. Fail-open: a D1 failure is an accepted
+    // undercount, never a throw out of the alarm handler.
     const db = this.env.COMPANION_DB
     if (db === undefined) return
     await deductSessionMinutes(db, {
