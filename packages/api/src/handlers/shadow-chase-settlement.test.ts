@@ -14,12 +14,14 @@ import {
 } from './shadow-chase-settlement'
 
 const RUN_ID = '00000000-0000-4000-8000-000000000009'
+const ATTEMPT_ID = '11111111-1111-4111-8111-111111111111'
 const NOW = '2026-07-10T08:00:00.000Z'
 
 function body(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     version: 1,
     runId: RUN_ID,
+    attemptId: ATTEMPT_ID,
     outcome: 'win',
     durationTicks: 800,
     ...overrides,
@@ -99,8 +101,12 @@ describe('handlePostShadowChaseSettlement', () => {
       }>()
     expect(row?.user_id).toBe('user-a')
     expect(row?.game_id).toBe(SHADOW_CHASE_GAME_ID)
+    // game_run_id keeps the seed-derived runId as provenance; the capture event
+    // id keys on the per-attempt attemptId.
     expect(row?.game_run_id).toBe(RUN_ID)
-    expect(row?.event_id).toContain('settlement:shadow-chase:6:user-a:')
+    expect(row?.event_id).toBe(
+      `settlement:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', ATTEMPT_ID)}`
+    )
     expect(JSON.parse(row?.payload ?? '{}')).toMatchObject({
       outcome: 'win',
       durationSeconds: 200,
@@ -150,7 +156,8 @@ describe('handlePostShadowChaseSettlement', () => {
   })
 
   it.each([
-    ['uuid', { runId: 'not-a-uuid' }],
+    ['run uuid', { runId: 'not-a-uuid' }],
+    ['attempt uuid', { attemptId: 'not-a-uuid' }],
     ['outcome', { outcome: 'draw' }],
     ['zero duration', { durationTicks: 0 }],
     ['over duration', { durationTicks: 1_201 }],
@@ -296,7 +303,82 @@ describe('handlePostShadowChaseSettlement', () => {
       .prepare("SELECT amount, source_key FROM asset_entry WHERE source_key GLOB 'win:*'")
       .first<{ amount: number; source_key: string }>()
     expect(row?.amount).toBe(5)
-    expect(row?.source_key).toBe(`win:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', RUN_ID)}`)
+    // The win key derives from the per-attempt attemptId, not the seed-derived runId.
+    expect(row?.source_key).toBe(
+      `win:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', ATTEMPT_ID)}`
+    )
+  })
+
+  it('credits two distinct attempts of the same seed/run independently (P1 regression)', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    const db = createTestDb()
+    const env = { AUTH: auth.asKV(), COMPANION_DB: db }
+    const options = { scheduler: collectingScheduler(), now: () => NOW }
+    const SECOND_ATTEMPT = '22222222-2222-4222-8222-222222222222'
+
+    // Both settlements share the SAME seed-derived runId (as a signed-in player's
+    // first shadow-chase run does on every visit) but carry distinct per-attempt
+    // ids. Keying the reward on the deterministic runId credited only the first;
+    // keying on attemptId credits each attempt.
+    const first = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win', attemptId: ATTEMPT_ID }), { Cookie: cookie }),
+      env,
+      options
+    )
+    const second = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win', attemptId: SECOND_ATTEMPT }), { Cookie: cookie }),
+      env,
+      options
+    )
+
+    expect((await first.json()) as { reward?: WinReward }).toMatchObject({
+      reward: { amount: 5, status: 'credited', balance: 5 },
+    })
+    expect((await second.json()) as { reward?: WinReward }).toMatchObject({
+      reward: { amount: 5, status: 'credited', balance: 10 },
+    })
+    const rows = await db
+      .prepare(
+        "SELECT source_key FROM asset_entry WHERE source_key GLOB 'win:*' ORDER BY source_key"
+      )
+      .all<{ source_key: string }>()
+    expect(rows.results.map((r) => r.source_key)).toEqual([
+      `win:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', ATTEMPT_ID)}`,
+      `win:${settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', SECOND_ATTEMPT)}`,
+    ])
+  })
+
+  it('dedups a retry of the same attempt without double-crediting', async () => {
+    const { auth, cookie } = await authenticated('user-a')
+    const db = createTestDb()
+    const env = { AUTH: auth.asKV(), COMPANION_DB: db }
+    const options = { scheduler: collectingScheduler(), now: () => NOW }
+
+    // A network retry re-POSTs the identical settlement (same attemptId): the
+    // second must dedup rather than credit a second +5.
+    const first = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win' }), { Cookie: cookie }),
+      env,
+      options
+    )
+    const retry = await handlePostShadowChaseSettlement(
+      request(body({ outcome: 'win' }), { Cookie: cookie }),
+      env,
+      options
+    )
+
+    expect((await first.json()) as { reward?: WinReward }).toMatchObject({
+      reward: { amount: 5, status: 'credited', balance: 5 },
+    })
+    expect((await retry.json()) as { reward?: WinReward }).toMatchObject({
+      reward: { amount: 0, status: 'duplicate', balance: 5 },
+    })
+    const balance = await db
+      .prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS balance FROM asset_entry WHERE source_key GLOB 'win:*'"
+      )
+      .first<{ balance: number }>()
+    expect(Number(balance?.balance)).toBe(5)
   })
 
   it('does not credit a loss and returns no reward', async () => {
@@ -317,7 +399,7 @@ describe('handlePostShadowChaseSettlement', () => {
     expect(rows.results).toHaveLength(0)
   })
 
-  it('derives the win source_key from the converged settlementIdFor (parity with the pre-swap local copy)', async () => {
+  it('derives the win source_key from the converged settlementIdFor over the per-attempt attemptId', async () => {
     const { auth, cookie } = await authenticated('user-a')
     const db = createTestDb()
 
@@ -327,15 +409,15 @@ describe('handlePostShadowChaseSettlement', () => {
       { scheduler: collectingScheduler(), now: () => NOW }
     )
 
-    // The deleted handler-local settlementIdFor produced exactly this string;
-    // the imported companion-memory copy must reproduce it byte-for-byte so the
-    // win-reward key never drifts from what earlier runs would have written.
-    const preSwapLiteral = `${SHADOW_CHASE_GAME_ID}:${'user-a'.length}:user-a:${RUN_ID}`
-    expect(settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', RUN_ID)).toBe(preSwapLiteral)
+    // The win-reward key is built from the imported companion-memory
+    // settlementIdFor over the per-attempt attemptId — never the seed-derived
+    // runId — and must reproduce this literal byte-for-byte.
+    const attemptLiteral = `${SHADOW_CHASE_GAME_ID}:${'user-a'.length}:user-a:${ATTEMPT_ID}`
+    expect(settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', ATTEMPT_ID)).toBe(attemptLiteral)
     const row = await db
       .prepare("SELECT source_key FROM asset_entry WHERE source_key GLOB 'win:*'")
       .first<{ source_key: string }>()
-    expect(row?.source_key).toBe(`win:${preSwapLiteral}`)
+    expect(row?.source_key).toBe(`win:${attemptLiteral}`)
   })
 
   it('keeps a win settlement successful with no reward when the ledger throws', async () => {
@@ -376,9 +458,11 @@ describe('handlePostShadowChaseSettlement', () => {
     expect(response.status).toBe(202)
     await expect(Promise.all(scheduler.promises)).resolves.toEqual([undefined])
     const logs = JSON.stringify(logger.mock.calls)
+    // The failure log carries the game-run reference (runId) for correlation and
+    // never the owner-embedding settlementId (which derives from attemptId).
     expect(logs).toContain(RUN_ID)
     expect(logs).not.toContain('user-a')
-    expect(logs).not.toContain(settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', RUN_ID))
+    expect(logs).not.toContain(settlementIdFor(SHADOW_CHASE_GAME_ID, 'user-a', ATTEMPT_ID))
     expect(logs).not.toContain('D1 partial statement failure')
   })
 })

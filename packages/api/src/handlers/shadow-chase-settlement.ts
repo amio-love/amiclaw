@@ -47,7 +47,11 @@ export interface ShadowChaseSettlementOptions {
 
 interface SettlementBody {
   version: 1
+  // Seed-derived deterministic run id — persisted as game-run provenance only.
   runId: string
+  // Per-attempt settlement identity (fresh UUID per attempt) — the idempotency
+  // component for both the win reward and the settlement capture.
+  attemptId: string
   outcome: 'win' | 'loss' | 'timeout'
   durationTicks: number
 }
@@ -65,7 +69,10 @@ function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]):
 }
 
 function validateBody(value: unknown): value is SettlementBody {
-  if (!isRecord(value) || !hasExactKeys(value, ['version', 'runId', 'outcome', 'durationTicks'])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['version', 'runId', 'attemptId', 'outcome', 'durationTicks'])
+  ) {
     return false
   }
   return (
@@ -73,6 +80,9 @@ function validateBody(value: unknown): value is SettlementBody {
     typeof value.runId === 'string' &&
     value.runId.length === 36 &&
     UUID_PATTERN.test(value.runId) &&
+    typeof value.attemptId === 'string' &&
+    value.attemptId.length === 36 &&
+    UUID_PATTERN.test(value.attemptId) &&
     (value.outcome === 'win' || value.outcome === 'loss' || value.outcome === 'timeout') &&
     Number.isSafeInteger(value.durationTicks) &&
     (value.durationTicks as number) >= 1 &&
@@ -172,7 +182,16 @@ export async function handlePostShadowChaseSettlement(
 
   const body = parsed.value
   const occurredAt = (options.now ?? (() => new Date().toISOString()))()
-  const settlementId = settlementIdFor(SHADOW_CHASE_GAME_ID, required.session.user_id, body.runId)
+  // The settlement identity keys on the per-attempt `attemptId`, never the
+  // seed-derived `runId` (which repeats across attempts of the same seed). Both
+  // the capture event id (settlementEventId) and the win-reward key
+  // (winSourceKey) derive from this settlementId, so they dedup on the same
+  // per-attempt basis. `runId` is retained only as game-run provenance.
+  const settlementId = settlementIdFor(
+    SHADOW_CHASE_GAME_ID,
+    required.session.user_id,
+    body.attemptId
+  )
   const captureInput: SettlementCaptureInput = {
     settlementId,
     userId: required.session.user_id,
@@ -222,13 +241,13 @@ export async function handlePostShadowChaseSettlement(
   // capture stays backgrounded above via the scheduler. creditWinReward is
   // internally fail-open — an 'error' status omits the reward field so the
   // settlement always succeeds. The win-reward key derives from the same
-  // idempotency `settlementIdFor`, matching the capture id byte-for-byte.
+  // per-attempt `attemptId` as the capture id, matching it byte-for-byte.
   let reward: WinReward | undefined
   if (body.outcome === 'win') {
     const result = await creditWinReward(companionDb, {
       userId: required.session.user_id,
       gameId: SHADOW_CHASE_GAME_ID,
-      runId: body.runId,
+      runId: body.attemptId,
       today: getTodayString(new Date(occurredAt)),
       deps: { now: () => occurredAt, newId: () => crypto.randomUUID() },
     })
