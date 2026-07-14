@@ -62,6 +62,12 @@ export interface AssembledSession {
 export interface AssembleSessionExtras {
   companionContext?: CompanionContext
   gameRunId?: string
+  /**
+   * The session's minute budget = the starburst balance at create (reward-economy
+   * L2 §5). Threaded from the DO's create-gate read; absent leaves the session
+   * uncapped (a dev/demo priceless session with no `COMPANION_DB` binding).
+   */
+  budgetMinutes?: number
 }
 
 /**
@@ -107,8 +113,15 @@ export function assembleSession(
     // Latches to 'derived-from-bytes' on the first turn whose STT seconds did
     // not come from the provider's own report (see `SessionState.sttSource`).
     sttSource: 'provider-reported',
+    // Reward-economy fields (L2 §5), set atomically at establishment so both are
+    // present whenever the DO publishes `sessionState` (finding 9 invariant).
+    // `fundingSource` is server-hardcoded to `'earned'` in v1 (no create-wire
+    // field); `startedAtMs` is the billed-minutes basis.
+    fundingSource: 'earned',
+    startedAtMs: Date.now(),
     ...(extras.companionContext !== undefined ? { companionContext: extras.companionContext } : {}),
     ...(extras.gameRunId !== undefined ? { gameRunId: extras.gameRunId } : {}),
+    ...(extras.budgetMinutes !== undefined ? { budgetMinutes: extras.budgetMinutes } : {}),
   }
   return { sessionId, userId, providers, state }
 }

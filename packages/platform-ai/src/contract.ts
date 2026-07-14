@@ -184,6 +184,16 @@ export interface SessionSummary {
 export type RecapOutcome = 'defused' | 'exploded' | 'timeout'
 
 /**
+ * The recap register the server may drive `runClosingTurn` with. A superset of
+ * the client-facing {@link RecapOutcome}: the extra `'depleted'` register is
+ * SERVER-only — the burn-through wind-down (reward-economy L2 §5) speaks a warm
+ * farewell when the session's starburst budget runs out. It is never accepted
+ * on the `closing` wire message, so the client protocol stays the three
+ * outcomes.
+ */
+export type RecapRegister = RecapOutcome | 'depleted'
+
+/**
  * Client→server control message: request the closing-recap turn.
  *
  * Sent by the client at settlement BEFORE the results screen appears. The DO runs

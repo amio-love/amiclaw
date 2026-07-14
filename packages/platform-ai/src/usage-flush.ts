@@ -46,6 +46,12 @@ export interface SessionUsageSnapshot {
   usage: UsageCounters
   /** Aggregate STT metering provenance (see `SessionState.sttSource`). */
   sttSource: SttUsageSource
+  /**
+   * Reward-economy funding source for the session (see `SessionState.fundingSource`;
+   * v1 always `'earned'`). Persisted alongside the metering counters so the usage
+   * record and the ledger deduct row agree on how the session was funded.
+   */
+  fundingSource: string
 }
 
 /** JSON value stored under the usage key. Identity lives in the key. */
@@ -54,6 +60,8 @@ export interface UsageRecord {
   turnCount: number
   usage: UsageCounters
   sttSource: SttUsageSource
+  /** Reward-economy funding source for the session (v1 always `'earned'`). */
+  fundingSource: string
   /** ISO 8601 flush timestamp — provenance for audits and late-write triage. */
   flushedAt: string
 }
@@ -70,6 +78,7 @@ export function buildUsageRecord(snapshot: SessionUsageSnapshot, flushedAt: Date
     turnCount: snapshot.turnCount,
     usage: { ...snapshot.usage },
     sttSource: snapshot.sttSource,
+    fundingSource: snapshot.fundingSource,
     flushedAt: flushedAt.toISOString(),
   }
 }

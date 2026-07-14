@@ -20,6 +20,7 @@ const ERROR_COPY: Record<GameVoiceErrorCode, string> = {
   microphone: '麦克风不可用，已切换为按钮模式。',
   transport: '语音连接中断，策略按钮仍可使用。',
   server: '语音服务暂不可用，策略按钮仍可使用。',
+  'insufficient-balance': '星芒不足，先去赚一些再和伙伴对话吧，策略按钮仍可使用。',
 }
 
 function mappedStatus(

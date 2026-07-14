@@ -57,6 +57,7 @@ function snapshot(overrides: Partial<SessionUsageSnapshot> = {}): SessionUsageSn
     turnCount: 3,
     usage: { ...COUNTERS },
     sttSource: 'provider-reported',
+    fundingSource: 'earned',
     ...overrides,
   }
 }
@@ -86,8 +87,14 @@ describe('buildUsageRecord', () => {
       turnCount: 3,
       usage: COUNTERS,
       sttSource: 'provider-reported',
+      fundingSource: 'earned',
       flushedAt: '2026-06-11T08:00:00.000Z',
     })
+  })
+
+  it('carries the reward-economy funding source (v1 always earned)', () => {
+    const record = buildUsageRecord(snapshot(), new Date('2026-06-11T08:00:00Z'))
+    expect(record.fundingSource).toBe('earned')
   })
 
   it('copies the counters instead of aliasing the live session object', () => {
@@ -110,6 +117,7 @@ describe('flushSessionUsage — fail-open', () => {
       turnCount: 3,
       usage: COUNTERS,
       sttSource: 'provider-reported',
+      fundingSource: 'earned',
       flushedAt: '2026-06-11T08:00:00.000Z',
     })
   })

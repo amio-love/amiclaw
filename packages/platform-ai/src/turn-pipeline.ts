@@ -25,7 +25,7 @@
  */
 
 import type { CompanionContext } from '../../companion-memory/src/types'
-import type { AiResponseChunk, AudioChunk, CoBuildAction, RecapOutcome } from './contract'
+import type { AiResponseChunk, AudioChunk, CoBuildAction, RecapRegister } from './contract'
 import type {
   ChatMessage,
   LlmProvider,
@@ -110,6 +110,29 @@ export interface SessionState {
    * whole session's annotation. Flushed alongside the counters at session end.
    */
   sttSource: SttUsageSource
+  /**
+   * Reward-economy funding source for this session (L2 §5). v1 is always
+   * `'earned'` — server-hardcoded at assembly, NO `create`-wire field. Persisted
+   * at teardown into the deduct row's `source_ref` (`'session:earned'`) and the
+   * usage record, so a later phase can make paid-currency-funded sessions
+   * reward-ineligible without a schema change.
+   */
+  fundingSource: string
+  /**
+   * Wall-clock ms at session establishment, set atomically in `assembleSession`
+   * (finding 9 invariant: always a finite number whenever `sessionState` exists).
+   * The billed-minutes basis — teardown bills `ceil((now - startedAtMs)/60_000)`.
+   * A non-finite value is refused at teardown (a NaN amount would permanently
+   * poison the ledger `SUM(amount)`).
+   */
+  startedAtMs: number
+  /**
+   * The session's minute budget captured at create = the starburst balance
+   * (1 starburst = 1 minute). Caps the billed minutes and arms the burn-through
+   * wind-down timer. Optional: absent = uncapped (a dev/demo priceless session
+   * with no `COMPANION_DB` binding).
+   */
+  budgetMinutes?: number
 }
 
 /** The three wired providers a turn drives. */
@@ -796,16 +819,37 @@ export const CLOSING_DIRECTIVE_TIMEOUT =
   'stopped — name the specific module or step reached. State facts only; do NOT console or ' +
   'encourage. Spoken naturally. No lists, no brackets, no markdown.'
 
+/**
+ * Server-side wind-down directive for the burn-through recap (reward-economy L2
+ * §5). Fired when the session's starburst budget runs out while the WS is
+ * resident — a distinct "companion time depleted" register, NOT a game outcome.
+ * The persona's own voice rule (spoken Chinese, no brackets/markdown) governs
+ * the reply; the directive constrains only LENGTH, INTENT, and REGISTER: a warm,
+ * brief farewell acknowledging the shared time is ending and inviting a return.
+ */
+export const CLOSING_DIRECTIVE_DEPLETED =
+  '[session winding down: companion time depleted] The shared starburst time for this ' +
+  'session has run out. In the language you have been speaking (Chinese), give the player a ' +
+  'warm, brief farewell in one or two short sentences — acknowledge that your time together ' +
+  'is ending for now and gently invite them to come back. Spoken naturally. No lists, no ' +
+  'brackets, no markdown.'
+
 /** Back-compat alias: the pre-outcome single directive is the defused one. */
 export const CLOSING_DIRECTIVE = CLOSING_DIRECTIVE_DEFUSED
 
-/** Select the closing directive for a run outcome. Absent outcome ⇒ defused. */
-export function closingDirectiveFor(outcome: RecapOutcome = 'defused'): string {
+/**
+ * Select the closing directive for a recap register. Absent ⇒ defused. Accepts
+ * the SERVER-only `'depleted'` register in addition to the three client
+ * outcomes (see {@link RecapRegister}).
+ */
+export function closingDirectiveFor(outcome: RecapRegister = 'defused'): string {
   switch (outcome) {
     case 'exploded':
       return CLOSING_DIRECTIVE_EXPLODED
     case 'timeout':
       return CLOSING_DIRECTIVE_TIMEOUT
+    case 'depleted':
+      return CLOSING_DIRECTIVE_DEPLETED
     case 'defused':
       return CLOSING_DIRECTIVE_DEFUSED
   }
@@ -828,7 +872,7 @@ export function closingDirectiveFor(outcome: RecapOutcome = 'defused'): string {
 export async function* runClosingTurn(
   providers: Pick<TurnProviders, 'llm' | 'tts'>,
   state: SessionState,
-  outcome: RecapOutcome = 'defused'
+  outcome: RecapRegister = 'defused'
 ): AsyncIterable<AiResponseChunk> {
   const turnStart = Date.now()
   const userMessage: ChatMessage = { role: 'user', content: closingDirectiveFor(outcome) }

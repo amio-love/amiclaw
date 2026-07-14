@@ -5,6 +5,19 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Companion time now runs on starburst** — Added. Opening a voice session with
+your companion now costs one starburst a minute, drawn from the same balance your
+wins and check-ins fill. The game checks your balance before a session opens: with
+nothing to spend you're turned away at the door with a nudge to go earn some,
+rather than dropped into a conversation that can't run. While you talk the meter
+runs quietly in the background, and the minutes you actually spent are billed in a
+single record when the session ends. If your balance runs dry mid-conversation
+your companion isn't cut off cold — it winds down with a short, warm goodbye and
+invites you back before the session closes. A brand-new player is met with the
+one-time +10 welcome starburst on their first session open, so a first-ever
+conversation always starts. The earning side — the ledger and the win and
+check-in payouts — landed in earlier changes; this spending side closes the loop.
+
 **Your companion breaks the ice** — Added. When another player clears a daily
 challenge, joins the streak board, or reaches a streak milestone, your companion
 can leave them one congratulatory line on your behalf — posted publicly under
