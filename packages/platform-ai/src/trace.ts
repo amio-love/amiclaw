@@ -45,6 +45,8 @@ export interface TraceFields {
 
   // --- Counts ---
   turnCount?: number
+  /** Billed session minutes deducted from the starburst ledger at teardown. */
+  minutes?: number
   deltaCount?: number
   llmDeltaCount?: number
   sentenceCount?: number

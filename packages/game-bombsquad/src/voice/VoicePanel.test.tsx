@@ -23,6 +23,7 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
     isAiSpeaking: false,
     error: null,
     summary: null,
+    summaryReason: null,
     endSession,
     requestClosing,
     ...partial,

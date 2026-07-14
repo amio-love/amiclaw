@@ -77,6 +77,10 @@ export type GameVoiceErrorCode =
   | 'microphone'
   | 'transport'
   | 'server'
+  // The session pricing gate refused this open — the player's starburst balance
+  // is below the session minimum (reward-economy §5). A stable code so the panel
+  // can present a narrative earn-CTA intercept instead of a raw server error.
+  | 'insufficient-balance'
 
 export interface GameVoiceGuards {
   connectMs: number
@@ -198,6 +202,13 @@ export interface UseGameVoiceSessionResult {
   errorCode: GameVoiceErrorCode | null
   /** Session summary, set once the session ends cleanly. */
   summary: unknown | null
+  /**
+   * The terminal summary's optional reason. `'balance-depleted'` when the session
+   * ended because the starburst budget ran out mid-conversation (reward-economy
+   * §5 burn-through wind-down) so the panel can show a depletion / earn-more beat;
+   * `null` for an ordinary `end`-driven close.
+   */
+  summaryReason: string | null
   /** Explicit user-gesture open path; a pre-granted mic stream is reused once. */
   openSession: (stream?: MediaStream) => void
   /** Abruptly stop voice without creating a companion-memory summary. */
@@ -777,7 +788,13 @@ export function useGameVoiceSession(
         // back to listening. The reducer drops the benign codes, so no error line
         // shows; an unexpected code still surfaces through the reducer.
         if (frame.code === 'turn_in_flight' && awaitingResponseRef.current) setAwaiting(false)
-        if (frame.code !== 'turn_in_flight' && frame.code !== 'already_created') {
+        if (frame.code === 'insufficient_balance') {
+          // Session pricing gate refused this open (reward-economy §5): surface
+          // the stable code so the panel shows the earn-CTA intercept, not a raw
+          // server error. The DO closes 1000 right after, so `onclose` lands
+          // `closed`; the reducer still stores the bounded message.
+          setErrorCode('insufficient-balance')
+        } else if (frame.code !== 'turn_in_flight' && frame.code !== 'already_created') {
           setErrorCode('server')
         }
         safeDispatch({ type: 'frame', frame })
@@ -994,6 +1011,7 @@ export function useGameVoiceSession(
     // `SessionSummary` here, at this package's boundary. The client only forwards
     // the value, so this assertion is the single place the type is recovered.
     summary: state.summary,
+    summaryReason: state.summaryReason,
     openSession,
     closeSession,
     updateGameState,

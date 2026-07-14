@@ -28,6 +28,7 @@ function hookState(partial: Partial<UseGameVoiceSessionResult> = {}): UseGameVoi
     error: null,
     errorCode: null,
     summary: null,
+    summaryReason: null,
     openSession,
     closeSession: vi.fn(),
     updateGameState: vi.fn(),

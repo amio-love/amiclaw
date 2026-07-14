@@ -131,6 +131,8 @@ function freshState(): SessionState {
     turnCount: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
     sttSource: 'provider-reported',
+    fundingSource: 'earned',
+    startedAtMs: Date.now(),
   }
 }
 

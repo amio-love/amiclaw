@@ -77,6 +77,12 @@
 import { Agent, type Connection, type ConnectionContext, type WSMessage } from 'agents'
 import type { CompanionDb } from '../../companion-memory/src/db'
 import { resolveCompanionContext } from '../../companion-memory/src/resolver'
+import { MIN_SESSION_BALANCE } from '../../companion-memory/src/economy'
+import {
+  creditWelcomeGrant,
+  deductSessionMinutes,
+  readBalance,
+} from '../../companion-memory/src/ledger'
 import type { CompanionContext } from '../../companion-memory/src/types'
 import {
   handOffSummaryCapture,
@@ -475,6 +481,31 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * across the `clearSession` epoch boundary.
    */
   private usageFlushed = false
+  /**
+   * Whether THIS session's minute deduct has been written to the ledger — the
+   * sibling of `usageFlushed` for the reward-economy teardown (L2 §5, finding 8).
+   * `finalizeSessionAccounting` is called from BOTH `endSession` and the
+   * owner-socket close path; this single guard makes the negative ledger row
+   * fire exactly once across the two terminal paths. Reset at `create` /
+   * `clearSession`, so it never bleeds across the session generation boundary.
+   */
+  private deductFlushed = false
+  /**
+   * The burn-through wind-down timer, armed at `create` when the session has a
+   * finite starburst budget (L2 §5). A single WS-resident `setTimeout` (the DO
+   * stays resident with hibernation off) stands in for per-minute ticking — no
+   * per-minute DB writes. Fires the narrative wind-down at the budget boundary;
+   * cleared on any earlier teardown (`clearSession`). NOT the DO `alarm()`
+   * (accepted decision — SDK collision risk).
+   */
+  private burnTimer: ReturnType<typeof setTimeout> | undefined
+  /**
+   * Wall-clock ms per billed minute — the burn-through timer basis (budget
+   * minutes × this). `60_000` in production; a workerd timer test overrides it
+   * to a small value so a real `setTimeout` fires the wind-down deterministically
+   * fast (the L3 timer-fire obligation), without fake timers.
+   */
+  private burnMinuteMs = 60_000
   /** Wired providers for the session. */
   private providers: TurnProviders | undefined
   /**
@@ -505,6 +536,17 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    * dangling. `undefined` when no reply is running.
    */
   private activeTurn: AsyncIterator<AiResponseChunk> | undefined
+  /**
+   * A deferred burn-through wind-down, set when the budget timer fires WHILE a
+   * turn is in flight (L2 §5, finding 1 — the wind-down recap must not overlap a
+   * live turn). Holds the owner socket to wind down; consumed by `streamTurn`'s
+   * `finally` the instant the in-flight turn fully drains, which re-invokes
+   * `windDown` (now with no turn in flight) so the recap runs strictly AFTER the
+   * live turn — never concurrently. Cleared on any teardown (`clearSession`), so a
+   * pending wind-down can never fire against a later session generation.
+   * `undefined` when no wind-down is pending.
+   */
+  private pendingWindDown: Connection | undefined
   /**
    * Monotonic session-generation counter — the epoch guard that keeps a stale
    * turn-loop `finally` from clobbering a NEWER session's shared `turnInFlight`/
@@ -717,6 +759,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     // so the flush cannot double-fire across the two paths — and the
     // `usageFlushed` guard backstops it regardless.
     void this.cancelActiveTurn()
+    this.finalizeSessionAccounting()
     this.flushUsage()
     this.clearSession()
   }
@@ -751,7 +794,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     userId: string,
     manualData: ManualData,
     gameState?: GameState,
-    extras?: { companionContext?: CompanionContext; gameRunId?: string }
+    extras?: { companionContext?: CompanionContext; gameRunId?: string; budgetMinutes?: number }
   ): string {
     const normalizedGameState = normalizeVoiceGameState(
       gameId,
@@ -771,6 +814,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.providers = assembled.providers
     this.sessionState = assembled.state
     this.usageFlushed = false
+    this.deductFlushed = false
     return assembled.sessionId
   }
 
@@ -820,6 +864,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         : {}),
       occurredAt: new Date().toISOString(),
     }
+    // Reward-economy deduct (L2 §5): bill the session's minutes in one negative
+    // ledger row, the sibling of the usage flush below. Both read the still-live
+    // session fields here, before any `clearSession`, and each is guarded to fire
+    // exactly once across `endSession` + the owner-close path.
+    this.finalizeSessionAccounting()
     this.flushUsage()
     return summary
   }
@@ -846,6 +895,28 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     } catch (error) {
       console.warn('session-do: companion-context resolution failed (memory-less session)', error)
       return undefined
+    }
+  }
+
+  /**
+   * Read the session's starburst budget at `create` (reward-economy L2 §5), on
+   * the existing `COMPANION_DB` binding — `create` is a session BOUNDARY, not a
+   * voice-turn, so a D1 read here honors "no D1 in the hot path". First mints the
+   * idempotent welcome grant (a brand-new user gets +10 so a first-ever session
+   * opens), THEN reads the balance AFTER the grant. Total / fail-open:
+   *  - no `COMPANION_DB` binding (dev/demo) -> `Infinity` (a priceless session);
+   *  - any D1 failure -> `Infinity` (never block a session on a read failure).
+   * The returned number is the minute budget (1 starburst = 1 minute).
+   */
+  private async readSessionBudgetBestEffort(userId: string): Promise<number> {
+    const db = this.env.COMPANION_DB
+    if (db === undefined) return Infinity
+    try {
+      await creditWelcomeGrant(db, userId)
+      return await readBalance(db, userId)
+    } catch (error) {
+      console.warn('session-do: session-budget read failed (priceless session)', error)
+      return Infinity
     }
   }
 
@@ -1023,6 +1094,15 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private clearSession(): void {
     this.turnEpoch += 1
+    // Cancel the burn-through wind-down timer for this now-torn generation. A
+    // clear on a timer that already fired is a harmless no-op.
+    if (this.burnTimer !== undefined) {
+      clearTimeout(this.burnTimer)
+      this.burnTimer = undefined
+    }
+    // Drop any deferred wind-down (finding 1): the session is torn down, so a
+    // pending wind-down must never fire against the next generation.
+    this.pendingWindDown = undefined
     this.sessionState = undefined
     this.userId = undefined
     this.sessionId = undefined
@@ -1035,6 +1115,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     this.activeTurn = undefined
     this.ownerSocket = undefined
     this.usageFlushed = false
+    this.deductFlushed = false
     this.prerollFrames = []
     this.prerollBytes = 0
   }
@@ -1089,6 +1170,63 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         turnCount: state.turnCount,
         usage: { ...state.usage },
         sttSource: state.sttSource,
+        fundingSource: state.fundingSource,
+      })
+    )
+  }
+
+  /**
+   * Deduct the session's billed minutes in ONE negative ledger row — the sibling
+   * of `flushUsage`, reached from BOTH `endSession` and the owner-socket close
+   * path, guarded by the single `deductFlushed` boolean so it writes exactly once
+   * across the two terminal boundaries (L2 §5, finding 8). Billed minutes =
+   * `min(ceil(elapsed / 60_000), budgetMinutes)` with a floor of 1 — any
+   * established session bills at least a minute (its opening greeting is real
+   * LLM+TTS cost, finding iii).
+   *
+   * Fail-open, undercount-only, non-blocking:
+   *  - no `COMPANION_DB` binding (dev/demo) -> skip (a priceless session);
+   *  - no `budgetMinutes` established -> skip (gate/deduct fail-open SYMMETRY): a
+   *    transient D1 failure in the create-gate admits the session priceless
+   *    (`readSessionBudgetBestEffort` returns Infinity, so no `budgetMinutes` is
+   *    threaded), so the deduct must also fail open — otherwise it would bill the
+   *    UNCAPPED full elapsed if D1 recovered by teardown, an asymmetry that
+   *    charges the user for a session the gate priced at zero;
+   *  - a non-finite `startedAtMs` -> skip (the NaN-poison invariant, finding 9 —
+   *    a NaN amount would permanently poison `SUM(amount)` and can never be
+   *    written; `deductSessionMinutes` refuses it too, belt and braces);
+   *  - the deduct rides `ctx.waitUntil` and swallows its own D1 failure, so a
+   *    slow or failing ledger never blocks or delays session teardown.
+   * `deductSessionMinutes` writes `source_ref = 'session:' + fundingSource`
+   * (v1 `'session:earned'`) under the unique `session:{sessionId}` key, so a
+   * double-fired teardown is a no-op regardless of the guard.
+   */
+  private finalizeSessionAccounting(): void {
+    if (this.deductFlushed) return
+    this.deductFlushed = true
+    const db = this.env.COMPANION_DB
+    const state = this.sessionState
+    const sessionId = this.sessionId
+    const userId = this.userId
+    if (db === undefined || !state || sessionId === undefined || userId === undefined) return
+    if (!Number.isFinite(state.startedAtMs)) return
+    // Symmetry with the fail-open create-gate: a session admitted priceless (no
+    // budget established because the balance read threw) is never billed. This is
+    // distinct from the dev/demo no-COMPANION_DB case, which already returned above.
+    if (state.budgetMinutes === undefined) return
+    const elapsed = Math.max(1, Math.ceil((Date.now() - state.startedAtMs) / 60_000))
+    const minutes = Math.min(elapsed, state.budgetMinutes)
+    if (!Number.isFinite(minutes) || minutes <= 0) return
+    traceTurn('session', 'deduct', { sessionId, minutes })
+    this.ctx.waitUntil(
+      deductSessionMinutes(db, {
+        userId,
+        sessionId,
+        minutes,
+        fundingSource: state.fundingSource,
+      }).catch((err: unknown) => {
+        // Fail-open: a D1 failure is an accepted undercount, never a teardown block.
+        console.error(`platform-ai: session deduct failed for session:${sessionId}`, err)
       })
     )
   }
@@ -1197,6 +1335,18 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       if (this.turnEpoch === myEpoch) {
         this.turnInFlight = false
         this.activeTurn = undefined
+        // A budget depletion fired while this turn was streaming and DEFERRED the
+        // wind-down (finding 1: the wind-down recap must not overlap a live turn).
+        // Now that this turn has fully drained, re-invoke the deferred wind-down —
+        // with no turn in flight it proceeds straight to the recap + teardown, so
+        // the two turns are strictly serial. Gated by the epoch match above, so a
+        // stale generation's `finally` never launches a wind-down against a newer
+        // session (a torn-down session already reset `pendingWindDown`).
+        const deferred = this.pendingWindDown
+        if (deferred !== undefined) {
+          this.pendingWindDown = undefined
+          void this.windDown(deferred)
+        }
       }
     }
   }
@@ -1275,6 +1425,97 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   }
 
   /**
+   * Burn-through wind-down: the session's starburst budget elapsed while the WS
+   * was resident (reward-economy L2 §5). Fired by the `burnTimer` `setTimeout`.
+   * Run ONE narrative wind-down turn (the closing-recap path in the distinct
+   * `'depleted'` register — a warm farewell, NOT a game outcome), then tear the
+   * session down: `endSession` deducts the now-≈budget minutes + flushes usage +
+   * builds the summary, then clear and close 1000 with a `summary` frame carrying
+   * `reason: 'balance-depleted'` so the panel shows the depletion beat.
+   *
+   * Serial with any live turn (finding 1): if a turn is in flight when the timer
+   * fires, the wind-down is DEFERRED (`pendingWindDown`) until that turn drains,
+   * so the recap never overlaps a live turn on the socket. The depletion outcome
+   * is TERMINAL (findings 2 + 3): it deducts, clears every guard timer, and closes
+   * even if a mid-farewell barge-in (`speech-start`) supersedes the recap — the
+   * teardown aborts ONLY when a competing terminal path (`end` / owner close)
+   * already unbound the session, keyed on the session identity, not the epoch (a
+   * barge-in advances the epoch but leaves the session bound). The eviction edge
+   * (isolate evicted mid-session) is handled by `onSocketClose` for the
+   * elapsed-so-far (undercount, fail-open) — DO-`alarm()` durability is a followup,
+   * not v1.
+   */
+  private async windDown(ws: Connection): Promise<void> {
+    this.burnTimer = undefined
+    const sessionId = this.sessionId
+    const userId = this.userId
+    if (!this.sessionState || !this.providers || sessionId === undefined || userId === undefined) {
+      return
+    }
+    // Serialize with an in-flight turn (finding 1): a reply / greeting / recap
+    // streaming when the budget timer fires would otherwise overlap the wind-down
+    // recap on the same socket — two concurrent `streamTurn`s clobbering the shared
+    // `activeTurn`/`turnInFlight` guard and interleaving audio. Defer rather than
+    // abruptly supersede the live turn: park the wind-down and let the running turn
+    // finish. `streamTurn`'s `finally` re-invokes `windDown` the instant that turn
+    // drains, so the recap runs strictly AFTER it and the two never overlap. (If a
+    // barge-in supersedes the live turn instead, its stale `finally` is an
+    // epoch-fenced no-op, but `pendingWindDown` survives on the still-bound session
+    // and the next turn's `finally` — or a teardown that resets it — carries it, so
+    // the wind-down is never lost or fired against a torn-down session.)
+    if (this.turnInFlight) {
+      this.pendingWindDown = ws
+      return
+    }
+    const myEpoch = this.turnEpoch
+    try {
+      traceTurn('turn', 'winddown-start', { sessionId })
+      const turn = runClosingTurn(this.providers, this.sessionState, 'depleted')[
+        Symbol.asyncIterator
+      ]()
+      await this.streamTurn(ws, turn)
+    } catch (err: unknown) {
+      // A provider error during the wind-down recap: fail-loud-close like the
+      // closing-recap path, epoch-fenced.
+      if (this.turnEpoch === myEpoch) {
+        const reason = err instanceof Error ? err.message : 'wind-down failed'
+        traceTurnError('turn', 'winddown-error', {
+          sessionId,
+          messageChars: reason.length,
+        })
+        try {
+          ws.close(1008, safeCloseReason(reason))
+        } catch {
+          // socket already gone — nothing to fail loud on.
+        }
+      }
+      return
+    }
+    // Terminal-teardown guard (finding 3): the depletion OUTCOME must be terminal.
+    // Abort ONLY when a competing TERMINAL path (a real `end` / owner-socket close)
+    // already tore this session down — detected by the bound session being gone or
+    // replaced (`clearSession` nulls `sessionId`; a reconnect binds a new one). A
+    // mid-farewell barge-in (`speech-start`) ALSO advances the epoch but leaves the
+    // session BOUND, so keying the abort on the epoch (as the prior code did)
+    // wrongly abandoned the teardown — leaving the depleted session un-deducted and
+    // un-closed. Keying on the session identity instead lets a barge-in still wind
+    // down to a terminal close.
+    if (this.sessionId !== sessionId) return
+    // Tear down exactly as a normal `end` does (finding 2): `endSession` finalizes
+    // accounting (deduct ≈ budget) + flushes usage + builds the summary + discards
+    // any open utterance; CANCEL any turn a mid-farewell barge-in may have started
+    // (the same fire-and-forget cancel the `end` path uses, so no provider stream
+    // dangles); then `clearSession` clears the burn timer + resets the turn guards.
+    // Hand off the capture, send the depletion summary, and close 1000.
+    const summary = this.endSession(sessionId, userId)
+    void this.cancelActiveTurn()
+    this.clearSession()
+    void handOffSummaryCapture(this.env.COMPANION_CONSOLIDATOR, summary)
+    ws.send(JSON.stringify({ type: 'summary', summary, reason: 'balance-depleted' }))
+    ws.close(1000, safeCloseReason('balance depleted'))
+  }
+
+  /**
    * Reject cross-session / cross-user access. Delegates to the pure
    * `assertSessionOwnership` predicate (the L2 ownership invariant — the `turn`
    * and `end` paths verify ownership against the bound session).
@@ -1344,7 +1585,30 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           this.sendError(ws, 'already_created', 'session already created')
           return
         }
-        // Bind the AUTH-validated user id, NOT any id the client claims.
+        // Session pricing gate (reward-economy L2 §5). Best-effort welcome-mint +
+        // balance read on the existing `COMPANION_DB` binding (a boundary read,
+        // not a hot-path turn). A brand-new user is minted +10 before the read,
+        // so a first-ever session opens; a below-minimum balance is refused with
+        // a structured in-band frame + a clean 1000 close, and the session never
+        // assembles. Dev/demo (no binding) or a D1 failure returns `Infinity`
+        // (fail-open, a priceless session).
+        const budget = await this.readSessionBudgetBestEffort(socketUserId)
+        if (budget < MIN_SESSION_BALANCE) {
+          this.sendError(ws, 'insufficient_balance', 'not enough starburst to open a session')
+          ws.close(1000, safeCloseReason('insufficient balance'))
+          return
+        }
+        // Re-apply the post-await already-created guard: the budget read is a
+        // second await, so a concurrent `create` could have interleaved across it
+        // — same discipline as the companion-context await above, keeping the
+        // check + the synchronous `createSession` atomic.
+        if (this.sessionState) {
+          this.sendError(ws, 'already_created', 'session already created')
+          return
+        }
+        // Bind the AUTH-validated user id, NOT any id the client claims. A finite
+        // budget threads into `SessionState.budgetMinutes` (the deduct cap + the
+        // burn-through basis); an `Infinity` dev/demo budget stays uncapped.
         const sessionId = this.createSession(
           msg.gameId,
           socketUserId,
@@ -1353,6 +1617,7 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           {
             ...(companionContext !== undefined ? { companionContext } : {}),
             ...(msg.gameRunId !== undefined ? { gameRunId: msg.gameRunId } : {}),
+            ...(Number.isFinite(budget) ? { budgetMinutes: budget } : {}),
           }
         )
         // Record THIS socket as the session owner. Only this exact socket's close
@@ -1361,6 +1626,16 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         // (`already_created`) never repoints the owner.
         this.ownerSocket = ws
         ws.send(JSON.stringify({ type: 'created', sessionId }))
+        // Arm the burn-through wind-down timer (L2 §5). A single WS-resident
+        // `setTimeout` (the DO stays resident with hibernation off) stands in for
+        // per-minute ticking — no per-minute DB writes. Only for a finite,
+        // positive budget: a dev/demo priceless session never depletes. Cleared
+        // on any earlier teardown (`clearSession`).
+        if (Number.isFinite(budget) && budget > 0) {
+          this.burnTimer = setTimeout(() => {
+            void this.windDown(ws)
+          }, budget * this.burnMinuteMs)
+        }
         // AI speaks first: fire the opening greeting (LLM->TTS, no player audio)
         // in the background, when enabled (default on — AI-first is the product
         // behaviour). `runOpeningGreeting` owns its own errors (fail-loud 1008 on

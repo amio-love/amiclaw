@@ -143,11 +143,15 @@ describe('real VoiceSessionDO — direct endSession flush', () => {
       turnCount: number
       usage: UsageCounters
       sttSource: string
+      fundingSource: string
     }
     expect(record.gameId).toBe('demo-mock')
     expect(record.turnCount).toBe(0)
     expect(record.usage).toEqual(ZERO_COUNTERS)
     expect(record.sttSource).toBe('provider-reported')
+    // Reward-economy: the flushed usage record carries the session funding source
+    // (v1 always 'earned'), so it and the ledger deduct row agree on funding.
+    expect(record.fundingSource).toBe('earned')
   })
 
   it('a repeated direct endSession stays guarded — one write, one registration', async () => {

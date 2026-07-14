@@ -123,7 +123,7 @@ export type ServerFrame =
   | { type: 'chunk'; kind: 'text'; text?: string; done: boolean }
   | { type: 'chunk'; kind: 'audio'; audio?: string; done: false }
   | { type: 'action'; actions: CoBuildAction[] }
-  | { type: 'summary'; summary: SessionSummaryPayload }
+  | { type: 'summary'; summary: SessionSummaryPayload; reason?: string }
   | { type: 'error'; code?: string; message?: string }
 
 /** Reducer actions: server frames plus the local lifecycle transitions. */
@@ -161,6 +161,14 @@ export interface VoiceSessionState {
   error: string | null
   /** Session summary, set once `end` is acknowledged. */
   summary: SessionSummaryPayload | null
+  /**
+   * The terminal `summary` frame's optional `reason` (reward-economy §5). The
+   * server sets `'balance-depleted'` when the session ended because the starburst
+   * budget ran out mid-conversation (the burn-through wind-down), so the panel can
+   * show a depletion / earn-more beat rather than a plain clean close. `null` for
+   * an ordinary `end`-driven summary.
+   */
+  summaryReason: string | null
 }
 
 export const initialVoiceState: VoiceSessionState = {
@@ -171,6 +179,7 @@ export const initialVoiceState: VoiceSessionState = {
   turnDone: true,
   error: null,
   summary: null,
+  summaryReason: null,
 }
 
 /** Cap an error message to a bounded length so a provider error never floods state. */
@@ -247,7 +256,16 @@ function reduceFrame(state: VoiceSessionState, frame: ServerFrame): VoiceSession
     }
 
     case 'summary':
-      return { ...state, status: 'closed', summary: frame.summary }
+      // A terminal summary lands `closed` and exposes the summary payload. The
+      // optional `reason` (`'balance-depleted'` on a burn-through wind-down)
+      // rides alongside so the panel can distinguish a budget-depletion end from
+      // an ordinary `end`; absent on a normal close (reset to null).
+      return {
+        ...state,
+        status: 'closed',
+        summary: frame.summary,
+        summaryReason: frame.reason ?? null,
+      }
 
     case 'error':
       // In-band, non-fatal server error; it does NOT close the socket. The benign
