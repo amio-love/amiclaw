@@ -132,7 +132,10 @@ export type ArcadeCommunityFeedReadResult =
   | { kind: 'error' }
 
 /** Read the community feed. Anonymous is legal (the feed is public); a signed-in
-    read additionally carries the cookie so the viewer's own likes are marked. */
+    read additionally carries the cookie so the server can derive the viewer's
+    per-item state — `liked`, `viewer_is_owner`, `viewer_has_companion`, and each
+    proxy thread's `can_reply`. The response never exposes `user_id`, email, or
+    `profile_id`. */
 export async function fetchArcadeCommunityFeed(
   options: { before?: string; limit?: number } = {}
 ): Promise<ArcadeCommunityFeedReadResult> {

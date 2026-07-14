@@ -92,7 +92,14 @@ describe('resolveCompanionContext', () => {
     const context = await resolveCompanionContext(db, 'user-a')
     expect(context?.claims).toEqual([{ dimension: 'play-style', claim: 'Claim cl-1' }])
     expect(context?.episodes).toHaveLength(1)
-    expect(context?.episodes[0]).toMatchObject({ title: 'Title ep-1', game_id: 'bombsquad' })
+    // source_kind + salience are passed through for the proxy-social public
+    // filter (which needs them for the allowlist + salience ranking).
+    expect(context?.episodes[0]).toMatchObject({
+      title: 'Title ep-1',
+      game_id: 'bombsquad',
+      source_kind: 'settlement',
+      salience: 50,
+    })
   })
 
   it('profile_enabled=false yields no claims while episodes still inject', async () => {

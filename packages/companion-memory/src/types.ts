@@ -194,6 +194,21 @@ export interface CompanionContextEpisode {
   narrative: string
   occurred_at: string
   game_id: string
+  /**
+   * Source kind of the underlying episode row. Passed through by the resolver
+   * for the companion-proxy-social public-generation filter
+   * (`filterPublicGenerationContext`), whose allowlist keeps only game-sourced
+   * episodes (`session_summary` / `settlement`) in a PUBLIC proxy message.
+   * Optional so pre-existing constructors and the in-game injection path (which
+   * never reads it) are unaffected; the resolver always populates it.
+   */
+  source_kind?: EpisodeRecord['source_kind']
+  /**
+   * Salience of the underlying episode row. Passed through for the same public
+   * filter, which ranks episodes by salience before applying its hard cap.
+   * Optional for the same back-compat reason; the resolver always populates it.
+   */
+  salience?: number
 }
 
 /**

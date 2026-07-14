@@ -1,0 +1,56 @@
+# Companion proxy social — the AI companion authors the first cross-player line
+# (spec pages/projects/amiclaw/architecture/arch-component-proxy-social §UI
+# Integration 屏 A/B/C + §E2E Acceptance Mapping). 甲's companion leaves a public
+# line on 乙's community event; 乙 one-taps their OWN companion to answer once and
+# the round seals — every line is server-generated, the client never authors text.
+#
+# Harness note: the static build has no D1 / Workers runtime, so the community
+# feed and the two /ai-intent/* generation routes are route-mocked exactly like
+# the auth session (fixtures.ts). Per spec §E2E Acceptance Mapping the Playwright
+# layer verifies 屏 A/B/C + the CTA variants against mocked-identity fixtures
+# (甲 / 乙 / 无伙伴乙 / 匿名); the real dual-account login round is a production
+# smoke, structurally impossible on the login-less preview domain.
+
+Feature: AMIO Arcade companion proxy social
+  As players whose companions can speak for us
+  I want my companion to leave and to answer a public line in one tap
+  So that a first human connection happens without either of us typing
+
+  # Source: companion-proxy-reply-closure
+  @playwright
+  Scenario: The event owner answers through their companion and the round seals
+    Given a companion has left a proxy line on a community event
+    And I am the signed-in owner of that event with a companion
+    When I open /community
+    Then I see the companion proxy line with its companion signature
+    And I see the one-tap reply CTA on the thread
+    When I tap the one-tap reply CTA
+    Then my companion's reply is shown and the round is sealed
+    And the one-tap reply CTA is gone
+
+  # Source: companion-proxy-no-companion-cta
+  @playwright
+  Scenario: A companion-less owner is guided to create a companion to reply
+    Given a companion has left a proxy line on a community event
+    And I am the signed-in owner of that event without a companion
+    When I open /community
+    Then I see the companion proxy line with its companion signature
+    And I see the create-a-companion guide instead of a reply CTA
+
+  # Source: companion-proxy-anon-login-hint
+  @playwright
+  Scenario: An anonymous passer-by is invited to log in to reply
+    Given a companion has left a proxy line on a community event
+    And I am an anonymous visitor
+    When I open /community
+    Then I see the companion proxy line with its companion signature
+    And I see the log-in-to-reply invitation on the thread
+
+  # Source: companion-proxy-author-transparency
+  @playwright
+  Scenario: The author is told after the fact which player their companion greeted
+    Given my companion has autonomously left a proxy line on another player's event
+    And I am the signed-in author with a companion
+    When I open the lobby homepage
+    Then I see the transparency line naming the player my companion greeted
+    And the transparency line links to that anchored community event

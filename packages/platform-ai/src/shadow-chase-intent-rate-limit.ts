@@ -1,5 +1,8 @@
 /**
- * Coarse per-user cost guard for Shadow Chase model intent.
+ * Coarse per-user cost guard for the bounded model-intent routes. One generic
+ * KV limiter, reused per surface via its `keyPrefix`: `shadow-chase` (default
+ * `ratelimit:shadow-intent:user:*`) and companion-proxy-social
+ * (`ratelimit:proxy-social:user:*`) each get an independent budget.
  *
  * AUTH KV has no atomic increment, so concurrent requests may lose updates.
  * That limitation is acceptable for this coarse cost throttle only; this is
@@ -11,6 +14,8 @@ export const RATE_LIMIT_REQUESTS = 12
 export const RATE_LIMIT_WINDOW_SECONDS = 60
 
 const WINDOW_MS = RATE_LIMIT_WINDOW_SECONDS * 1_000
+/** Default key namespace (shadow-chase). Other surfaces pass their own prefix to
+    the `KvIntentRateLimiter` constructor for an independent budget. */
 const KEY_PREFIX = 'ratelimit:shadow-intent:user:'
 
 interface RateLimitState {
@@ -56,13 +61,23 @@ function parseState(raw: string): RateLimitState {
 }
 
 export class KvIntentRateLimiter implements IntentRateLimiter {
-  constructor(private readonly kv: IntentRateLimitKv) {}
+  /**
+   * @param kv        AUTH KV surface for the coarse counter.
+   * @param keyPrefix Namespace for the per-user counter key. Defaults to the
+   *   shadow-intent prefix (unchanged for existing callers). A different intent
+   *   surface (e.g. the companion-proxy routes) passes its own prefix so its
+   *   budget is independent, not shared with shadow-chase.
+   */
+  constructor(
+    private readonly kv: IntentRateLimitKv,
+    private readonly keyPrefix: string = KEY_PREFIX
+  ) {}
 
   async consume(userId: string, nowMs: number): Promise<IntentRateLimitResult> {
     if (!userId || !Number.isSafeInteger(nowMs) || nowMs < 0) {
       throw new Error('shadow-intent-rate-limit: invalid input')
     }
-    const key = `${KEY_PREFIX}${userId}`
+    const key = `${this.keyPrefix}${userId}`
     const raw = await this.kv.get(key)
     let state: RateLimitState
     if (raw === null) {

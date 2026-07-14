@@ -27,6 +27,8 @@ interface EpisodeRow {
   narrative: string
   occurred_at: string
   game_id: string
+  source_kind: 'session_summary' | 'settlement'
+  salience: number
 }
 
 export async function resolveCompanionContext(
@@ -65,7 +67,7 @@ export async function resolveCompanionContext(
   // Episodes: most-recent slot + high-salience slot, deduped, recency first.
   const { results: recent } = await db
     .prepare(
-      `SELECT id, title, narrative, occurred_at, game_id
+      `SELECT id, title, narrative, occurred_at, game_id, source_kind, salience
        FROM episode
        WHERE user_id = ? AND status = 'active'
        ORDER BY occurred_at DESC, id DESC
@@ -75,7 +77,7 @@ export async function resolveCompanionContext(
     .all<EpisodeRow>()
   const { results: salient } = await db
     .prepare(
-      `SELECT id, title, narrative, occurred_at, game_id
+      `SELECT id, title, narrative, occurred_at, game_id, source_kind, salience
        FROM episode
        WHERE user_id = ? AND status = 'active' AND salience >= ?
        ORDER BY salience DESC, occurred_at DESC, id DESC
@@ -94,6 +96,8 @@ export async function resolveCompanionContext(
       narrative: row.narrative,
       occurred_at: row.occurred_at,
       game_id: row.game_id,
+      source_kind: row.source_kind,
+      salience: row.salience,
     })
   }
 

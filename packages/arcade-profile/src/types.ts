@@ -165,12 +165,49 @@ export interface ArcadeStreakLeaderboardResponse {
    honest quiet state, never padded fakes. */
 export type ArcadeCommunityFeedTemplate = 'daily_clear' | 'leaderboard_entry' | 'streak_milestone'
 
+/* A companion proxy reply — the single, one-round-capped answer 乙's companion
+   writes back on a proxy message. Only the write-time signature snapshot and the
+   AI-generated body ever reach the wire; the responder's user_id is never
+   exposed (it lives only as message.target_user_id in the DB). */
+export interface ArcadeCommunityProxyReply {
+  responder_companion_name: string
+  responder_public_label: string
+  body: string
+  created_at: string
+}
+
+/* A companion proxy thread hanging off a community event — one message a
+   companion (甲) authored on another player's event, plus its optional single
+   reply. Signature fields are write-time snapshots; no user_id is ever
+   serialized. A single event can carry many threads (one per author companion). */
+export interface ArcadeCommunityProxyThread {
+  /** Opaque message id — the reply / render key. Never a raw user_id. */
+  message_id: string
+  author_companion_name: string
+  author_public_label: string
+  body: string
+  created_at: string
+  /** The single reply, or null while the message is unanswered. */
+  reply: ArcadeCommunityProxyReply | null
+  /** Server-derived: viewer_is_owner AND viewer_has_companion AND reply === null.
+      The client never recomputes reply eligibility from identity. */
+  can_reply: boolean
+}
+
+/* A single community feed item.
+ *
+ * Session contract: a signed-in session is read server-side ONLY to derive
+ * per-viewer state — `liked`, `viewer_is_owner`, `viewer_has_companion`, and each
+ * thread's `can_reply`. The raw session `user_id` is never reflected back.
+ * Privacy invariant: this item never exposes `user_id`, email, or `profile_id`;
+ * the sole player identity it carries is `public_label`. */
 export interface ArcadeCommunityFeedItem {
   /** Opaque, deterministic per underlying event (stable across template
       reclassification); the like key. Never a raw run_id / source_key. */
   id: string
   template: ArcadeCommunityFeedTemplate
-  /** The privacy-vetted public label — the only identity the feed ever exposes. */
+  /** The privacy-vetted public label — the sole player identity this item
+      carries. Never `user_id`, email, or `profile_id`. */
   public_label: string
   /** ISO timestamp of the real event (finished_at / created_at). Relative time
       is rendered live from this on the client — never a frozen string. */
@@ -182,6 +219,15 @@ export interface ArcadeCommunityFeedItem {
   like_count: number
   /** Whether the requesting viewer has liked this item (always false for anon). */
   liked: boolean
+  /** Companion proxy threads on this event — 0..N, one per author companion.
+      Empty when nobody has proxied on it (or before migration 0007 applies). */
+  threads: ArcadeCommunityProxyThread[]
+  /** Server-derived: the signed-in viewer owns this event. Always false for
+      anonymous viewers; never leaks the owner user_id. */
+  viewer_is_owner: boolean
+  /** Server-derived: the signed-in viewer has an AI companion (so they can
+      reply). Always false for anonymous viewers. */
+  viewer_has_companion: boolean
 }
 
 export interface ArcadeCommunityFeedResponse {

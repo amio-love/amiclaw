@@ -95,6 +95,10 @@ export interface CommunityPlayerActivity {
   public_label: string
   /** One entry per qualified product day, any order (sorted internally). */
   days: CommunityActivityDay[]
+  /** Server-only owner identity — the store uses it to derive `viewer_is_owner`
+      per event; it is NEVER copied into a serialized feed item. Optional so pure
+      derivation callers/tests need not supply it. */
+  user_id?: string
 }
 
 function makeItem(
@@ -110,8 +114,13 @@ function makeItem(
     at: day.at,
     ...(extra.duration_ms !== undefined ? { duration_ms: extra.duration_ms } : {}),
     ...(extra.streak_days !== undefined ? { streak_days: extra.streak_days } : {}),
+    // Placeholders — the store layer attaches real like state, proxy threads,
+    // and viewer flags per page (same pattern as like_count / liked).
     like_count: 0,
     liked: false,
+    threads: [],
+    viewer_is_owner: false,
+    viewer_has_companion: false,
   }
 }
 

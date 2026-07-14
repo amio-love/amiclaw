@@ -89,6 +89,26 @@ interface SubmitResponse {
   personal_best_attempt?: number
 }
 
+/** A companion proxy reply — the single, one-round-capped answer 乙's companion
+    writes. Mirrors ArcadeCommunityProxyReply (arcade-profile/types.ts). */
+interface CommunityProxyReply {
+  responder_companion_name: string
+  responder_public_label: string
+  body: string
+  created_at: string
+}
+/** A companion proxy thread on an event — 甲's companion line + its optional
+    single reply + the server-derived `can_reply`. Mirrors
+    ArcadeCommunityProxyThread (arcade-profile/types.ts). */
+interface CommunityProxyThread {
+  message_id: string
+  author_companion_name: string
+  author_public_label: string
+  body: string
+  created_at: string
+  reply: CommunityProxyReply | null
+  can_reply: boolean
+}
 interface CommunityFeedItem {
   id: string
   template: 'daily_clear' | 'leaderboard_entry' | 'streak_milestone'
@@ -98,6 +118,12 @@ interface CommunityFeedItem {
   streak_days?: number
   like_count: number
   liked: boolean
+  /** Companion proxy threads (spec §UI 屏 A/B). The real feed always carries the
+      key — [] when nobody proxied — so the fixture must too, else CommunityPage's
+      `item.threads.map` throws. Server-derived viewer flags ride alongside. */
+  threads: CommunityProxyThread[]
+  viewer_is_owner: boolean
+  viewer_has_companion: boolean
 }
 interface CommunityFeedResponse {
   items: CommunityFeedItem[]
@@ -131,6 +157,9 @@ function defaultCommunityFeed(): CommunityFeedResponse {
         duration_ms: 131_000,
         like_count: 12,
         liked: false,
+        threads: [],
+        viewer_is_owner: false,
+        viewer_has_companion: false,
       },
     ],
     next_before: null,
@@ -247,6 +276,35 @@ export class World {
   communityFeed: CommunityFeedResponse = defaultCommunityFeed()
   /** Captured community like/unlike requests (POST/DELETE /likes). */
   readonly communityLikes: { method: string; body: Record<string, unknown> }[] = []
+  /** The V1 background-trigger outcome the mocked POST /ai-intent/companion-proxy
+   *  -message returns. Default `messaged:false` (silent — no dock beat) so every
+   *  signed-in-companion scenario stays clean; the author-transparency journey
+   *  sets a `messaged:true` payload to raise the 屏 C dock line. */
+  proxyMessage: {
+    messaged: boolean
+    message_id?: string
+    target_event?: {
+      event_id: string
+      template: 'daily_clear' | 'leaderboard_entry' | 'streak_milestone'
+      target_public_label: string
+      streak_days?: number
+      duration_ms?: number
+    }
+  } = { messaged: false }
+  /** The server-generated reply the mocked POST /ai-intent/companion-proxy-reply
+   *  writes into the affected thread (the real V2 route returns no reply body, so
+   *  the client refetches the feed — the mock mutates `communityFeed` to match). */
+  proxyReplyResponder: {
+    responder_companion_name: string
+    responder_public_label: string
+    body: string
+  } = {
+    responder_companion_name: '',
+    responder_public_label: '',
+    body: '',
+  }
+  /** Captured V2 reply POST bodies (message_id only — never free text). */
+  readonly proxyReplies: Record<string, unknown>[] = []
   /** Stub config + captured frames for the mode② voice WebSocket. */
   readonly voice: VoiceMockState = {
     reply: VOICE_REPLY_TEXT,
@@ -685,6 +743,101 @@ export const test = base.extend<{ world: World }>({
             event_id: String(body.event_id ?? ''),
             like_count: liked ? 13 : 12,
             liked,
+          }),
+        })
+      })
+
+      // Companion proxy social V1 — the 甲-side background trigger (POST
+      // /ai-intent/companion-proxy-message). The real route runs server-side
+      // candidate-selection + bounded generation; the static harness has no
+      // Worker/LlmProvider, so it returns `world.proxyMessage`. Default
+      // `messaged:false` (silent) keeps every non-author scenario free of a dock
+      // beat; the author-transparency journey sets a `messaged:true` payload to
+      // raise the 屏 C line. Mirrors the client's best-effort contract: any
+      // non-`messaged:true` outcome surfaces nothing.
+      await page.route('**/ai-intent/companion-proxy-message', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(world.proxyMessage),
+        })
+      })
+
+      // Companion proxy social V2 — the 乙-side one-tap reply (POST
+      // /ai-intent/companion-proxy-reply). The body carries only the opaque
+      // message_id (never free text); identity is the mocked session. The real
+      // route writes the reply and returns only the write-time signature, so the
+      // mock MUTATES the affected thread in `world.communityFeed` (the client then
+      // refetches the feed to render the server-generated reply verbatim) and maps
+      // the refusal codes the client discriminates on.
+      await page.route('**/ai-intent/companion-proxy-reply', async (route) => {
+        const request = route.request()
+        if (request.method() !== 'POST') {
+          await route.fulfill({ status: 405, body: 'Method Not Allowed' })
+          return
+        }
+        let body: Record<string, unknown> = {}
+        try {
+          body = request.postDataJSON() as Record<string, unknown>
+        } catch {
+          /* body not JSON — ignore */
+        }
+        world.proxyReplies.push(body)
+        if (!world.authIdentity) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'authentication required' }),
+          })
+          return
+        }
+        const messageId = String(body.message_id ?? '')
+        let target: CommunityProxyThread | null = null
+        for (const item of world.communityFeed.items) {
+          const match = item.threads.find((thread) => thread.message_id === messageId)
+          if (match) {
+            target = match
+            break
+          }
+        }
+        if (target === null) {
+          await route.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'message not found' }),
+          })
+          return
+        }
+        if (target.reply !== null) {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ reason: 'already-replied' }),
+          })
+          return
+        }
+        // Write the server-generated reply into the mocked feed + seal the thread,
+        // so the client's post-reply refetch renders it (a fresh feed read is the
+        // real client behavior — the V2 response carries no reply body).
+        target.reply = {
+          responder_companion_name: world.proxyReplyResponder.responder_companion_name,
+          responder_public_label: world.proxyReplyResponder.responder_public_label,
+          body: world.proxyReplyResponder.body,
+          created_at: new Date(world.seedT).toISOString(),
+        }
+        target.can_reply = false
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({
+            message_id: messageId,
+            reply_public_label: world.proxyReplyResponder.responder_public_label,
+            responder_companion_name: world.proxyReplyResponder.responder_companion_name,
           }),
         })
       })

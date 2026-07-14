@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { upsertArcadeProfileEvents, upsertArcadePublicProfile } from '@amiclaw/arcade-profile/store'
+import {
+  insertProxyMessage,
+  upsertArcadeProfileEvents,
+  upsertArcadePublicProfile,
+} from '@amiclaw/arcade-profile/store'
 import type { ArcadeProfileDb } from '@amiclaw/arcade-profile/store'
 import type {
   ArcadeCommunityFeedResponse,
   ArcadeCommunityLikeResponse,
   ArcadeProfileEvent,
 } from '@amiclaw/arcade-profile/types'
-import { createTestDb } from '../../../arcade-profile/src/test-support/sqlite-db'
+import {
+  createProxySocialTestDb,
+  createTestDb,
+} from '../../../arcade-profile/src/test-support/sqlite-db'
 import { FakeKV } from '../auth/fake-kv'
 import {
   handleDeleteArcadeCommunityLike,
@@ -80,9 +87,13 @@ describe('arcade community handlers', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-07-08T08:00:00.000Z'))
+    // Degrade guards emit console.warn; silence it here (asserted in the store
+    // suite) so the API suite output stays clean.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('serves the derived feed anonymously without private identity fields', async () => {
@@ -174,5 +185,63 @@ describe('arcade community handlers', () => {
     const testEnv = await env()
     const response = await handleGetArcadeCommunityFeed(getReq(`${FEED_URL}?limit=999`), testEnv)
     expect(response.status).toBe(422)
+  })
+
+  it('embeds proxy threads + viewer flags for the signed-in owner (200)', async () => {
+    const db = createProxySocialTestDb()
+    const testEnv = await env(db)
+    // viewer-a (the session user) owns a community event and has a companion.
+    await upsertArcadeProfileEvents(db, 'viewer-a', [runEvent('run-a', '2026-07-08T08:00:00.000Z')])
+    await upsertArcadePublicProfile(db, 'viewer-a', { profileId: 'profile-a', publicLabel: 'Ava' })
+    await db
+      .prepare(`INSERT INTO companion (user_id, name, voice_id, created_at) VALUES (?, ?, ?, ?)`)
+      .bind('viewer-a', 'Nova', 'voice-default', '2026-07-01T00:00:00.000Z')
+      .run()
+
+    const anonFeed = await handleGetArcadeCommunityFeed(getReq(FEED_URL), testEnv)
+    const eventId = ((await anonFeed.json()) as ArcadeCommunityFeedResponse).items[0].id
+    await insertProxyMessage(db, {
+      messageId: 'm1',
+      eventId,
+      anchorSourceKey: 'bombsquad:run-a',
+      authorUserId: 'author-1',
+      authorCompanionName: 'Orion',
+      authorPublicLabel: 'Zed',
+      targetUserId: 'viewer-a',
+      body: 'nice run',
+    })
+
+    const response = await handleGetArcadeCommunityFeed(getReq(FEED_URL, SESSION_COOKIE), testEnv)
+    const body = (await response.json()) as ArcadeCommunityFeedResponse
+    const item = body.items[0]
+
+    expect(response.status).toBe(200)
+    expect(item).toMatchObject({ viewer_is_owner: true, viewer_has_companion: true })
+    expect(item.threads).toHaveLength(1)
+    expect(item.threads[0]).toMatchObject({
+      message_id: 'm1',
+      author_companion_name: 'Orion',
+      author_public_label: 'Zed',
+      body: 'nice run',
+      reply: null,
+      can_reply: true,
+    })
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('viewer-a')
+    expect(serialized).not.toContain('author-1')
+    expect(serialized).not.toContain('user_id')
+  })
+
+  it('keeps the feed readable with empty threads before migration 0007 (200)', async () => {
+    const testEnv = await env() // default DB: 0007 absent
+    await seedPublicPlayer(testEnv.COMPANION_DB)
+
+    const response = await handleGetArcadeCommunityFeed(getReq(FEED_URL), testEnv)
+    const body = (await response.json()) as ArcadeCommunityFeedResponse
+
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].threads).toEqual([])
+    expect(body.items[0]).toMatchObject({ viewer_is_owner: false, viewer_has_companion: false })
   })
 })
