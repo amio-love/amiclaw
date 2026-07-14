@@ -15,7 +15,9 @@ import {
   getCompanion,
   listActiveClaimsWithEvidence,
   listMemories,
+  readProxySocialEnabled,
   setProfileEnabled,
+  setProxySocialEnabled,
   setVoicePosture,
 } from './store'
 import { createTestDb } from './test-support/sqlite-db'
@@ -292,5 +294,43 @@ describe('setVoicePosture', () => {
     // The column CHECK is the last line of defence below the handler's guard.
     await expect(setVoicePosture(db, 'user-a', 'shouting')).rejects.toThrow()
     expect((await getCompanion(db, 'user-a'))?.voice_posture).toBe('voice-default')
+  })
+})
+
+describe('proxy-social opt-out switch (甲侧代言总开关)', () => {
+  it('defaults to enabled and flips off, persisting 0', async () => {
+    const db = createTestDb()
+    await createCompanion(
+      db,
+      { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' },
+      testDeps()
+    )
+
+    expect(await readProxySocialEnabled(db, 'user-a')).toBe(true)
+    expect(await setProxySocialEnabled(db, 'user-a', false)).toBe(true)
+    expect(await readProxySocialEnabled(db, 'user-a')).toBe(false)
+    expect((await getCompanion(db, 'user-a'))?.proxy_social_enabled).toBe(0)
+
+    expect(await setProxySocialEnabled(db, 'user-a', true)).toBe(true)
+    expect(await readProxySocialEnabled(db, 'user-a')).toBe(true)
+  })
+
+  it('reports a missing companion on flip, and reads enabled for an absent row', async () => {
+    const db = createTestDb()
+    expect(await setProxySocialEnabled(db, 'nobody', false)).toBe(false)
+    // No companion row → the no-companion case is gated by the caller, not here.
+    expect(await readProxySocialEnabled(db, 'nobody')).toBe(true)
+  })
+
+  it('degrades to enabled when the migration-0008 column is missing', async () => {
+    const db = createTestDb()
+    await createCompanion(
+      db,
+      { userId: 'user-a', name: 'Ami', voiceId: 'companion-warm' },
+      testDeps()
+    )
+    // Simulate the migration lagging the deploy: the column is not there yet.
+    db.raw.exec('ALTER TABLE companion DROP COLUMN proxy_social_enabled')
+    expect(await readProxySocialEnabled(db, 'user-a')).toBe(true)
   })
 })

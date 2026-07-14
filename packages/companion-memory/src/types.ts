@@ -48,6 +48,8 @@ export {
   type ProfileClaimView,
   type ProfileResponse,
   type ProfileSettingsBody,
+  type ProxySocialSettingsResponse,
+  type ProxySocialSettingsBody,
   type ProfileCorrectionBody,
   type ProfileCorrectionResponse,
   type MemoryView,
@@ -66,6 +68,14 @@ export interface CompanionRecord {
   voice_id: string
   /** SQLite boolean: 0 | 1. */
   profile_enabled: number
+  /**
+   * Author-side proxy-social master switch (甲侧代言总开关, migration 0008): 0 | 1,
+   * default 1. When 0, the companion never autonomously authors a community
+   * proxy message (the V1 route skips). Optional here because a `SELECT *`
+   * against a pre-0008 schema (migration lag) omits it — readers treat an absent
+   * value as enabled.
+   */
+  proxy_social_enabled?: number
   /**
    * Remembered auto-voice posture (presence layer; migration 0004). One of
    * `voice-default` / `quiet-remembered` / `denied-remembered` — the CHECK

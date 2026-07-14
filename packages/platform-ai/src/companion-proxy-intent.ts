@@ -5,9 +5,10 @@
  *  - V1 `POST /ai-intent/companion-proxy-message`: 甲 logged-in and present, the
  *    companion AUTONOMOUSLY leaves one public line on another player's community
  *    event. Background trigger → EVERY skip reason is a silent `200 messaged:false`
- *    (no companion / no public profile / no candidate / daily cap / model decline /
- *    concurrent-duplicate). Success carries `target_event` so the dock transparency
- *    line renders without a second feed read.
+ *    (no companion / proxy-social-disabled (甲侧代言总开关 off) / no public profile /
+ *    no candidate / daily cap / model decline / concurrent-duplicate). Success
+ *    carries `target_event` so the dock transparency line renders without a
+ *    second feed read.
  *  - V2 `POST /ai-intent/companion-proxy-reply`: 乙 taps "let my companion reply".
  *    User-initiated → explicit status codes (401 / 403 / 404 / 409 / 410 / 429 / 502).
  *
@@ -91,6 +92,10 @@ export interface CompanionProxyMessageDeps {
   rateLimiter: IntentRateLimiter
   /** Game-global companion read (gameId omitted): identity + cross-game memory. */
   resolveCompanionContext: (userId: string) => Promise<CompanionContext | null>
+  /** Author-side proxy-social master switch (甲侧代言总开关, migration 0008).
+      `false` = the author opted out → the route skips silently, no generation.
+      Degrades to `true` on migration lag (handled in the store read). */
+  readProxySocialEnabled: (userId: string) => Promise<boolean>
   readPublicProfile: (userId: string) => Promise<ArcadePublicProfileStatus>
   readCandidates: (authorUserId: string) => Promise<ProxyCandidateEvent[]>
   countAuthorMessagesForDay: (authorUserId: string) => Promise<number>
@@ -428,6 +433,7 @@ export async function handleCompanionProxyMessage(
     sessionReader,
     rateLimiter,
     resolveCompanionContext,
+    readProxySocialEnabled,
     readPublicProfile,
     readCandidates,
     countAuthorMessagesForDay,
@@ -439,6 +445,7 @@ export async function handleCompanionProxyMessage(
     !sessionReader ||
     !rateLimiter ||
     !resolveCompanionContext ||
+    !readProxySocialEnabled ||
     !readPublicProfile ||
     !readCandidates ||
     !countAuthorMessagesForDay ||
@@ -466,6 +473,19 @@ export async function handleCompanionProxyMessage(
     return serviceUnavailable()
   }
   if (authCtx === null) return notMessaged('no-companion')
+
+  // 甲侧代言总开关: the author's master opt-out. Off → the companion never
+  // autonomously authors a proxy line (silent skip, same shape as no-companion),
+  // checked before any candidate read or generation. Degrades to enabled on
+  // migration lag (handled in the store read); a genuine DB failure is a 503.
+  let proxySocialEnabled: boolean
+  try {
+    proxySocialEnabled = await readProxySocialEnabled(identity.userId)
+  } catch {
+    log('proxy-social-read-unavailable')
+    return serviceUnavailable()
+  }
+  if (!proxySocialEnabled) return notMessaged('proxy-social-disabled')
 
   let authPublic: ArcadePublicProfileStatus
   try {
