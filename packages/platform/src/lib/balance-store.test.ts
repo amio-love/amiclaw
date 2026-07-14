@@ -67,11 +67,12 @@ describe('balance-store', () => {
     expect(getBalanceSnapshot()).toEqual({ status: 'unavailable' })
   })
 
-  it('keeps the last-known value when a later refresh fails', async () => {
+  it('keeps the last-known value when a TRANSIENT (500) refresh fails', async () => {
     stubAssets(200, ASSETS)
     await reloadBalance()
 
-    // A transient refresh failure must NOT blank a good balance.
+    // A transient refresh failure (500 / network / malformed → kind 'error')
+    // must NOT blank a good balance.
     stubAssets(500)
     await reloadBalance()
 
@@ -81,6 +82,48 @@ describe('balance-store', () => {
       entries: ASSETS.entries,
       welcomeGranted: false,
     })
+  })
+
+  it('CLEARS the chip when a refresh returns anon (401) even while ready', async () => {
+    stubAssets(200, ASSETS)
+    await reloadBalance()
+    expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 12 })
+
+    // A 401 is authoritative (logged out elsewhere / expired cookie). Unlike a
+    // transient error, it must clear the private chip, not keep stale account
+    // data on screen.
+    stubAssets(401)
+    await reloadBalance()
+
+    expect(getBalanceSnapshot()).toEqual({ status: 'unavailable' })
+  })
+
+  it('force refresh issues a post-return read, not a stale pre-return in-flight one', async () => {
+    // Model a return: a pre-departure read is still in flight (deferred, resolves
+    // to the OLD balance 12); the return event forces a fresh read that returns
+    // the post-return balance 17. The store must land on 17, never 12.
+    let resolveFirst!: (res: Response) => void
+    const firstRead = new Promise<Response>((resolve) => {
+      resolveFirst = resolve
+    })
+    let call = 0
+    const fetchMock = vi.fn(() => {
+      call += 1
+      return call === 1
+        ? firstRead
+        : Promise.resolve(new Response(JSON.stringify({ ...ASSETS, balance: 17 }), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const initial = reloadBalance() // R1: pre-return, still pending
+    const forced = reloadBalance({ force: true }) // return event while R1 in flight
+
+    // R1 finally resolves with the OLD balance — must be superseded, not kept.
+    resolveFirst(new Response(JSON.stringify({ ...ASSETS, balance: 12 }), { status: 200 }))
+    await Promise.all([initial, forced])
+
+    expect(fetchMock).toHaveBeenCalledTimes(2) // a SECOND read was issued post-return
+    expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 17 })
   })
 
   it('pushBalance repaints the number and preserves entries + welcome beat', async () => {

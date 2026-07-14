@@ -32,7 +32,10 @@ export function useBalance(enabled: boolean): { state: BalanceState; reload: () 
     void reloadBalance()
 
     const refetchWhenVisible = () => {
-      if (document.visibilityState === 'visible') void reloadBalance()
+      // `force`: a read issued AFTER the return. A request left in flight before
+      // the user departed predates the win / spend earned in the game and would
+      // repaint the old balance, so the return path must not reuse it.
+      if (document.visibilityState === 'visible') void reloadBalance({ force: true })
     }
     document.addEventListener('visibilitychange', refetchWhenVisible)
     // `pageshow` fires on a bfcache restore (return from a game via back/forward)

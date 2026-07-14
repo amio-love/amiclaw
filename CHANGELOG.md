@@ -133,6 +133,13 @@ codebook page to hand your partner, a per-segment transcription pad, first-run
 onboarding, and a count-up stopwatch with a wrong-answer time penalty. Dark-only,
 CSS-only animation, running on the shared creation engine.
 
+### Improvements
+
+- **Balance chip keeps up** — Your starburst chip now refreshes on its own.
+  Come back from a game or close the ledger and it shows your current balance,
+  not the number from when the page first loaded. If your sign-in has ended in
+  another tab, the chip quietly steps aside instead of showing a stale total.
+
 ### Bug Fixes
 
 - **Sound Garden browser verification** — Anonymous co-build checks now advance

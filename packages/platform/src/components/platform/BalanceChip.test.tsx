@@ -160,6 +160,24 @@ describe('BalanceChip', () => {
     expect(screen.getByRole('button', { name: /星芒余额 12/ })).toBeInTheDocument()
   })
 
+  it('clears the chip when a refresh returns 401 (signed out elsewhere)', async () => {
+    stubAssets(200, ASSETS)
+    const { container } = render(<BalanceChip />)
+
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+
+    // Unlike a transient 500, a 401 on refresh is authoritative — the session
+    // ended (logout in another tab / expired cookie). The private chip must
+    // clear, never keep the last balance on screen.
+    stubAssets(401)
+    await act(async () => {
+      await reloadBalance()
+    })
+
+    expect(screen.queryByRole('button', { name: /星芒余额/ })).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
+  })
+
   // --- Live-refresh wiring: the effect re-reads on the DOM events that mark a
   //     "return from a game SPA" (the mount-once staleness this fix removes).
   //     These fire the real events so the wiring itself is under test, not just

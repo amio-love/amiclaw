@@ -19,7 +19,7 @@
  * tab refocus) and when the ledger drawer closes.
  */
 import type { AssetEntryView } from '@shared/companion-types'
-import { fetchAssets } from '@/lib/companion-api'
+import { fetchAssets, type AssetsReadResult } from '@/lib/companion-api'
 
 /**
  *   - `loading`     — no read has resolved yet; the chip stays empty (mirrors
@@ -72,35 +72,64 @@ export function getBalanceSnapshot(): BalanceState {
 }
 
 /**
- * Re-read `GET /api/companion/assets` and publish the result. Graceful
- * degradation matches the chip's contract:
- *   - success            → `ready` with the fresh balance / entries.
- *   - failure, not-ready  → `unavailable` (the initial-load-empty hide).
- *   - failure, ready      → KEEP the last-known value (a transient refresh
- *                           failure must not blank a good chip).
- * Concurrent calls share the single in-flight read.
+ * Publish one `fetchAssets` result. Graceful degradation matches the chip's
+ * contract:
+ *   - `ok`                 → `ready` with the fresh balance / entries.
+ *   - `anon` (401)         → `unavailable`, ALWAYS — even from `ready`. A 401 is
+ *                            authoritative: the session is no longer signed in
+ *                            (logout in another tab, expired / revoked cookie).
+ *                            The chip is private, so it must clear rather than
+ *                            keep another account's last-known balance on screen.
+ *   - `error`, not ready   → `unavailable` (the initial-load-empty hide).
+ *   - `error`, ready       → KEEP the last-known value. A transient failure
+ *                            (500 / network / malformed body) on refresh must
+ *                            not blank a good chip.
  */
-export function reloadBalance(): Promise<void> {
-  if (inFlight) return inFlight
-  const pending = fetchAssets()
-    .then((result) => {
-      if (result.kind === 'ok') {
-        setState({
-          status: 'ready',
-          balance: result.balance,
-          entries: result.entries,
-          welcomeGranted: result.welcomeGranted,
-        })
-      } else if (state.status !== 'ready') {
-        setState({ status: 'unavailable' })
-      }
-      // else: refresh failed while ready → keep the last-known value.
+function applyResult(result: AssetsReadResult): void {
+  if (result.kind === 'ok') {
+    setState({
+      status: 'ready',
+      balance: result.balance,
+      entries: result.entries,
+      welcomeGranted: result.welcomeGranted,
     })
+  } else if (result.kind === 'anon') {
+    setState({ status: 'unavailable' })
+  } else if (state.status !== 'ready') {
+    setState({ status: 'unavailable' })
+  }
+  // else: `error` while ready → keep the last-known value.
+}
+
+/** Issue ONE read now and track it as the in-flight request. */
+function issueRead(): Promise<void> {
+  const pending = fetchAssets()
+    .then(applyResult)
     .finally(() => {
-      inFlight = null
+      if (inFlight === pending) inFlight = null
     })
   inFlight = pending
   return pending
+}
+
+/**
+ * Re-read `GET /api/companion/assets` and publish the result (via `applyResult`).
+ *
+ * Concurrency: by default a genuinely concurrent read (the initial mount + a
+ * drawer open firing together) shares the single in-flight request.
+ *
+ * `{ force: true }` is the RETURN-event path (visibility / pageshow). It must
+ * land on a read ISSUED AFTER the return: a request that was already in flight
+ * before the user left predates the win / spend earned in the game, so reusing
+ * it would repaint the OLD balance. When something is in flight, force chains a
+ * fresh read after it settles and publishes THAT result; otherwise it reads now.
+ */
+export function reloadBalance(options?: { force?: boolean }): Promise<void> {
+  if (options?.force && inFlight) {
+    return inFlight.then(issueRead, issueRead)
+  }
+  if (inFlight) return inFlight
+  return issueRead()
 }
 
 /**
