@@ -16,13 +16,13 @@
     "smoke:readiness": "tsx scripts/post-deploy-readiness.ts"
   },
   "dependencies": {
-    "agents": "^0.17.0"
+    "agents": "^0.17.4"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.20",
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
     "@cloudflare/workers-types": "^4.20260621.1",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
