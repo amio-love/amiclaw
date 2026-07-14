@@ -648,3 +648,28 @@ export function makeStuckLlm(): { llm: LlmProvider; finallyRan(): boolean } {
   }
   return { llm, finallyRan: () => cleaned }
 }
+
+/**
+ * A never-yielding LLM that HONORS the request `AbortSignal` — its pending `await`
+ * REJECTS the instant the signal aborts (the shape a real adapter like DeepSeek uses:
+ * a caller abort throws out of the stream). Models the common barge-in case: a turn
+ * mid-`await` on the provider that `return()` cannot interrupt, but an abort can. Used
+ * to prove the supersede/cancel path aborts the signal so the superseded stream
+ * unwinds and emits its terminal `done` promptly (not after the 120s deadline).
+ */
+export function makeAbortableStuckLlm(): { llm: LlmProvider } {
+  const llm: LlmProvider = {
+    async *streamCompletion(request: LlmCompletionRequest) {
+      await new Promise<void>((_resolve, reject) => {
+        const signal = request.signal
+        if (signal?.aborted) {
+          reject(new Error('aborted'))
+          return
+        }
+        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+      yield { content: 'unreachable', done: false }
+    },
+  }
+  return { llm }
+}

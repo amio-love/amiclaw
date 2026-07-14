@@ -109,6 +109,7 @@ export function assembleSession(
     gameState: gameState ?? { relevantSections: [] },
     history: [],
     turnCount: 0,
+    turnGeneration: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
     // Latches to 'derived-from-bytes' on the first turn whose STT seconds did
     // not come from the provider's own report (see `SessionState.sttSource`).

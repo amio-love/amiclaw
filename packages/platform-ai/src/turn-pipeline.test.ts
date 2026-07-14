@@ -7,6 +7,7 @@ import {
   OPENING_DIRECTIVE,
   runClosingTurn,
   runOpeningTurn,
+  runReply,
   runTurn,
   splitSentences,
   type SessionState,
@@ -129,6 +130,7 @@ function freshState(): SessionState {
     gameState: { relevantSections: ['intro'] },
     history: [],
     turnCount: 0,
+    turnGeneration: 0,
     usage: { llmInputTokens: 0, llmOutputTokens: 0, sttInputSeconds: 0, ttsOutputSeconds: 0 },
     sttSource: 'provider-reported',
     fundingSource: 'earned',
@@ -991,5 +993,57 @@ describe('co_build turn gating', () => {
     expect(system?.content).toMatch(/MUST/)
     expect(system?.content).toMatch(/CONTRACT VIOLATION/)
     expect(system?.content.trimEnd().endsWith(CO_BUILD_CLOSE)).toBe(true)
+  })
+})
+
+describe('turn-generation settle fence (late force-cancel / supersession)', () => {
+  it('runReply SKIPS its settle commit when the turn generation is bumped mid-turn', async () => {
+    // A turn force-canceled (per-turn deadline) or superseded (barge-in) mid-flight
+    // may still complete LATE if its provider ignored `return()` (a stuck `await`).
+    // The generation fence must make its settle a no-op so it cannot corrupt shared
+    // state after newer turns ran. Model it by bumping `state.turnGeneration` between
+    // the transcript frame and the settle, then draining to completion.
+    const state = freshState()
+    const received: string[] = []
+    const providers: TurnProviders = {
+      stt: mockStt([]),
+      llm: mockLlm(['hello world.']),
+      tts: mockTts(received),
+    }
+    const it = runReply(providers, state, { transcript: 'hi there', audioBytes: 100 })[
+      Symbol.asyncIterator
+    ]()
+
+    // First pull: runReply captured the turn generation and yielded the transcript.
+    const first = await it.next()
+    expect((first.value as AiResponseChunk).kind).toBe('transcript')
+
+    // A force-cancel / supersession lands mid-turn — the DO bumps the generation.
+    state.turnGeneration += 1
+
+    // Drain the rest of the (abandoned) turn to completion.
+    while (!(await it.next()).done) {
+      /* drain */
+    }
+
+    // The settle was fenced: no history, no turnCount, no usage mutation.
+    expect(state.turnCount).toBe(0)
+    expect(state.history).toHaveLength(0)
+    expect(state.usage.llmOutputTokens).toBe(0)
+  })
+
+  it('runReply COMMITS its settle normally when the generation is unchanged (positive control)', async () => {
+    const state = freshState()
+    const providers: TurnProviders = {
+      stt: mockStt([]),
+      llm: mockLlm(['hello world.'], { usage: { inputTokens: 5, outputTokens: 9 } }),
+      tts: mockTts([]),
+    }
+    await collect(runReply(providers, state, { transcript: 'hi there', audioBytes: 100 }))
+
+    // No generation bump → the settle runs: history + turnCount + usage recorded.
+    expect(state.turnCount).toBe(1)
+    expect(state.history).toHaveLength(2) // user + assistant
+    expect(state.usage.llmOutputTokens).toBe(9)
   })
 })

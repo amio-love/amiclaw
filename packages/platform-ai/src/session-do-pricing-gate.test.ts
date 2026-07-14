@@ -47,6 +47,7 @@ vi.mock('./providers/factory', async (importOriginal) => {
   }
 })
 
+import { runDurableObjectAlarm } from 'cloudflare:test'
 import type {
   CompanionDb,
   CompanionDbRunResult,
@@ -57,12 +58,18 @@ import type { VoiceSessionDO } from './session-do'
 import {
   createSessionOverWs,
   driveUtteranceToLlm,
+  makeAbortableStuckLlm,
   makeGatedProviders,
+  makeStuckLlm,
+  makeTurnProviders,
   MANUAL,
   makeSessionDo,
   messagesOfType,
   openSocket,
+  sawDoneChunk,
   settle,
+  SPEECH_START,
+  TURN,
   waitFor,
   waitForMessage,
   type SessionHandle,
@@ -242,24 +249,61 @@ class ThrowingCompanionDb implements CompanionDb {
 
 interface DoPrivate {
   env: SessionDoEnv
-  burnMinuteMs: number
-  burnTimer: unknown
+  burnSecondsPerMinute: number
+  burnScheduleId: unknown
+  maxTurnMs: number
+  hasDeliveredTurn: boolean
   pendingWindDown: unknown
   turnInFlight: boolean
   activeTurn: unknown
-  sessionState: { startedAtMs: number; budgetMinutes?: number } | undefined
+  sessionState:
+    | {
+        startedAtMs: number
+        budgetMinutes?: number
+        turnGeneration: number
+        turnCount: number
+        history: unknown[]
+      }
+    | undefined
 }
 
-function asPrivate(instance: VoiceSessionDO): DoPrivate {
-  return instance as unknown as DoPrivate
+/** The burn-through alarm payload the DO's `schedule()` persists + dispatches. */
+interface BurnPayload {
+  sessionId: string
+  userId: string
+  budgetMinutes: number
+  fundingSource: string
 }
 
 /**
- * Poll a predicate over the DO's PRIVATE wind-down state (read inside the DO's
- * I/O context via `handle.run`) until it holds — the async-DO-state analog of
- * `waitFor` (which only reads synchronous client-socket state). Lets the
- * concurrency tests synchronize on "the timer fired and deferred" /
- * "the barge-in superseded the recap" without a fixed sleep.
+ * Invoke the burn-through alarm callback the way the Agents-SDK alarm dispatch
+ * would, inside the DO's I/O context. Directly exercises the FIX 1 callback
+ * (resident wind-down vs. durable eviction-path deduct) deterministically —
+ * without racing a 1-second-granularity wall-clock schedule.
+ */
+function fireBurnAlarm(handle: SessionHandle, payload: BurnPayload): Promise<void> {
+  return handle.run((instance) => instance.onBurnThroughAlarm(payload))
+}
+
+/** The durable "this session delivered billable output" storage-key prefix. */
+const BILLABLE_KEY_PREFIX = 'reward:billable:'
+
+/**
+ * Write the durable billable marker the DO persists on a session's first delivered
+ * chunk — so a burn-through alarm for `sessionId` treats it as a DELIVERED session
+ * (bills its budget) rather than a zero-delivery one (bills ZERO, Finding #2).
+ */
+function writeBillableMarker(handle: SessionHandle, sessionId: string): Promise<void> {
+  return handle.run((_instance, state) =>
+    state.storage.put(`${BILLABLE_KEY_PREFIX}${sessionId}`, true)
+  )
+}
+
+/**
+ * Poll a predicate over the DO's PRIVATE state (read inside its I/O context via
+ * `handle.run`) until it holds — the async-DO-state analog of `waitFor` (which
+ * only reads synchronous client-socket state). Lets a test synchronize on
+ * "the reply parked at the stuck LLM" / "the wind-down deferred" without a sleep.
  */
 async function waitForDoState(
   handle: SessionHandle,
@@ -273,6 +317,10 @@ async function waitForDoState(
     if (Date.now() > deadline) throw new Error(`waitForDoState timed out: ${label}`)
     await new Promise<void>((resolve) => setTimeout(resolve, 2))
   }
+}
+
+function asPrivate(instance: VoiceSessionDO): DoPrivate {
+  return instance as unknown as DoPrivate
 }
 
 beforeEach(() => {
@@ -409,6 +457,12 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
     await injectCompanionDb(handle, db)
     const socket = await openSocket(handle, 'user-A')
     const sessionId = await createSessionOverWs(socket)
+    // The session delivered its opening turn (FIX 3 floor gate); this suite creates
+    // with the greeting off, so latch the flag directly to represent a normal
+    // established session that DID deliver.
+    await handle.run((instance) => {
+      asPrivate(instance).hasDeliveredTurn = true
+    })
 
     socket.send(JSON.stringify({ type: 'end' }))
     await waitForMessage(socket, 'summary')
@@ -434,6 +488,7 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
       const sid = instance.createSession('demo-mock', 'user-A', MANUAL, undefined, {
         budgetMinutes: 10,
       })
+      asPrivate(instance).hasDeliveredTurn = true // delivered a turn (FIX 3 floor gate)
       // `endSession` does not clear the session, so a second direct call passes
       // the state checks; the `deductFlushed` guard must absorb it.
       instance.endSession(sid, 'user-A')
@@ -453,6 +508,7 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
       const sid = instance.createSession('demo-mock', 'user-A', MANUAL, undefined, {
         budgetMinutes: 10,
       })
+      asPrivate(instance).hasDeliveredTurn = true // delivered a turn (FIX 3 floor gate)
       instance.endSession(sid, 'user-A')
     })
 
@@ -471,6 +527,7 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
       })
       // Backdate the start 5 minutes: elapsed(5) > budget(2) → billed capped at 2.
       const view = asPrivate(instance)
+      view.hasDeliveredTurn = true // delivered a turn (FIX 3 floor gate)
       if (view.sessionState) view.sessionState.startedAtMs = Date.now() - 5 * 60_000
       instance.endSession(sid, 'user-A')
     })
@@ -489,6 +546,8 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
         budgetMinutes: 10,
       })
       const view = asPrivate(instance)
+      // Delivered a turn, so the NaN guard (not the FIX 3 floor gate) is what skips.
+      view.hasDeliveredTurn = true
       if (view.sessionState) view.sessionState.startedAtMs = Number.NaN
       instance.endSession(sid, 'user-A')
     })
@@ -522,6 +581,9 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
     db.failReads = false
     await handle.run((instance) => {
       const view = asPrivate(instance)
+      // Delivered a turn, so the missing-budget guard (not the FIX 3 floor gate) is
+      // what skips — the fail-open symmetry is what this test isolates.
+      view.hasDeliveredTurn = true
       if (view.sessionState) view.sessionState.startedAtMs = Date.now() - 90 * 60_000
     })
 
@@ -533,26 +595,96 @@ describe('VoiceSessionDO pricing gate — finalizeSessionAccounting', () => {
     expect(db.deductRows()).toHaveLength(0) // fail-open, symmetric with the gate
     expect(warn).toHaveBeenCalled()
   })
+
+  it('FIX 3 — bills ZERO for a session that ended before any turn delivered output', async () => {
+    // The opening-greeting-failure floor skip: a session that established but never
+    // delivered a single turn's output (the greeting is off here, and no player turn
+    // ran) is charged NOTHING — not even the 1-minute floor. `hasDeliveredTurn` stays
+    // false, so `finalizeSessionAccounting` skips the deduct entirely.
+    const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+    const socket = await openSocket(handle, 'user-A')
+    const sessionId = await createSessionOverWs(socket) // opening greeting OFF (default)
+
+    // No turn ever delivered a chunk.
+    const delivered = await handle.run((instance) => asPrivate(instance).hasDeliveredTurn)
+    expect(delivered).toBe(false)
+
+    socket.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socket, 'summary')
+    await settle()
+
+    expect(sessionId).not.toBe('')
+    // Zero-value session → ZERO deduct (no 1-minute floor).
+    expect(db.deductRows()).toHaveLength(0)
+  })
+
+  it('FIX 3 — bills the 1-minute floor once a delivered greeting flipped the flag', async () => {
+    // The counterpart: a session whose opening greeting DID deliver output bills the
+    // floor. Modeled by latching `hasDeliveredTurn` (the greeting's first chunk does
+    // this in production) before an immediate end.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+
+    await handle.run((instance) => {
+      const sid = instance.createSession('demo-mock', 'user-A', MANUAL, undefined, {
+        budgetMinutes: 10,
+      })
+      asPrivate(instance).hasDeliveredTurn = true // a greeting delivered its first chunk
+      instance.endSession(sid, 'user-A')
+    })
+
+    await waitFor(() => db.deductRows().length === 1, 'floor billed')
+    expect(db.deductRows()).toHaveLength(1)
+    expect(db.deductRows()[0].amount).toBe(-1) // the 1-minute floor
+  })
 })
 
 // --- burn-through wind-down: the timer actually fires (§11.iv L3 obligation) -------
 
-describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
-  it('fires the WS-resident setTimeout, runs the wind-down recap, deducts, and closes with a balance-depleted summary', async () => {
+describe('VoiceSessionDO pricing gate — burn-through wind-down (durable DO alarm, FIX 1)', () => {
+  it('arms a DURABLE schedule at create (migrated off the WS-resident setTimeout)', async () => {
+    // FIX 1 migration: the burn-through is now an Agents-SDK `schedule()` row, not a
+    // setTimeout. Creating with a finite budget arms a durable schedule id.
     const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10 minutes
     const handle = makeSessionDo()
-    // Shrink the per-minute wall-clock basis BEFORE `create` reads it: the real
-    // `setTimeout(budgetMinutes * burnMinuteMs)` then fires after ~10 * 10 = 100 ms,
-    // exercising the genuine burn-through timer (no fake timers) deterministically.
+    await injectCompanionDb(handle, db)
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    const scheduleId = await handle.run((instance) => asPrivate(instance).burnScheduleId)
+    expect(typeof scheduleId).toBe('string')
+    expect(scheduleId).not.toBe('')
+
+    // Tearing the session down cancels the durable schedule.
+    await handle.run((instance) => {
+      asPrivate(instance).hasDeliveredTurn = true
+    })
+    socket.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socket, 'summary')
+  })
+
+  it('fires via the real DO alarm dispatch, runs the wind-down recap, deducts, and closes balance-depleted', async () => {
+    const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10 minutes
+    const handle = makeSessionDo()
+    // Shrink the per-minute basis to 0 BEFORE `create` reads it, so the schedule is
+    // due immediately (`time <= now`) and the real alarm dispatch fires the
+    // wind-down. The SDK stores schedule time at 1-second granularity, so this is
+    // the deterministic way to exercise the genuine schedule→alarm→callback chain.
     await handle.run((instance) => {
       const view = asPrivate(instance)
       view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
-      view.burnMinuteMs = 10
+      view.burnSecondsPerMinute = 0
     })
     const socket: TestSocket = await openSocket(handle, 'user-A')
     const sessionId = await createSessionOverWs(socket)
 
-    // The timer fires on its own — wait for the depletion summary (no client `end`).
+    // Fire the due burn-through alarm through the REAL SDK dispatch (runs the DO's
+    // `alarm()`, which dispatches `onBurnThroughAlarm`). Robust to a runtime that
+    // ALSO auto-fires the past-due alarm — `waitFor(summary)` converges either way.
+    await runDurableObjectAlarm(handle.stub)
     await waitFor(() => socket.messagesOfType('summary').length > 0, 'burn-through summary', 4000)
 
     // The wind-down ran ONE recap turn (LLM+TTS over demo-mock) before teardown.
@@ -574,6 +706,68 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
     expect(db.deductRows()[0].amount).toBeLessThan(0)
   })
 
+  it('still deducts the depleted budget when the alarm fires on a NON-resident (evicted) DELIVERED session', async () => {
+    // The durability win: the old setTimeout was LOST on an isolate eviction, so a
+    // depleted session was never billed. The durable schedule survives — when the
+    // alarm fires on a fresh post-eviction instance (in-memory `sessionState` gone),
+    // `onBurnThroughAlarm` bills the budget from its persisted payload IF the session
+    // delivered output (its durable billable marker survived the eviction too).
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+    // The evicted session HAD delivered output → its durable marker persists.
+    await writeBillableMarker(handle, 'evicted-session')
+
+    // No session is bound (fresh instance, exactly as after an eviction). The alarm
+    // dispatches with the payload the schedule persisted at create.
+    await fireBurnAlarm(handle, {
+      sessionId: 'evicted-session',
+      userId: 'user-A',
+      budgetMinutes: 7,
+      fundingSource: 'earned',
+    })
+
+    await waitFor(() => db.deductRows().length === 1, 'durable eviction-path deduct')
+    expect(db.deductRows()).toHaveLength(1)
+    expect(db.deductRows()[0].source_key).toBe('session:evicted-session')
+    expect(db.deductRows()[0].source_ref).toBe('session:earned')
+    expect(db.deductRows()[0].amount).toBe(-7) // the full depleted budget
+  })
+
+  it('the eviction-path deduct is idempotent on session:{sessionId} (no double-charge vs a prior teardown)', async () => {
+    // Belt-and-braces: if a normal teardown already wrote the session's deduct AND a
+    // stale alarm still fires (cancel raced), the ON CONFLICT (source_key) makes the
+    // alarm deduct a no-op — the session is billed exactly once.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+    // A DELIVERED session (marker present) whose prior teardown already billed 2 min.
+    await writeBillableMarker(handle, 'already-billed')
+    db.seed({
+      user_id: 'user-A',
+      asset_type: 'starburst',
+      amount: -2,
+      source_product: 'amiclaw',
+      source_ref: 'session:earned',
+      source_key: 'session:already-billed',
+      earned_at: '2026-07-01T00:05:00.000Z',
+    })
+
+    await fireBurnAlarm(handle, {
+      sessionId: 'already-billed',
+      userId: 'user-A',
+      budgetMinutes: 9,
+      fundingSource: 'earned',
+    })
+    await settle()
+
+    // Still exactly one deduct row for the session, still the original -2 (the alarm's
+    // -9 was an ON CONFLICT no-op).
+    const rows = db.deductRows().filter((r) => r.source_key === 'session:already-billed')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].amount).toBe(-2)
+  })
+
   it('bills the FULL budget at production arithmetic when the budget elapses (magnitude + cap)', async () => {
     // F3: the accelerated end-to-end test above floors in-test elapsed to 1 minute
     // (shrunk burnMinuteMs), so it only locks amount < 0. This locks the magnitude
@@ -592,6 +786,7 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
       // elapsed ceils to BUDGET + 1, so the deduct proves BOTH that a burn-through
       // bills the full budget AND that the cap holds (min(elapsed, budget) = budget).
       const view = asPrivate(instance)
+      view.hasDeliveredTurn = true // delivered a turn (FIX 3 floor gate)
       if (view.sessionState) view.sessionState.startedAtMs = Date.now() - (BUDGET * 60_000 + 30_000)
       instance.endSession(sid, 'user-A')
     })
@@ -604,18 +799,12 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down timer', () => {
 // --- burn-through wind-down: the 3 concurrency edges (PR #254 codex findings) -----
 
 describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', () => {
-  it('finding 1 — a mid-turn budget-timer fire DEFERS the wind-down: the reply and the wind-down recap run strictly serially, exactly one deduct', async () => {
+  it('finding 1 — a mid-turn budget-alarm fire DEFERS the wind-down: the reply and the wind-down recap run strictly serially, exactly one deduct', async () => {
     const kit = makeGatedProviders()
     providerControl.override = kit.providers
     const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10 minutes
     const handle = makeSessionDo()
-    // Shrink the per-minute basis so the real setTimeout fires at ~10 * 10 = 100 ms,
-    // WHILE the reply below is held parked at the gated LLM.
-    await handle.run((instance) => {
-      const view = asPrivate(instance)
-      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
-      view.burnMinuteMs = 10
-    })
+    await injectCompanionDb(handle, db)
     const socket = await openSocket(handle, 'user-A')
     const sessionId = await createSessionOverWs(socket)
 
@@ -623,15 +812,25 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', (
     await driveUtteranceToLlm(socket, kit, 1)
     expect(kit.llmTurns).toHaveLength(1)
 
-    // The burn timer fires (~100 ms) WHILE the reply is parked. It must DEFER, not
-    // start a second concurrent stream: `pendingWindDown` is set and the burn timer
-    // is cleared — but NO wind-down recap has reached the LLM (no overlap) and no
+    // The burn-through alarm fires WHILE the reply is parked. It must DEFER, not
+    // start a second concurrent stream: `pendingWindDown` is set and the schedule
+    // id is cleared — but NO wind-down recap has reached the LLM (no overlap) and no
     // depletion summary has been sent (no premature teardown).
-    await waitForDoState(
-      handle,
-      (view) => view.pendingWindDown !== undefined && view.burnTimer === undefined,
-      'the mid-turn timer deferred the wind-down'
-    )
+    await fireBurnAlarm(handle, {
+      sessionId,
+      userId: 'user-A',
+      budgetMinutes: 10,
+      fundingSource: 'earned',
+    })
+    const deferred = await handle.run((instance) => {
+      const view = asPrivate(instance)
+      return {
+        pending: view.pendingWindDown !== undefined,
+        scheduleCleared: view.burnScheduleId === undefined,
+      }
+    })
+    expect(deferred.pending).toBe(true)
+    expect(deferred.scheduleCleared).toBe(true)
     expect(kit.llmTurns).toHaveLength(1) // recap has NOT started → no overlap
     expect(socket.messagesOfType('summary')).toHaveLength(0)
 
@@ -666,15 +865,17 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', (
     // the teardown mirrors a normal `end`: every guard cleared, nothing post-close.
     const db = new FakeCompanionDb()
     const handle = makeSessionDo()
-    await handle.run((instance) => {
-      const view = asPrivate(instance)
-      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
-      view.burnMinuteMs = 10
-    })
+    await injectCompanionDb(handle, db)
     const socket = await openSocket(handle, 'user-A')
-    await createSessionOverWs(socket)
+    const sessionId = await createSessionOverWs(socket)
 
-    // The timer fires on its own and drives the full depletion teardown.
+    // Fire the burn-through alarm (no turn in flight) → the full depletion teardown.
+    await fireBurnAlarm(handle, {
+      sessionId,
+      userId: 'user-A',
+      budgetMinutes: 10,
+      fundingSource: 'earned',
+    })
     await waitFor(() => socket.messagesOfType('summary').length > 0, 'burn-through summary', 4000)
     expect(socket.messagesOfType('summary')[0].reason).toBe('balance-depleted')
     await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'depletion close')
@@ -682,20 +883,20 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', (
     const chunksAtClose = socket.messagesOfType('chunk').length
     const summariesAtClose = socket.messagesOfType('summary').length
 
-    // Every DO-resident guard is cleared by the teardown (the burn timer, the
-    // deferred-wind-down slot, the turn guards), and the session is fully unbound —
-    // so nothing DO-side can fire after the close.
+    // Every DO-resident guard is cleared by the teardown (the burn-through schedule,
+    // the deferred-wind-down slot, the turn guards), and the session is fully unbound
+    // — so nothing DO-side can fire after the close.
     const state = await handle.run((instance) => {
       const view = asPrivate(instance)
       return {
-        burnTimer: view.burnTimer,
+        burnScheduleId: view.burnScheduleId,
         pendingWindDown: view.pendingWindDown,
         turnInFlight: view.turnInFlight,
         activeTurn: view.activeTurn,
         sessionBound: view.sessionState !== undefined,
       }
     })
-    expect(state.burnTimer).toBeUndefined()
+    expect(state.burnScheduleId).toBeUndefined()
     expect(state.pendingWindDown).toBeUndefined()
     expect(state.turnInFlight).toBe(false)
     expect(state.activeTurn).toBeUndefined()
@@ -714,20 +915,26 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', (
     providerControl.override = kit.providers
     const db = new FakeCompanionDb()
     const handle = makeSessionDo()
+    // Schedule due immediately (basis 0) so the real alarm dispatch fires the recap.
     await handle.run((instance) => {
       const view = asPrivate(instance)
       view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
-      view.burnMinuteMs = 10
+      view.burnSecondsPerMinute = 0
     })
     const socket = await openSocket(handle, 'user-A')
     const sessionId = await createSessionOverWs(socket)
 
-    // The timer fires (no turn in flight) and the wind-down recap parks at the
-    // gated LLM — the farewell is now "playing".
+    // Fire the due burn-through alarm in the background (non-awaited: the recap parks
+    // at the gated LLM, so the alarm handler stays pending until we release it). A
+    // runtime that also auto-fires the past-due alarm is harmless — the one-shot
+    // schedule row is consumed once, so only one wind-down ever runs.
+    void runDurableObjectAlarm(handle.stub).catch(() => {})
+
+    // The wind-down recap parks at the gated LLM — the farewell is now "playing".
     await waitFor(
       () => kit.llmTurns.length === 1,
       'the wind-down recap reached the gated LLM',
-      2000
+      4000
     )
 
     // The client VAD barges in MID-farewell: `speech-start` supersedes the recap
@@ -755,5 +962,492 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down concurrency', (
     // The session is fully unbound — the depletion is terminal, not half-torn-down.
     const bound = await handle.run((instance) => asPrivate(instance).sessionState !== undefined)
     expect(bound).toBe(false)
+  })
+})
+
+// --- FIX 2: a stuck provider turn is force-canceled so the deferred wind-down fires
+
+describe('VoiceSessionDO pricing gate — stuck-turn hard deadline (FIX 2)', () => {
+  it('force-cancels a never-resolving turn so a wind-down deferred behind it still fires + deducts', async () => {
+    // The stuck-turn gap: a hung LLM/TTS turn pins `turnInFlight`, so a burn-through
+    // wind-down deferred behind it (finding 1) would NEVER fire — free minutes past
+    // budget. The per-turn hard deadline force-cancels the stuck turn, releasing the
+    // guard so the deferred wind-down runs and the session is billed.
+    const stuck = makeStuckLlm() // an LLM parked at a never-settling promise
+    const bundle = makeTurnProviders(stuck.llm) // counting STT + mock TTS + stuck LLM
+    providerControl.override = bundle.providers
+    const db = new FakeCompanionDb() // fresh user → welcome +10 → budget 10
+    const handle = makeSessionDo()
+    // Shrink the per-turn cap so the stuck reply (and the stuck wind-down recap) are
+    // force-canceled fast with a real timer, no fake timers.
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      view.maxTurnMs = 150
+    })
+    const socket = await openSocket(handle, 'user-A')
+    const sessionId = await createSessionOverWs(socket)
+
+    // Drive a player turn — it delivers the terminal transcript frame, then parks at
+    // the stuck LLM. Wait until the reply is genuinely in flight.
+    socket.send(SPEECH_START)
+    socket.send(TURN)
+    await waitForDoState(handle, (v) => v.turnInFlight === true, 'reply parked at the stuck LLM')
+
+    // The budget alarm fires WHILE the stuck reply is in flight → it DEFERS (a
+    // wind-down can never overlap a live turn). Without FIX 2 the stuck turn would
+    // pin turnInFlight forever and this deferred wind-down would never fire.
+    await fireBurnAlarm(handle, {
+      sessionId,
+      userId: 'user-A',
+      budgetMinutes: 10,
+      fundingSource: 'earned',
+    })
+    await waitForDoState(
+      handle,
+      (v) => v.pendingWindDown !== undefined,
+      'wind-down deferred behind the stuck turn'
+    )
+
+    // The per-turn deadline force-cancels the stuck reply → `streamTurn` releases the
+    // guard → the deferred wind-down fires. Its recap ALSO hits the stuck LLM and is
+    // force-canceled by the same deadline, so the teardown (deduct + depletion
+    // summary + 1000 close) still completes despite the provider never resolving.
+    await waitFor(
+      () => socket.messagesOfType('summary').length > 0,
+      'the deferred wind-down fired despite the stuck turn',
+      6000
+    )
+    expect(socket.messagesOfType('summary')[0].reason).toBe('balance-depleted')
+    await waitFor(() => socket.closeEvents.some((c) => c.code === 1000), 'depletion close')
+
+    await waitFor(() => db.deductRows().length === 1, 'the deferred wind-down still deducted')
+    expect(db.deductRows()).toHaveLength(1)
+    expect(db.deductRows()[0].source_key).toBe(`session:${sessionId}`)
+    expect(db.deductRows()[0].amount).toBeLessThan(0)
+    // NB: the stuck generator's own `finally` never runs — `return()` cannot interrupt
+    // a pending provider `await` (the documented caveat) — which is exactly why the
+    // force-cancel operates at the `streamTurn` level (break + guard release) rather
+    // than by unwinding the generator; the leaked provider promise is accepted.
+  })
+
+  it('force-cancels a stuck ordinary player turn (no wind-down) so the guard is released', async () => {
+    // The simpler shape: a stuck turn with no budget pressure still gets force-canceled
+    // by the deadline, so `turnInFlight` is released and the session stays usable.
+    const stuck = makeStuckLlm()
+    const bundle = makeTurnProviders(stuck.llm)
+    providerControl.override = bundle.providers
+    const handle = makeSessionDo() // no COMPANION_DB → priceless, no burn schedule
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 150
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    socket.send(SPEECH_START)
+    socket.send(TURN)
+    await waitForDoState(handle, (v) => v.turnInFlight === true, 'reply parked at the stuck LLM')
+
+    // The per-turn deadline trips and force-cancels the stuck turn: turnInFlight clears
+    // even though the provider `await` never settles (the guard release happens at the
+    // `streamTurn` level, not by unwinding the leaked generator).
+    await waitForDoState(
+      handle,
+      (v) => v.turnInFlight === false,
+      'the stuck turn was force-canceled and released the guard',
+      4000
+    )
+  })
+})
+
+// --- PR #257 codex review — 3 P2 correctness fixes -------------------------------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex P2 fixes', () => {
+  it('P2#1 — a STALE alarm for an earlier session does not clobber the bound session schedule id and bills only its own session', async () => {
+    // A reused DO: session B is bound; a stale alarm armed by an EARLIER session A
+    // fires (its own cancel raced). It must not touch B's `burnScheduleId` (which
+    // would strand B's alarm and later mis-bill B's full budget), and must bill only
+    // its own `payload.sessionId`.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+    const socket = await openSocket(handle, 'user-A')
+    const sessionB = await createSessionOverWs(socket) // binds B, arms schedule idB
+
+    const idBefore = await handle.run((instance) => asPrivate(instance).burnScheduleId)
+    expect(typeof idBefore).toBe('string')
+
+    // Session A HAD delivered output (its durable marker persists) — so its stale
+    // alarm would bill A, which is exactly what must NOT leak onto B.
+    await writeBillableMarker(handle, 'stale-session-A')
+    // The stale alarm for session A fires while B is bound.
+    await fireBurnAlarm(handle, {
+      sessionId: 'stale-session-A',
+      userId: 'user-A',
+      budgetMinutes: 5,
+      fundingSource: 'earned',
+    })
+
+    // B's schedule id is UNTOUCHED — B can still cancel its own alarm on close.
+    const idAfter = await handle.run((instance) => asPrivate(instance).burnScheduleId)
+    expect(idAfter).toBe(idBefore)
+    // The stale alarm billed ONLY its own session A, never B.
+    expect(db.deductRows().map((r) => r.source_key)).toEqual(['session:stale-session-A'])
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+
+    // B delivered nothing and closes: FIX 3 zero-bill AND the (intact) alarm is
+    // canceled — so B is never mis-billed the full budget.
+    socket.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socket, 'summary')
+    await settle()
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+  })
+
+  it('P2#2 — a force-canceled turn that already streamed a chunk emits a terminal done frame (socket stays open)', async () => {
+    // The client sets its streaming flag on the first chunk and clears it only on a
+    // `done` frame or a socket close. A force-cancel after a partial stream must emit
+    // a terminal `done:true` so the client is not left mid-stream (which would
+    // suppress later utterances).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo() // priceless — this is about the wire, not billing
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 200
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // Turn parks at the gated LLM; stream ONE partial text chunk, then leave it hung.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('partial reply')
+    })
+    await waitFor(
+      () =>
+        messagesOfType(socket, 'chunk').some(
+          (c) => c.kind === 'text' && c.text === 'partial reply'
+        ),
+      'partial chunk reached the client'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-stream — no terminal frame yet
+
+    // The per-turn deadline force-cancels the hung turn → it MUST emit a terminal
+    // done frame so the client clears its streaming state.
+    await waitFor(() => sawDoneChunk(socket), 'force-cancel emitted a terminal done frame', 4000)
+    // The socket stays OPEN — the session continues, later utterances not suppressed.
+    await settle()
+    expect(socket.closeEvents).toHaveLength(0)
+  })
+
+  it('P2#3 — a force-cancel bumps the turn generation and a LATE-completing turn does not mutate state', async () => {
+    // The per-turn deadline bumps `turnGeneration`; a timed-out turn whose provider
+    // ignores the abort and completes late is fenced (its settle is a no-op), so it
+    // cannot corrupt `turnCount` / `history` for the abandoned turn. (The fence
+    // mechanism itself is unit-tested in turn-pipeline.test.ts.)
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 150
+    })
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    const before = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        turnCount: s?.turnCount ?? -1,
+        historyLen: s?.history.length ?? -1,
+        gen: s?.turnGeneration ?? -1,
+      }
+    })
+
+    // The turn parks at the gated LLM, then the per-turn deadline force-cancels it.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await waitForDoState(
+      handle,
+      (v) => v.turnInFlight === false,
+      'turn force-canceled by the deadline'
+    )
+    const genAfterCancel = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+    expect(genAfterCancel).toBe(before.gen + 1) // force-cancel bumped the generation
+
+    // The provider ignored the abort and completes LATE (after the guard released).
+    await handle.run(() => {
+      kit.llmTurns[0].finishStream()
+    })
+    await settle()
+    await settle()
+
+    const after = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(after.turnCount).toBe(before.turnCount) // no stale turnCount increment
+    expect(after.historyLen).toBe(before.historyLen) // no stale history mutation
+  })
+})
+
+// --- PR #257 codex round 2 — stale-turn cross-session invariant + zero-bill alarm --
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-2 fixes', () => {
+  it('round2 #1/#3 — a stale turn resolving a chunk LATE does not flip the delivered latch / bump generation / write history on a REBOUND new session', async () => {
+    // Root-cause invariant: `return()` cannot interrupt a pending provider await, so
+    // an old session's turn can run its loop body LATE — after `clearSession` rebound
+    // the DO to a NEW session. Its session-facing writes must be gated on session
+    // identity, or they corrupt the new session (floor-charge it / skip its turn).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+    })
+
+    // Session A: a turn parks at the gated LLM (stuck), then A ends (DO unbinds).
+    const socketA = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socketA)
+    await driveUtteranceToLlm(socketA, kit, 1) // A's turn parked at the gated LLM
+    socketA.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketA, 'summary')
+
+    // The DO is REBOUND to a NEW session B (new sessionId, fresh state).
+    const socketB = await openSocket(handle, 'user-B')
+    const sessionB = await createSessionOverWs(socketB)
+    const before = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        gen: s?.turnGeneration ?? -1,
+        delivered: asPrivate(instance).hasDeliveredTurn,
+        historyLen: s?.history.length ?? -1,
+      }
+    })
+    expect(before.delivered).toBe(false)
+
+    // Session A's stuck turn resolves a chunk LATE (its provider ignored return()).
+    // The loop-body identity guard must make it touch NOTHING on session B.
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('late reply from A')
+      kit.llmTurns[0].finishStream()
+    })
+    await settle()
+    await settle()
+
+    const after = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        gen: s?.turnGeneration ?? -1,
+        delivered: asPrivate(instance).hasDeliveredTurn,
+        historyLen: s?.history.length ?? -1,
+      }
+    })
+    expect(after.delivered).toBe(false) // NOT floor-flagged by A's stale chunk
+    expect(after.gen).toBe(before.gen) // A's stale turn did NOT bump B's generation
+    expect(after.historyLen).toBe(before.historyLen) // no stale history on B
+    // B delivered nothing → it must bill ZERO on close (the corruption would have
+    // floor-charged it). Session A DID deliver (its transcript frame), so it bills —
+    // assert specifically that NO row exists for B.
+    socketB.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketB, 'summary')
+    await settle()
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+  })
+
+  it("round2 #1 — a stale turn's deadline firing LATE does not bump a rebound new session's generation", async () => {
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 250 // A's stuck turn trips its deadline soon
+    })
+
+    // Session A: a turn parks at the gated LLM (never released), then A ends.
+    const socketA = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socketA)
+    await driveUtteranceToLlm(socketA, kit, 1)
+    socketA.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketA, 'summary')
+
+    // Rebind to a NEW session B.
+    const socketB = await openSocket(handle, 'user-B')
+    await createSessionOverWs(socketB)
+    const genBefore = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+
+    // Wait past A's per-turn deadline (250 ms): its force-cancel path fires LATE while
+    // B is bound. The epoch gate must make it skip the generation bump.
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    await settle()
+
+    const genAfter = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+    expect(genAfter).toBe(genBefore) // A's late deadline did NOT bump B's generation
+  })
+
+  it('round2 #2 — the durable alarm bills ZERO for a zero-delivery session (no billable marker, no idempotency row, failed cancel)', async () => {
+    // FIX 3 writes NO teardown deduct row for a zero-delivery session, so the ON
+    // CONFLICT idempotency guard could not stop a stale alarm from full-budget-billing
+    // it. The durable billable marker is the real gate: absent => bill ZERO.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+
+    // No marker written (the session delivered nothing) and no seeded deduct row (FIX 3
+    // wrote none). The schedule-cancel raced, so the alarm still fires.
+    await fireBurnAlarm(handle, {
+      sessionId: 'zero-delivery-session',
+      userId: 'user-A',
+      budgetMinutes: 8,
+      fundingSource: 'earned',
+    })
+    await settle()
+
+    // The alarm billed NOTHING — the zero-bill rule holds durably.
+    expect(db.deductRows()).toHaveLength(0)
+  })
+})
+
+// --- PR #257 codex round 3 — create-ordering + superseded terminal-done ----------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-3 fixes', () => {
+  it('round3 #1 — a text-turn fired right after create does not overwrite the AI-first greeting (schedule armed before ready)', async () => {
+    // FIX 1's awaited `schedule()` used to sit BETWEEN the `created` ack and the
+    // greeting launch: the owner could fire a turn in that gap (the SDK's async
+    // `onMessage` interleaves across awaits) and the resumed handler would launch the
+    // greeting concurrently, overwriting `activeTurn`. Arming the schedule BEFORE
+    // `created` closes the gap — the greeting claims the turn synchronously with
+    // `created`, so a premature turn hits the in-flight guard. A DELIBERATELY SLOW
+    // `schedule()` here widens the arming window so the race is exercised deterministically
+    // (with the fix, the slow arming just delays `created`; the greeting still wins).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb() // a finite budget → the schedule is actually armed
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+      const realSchedule = instance.schedule.bind(instance)
+      vi.spyOn(instance, 'schedule').mockImplementation((...args) =>
+        new Promise((resolve) => setTimeout(resolve, 150)).then(() => realSchedule(...args))
+      )
+    })
+    const socket = await openSocket(handle, 'user-A')
+
+    // Create WITH the greeting, then fire a text-turn the moment `created` is seen. The
+    // create handler's schedule arm is in-flight; the text-turn interleaves. With the
+    // arm BEFORE `created`, the greeting already owns the turn, so the text-turn is
+    // REJECTED as turn-in-flight and does NOT start a second (overwriting) reply.
+    await createSessionOverWs(socket, 'demo-mock', { opening: true })
+    socket.send(JSON.stringify({ type: 'text-turn', text: 'hello there' }))
+    await waitFor(
+      () => messagesOfType(socket, 'error').some((e) => e.code === 'turn_in_flight'),
+      'the premature text-turn was rejected (greeting owns the turn)'
+    )
+    await settle()
+    expect(kit.llmTurns).toHaveLength(1) // ONLY the greeting ran — no overwrite
+  })
+
+  it('round3 #2 — a barged-in (superseded) turn still emits a terminal done so client suppression clears, while its state stays FENCED', async () => {
+    // The generation/identity fence stops a superseded turn's state commit, but the
+    // client sets barge-in suppression and clears it only on a later `chunk.done`. A
+    // superseded turn that drains after cancellation must STILL emit a terminal done,
+    // or the next real answer's chunks are dropped until its own done.
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo() // priceless — this is about the wire + the fence
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // A reply parks at the gated LLM and streams a partial chunk to the client.
+    await driveUtteranceToLlm(socket, kit, 1)
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('partial answer')
+    })
+    await waitFor(
+      () =>
+        messagesOfType(socket, 'chunk').some(
+          (c) => c.kind === 'text' && c.text === 'partial answer'
+        ),
+      'partial chunk streamed'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-stream — no terminal yet
+
+    // The client BARGES IN (speech-start) → the reply is superseded (epoch advances,
+    // state commit fenced) and a fresh recognizer opens.
+    socket.send(JSON.stringify({ type: 'speech-start' }))
+    await waitFor(() => kit.sttCalls() === 1, 'barge-in opened a fresh recognizer')
+
+    // The superseded reply drains after cancellation — it MUST still emit a terminal
+    // done so the client's barge-in suppression clears.
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('.')
+      kit.llmTurns[0].finishStream()
+    })
+    await waitFor(() => sawDoneChunk(socket), 'the superseded turn emitted a terminal done', 4000)
+
+    // Its state/usage commit stayed FENCED — no history, no turnCount for the
+    // superseded turn.
+    await settle()
+    const state = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(state.turnCount).toBe(0) // superseded reply did NOT settle
+    expect(state.historyLen).toBe(0)
+  })
+})
+
+// --- PR #257 codex round 4 — abort a mid-await turn on barge-in ------------------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-4 fix', () => {
+  it('round4 — a barge-in ABORTS a turn stuck mid provider-await so its terminal done fires PROMPTLY (no 120s wait, no further chunk)', async () => {
+    // The common barge-in case: the reply is mid-`await` on the provider when the user
+    // barges in. `return()` cannot interrupt that await, so before this fix the
+    // superseded stream would not reach its terminal-`done` emission until the next
+    // provider chunk OR the 120s hard deadline — leaving client suppression stuck.
+    // Storing + aborting the per-turn AbortController on supersede unblocks the await
+    // (a signal-honoring provider rejects), so the terminal `done` is emitted at once.
+    const abortable = makeAbortableStuckLlm() // never yields; rejects its await on abort
+    const bundle = makeTurnProviders(abortable.llm)
+    providerControl.override = bundle.providers
+    const handle = makeSessionDo() // priceless — this is about the wire + the abort
+    // maxTurnMs stays at its 120s default: the terminal `done` must NOT depend on the
+    // deadline firing. A 2 s wait budget (<< 120 s) proves promptness.
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // A reply parks mid provider-await (the LLM never yields).
+    socket.send(SPEECH_START)
+    socket.send(TURN)
+    await waitForDoState(
+      handle,
+      (v) => v.turnInFlight === true,
+      'reply parked at the provider await'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-await — no terminal yet
+
+    // The client BARGES IN → supersede must ABORT the stuck await so the superseded
+    // stream unwinds and emits its terminal `done` PROMPTLY (well within 2 s, i.e. not
+    // waiting for the 120 s deadline and not needing a further provider chunk).
+    socket.send(SPEECH_START)
+    await waitFor(
+      () => sawDoneChunk(socket),
+      'the aborted superseded turn emitted its terminal done promptly',
+      2000
+    )
+
+    // The superseded turn's state commit stayed fenced (no history / turnCount).
+    await settle()
+    const state = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(state.turnCount).toBe(0)
+    expect(state.historyLen).toBe(0)
   })
 })

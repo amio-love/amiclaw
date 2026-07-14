@@ -25,4 +25,11 @@ declare module 'cloudflare:test' {
     stub: DurableObjectStub<O>,
     callback: (instance: O, state: DurableObjectState) => R | Promise<R>
   ): Promise<R>
+
+  /**
+   * Immediately runs (and removes) the Durable Object's scheduled alarm, if one is
+   * due. Returns whether an alarm ran. Used to fire the durable burn-through
+   * schedule deterministically in the FIX 1 alarm tests.
+   */
+  export function runDurableObjectAlarm(stub: DurableObjectStub): Promise<boolean>
 }
