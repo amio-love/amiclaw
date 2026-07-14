@@ -5,6 +5,22 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Your starburst balance, now on screen** — Added. The starburst you earn and
+spend is finally visible where you play. Signed in, the arcade header carries a
+small starburst chip beside your avatar; tap it for a ledger of everything that
+moved your balance — wins, daily check-ins, your welcome gift, and the minutes a
+voice session spent. Clearing a daily challenge now lands a visible +5 reward drop
+right on the result screen, and the day's first qualified play adds a +3 check-in
+beat with a small sound; a day that has already hit its reward cap says so quietly
+instead of dropping nothing without a word. And when your balance can't cover a
+voice session, the companion no longer dead-ends on a blank error — it tells you
+warmly that it needs starburst to talk and points you toward earning more, and a
+session that runs dry mid-conversation bows out on a short goodbye rather than
+cutting off cold. The chip, the ledger, the reward drops, and the intercepts all
+wear the existing Atlas star-chart look — the same warm gold, no new colors. This
+is the visible half of the loop; the ledger, the payouts, and the pricing gate
+underneath it landed in earlier changes.
+
 **Companion time now runs on starburst** — Added. Opening a voice session with
 your companion now costs one starburst a minute, drawn from the same balance your
 wins and check-ins fill. The game checks your balance before a session opens: with

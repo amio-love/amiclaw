@@ -20,6 +20,8 @@
 import { API_BASE } from '@shared/api-base'
 import { resolveAccountStreak } from '@amiclaw/arcade-profile/companion-streak'
 import type {
+  AssetEntryView,
+  CompanionAssetsResponse,
   CompanionIdentity,
   CompanionResponse,
   CompanionSettingsBody,
@@ -331,6 +333,86 @@ export async function putVoicePosture(posture: VoicePosture): Promise<MutationRe
       body: JSON.stringify(body),
     })
     return res.ok ? { kind: 'ok' } : { kind: 'error' }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+// --- Reward-economy balance / ledger (starburst) -----------------------------
+
+/**
+ * `GET /api/companion/assets` result. `anon` is the require-session 401 (the
+ * chip renders nothing for a signed-out visitor); `error` is a network / shape
+ * failure (also renders nothing). A `balance` that is not a number is treated
+ * as `error` so a session-shaped or partial body never paints a broken chip.
+ */
+export type AssetsReadResult =
+  | {
+      kind: 'ok'
+      balance: number
+      entries: AssetEntryView[]
+      welcomeGranted: boolean
+      nextCursor?: string
+    }
+  | { kind: 'anon' }
+  | { kind: 'error' }
+
+/** Illustrative ledger for the `?companionSeed=1` preview (READ-ONLY, like every
+    other seeded read in this module) so the balance chip is felt before the real
+    ledger has rows. Production (no seed param) reads the real endpoint. */
+const SEED_ASSETS: { balance: number; entries: AssetEntryView[] } = {
+  balance: 12,
+  entries: [
+    {
+      amount: -6,
+      source_product: 'platform-ai',
+      kind: 'session',
+      earned_at: '2026-07-14T02:10:00.000Z',
+    },
+    {
+      amount: 3,
+      source_product: 'amiclaw',
+      kind: 'checkin',
+      earned_at: '2026-07-14T01:00:00.000Z',
+    },
+    { amount: 5, source_product: 'bombsquad', kind: 'win', earned_at: '2026-07-14T00:55:00.000Z' },
+    {
+      amount: 10,
+      source_product: 'amiclaw',
+      kind: 'welcome',
+      earned_at: '2026-07-13T09:00:00.000Z',
+    },
+  ],
+}
+
+/**
+ * Read the player's starburst balance + a recent ledger page. Owner identity is
+ * server-derived from the session cookie (require-session guard); the client
+ * never sends a user id. Mirrors the discriminated-result convention of every
+ * other read here.
+ */
+export async function fetchAssets(): Promise<AssetsReadResult> {
+  if (companionSeedEnabled()) {
+    return {
+      kind: 'ok',
+      balance: SEED_ASSETS.balance,
+      entries: SEED_ASSETS.entries,
+      welcomeGranted: false,
+    }
+  }
+  try {
+    const res = await fetch(`${BASE}/assets`, { credentials: 'include' })
+    if (res.status === 401) return { kind: 'anon' }
+    if (!res.ok) return { kind: 'error' }
+    const data = (await res.json()) as CompanionAssetsResponse
+    if (typeof data.balance !== 'number' || !Array.isArray(data.entries)) return { kind: 'error' }
+    return {
+      kind: 'ok',
+      balance: data.balance,
+      entries: data.entries,
+      welcomeGranted: data.welcome_granted === true,
+      ...(data.next_cursor !== undefined ? { nextCursor: data.next_cursor } : {}),
+    }
   } catch {
     return { kind: 'error' }
   }

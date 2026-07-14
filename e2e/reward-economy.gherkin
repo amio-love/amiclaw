@@ -1,0 +1,30 @@
+# Reward-economy starburst balance — the signed-in arcade shell shows the
+# player's starburst balance in the TopNav with a tap-through ledger drawer
+# (reward-economy §7). This journey covers the observable balance-viewing beat
+# within the existing homepage shell — NO new route, so the flow-inventory stays
+# within existing pages.
+#
+# Scope note: the full earn -> see-balance -> play -> deduct loop's earn
+# (win/check-in credit) and spend (voice-session deduct) legs run through the
+# platform-ai pricing gate + the ledger, which are exercised by the workerd DO
+# tests and the ledger unit tests — not reachable through the static e2e harness
+# (no Workers runtime, no live voice WebSocket). The e2e stays at the observable
+# UI: the balance chip renders the authed balance and its drawer lists the
+# ledger. The settlement reward drop, the check-in beat, and the voice intercepts
+# are covered by their per-package component tests.
+
+Feature: Reward-economy starburst balance
+  As a signed-in AMIO Arcade player
+  I want to see my starburst balance in the arcade header and open its ledger
+  So that I know what I have earned and what a voice session will spend
+
+  Background:
+    Given I am a signed-in player with a starburst balance
+
+  # Source: reward-economy-balance-chip
+  @playwright
+  Scenario: The balance chip shows the starburst balance and opens the ledger
+    When I open /
+    Then the header shows my starburst balance of 12
+    When I open the starburst ledger
+    Then the ledger lists my 过关奖励 and 见面礼 entries

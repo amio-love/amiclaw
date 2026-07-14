@@ -21,10 +21,9 @@
 #
 # --- Regression size budget --------------------------------------------------
 # Per the governance model (rule 3): the e2e regression suite is capped at
-# 2 x the journey-scenario count. With 39 active flows <-> 39 journey
-# scenarios, the regression size budget is 78 (2026-07-13, after the Sound
-# Garden anon-run flow and the four companion-proxy-social flows landed as
-# @playwright journeys).
+# 2 x the journey-scenario count. With 40 active flows <-> 40 journey
+# scenarios, the regression size budget is 80 (2026-07-14, after the
+# reward-economy balance-chip flow landed as a @playwright journey).
 # Crossing it triggers a forced prune audit. Current regression count: 2.
 #
 # --- Retired scenario --------------------------------------------------------
@@ -595,4 +594,19 @@ flows:
       player, no second feed read) — and its 「→ 看看我说了什么」link anchors at the
       exact event via /community?event=<event_id>.
     steps: [lobby-homepage, proxy-v1-triggered, transparency-line, anchored-event-link]
+    status: active
+
+  # === Reward economy flows ===================================================
+
+  - id: reward-economy-balance-chip
+    name: Starburst balance chip + ledger drawer
+    description: >-
+      A signed-in player opens the homepage and the TopNav shows their starburst
+      (星芒) balance chip next to the avatar; tapping it opens the shared-Modal
+      ledger drawer listing the recent entries by kind (过关奖励 / 每日打卡 / 见面礼
+      / 语音陪伴) — no new route, the ledger stays within the existing shell. The
+      observable balance-viewing beat of the reward-economy earn -> see -> open ->
+      spend loop; the earn/spend legs run server-side (pricing gate + ledger)
+      outside the static harness.
+    steps: [homepage-signed-in, balance-chip-render, open-ledger, ledger-entries]
     status: active

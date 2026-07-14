@@ -124,6 +124,7 @@ export function ShadowVoiceRuntime({
     companionText: session.aiText,
     commandResult,
     errorCode: session.errorCode ?? undefined,
+    sessionReason: session.summaryReason ?? undefined,
     statusMessage:
       (session.errorCode ? ERROR_COPY[session.errorCode] : undefined) ?? eligibilityMessage,
     ...(eligibility.status === 'eligible' &&

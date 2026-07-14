@@ -201,3 +201,42 @@
     animation: none;
   }
 }
+
+/* --- Reward-economy voice intercepts (§5). Brand-yellow channel, not the
+   error rose — this is a "go earn" state, not a fault. --- */
+.intercept {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--y-glow-25);
+}
+
+.interceptLead {
+  margin: 0;
+  font: 400 12px/1.5 var(--font-body);
+  color: var(--soft);
+}
+
+.interceptCta {
+  justify-self: start;
+  font: 600 12px/1.45 var(--font-body);
+  color: var(--y);
+  text-decoration: none;
+}
+
+.interceptCta:hover {
+  text-decoration: underline;
+}
+
+.farewell {
+  margin: 0;
+  padding: 8px 12px;
+  font: 400 12px/1.45 var(--font-body);
+  color: var(--y);
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--y-glow-25);
+  border-radius: var(--radius-md);
+  text-align: center;
+}

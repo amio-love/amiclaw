@@ -23,13 +23,9 @@ export interface UseVoiceSessionResult extends Omit<
   // `sendText` is the shared hook's typed-input fallback; BombSquad is voice-only
   // (no typed channel), so it is narrowed away here to keep BombSquad's public
   // result surface unchanged — same as openSession/closeSession/updateGameState.
-  | 'summary'
-  | 'requestClosing'
-  | 'openSession'
-  | 'closeSession'
-  | 'updateGameState'
-  | 'errorCode'
-  | 'sendText'
+  // `errorCode` / `summaryReason` are KEPT (not narrowed): the voice panel reads
+  // them for the reward-economy insufficient-balance / balance-depleted beats.
+  'summary' | 'requestClosing' | 'openSession' | 'closeSession' | 'updateGameState' | 'sendText'
 > {
   summary: SessionSummary | null
   requestClosing: (outcome?: RecapOutcome) => Promise<void>
