@@ -3,10 +3,12 @@ import { Button, GlassCard, Modal, Toggle } from '@amiclaw/ui'
 import type { ProfileClaimView } from '@shared/companion-types'
 import {
   fetchProfile,
+  fetchProxySocial,
   correctClaim,
   deleteClaim,
   deleteAllClaims,
   setProfileEnabled,
+  setProxySocialEnabled,
 } from '@/lib/companion-api'
 import {
   useCompanionAccess,
@@ -38,8 +40,13 @@ export default function ProfileControlPage() {
   const access = useCompanionAccess()
   const [status, setStatus] = useState<LoadStatus>('loading')
   const [enabled, setEnabled] = useState(true)
+  const [proxyEnabled, setProxyEnabled] = useState(true)
+  // The proxy-social switch has its OWN read state: a read failure must never
+  // silently paint an "enabled" switch — it disables the control and shows a retry.
+  const [proxyStatus, setProxyStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [claims, setClaims] = useState<ProfileClaimView[]>([])
   const [toggleBusy, setToggleBusy] = useState(false)
+  const [proxyToggleBusy, setProxyToggleBusy] = useState(false)
   const [modal, setModal] = useState<ModalState>({ type: 'none' })
   const [busy, setBusy] = useState(false)
   const [actionFailed, setActionFailed] = useState(false)
@@ -47,18 +54,29 @@ export default function ProfileControlPage() {
   useEffect(() => {
     if (access !== 'ready') return
     let active = true
-    fetchProfile().then((result) => {
+    // Profile drives the page status (companion existence); the proxy-social
+    // switch is read alongside it and only applied once a companion is present.
+    Promise.all([fetchProfile(), fetchProxySocial()]).then(([profileResult, proxyResult]) => {
       if (!active) return
-      if (result.kind === 'ok') {
-        setEnabled(result.profileEnabled)
-        setClaims(result.claims)
+      if (profileResult.kind === 'ok') {
+        setEnabled(profileResult.profileEnabled)
+        setClaims(profileResult.claims)
         setStatus('ready')
-      } else if (result.kind === 'none') {
+      } else if (profileResult.kind === 'none') {
         // No companion yet — there is no profile to control. Gate to setup
         // (distinct from the has-companion-but-zero-claims empty state).
         setStatus('setup')
       } else {
         setStatus('error')
+      }
+      // Proxy-social read state is tracked independently: 'ready' only on a
+      // clean read; any failure lands 'error' so the switch renders disabled
+      // with a retry rather than a misleading enabled position.
+      if (proxyResult.kind === 'ok') {
+        setProxyEnabled(proxyResult.proxySocialEnabled)
+        setProxyStatus('ready')
+      } else {
+        setProxyStatus('error')
       }
     })
     return () => {
@@ -73,6 +91,28 @@ export default function ProfileControlPage() {
     const result = await setProfileEnabled(next)
     if (result.kind !== 'ok') setEnabled(!next) // revert on failure
     setToggleBusy(false)
+  }
+
+  async function onProxyToggle(next: boolean) {
+    if (proxyToggleBusy) return
+    setProxyToggleBusy(true)
+    setProxyEnabled(next) // optimistic
+    const result = await setProxySocialEnabled(next)
+    if (result.kind !== 'ok') setProxyEnabled(!next) // revert on failure
+    setProxyToggleBusy(false)
+  }
+
+  // Retry handler for the proxy-social read (event-driven → the synchronous
+  // setState here is intentional and outside any effect body).
+  async function retryProxySocial() {
+    setProxyStatus('loading')
+    const result = await fetchProxySocial()
+    if (result.kind === 'ok') {
+      setProxyEnabled(result.proxySocialEnabled)
+      setProxyStatus('ready')
+    } else {
+      setProxyStatus('error')
+    }
   }
 
   function closeModal() {
@@ -148,6 +188,29 @@ export default function ProfileControlPage() {
               画像已关闭。下面的理解暂停生效，但仍由你保管。
             </p>
           )}
+
+          <GlassCard radius="2xl" className={styles.switchCard}>
+            <div className={styles.switchText}>
+              <span className={styles.switchTitle}>让伙伴替我在社区留言</span>
+              <span className={styles.switchSub}>
+                关闭后，伙伴不再替你到别人的社区动态下留新的话；已经发出的留言不受影响，仍然保留。
+              </span>
+              {proxyStatus === 'error' && (
+                <span className={styles.switchError} role="alert">
+                  开关状态暂时读不出来。
+                  <button type="button" className={styles.switchRetry} onClick={retryProxySocial}>
+                    重试
+                  </button>
+                </span>
+              )}
+            </div>
+            <Toggle
+              checked={proxyEnabled}
+              onChange={onProxyToggle}
+              disabled={proxyToggleBusy || proxyStatus !== 'ready'}
+              label="代言社交开关"
+            />
+          </GlassCard>
 
           {claims.length === 0 ? (
             <CompanionEmptyState

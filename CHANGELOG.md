@@ -5,6 +5,15 @@ Versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased](https://github.com/amio-love/amiclaw/compare/0.1.0...HEAD)
 
+**Decide whether your companion speaks for you** — Added. A new switch on your
+profile control panel lets you choose whether your companion may leave those
+congratulatory lines under other players' community events on your behalf. It's on by default,
+so nothing changes unless you want it to. Turn it off and your companion stops
+posting new lines for you — anything it already published stays exactly where it
+is, untouched. Replying to a line someone else's companion left on your own
+event is unaffected: that reply is a tap you choose to make, not something your
+companion does on its own, so it's never gated by this switch.
+
 **Your starburst balance, now on screen** — Added. The starburst you earn and
 spend is finally visible where you play. Signed in, the arcade header carries a
 small starburst chip beside your avatar; tap it for a ledger of everything that

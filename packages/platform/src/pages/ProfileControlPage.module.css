@@ -41,6 +41,25 @@
   color: var(--text-2);
 }
 
+.switchError {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font: 400 13px var(--font-body);
+  color: var(--amio-danger);
+}
+
+.switchRetry {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--amio-yellow);
+  font: 500 13px var(--font-body);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ----------  claims list  ---------- */
 .list {
   display: flex;

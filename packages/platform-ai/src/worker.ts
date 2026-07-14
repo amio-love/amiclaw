@@ -1,14 +1,18 @@
 /**
  * Platform AI Worker entry (L2 §Mechanism Variant 3).
  *
- * Mounted same-origin at `claw.amio.fans/ai-ws/*` plus the bounded
- * `/ai-intent/shadow-chase` HTTP route (see `wrangler.toml`) so the auth-session
- * cookie rides along on both surfaces. The Worker:
- *   1. Dispatches the Shadow Chase intent POST before its WebSocket branch.
- *   2. Accepts `/ai-ws/*` WebSocket upgrades.
- *   3. Runs the handshake-time auth seam (cookie -> session-reader -> userId);
- *      an invalid/absent session is rejected at the handshake (401, no upgrade).
- *   4. Routes to the per-session `VoiceSessionDO` and forwards the upgrade.
+ * Mounted same-origin at `claw.amio.fans/ai-ws/*` plus the bounded `/ai-intent/*`
+ * HTTP routes (see `wrangler.toml`) so the auth-session cookie rides along on
+ * every surface. The Worker dispatches, in order, before its WebSocket branch:
+ *   1. `POST /ai-intent/shadow-chase` — the Shadow Chase bounded intent.
+ *   2. `POST /ai-intent/companion-proxy-message` — companion-proxy-social V1
+ *      (甲's companion autonomously authors one public line; silent skips).
+ *   3. `POST /ai-intent/companion-proxy-reply` — companion-proxy-social V2
+ *      (乙's companion replies once; explicit status codes).
+ *   4. `/ai-ws/*` WebSocket upgrades — runs the handshake-time auth seam (cookie
+ *      -> session-reader -> userId; invalid/absent session rejected at the
+ *      handshake, 401, no upgrade), then routes to the per-session
+ *      `VoiceSessionDO` and forwards the upgrade.
  *
  * The agent is addressed by the URL path segment after `/ai-ws/` (the opaque
  * session name the client connects on); `getAgentByName` makes the same name
@@ -22,6 +26,7 @@ import { VoiceSessionDO } from './session-do'
 import { CompanionConsolidatorDO } from './consolidator-do'
 import { resolveSessionReader, type AuthSeamEnv } from './auth-seam'
 import { resolveCompanionContext } from '../../companion-memory/src/resolver'
+import { readProxySocialEnabled } from '../../companion-memory/src/store'
 import {
   countAuthorProxyMessagesForDay,
   findInWindowCommunityEvent,
@@ -134,6 +139,8 @@ export default {
             rateLimiter: new KvIntentRateLimiter(env.AUTH, PROXY_RATE_LIMIT_PREFIX),
             resolveCompanionContext: (userId) =>
               resolveCompanionContext(env.COMPANION_DB as D1Database, userId),
+            readProxySocialEnabled: (userId) =>
+              readProxySocialEnabled(env.COMPANION_DB as D1Database, userId),
             readPublicProfile: (userId) => readArcadePublicProfile(db, userId),
             readCandidates: (userId) => readProxyCandidateEvents(db, userId),
             countAuthorMessagesForDay: (userId) => countAuthorProxyMessagesForDay(db, userId),

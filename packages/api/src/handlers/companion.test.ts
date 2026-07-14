@@ -22,6 +22,7 @@ import {
   handlePutProfileSettings,
 } from './companion-profile'
 import { handlePutCompanionSettings } from './companion-settings'
+import { handleGetProxySocial, handlePutProxySocial } from './companion-proxy-social-settings'
 import { handleClaimCorrection, handleClaimDelete } from './companion-profile-claim'
 import { handleGetMemories, handleMemoryDelete } from './companion-memories'
 import type { CompanionApiEnv } from './companion-shared'
@@ -120,6 +121,11 @@ describe('require-session gate (every endpoint, unauthenticated -> 401)', () => 
       handleGetCompanion(anonRequest('/api/companion'), env),
       handlePutCompanionSettings(
         anonRequest('/api/companion/settings', { method: 'PUT', body: '{}' }),
+        env
+      ),
+      handleGetProxySocial(anonRequest('/api/companion/proxy-social'), env),
+      handlePutProxySocial(
+        anonRequest('/api/companion/proxy-social', { method: 'PUT', body: '{}' }),
         env
       ),
     ])
@@ -259,6 +265,85 @@ describe('PUT /api/companion/profile (the switch)', () => {
       env
     )
     expect(response.status).toBe(422)
+  })
+})
+
+describe('GET/PUT /api/companion/proxy-social (甲侧代言总开关)', () => {
+  it('defaults to enabled, and PUT flips it off (persisting 0)', async () => {
+    const { env, db } = await makeEnv()
+    await setupCompanion(env)
+
+    const get = await handleGetProxySocial(authedRequest('/api/companion/proxy-social'), env)
+    expect(get.status).toBe(200)
+    expect(((await get.json()) as { proxy_social_enabled: boolean }).proxy_social_enabled).toBe(
+      true
+    )
+
+    const put = await handlePutProxySocial(
+      authedRequest('/api/companion/proxy-social', {
+        method: 'PUT',
+        body: JSON.stringify({ proxy_social_enabled: false }),
+      }),
+      env
+    )
+    expect(put.status).toBe(200)
+    expect(((await put.json()) as { proxy_social_enabled: boolean }).proxy_social_enabled).toBe(
+      false
+    )
+
+    const row = await db
+      .prepare('SELECT proxy_social_enabled FROM companion')
+      .bind()
+      .first<{ proxy_social_enabled: number }>()
+    expect(row?.proxy_social_enabled).toBe(0)
+  })
+
+  it('404s the read and the write when there is no companion', async () => {
+    const { env } = await makeEnv()
+    expect(
+      (await handleGetProxySocial(authedRequest('/api/companion/proxy-social'), env)).status
+    ).toBe(404)
+    expect(
+      (
+        await handlePutProxySocial(
+          authedRequest('/api/companion/proxy-social', {
+            method: 'PUT',
+            body: JSON.stringify({ proxy_social_enabled: true }),
+          }),
+          env
+        )
+      ).status
+    ).toBe(404)
+  })
+
+  it('422s a non-boolean payload', async () => {
+    const { env } = await makeEnv()
+    await setupCompanion(env)
+    const response = await handlePutProxySocial(
+      authedRequest('/api/companion/proxy-social', {
+        method: 'PUT',
+        body: JSON.stringify({ proxy_social_enabled: 'off' }),
+      }),
+      env
+    )
+    expect(response.status).toBe(422)
+  })
+
+  // The 401 gate is covered once, for every endpoint, in the unified
+  // require-session matrix above — no per-feature duplicate here.
+
+  it('GET degrades to enabled when the migration-0008 column is missing', async () => {
+    const { env, db } = await makeEnv()
+    await setupCompanion(env)
+    // Simulate the 0008 migration lagging the deploy: the column is not there.
+    ;(db as unknown as { raw: { exec: (sql: string) => void } }).raw.exec(
+      'ALTER TABLE companion DROP COLUMN proxy_social_enabled'
+    )
+    const get = await handleGetProxySocial(authedRequest('/api/companion/proxy-social'), env)
+    expect(get.status).toBe(200)
+    expect(((await get.json()) as { proxy_social_enabled: boolean }).proxy_social_enabled).toBe(
+      true
+    )
   })
 })
 

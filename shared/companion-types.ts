@@ -142,6 +142,23 @@ export interface ProfileSettingsBody {
   profile_enabled: boolean
 }
 
+// --- Proxy-social opt-out (甲侧代言总开关) -------------------------------------
+
+/**
+ * Response of `GET` / `PUT /api/companion/proxy-social` — the author-side master
+ * switch for 伙伴代言社交. `true` = the companion may leave proxy lines on other
+ * players' community events (the default); `false` stops NEW proxy messages
+ * (already-published threads are untouched). Mirrors the profile-switch shape.
+ */
+export interface ProxySocialSettingsResponse {
+  proxy_social_enabled: boolean
+}
+
+/** Body of `PUT /api/companion/proxy-social` (the proxy-social switch). */
+export interface ProxySocialSettingsBody {
+  proxy_social_enabled: boolean
+}
+
 // --- Companion settings (presence-layer control plane) ------------------------
 
 /** Body of `PUT /api/companion/settings` (the voice-posture write). */

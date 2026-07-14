@@ -32,6 +32,7 @@ import type {
   ProfileClaimView,
   ProfileCorrectionResponse,
   ProfileResponse,
+  ProxySocialSettingsResponse,
   VoicePosture,
 } from '@shared/companion-types'
 import {
@@ -310,6 +311,49 @@ export async function setProfileEnabled(enabled: boolean): Promise<ProfileToggle
     })
     if (!res.ok) return { kind: 'error' }
     return { kind: 'ok', profileEnabled: enabled }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+// --- Proxy-social opt-out (甲侧代言总开关) -------------------------------------
+
+export type ProxySocialResult =
+  | { kind: 'ok'; proxySocialEnabled: boolean }
+  | { kind: 'none' }
+  | { kind: 'error' }
+
+/** Read the author-side proxy-social master switch. `none` = no companion yet. */
+export async function fetchProxySocial(): Promise<ProxySocialResult> {
+  if (companionSeedEnabled()) return { kind: 'ok', proxySocialEnabled: true }
+  try {
+    const res = await fetch(`${BASE}/proxy-social`, { credentials: 'include' })
+    if (res.status === 404) return { kind: 'none' }
+    if (!res.ok) return { kind: 'error' }
+    const data = (await res.json()) as ProxySocialSettingsResponse
+    return { kind: 'ok', proxySocialEnabled: data.proxy_social_enabled }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+export type ProxySocialToggleResult =
+  | { kind: 'ok'; proxySocialEnabled: boolean }
+  | { kind: 'error' }
+
+/** Flip the proxy-social switch. Off stops NEW proxy messages; published threads
+    are untouched (that is server-side truth — the client only carries the flag). */
+export async function setProxySocialEnabled(enabled: boolean): Promise<ProxySocialToggleResult> {
+  if (companionSeedEnabled()) return { kind: 'ok', proxySocialEnabled: enabled }
+  try {
+    const res = await fetch(`${BASE}/proxy-social`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      credentials: 'include',
+      body: JSON.stringify({ proxy_social_enabled: enabled }),
+    })
+    if (!res.ok) return { kind: 'error' }
+    return { kind: 'ok', proxySocialEnabled: enabled }
   } catch {
     return { kind: 'error' }
   }

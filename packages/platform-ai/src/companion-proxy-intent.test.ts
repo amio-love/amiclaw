@@ -110,6 +110,7 @@ function messageDeps(
     sessionReader,
     rateLimiter,
     resolveCompanionContext: vi.fn(async () => COMPANION),
+    readProxySocialEnabled: vi.fn(async () => true),
     readPublicProfile: vi.fn(async () => CLAIMED),
     readCandidates: vi.fn(async () => [candidate()]),
     countAuthorMessagesForDay: vi.fn(async () => 0),
@@ -307,6 +308,42 @@ describe('handleCompanionProxyMessage — silent background skips (200 messaged:
     const llm = { streamCompletion: vi.fn() } as unknown as LlmProvider
     const deps = messageDeps({ countAuthorMessagesForDay: vi.fn(async () => DAILY_PROXY_CAP), llm })
     await handleCompanionProxyMessage(request(V1_PATH), deps)
+    expect(llm.streamCompletion).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleCompanionProxyMessage — 甲侧代言总开关 (proxy-social opt-out)', () => {
+  it('skips silently (200 messaged:false) with no LLM call when the author opted out', async () => {
+    const llm = { streamCompletion: vi.fn() } as unknown as LlmProvider
+    const insertMessage = vi.fn(async () => ({ inserted: true }) as InsertProxyResult)
+    const deps = messageDeps({
+      readProxySocialEnabled: vi.fn(async () => false),
+      insertMessage,
+      llm,
+    })
+    const response = await handleCompanionProxyMessage(request(V1_PATH), deps)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ messaged: false })
+    expect(llm.streamCompletion).not.toHaveBeenCalled()
+    expect(insertMessage).not.toHaveBeenCalled()
+  })
+
+  it('authors normally when proxy-social is enabled (the degrade-safe default)', async () => {
+    const deps = messageDeps({ readProxySocialEnabled: vi.fn(async () => true) })
+    const response = await handleCompanionProxyMessage(request(V1_PATH), deps)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ messaged: true })
+    expect(deps.readProxySocialEnabled).toHaveBeenCalledWith('user-jia')
+  })
+
+  it('503s (never generating) when the switch read itself fails', async () => {
+    const llm = { streamCompletion: vi.fn() } as unknown as LlmProvider
+    const deps = messageDeps({
+      readProxySocialEnabled: vi.fn(async () => Promise.reject(new Error('DB down'))),
+      llm,
+    })
+    const response = await handleCompanionProxyMessage(request(V1_PATH), deps)
+    expect(response.status).toBe(503)
     expect(llm.streamCompletion).not.toHaveBeenCalled()
   })
 })

@@ -94,6 +94,56 @@ export async function setProfileEnabled(
   return result.meta.changes > 0
 }
 
+/* The proxy-social opt-out column lands in migration 0008 on the existing
+   companion table (0001). A read that runs before that migration is applied
+   (migration lagging a deploy) hits "no such column: proxy_social_enabled"; the
+   read degrades to the column's DEFAULT (enabled), never treating a missing
+   column as "off" — same feature-guard philosophy as the derived-feed guards. */
+function isMissingProxySocialColumnError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('no such column') &&
+    error.message.includes('proxy_social_enabled')
+  )
+}
+
+/**
+ * Read the author-side proxy-social master switch (甲侧代言总开关, migration 0008):
+ * `true` = the companion may autonomously author community proxy messages (the
+ * default). Degrades to `true` when the column is missing (migration lag) — and
+ * returns `true` for an absent companion row too, because the no-companion case
+ * is gated by the caller's own companion-existence check, not here.
+ */
+export async function readProxySocialEnabled(db: CompanionDb, userId: string): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare('SELECT proxy_social_enabled FROM companion WHERE user_id = ?')
+      .bind(userId)
+      .first<{ proxy_social_enabled: number }>()
+    if (row === null) return true
+    return row.proxy_social_enabled !== 0
+  } catch (error) {
+    if (!isMissingProxySocialColumnError(error)) throw error
+    console.warn(
+      '[companion] proxy_social_enabled column missing — treating as enabled (migration lag?)'
+    )
+    return true
+  }
+}
+
+/** Flip the proxy-social opt-out switch (甲侧代言总开关). Returns false when no companion. */
+export async function setProxySocialEnabled(
+  db: CompanionDb,
+  userId: string,
+  enabled: boolean
+): Promise<boolean> {
+  const result = await db
+    .prepare('UPDATE companion SET proxy_social_enabled = ? WHERE user_id = ?')
+    .bind(enabled ? 1 : 0, userId)
+    .run()
+  return result.meta.changes > 0
+}
+
 // --- episodes (memory album) ---------------------------------------------------
 
 const MEMORY_PAGE_DEFAULT = 20

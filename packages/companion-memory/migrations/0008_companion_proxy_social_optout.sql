@@ -1,0 +1,18 @@
+-- Migration 0008 — Author-side proxy-social opt-out (甲侧代言总开关).
+--
+-- The master switch for AMIO Arcade 伙伴代言社交. When 0, the companion never
+-- AUTONOMOUSLY authors a new proxy message on another player's community event:
+-- the V1 authoring route (`handleCompanionProxyMessage`) skips silently
+-- (200 messaged:false, same shape as the no-companion branch). The V2 reply
+-- route is NOT gated by this flag — a reply is a user-initiated tap, an explicit
+-- action the player takes, not autonomous companion behaviour.
+--
+-- Default 1 = ON: the feature stays opt-OUT, so every existing companion keeps
+-- the shipped v1 behaviour until its owner turns the switch off.
+--
+-- Lives on `companion` (migration 0001) beside `profile_enabled`, the twin
+-- player-sovereign switch. Read paths degrade to "enabled" when the column is
+-- missing (this migration lagging a deploy) — same degrade-guard philosophy as
+-- the derived-feed feature guards; the read never trusts a missing column to
+-- mean "off".
+ALTER TABLE companion ADD COLUMN proxy_social_enabled INTEGER NOT NULL DEFAULT 1;
