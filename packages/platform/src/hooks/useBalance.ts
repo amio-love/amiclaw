@@ -37,13 +37,21 @@ export function useBalance(enabled: boolean): { state: BalanceState; reload: () 
       // repaint the old balance, so the return path must not reuse it.
       if (document.visibilityState === 'visible') void reloadBalance({ force: true })
     }
+    const refetchOnRestore = (event: PageTransitionEvent) => {
+      // `pageshow` also fires on a NORMAL initial load, not only a bfcache
+      // restore. Gate on `persisted` (true only for a real back/forward restore)
+      // — refetching on a normal load would fire a redundant second read that,
+      // for a brand-new account, flips `welcomeGranted` back to false and hides
+      // the one-time +10 welcome beat before the user sees it.
+      if (event.persisted) void reloadBalance({ force: true })
+    }
     document.addEventListener('visibilitychange', refetchWhenVisible)
-    // `pageshow` fires on a bfcache restore (return from a game via back/forward)
-    // where `visibilitychange` may not — cover both so the chip is never stale.
-    window.addEventListener('pageshow', refetchWhenVisible)
+    // A bfcache restore (return from a game via back/forward) may not fire
+    // `visibilitychange`, so cover it via `pageshow` — but only a persisted one.
+    window.addEventListener('pageshow', refetchOnRestore)
     return () => {
       document.removeEventListener('visibilitychange', refetchWhenVisible)
-      window.removeEventListener('pageshow', refetchWhenVisible)
+      window.removeEventListener('pageshow', refetchOnRestore)
     }
   }, [enabled])
 

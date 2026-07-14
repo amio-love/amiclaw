@@ -208,17 +208,40 @@ describe('BalanceChip', () => {
     expect(document.visibilityState).toBe('visible')
   })
 
-  it('refetches on pageshow (bfcache restore via back/forward)', async () => {
+  /** A `pageshow` event with a set `persisted` flag (jsdom's Event has no
+   *  `persisted`; `true` marks a bfcache restore, `false` a normal load). */
+  function pageshowEvent(persisted: boolean): Event {
+    const event = new Event('pageshow')
+    Object.defineProperty(event, 'persisted', { value: persisted })
+    return event
+  }
+
+  it('refetches on a persisted pageshow (bfcache restore via back/forward)', async () => {
     const fetchMock = stubCountingAssets()
     render(<BalanceChip />)
     await screen.findByRole('button', { name: /星芒余额 12/ })
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      window.dispatchEvent(new Event('pageshow'))
+      window.dispatchEvent(pageshowEvent(true))
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT refetch on a normal-load pageshow (persisted:false)', async () => {
+    const fetchMock = stubCountingAssets()
+    render(<BalanceChip />)
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+    expect(fetchMock).toHaveBeenCalledTimes(1) // only the initial mount read
+
+    // `pageshow` also fires on a normal initial load. A second read here would,
+    // for a new account, flip `welcomeGranted` off and hide the +10 welcome beat.
+    await act(async () => {
+      window.dispatchEvent(pageshowEvent(false))
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1) // unchanged — no extra read
   })
 
   it('does NOT refetch while hidden — the refetch is event-gated, not a timer', async () => {

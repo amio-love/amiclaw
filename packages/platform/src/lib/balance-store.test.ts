@@ -98,10 +98,11 @@ describe('balance-store', () => {
     expect(getBalanceSnapshot()).toEqual({ status: 'unavailable' })
   })
 
-  it('force refresh issues a post-return read, not a stale pre-return in-flight one', async () => {
-    // Model a return: a pre-departure read is still in flight (deferred, resolves
-    // to the OLD balance 12); the return event forces a fresh read that returns
-    // the post-return balance 17. The store must land on 17, never 12.
+  it('force refresh reads immediately; a late pre-return read cannot clobber it', async () => {
+    // Model a return while an earlier read HANGS: R1 (pre-departure) never
+    // resolves until we say so; the forced return read R2 returns the fresh
+    // balance 17. The forced read must fire immediately (not wait for R1) and
+    // win, and R1's late OLD-balance (12) result must be discarded, not applied.
     let resolveFirst!: (res: Response) => void
     const firstRead = new Promise<Response>((resolve) => {
       resolveFirst = resolve
@@ -115,14 +116,20 @@ describe('balance-store', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const initial = reloadBalance() // R1: pre-return, still pending
-    const forced = reloadBalance({ force: true }) // return event while R1 in flight
+    const initial = reloadBalance() // R1: pre-return, hangs
+    const forced = reloadBalance({ force: true }) // return event: must issue NOW
 
-    // R1 finally resolves with the OLD balance — must be superseded, not kept.
+    // Immediacy: the forced read already fired a second fetch without waiting for
+    // the hung R1 to settle.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    await forced
+    expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 17 })
+
+    // Last-issued-wins: R1 finally resolves with the stale 12 — the generation
+    // guard discards it, so the forced read's 17 stands.
     resolveFirst(new Response(JSON.stringify({ ...ASSETS, balance: 12 }), { status: 200 }))
-    await Promise.all([initial, forced])
-
-    expect(fetchMock).toHaveBeenCalledTimes(2) // a SECOND read was issued post-return
+    await initial
     expect(getBalanceSnapshot()).toMatchObject({ status: 'ready', balance: 17 })
   })
 

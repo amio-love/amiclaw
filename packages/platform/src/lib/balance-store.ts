@@ -42,11 +42,18 @@ const listeners = new Set<() => void>()
 
 /**
  * De-dup the in-flight read (same shape as `useAuth`'s `sessionReadPromise`):
- * the initial mount and a concurrent visibility refetch share ONE request
- * rather than firing two. Cleared the moment it settles, so each later event
- * still re-reads a fresh balance.
+ * the initial mount and a concurrent drawer read share ONE request rather than
+ * firing two. Cleared the moment it settles, so each later event re-reads.
  */
 let inFlight: Promise<void> | null = null
+
+/**
+ * Monotonic read generation. Every issued read captures the value it bumped to;
+ * only the LATEST-issued read may publish (`gen === latestGen`). A slower older
+ * read that resolves out of order is discarded, so it can never clobber a newer
+ * balance — the guarantee the forced return path relies on.
+ */
+let latestGen = 0
 
 function emit(): void {
   for (const listener of listeners) listener()
@@ -101,10 +108,15 @@ function applyResult(result: AssetsReadResult): void {
   // else: `error` while ready → keep the last-known value.
 }
 
-/** Issue ONE read now and track it as the in-flight request. */
+/** Issue ONE read now, tagged with a fresh generation, and track it as the
+ *  in-flight request. Only this read publishes if it is still the latest when it
+ *  resolves; an older read that resolves later is discarded. */
 function issueRead(): Promise<void> {
+  const gen = ++latestGen
   const pending = fetchAssets()
-    .then(applyResult)
+    .then((result) => {
+      if (gen === latestGen) applyResult(result)
+    })
     .finally(() => {
       if (inFlight === pending) inFlight = null
     })
@@ -118,16 +130,16 @@ function issueRead(): Promise<void> {
  * Concurrency: by default a genuinely concurrent read (the initial mount + a
  * drawer open firing together) shares the single in-flight request.
  *
- * `{ force: true }` is the RETURN-event path (visibility / pageshow). It must
- * land on a read ISSUED AFTER the return: a request that was already in flight
- * before the user left predates the win / spend earned in the game, so reusing
- * it would repaint the OLD balance. When something is in flight, force chains a
- * fresh read after it settles and publishes THAT result; otherwise it reads now.
+ * `{ force: true }` is the RETURN-event path (visibility / bfcache restore). It
+ * must land on a read ISSUED AFTER the return: a request already in flight before
+ * the user left predates the win / spend earned in the game, so reusing it — or
+ * even waiting behind it — would keep the chip on the OLD balance while a slow or
+ * hanging pre-navigation read settles. So force issues a fresh read IMMEDIATELY
+ * and relies on the generation guard: the newer read wins, and the older read's
+ * late result is discarded rather than overwriting it.
  */
 export function reloadBalance(options?: { force?: boolean }): Promise<void> {
-  if (options?.force && inFlight) {
-    return inFlight.then(issueRead, issueRead)
-  }
+  if (options?.force) return issueRead()
   if (inFlight) return inFlight
   return issueRead()
 }
@@ -155,5 +167,6 @@ export function pushBalance(balance: number): void {
 export function resetBalanceStore(): void {
   state = INITIAL_STATE
   inFlight = null
+  latestGen = 0
   emit()
 }
