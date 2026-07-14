@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import {
   getBalanceSnapshot,
   reloadBalance,
@@ -27,31 +27,38 @@ export type { BalanceState }
 export function useBalance(enabled: boolean): { state: BalanceState; reload: () => void } {
   const state = useSyncExternalStore(subscribe, getBalanceSnapshot)
 
+  // A return event fired while the initial read is still in flight is QUEUED, not
+  // dropped: forcing a refetch now would race ahead of the initial read (which
+  // owns first paint + the one-time +10 welcome beat) and supersede it under the
+  // generation guard. But dropping it would strand the quick-return case — a user
+  // who left for a game before the initial read resolved would keep the stale
+  // pre-game balance with no later event guaranteed to fire. So we record the
+  // request and run ONE deferred refetch once the initial read lands.
+  const returnRefetchQueued = useRef(false)
+
   useEffect(() => {
     if (!enabled) return
     void reloadBalance()
 
-    // A forced return-refetch must not run until the initial read has landed.
-    // The initial read owns first paint AND the one-time +10 welcome beat; a
-    // forced read that raced ahead of it would supersede it under the generation
-    // guard, dropping its `welcome_granted`, so the beat would never render.
-    const initialReadLanded = () => getBalanceSnapshot().status !== 'loading'
-
-    const refetchWhenVisible = () => {
-      // `force`: a read issued AFTER the return. A request left in flight before
-      // the user departed predates the win / spend earned in the game and would
-      // repaint the old balance, so the return path must not reuse it.
-      if (initialReadLanded() && document.visibilityState === 'visible') {
+    const requestReturnRefetch = () => {
+      // Before the initial read lands, queue; after, refetch immediately. Either
+      // way the read is issued AFTER the return, so it reflects a balance
+      // earned / spent in the game rather than reusing the pre-departure read.
+      if (getBalanceSnapshot().status === 'loading') {
+        returnRefetchQueued.current = true
+      } else {
         void reloadBalance({ force: true })
       }
+    }
+
+    const refetchWhenVisible = () => {
+      if (document.visibilityState === 'visible') requestReturnRefetch()
     }
     const refetchOnRestore = (event: PageTransitionEvent) => {
       // `pageshow` also fires on a NORMAL initial load, not only a bfcache
       // restore. Gate on `persisted` (true only for a real back/forward restore)
-      // — refetching on a normal load would fire a redundant second read that,
-      // for a brand-new account, flips `welcomeGranted` back to false and hides
-      // the one-time +10 welcome beat before the user sees it.
-      if (event.persisted && initialReadLanded()) void reloadBalance({ force: true })
+      // so a normal load does not trigger an extra read.
+      if (event.persisted) requestReturnRefetch()
     }
     document.addEventListener('visibilitychange', refetchWhenVisible)
     // A bfcache restore (return from a game via back/forward) may not fire
@@ -62,6 +69,17 @@ export function useBalance(enabled: boolean): { state: BalanceState; reload: () 
       window.removeEventListener('pageshow', refetchOnRestore)
     }
   }, [enabled])
+
+  // When the initial read lands, run the deferred return refetch (if one was
+  // requested during loading). It runs strictly AFTER the initial read resolved,
+  // so the +10 welcome beat is preserved AND the post-return balance still lands.
+  useEffect(() => {
+    if (state.status === 'loading') return
+    if (returnRefetchQueued.current) {
+      returnRefetchQueued.current = false
+      void reloadBalance({ force: true })
+    }
+  }, [state.status])
 
   const reload = useCallback(() => {
     void reloadBalance()

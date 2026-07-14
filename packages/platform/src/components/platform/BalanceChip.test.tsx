@@ -251,45 +251,62 @@ describe('BalanceChip', () => {
     }
   })
 
-  it('skips a forced refetch until the initial read lands, so the welcome beat survives', async () => {
-    // A return event that fires while the INITIAL read is still in flight must be
-    // skipped. The initial read owns first paint + the one-time +10 welcome beat;
-    // a forced read racing ahead of it would supersede it (generation guard) and
-    // drop `welcome_granted`, so the beat would never render.
+  it('defers a return refetch requested while loading, then runs it once the initial read lands', async () => {
+    // The quick-return case: the user leaves for a game BEFORE the initial read
+    // resolves and returns via a visibility/bfcache event. The forced refetch
+    // must not fire immediately (it would race the initial read and drop the +10
+    // welcome beat), but it must not be dropped either — it is QUEUED and runs
+    // once, strictly after the initial read lands, so the beat renders once AND
+    // the post-return balance still lands.
     let resolveInitial!: (res: Response) => void
+    let resolveRefetch!: (res: Response) => void
     const initialRead = new Promise<Response>((resolve) => {
       resolveInitial = resolve
+    })
+    const refetchRead = new Promise<Response>((resolve) => {
+      resolveRefetch = resolve
     })
     let call = 0
     const fetchMock = vi.fn(() => {
       call += 1
-      // Only the initial (call 1) read carries the +10 grant; a forced second
-      // read (which must NOT happen here) would return welcome_granted:false.
-      return call === 1
-        ? initialRead
-        : Promise.resolve(
-            new Response(JSON.stringify({ ...ASSETS, welcome_granted: false }), { status: 200 })
-          )
+      // Call 1 = initial read (carries the +10 mint grant). Call 2 = the deferred
+      // return refetch (post-return balance 17, no re-mint).
+      return call === 1 ? initialRead : refetchRead
     })
     vi.stubGlobal('fetch', fetchMock)
 
     render(<BalanceChip />)
     expect(fetchMock).toHaveBeenCalledTimes(1) // initial read in flight; chip still loading
 
-    // A visibility return fires WHILE loading — it must be skipped, not fire a
-    // second read that would race the initial one.
+    // A return fires WHILE loading — it must be queued, NOT fire a second read yet.
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
-    // The initial read lands with the mint grant → the beat renders and survives.
+    // The initial read lands with the mint grant → the beat renders once, and the
+    // queued refetch now fires (call 2), strictly after the initial read.
     await act(async () => {
       resolveInitial(
-        new Response(JSON.stringify({ ...ASSETS, welcome_granted: true }), { status: 200 })
+        new Response(JSON.stringify({ ...ASSETS, balance: 12, welcome_granted: true }), {
+          status: 200,
+        })
       )
     })
-    expect(await screen.findByText(/\+10.*见面礼/)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2) // the deferred refetch ran
+    expect(screen.getByText(/\+10.*见面礼/)).toBeInTheDocument() // beat rendered once
+
+    // The deferred refetch resolves with the fresh post-return balance → the chip
+    // lands on 17, and the (non-minting) refetch clears the one-time beat.
+    await act(async () => {
+      resolveRefetch(
+        new Response(JSON.stringify({ ...ASSETS, balance: 17, welcome_granted: false }), {
+          status: 200,
+        })
+      )
+    })
+    expect(await screen.findByRole('button', { name: /星芒余额 17/ })).toBeInTheDocument()
+    expect(screen.queryByText(/\+10.*见面礼/)).not.toBeInTheDocument()
   })
 
   // --- Graceful degradation: every failure mode renders NOTHING on the INITIAL
