@@ -118,11 +118,15 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
   }, [hasInjectedVoice, planning, sessionPhase, stopInjectedVoice, store])
 
   useEffect(() => {
-    if (!state.terminal || settledRuns.current.has(state.runId)) return
-    settledRuns.current.add(state.runId)
+    // Guard on the per-attempt id, not the seed-derived runId: it is the unit a
+    // settlement dedups on, so a session-local double-settle is prevented per
+    // attempt.
+    if (!state.terminal || settledRuns.current.has(state.attemptId)) return
+    settledRuns.current.add(state.attemptId)
     handoffSettlement({
       version: 1,
       runId: state.runId,
+      attemptId: state.attemptId,
       outcome: state.terminal.outcome,
       durationTicks: state.tick,
     })

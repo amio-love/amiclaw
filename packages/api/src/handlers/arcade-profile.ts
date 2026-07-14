@@ -1,5 +1,6 @@
 import type {
   ArcadeProfileClaimResponse,
+  ArcadeProfileEventResponse,
   ArcadeProfileResponse,
   ArcadeStreakLeaderboardResponse,
 } from '@amiclaw/arcade-profile/types'
@@ -11,11 +12,14 @@ import {
   upsertArcadeProfileEvents,
   upsertArcadePublicProfile,
 } from '@amiclaw/arcade-profile/store'
+import { qualifiedBombSquadRunDate, qualifiedOracleSignDate } from '@amiclaw/arcade-profile/summary'
 import {
   resolveArcadePublicLabel,
   parseArcadeProfileClaimBody,
   parseArcadeProfileEvent,
 } from '@amiclaw/arcade-profile/validation'
+import { getTodayString } from '../../../../shared/date'
+import { creditCheckinReward } from '../../../companion-memory/src/ledger'
 import { requireSession } from '../auth/require-session'
 import { jsonResponse } from '../auth/respond'
 import { parseJsonBody } from './companion-shared'
@@ -70,11 +74,37 @@ export async function handlePostArcadeProfileEvent(
   await upsertArcadeProfileEvents(env.COMPANION_DB, auth.session.user_id, [event], {
     profileId: event.profile_id,
   })
+
+  // Check-in reward (+3): the FIRST qualified activity of the UTC day credits
+  // once, keyed on `checkin:{userId}:{today}` (design §4). Qualification reuses
+  // the streak's SSOT helpers so check-in and streak can never disagree — a
+  // practice/exploded run, a past-dated sign, or a same-day event whose product
+  // day is not today never triggers it. Fail-open: the ledger credit is wrapped
+  // so the profile write always succeeds even if the asset ledger is
+  // unavailable; the reward is simply omitted on any failure.
+  const today = getTodayString()
+  const qualifiedDate =
+    event.kind === 'bombsquad_run'
+      ? qualifiedBombSquadRunDate(event.run)?.date
+      : qualifiedOracleSignDate(event.sign)?.date
+  let checkinReward: ArcadeProfileEventResponse['checkin_reward']
+  if (qualifiedDate === today) {
+    try {
+      checkinReward = await creditCheckinReward(env.COMPANION_DB, auth.session.user_id, today)
+    } catch {
+      checkinReward = undefined
+    }
+  }
+
   const [profile, publicProfile] = await Promise.all([
     readArcadeAccountProfile(env.COMPANION_DB, auth.session.user_id),
     readArcadePublicProfile(env.COMPANION_DB, auth.session.user_id),
   ])
-  const response: ArcadeProfileResponse = { profile, public_profile: publicProfile }
+  const response: ArcadeProfileEventResponse = {
+    profile,
+    public_profile: publicProfile,
+    ...(checkinReward ? { checkin_reward: checkinReward } : {}),
+  }
   return jsonResponse(response, 200, { 'Cache-Control': 'no-store' })
 }
 

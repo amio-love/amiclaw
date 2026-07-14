@@ -122,6 +122,22 @@ export interface ArcadeProfileResponse {
   public_profile: ArcadePublicProfileStatus
 }
 
+/** POST /api/arcade/profile/event response: the profile view plus, on ANY event
+    that qualifies as an activity for the current UTC day (a defused daily run or
+    a same-day Oracle sign), the check-in credit outcome (reward-economy §4).
+    `credited` is true only on the day's FIRST qualified activity and false on
+    every later same-day one (the +3 is already banked). The field is ABSENT for
+    a non-qualified event, the anonymous 204 path, and a fail-open credit error.
+    The client plays the check-in fx + sfx when `checkin_reward.credited` is
+    true. */
+export interface ArcadeProfileEventResponse extends ArcadeProfileResponse {
+  checkin_reward?: {
+    credited: boolean
+    amount: number
+    balance: number
+  }
+}
+
 export interface ArcadeProfileClaimBody {
   profile_id: string
   events: ArcadeProfileEvent[]

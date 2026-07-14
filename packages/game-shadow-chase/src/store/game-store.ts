@@ -72,12 +72,18 @@ export function createGameStore(options?: {
   mapId?: string
   difficulty?: Difficulty
   fetchIntent?: IntentFetch | null
+  newAttemptId?: () => string
 }): GameStore {
   const scheduler = options?.scheduler ?? defaultScheduler
   const initialSeed = options?.seed ?? 20260710
   const mapId = options?.mapId ?? 'courtyard'
   const difficulty = options?.difficulty ?? 'standard'
-  let state = createRunningState(mapId, difficulty, initialSeed)
+  // A fresh per-attempt id is minted at every run creation/reset so the
+  // settlement's win-reward key is unique per play attempt (the seed — and thus
+  // `runId` — is deterministic, so keying on it would credit a signed-in
+  // player's win at most once ever). Injectable for deterministic tests.
+  const newAttemptId = options?.newAttemptId ?? (() => crypto.randomUUID())
+  let state = createRunningState(mapId, difficulty, initialSeed, newAttemptId())
   let started = false
   let hidden = false
   let destroyed = false
@@ -310,7 +316,7 @@ export function createGameStore(options?: {
     replayActions = []
     inputFeedback = undefined
     generation += 1
-    state = createRunningState(mapId, difficulty, initialSeed + generation - 1)
+    state = createRunningState(mapId, difficulty, initialSeed + generation - 1, newAttemptId())
     started = false
     hidden = false
     accumulatorMs = 0

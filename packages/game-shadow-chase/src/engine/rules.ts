@@ -53,7 +53,11 @@ export function runIdForSeed(seed: number): string {
 export function createRunningState(
   mapId: string,
   difficulty: Difficulty,
-  seed: number
+  seed: number,
+  // Per-attempt settlement identity. The live store injects a fresh
+  // crypto.randomUUID per attempt; deterministic callers (replay, tests) omit it
+  // and fall back to the seed-derived id so replay digests stay reproducible.
+  attemptId: string = runIdForSeed(seed)
 ): SimulationState {
   const map = getMap(mapId)
   const validation = validateMap(map)
@@ -64,6 +68,7 @@ export function createRunningState(
     seed,
     rngState: seed >>> 0,
     runId: runIdForSeed(seed),
+    attemptId,
     tick: 0,
     phase: 'running',
     mapId,

@@ -43,8 +43,20 @@ account-level asset ledger for the earn currency (starburst): append-only
 balance records with idempotent crediting and replay-safe daily-cap markers,
 plus an authenticated `/api/companion/assets` endpoint that returns the
 balance with recent entries and self-heals a one-time +10 welcome grant on
-the first authenticated read. No gameplay rewards flow yet — win, check-in,
-and companion-time wiring land in follow-up changes.
+the first authenticated read. Companion-time (voice-session) pricing wiring
+lands in a follow-up change.
+
+**Wins and daily check-ins start paying starburst** — Added. Defusing the
+BombSquad daily or escaping in Shadow Chase now credits +5 starburst the moment
+the run settles, and the first activity you complete each day that counts toward
+your streak — a defused daily run or a same-day Oracle sign — adds a +3 check-in
+bonus. Rewarded wins are capped at four a day, combined across games; beyond that
+a win still settles but earns nothing. The credit is written before the response
+returns, so the balance you see is already spendable — the results screen reads
+the payout from a new `reward` field on the score and Shadow Chase settlement
+responses, and the check-in cue fires from a `checkin_reward` field on the arcade
+activity response. Anonymous runs earn nothing, and a replayed run never
+double-pays.
 
 **The platform companion learns to act in co-build games** — Added. The voice
 AI pipeline gains a backward-compatible action channel: in games flagged as

@@ -111,6 +111,15 @@ export interface SimulationState {
   seed: number
   rngState: number
   runId: string
+  // Per-attempt settlement identity, minted fresh (crypto.randomUUID) each time
+  // the live store creates or resets a run. Unlike `runId` — which is
+  // deterministic from the seed (`runIdForSeed`) and load-bearing for
+  // intent-legality, decision-boundaries, replay, and DOM ids — `attemptId` is
+  // unique per play attempt, so it is the correct idempotency component for the
+  // win-reward + settlement-capture keys (distinct attempts credit; a retry of
+  // the same attempt dedups). Deterministic runs (replay / tests) fall back to
+  // the seed-derived id via createRunningState's default.
+  attemptId: string
   tick: number
   phase: SimulationPhase
   mapId: string

@@ -4,6 +4,8 @@ import type {
   ScoreSubmission,
   ScoreSubmissionResponse,
 } from '../../../../shared/leaderboard-types'
+import type { CompanionDb } from '../../../companion-memory/src/db'
+import { creditWinReward } from '../../../companion-memory/src/ledger'
 import { createTestDb } from '../../../companion-memory/src/test-support/sqlite-db'
 import type {
   CaptureEventRecord,
@@ -375,6 +377,143 @@ describe('handlePostScore — one row per player per day', () => {
     expect(todayEntries?.[0]).toMatchObject({ time_ms: 130_000 })
     expect(yesterdayEntries).toHaveLength(1)
     expect(yesterdayEntries?.[0]).toMatchObject({ time_ms: 150_000 })
+  })
+})
+
+describe('handlePostScore — win reward (reward-economy §3)', () => {
+  // A leaderboard POST only fires on a defusal, so an authenticated submission
+  // IS a bombsquad win. Pin the clock so the daily-cap window is deterministic.
+  const NOW = '2026-07-04T12:00:00.000Z'
+  const TODAY = '2026-07-04'
+  const WIN_SOURCE_KEY = `win:bombsquad:${'user-a'.length}:user-a:`
+
+  async function authKvWithSession(userId = 'user-a'): Promise<FakeKV> {
+    const authKv = new FakeKV()
+    await authKv.put(
+      'session:sess-a',
+      JSON.stringify({ user_id: userId, email: `${userId}@example.com`, created_at: NOW })
+    )
+    return authKv
+  }
+
+  // A fresh leaderboard KV per call sidesteps the per-device 10 s rate limit,
+  // so replay calls with the same device reach the reward path.
+  function authedWin(runId: string, authKv: FakeKV, db: CompanionDb): Promise<Response> {
+    return handlePostScore(
+      request(submission({ run_id: runId }), { Cookie: 'amiclaw_session=sess-a' }),
+      new FakeKV().asKV(),
+      { auth: authKv.asKV(), companionDb: db, now: () => NOW }
+    )
+  }
+
+  it('credits +5 and returns the reward for an authenticated win', async () => {
+    const authKv = await authKvWithSession()
+    const db = createTestDb()
+
+    const response = await authedWin('run-win', authKv, db)
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as ScoreSubmissionResponse
+    expect(body.reward).toEqual({
+      asset_type: 'starburst',
+      amount: 5,
+      status: 'credited',
+      balance: 5,
+    })
+    const row = await db
+      .prepare("SELECT amount, source_key FROM asset_entry WHERE source_key GLOB 'win:*'")
+      .bind()
+      .first<{ amount: number; source_key: string }>()
+    expect(row?.amount).toBe(5)
+    expect(row?.source_key).toBe(`${WIN_SOURCE_KEY}run-win`)
+  })
+
+  it('does not double-credit a replayed run and reflects duplicate in the response', async () => {
+    const authKv = await authKvWithSession()
+    const db = createTestDb()
+
+    const first = await authedWin('run-dup', authKv, db)
+    const second = await authedWin('run-dup', authKv, db)
+
+    expect(((await first.json()) as ScoreSubmissionResponse).reward?.status).toBe('credited')
+    const secondBody = (await second.json()) as ScoreSubmissionResponse
+    expect(secondBody.reward).toEqual({
+      asset_type: 'starburst',
+      amount: 0,
+      status: 'duplicate',
+      balance: 5,
+    })
+    // Exactly one CREDITED win row — the replay did not add a second.
+    const rows = await db
+      .prepare("SELECT amount FROM asset_entry WHERE source_key GLOB 'win:*' AND amount > 0")
+      .bind()
+      .all()
+    expect(rows.results).toHaveLength(1)
+  })
+
+  it('caps at the daily win limit and returns a zero-amount capped reward', async () => {
+    const authKv = await authKvWithSession()
+    const db = createTestDb()
+    let seq = 0
+    const seedDeps = { now: () => '2026-07-04T06:00:00.000Z', newId: () => `seed-${seq++}` }
+    // Four rewarded wins already today (the cap), across distinct runs.
+    for (let i = 0; i < 4; i += 1) {
+      await creditWinReward(db, {
+        userId: 'user-a',
+        gameId: 'bombsquad',
+        runId: `seed-run-${i}`,
+        today: TODAY,
+        deps: seedDeps,
+      })
+    }
+
+    const response = await authedWin('run-5', authKv, db)
+
+    const body = (await response.json()) as ScoreSubmissionResponse
+    expect(body.reward).toEqual({
+      asset_type: 'starburst',
+      amount: 0,
+      status: 'capped',
+      balance: 20, // 4 x 5; the capped marker is amount 0
+    })
+  })
+
+  it('keeps the settlement successful with no reward field when the ledger throws', async () => {
+    const authKv = await authKvWithSession()
+    const throwingDb = {
+      prepare() {
+        throw new Error('D1 unavailable')
+      },
+      batch() {
+        return Promise.reject(new Error('D1 unavailable'))
+      },
+    } as unknown as CompanionDb
+
+    const response = await authedWin('run-fail', authKv, throwingDb)
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as ScoreSubmissionResponse
+    expect(body).not.toHaveProperty('reward')
+  })
+
+  it('never credits or returns a reward for an anonymous submitter', async () => {
+    const authKv = new FakeKV() // no session stored
+    const db = createTestDb()
+
+    const response = await handlePostScore(
+      request(submission({ run_id: 'run-anon-win' })),
+      new FakeKV().asKV(),
+      { auth: authKv.asKV(), companionDb: db, now: () => NOW }
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as ScoreSubmissionResponse
+    expect(body).not.toHaveProperty('reward')
+    const rows = await db
+      .prepare("SELECT amount FROM asset_entry WHERE source_key GLOB 'win:*'")
+      .bind()
+      .all()
+    expect(rows.results).toHaveLength(0)
   })
 })
 

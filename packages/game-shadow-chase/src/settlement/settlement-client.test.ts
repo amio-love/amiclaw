@@ -9,6 +9,7 @@ describe('best-effort settlement handoff', () => {
     handoffSettlement({
       version: 1,
       runId: '00000000-0000-4000-8000-000000000001',
+      attemptId: '11111111-1111-4111-8111-111111111111',
       outcome: 'win',
       durationTicks: 100,
     })

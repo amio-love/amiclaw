@@ -1,11 +1,15 @@
+import { getTodayString } from '../../../../shared/date'
 import {
   LEADERBOARD_RETENTION_DAYS,
   type ScoreSubmission,
   type ScoreSubmissionResponse,
 } from '../../../../shared/leaderboard-types'
 import { computeBestRecord, type BestRecord } from '../../../../shared/personal-best'
+import type { WinReward } from '../../../../shared/reward-types'
 import { captureSettlementEvent } from '../../../companion-memory/src/capture'
 import type { CompanionDb } from '../../../companion-memory/src/db'
+import { ASSET_TYPE_STARBURST } from '../../../companion-memory/src/economy'
+import { creditWinReward } from '../../../companion-memory/src/ledger'
 import { readSessionFromRequest } from '../auth/session'
 import { dedupeStoredEntries, type StoredEntry } from '../leaderboard-entries'
 import {
@@ -125,6 +129,12 @@ export async function handlePostScore(
       1
   }
 
+  // Credit the win reward BEFORE finalizing the response so the exact reward
+  // (and the immediately-spendable balance) rides back on the settlement. A
+  // leaderboard POST IS a bombsquad win — the submit only fires on a defusal
+  // (design §3 win criterion). Fail-open: anonymous submitters and any ledger
+  // failure yield `undefined`, and the field is simply omitted.
+  const reward = await settleAuthenticatedWin(request, body, options)
   const response: ScoreSubmissionResponse = {
     rank: rank > 0 ? rank : ranked.length + 1,
     total_players: ranked.length,
@@ -132,37 +142,72 @@ export async function handlePostScore(
     ...(bestRecord.attempt_number !== undefined
       ? { personal_best_attempt: bestRecord.attempt_number }
       : {}),
+    ...(reward ? { reward } : {}),
   }
-  await captureAuthenticatedSettlement(request, body, options)
   return jsonResponse(response, 200)
 }
 
-async function captureAuthenticatedSettlement(
+/**
+ * Capture the authenticated settlement (memory episode, best-effort) and credit
+ * the win reward (synchronous, fail-open). Returns the reward to fold into the
+ * response, or `undefined` for an anonymous submitter or a ledger failure — the
+ * settlement always succeeds regardless (design §3).
+ */
+async function settleAuthenticatedWin(
   request: Request,
   body: ScoreSubmission,
   options: PostScoreOptions
-): Promise<void> {
-  if (!body.run_id || !options.auth || !options.companionDb) return
+): Promise<WinReward | undefined> {
+  if (!body.run_id || !options.auth || !options.companionDb) return undefined
 
+  let userId: string
   try {
     const session = await readSessionFromRequest(options.auth, request)
-    if (session === null) return
-    const now = options.now ?? (() => new Date().toISOString())
+    if (session === null) return undefined
+    userId = session.user_id
+  } catch {
+    console.warn('score settlement capture failed')
+    return undefined
+  }
+
+  const occurredAt = (options.now ?? (() => new Date().toISOString()))()
+  const deps = { now: () => occurredAt, newId: () => crypto.randomUUID() }
+
+  // Memory capture is best-effort and independent of the reward credit; its
+  // failure must not swallow the win reward, so it carries its own try/catch.
+  try {
     await captureSettlementEvent(
       options.companionDb,
       {
         settlementId: body.run_id,
-        userId: session.user_id,
+        userId,
         gameId: 'bombsquad',
         gameRunId: body.run_id,
         outcome: 'win',
         durationSeconds: body.time_ms / 1000,
-        occurredAt: now(),
+        occurredAt,
       },
-      { now, newId: () => crypto.randomUUID() }
+      deps
     )
   } catch {
     console.warn('score settlement capture failed')
+  }
+
+  // creditWinReward is internally fail-open — an 'error' status maps to an
+  // omitted reward field rather than a failed settlement.
+  const result = await creditWinReward(options.companionDb, {
+    userId,
+    gameId: 'bombsquad',
+    runId: body.run_id,
+    today: getTodayString(new Date(occurredAt)),
+    deps,
+  })
+  if (result.status === 'error') return undefined
+  return {
+    asset_type: ASSET_TYPE_STARBURST,
+    amount: result.amount,
+    status: result.status,
+    balance: result.balance,
   }
 }
 

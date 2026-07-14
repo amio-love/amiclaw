@@ -222,3 +222,51 @@ describe('fixed-step external store', () => {
     expect(store.getSnapshot().actors.player.position).toEqual(hiddenPosition)
   })
 })
+
+describe('per-attempt settlement id', () => {
+  it('mints one id at run start and keeps it stable across ticks', () => {
+    const scheduler = new ManualScheduler()
+    let n = 0
+    const store = createGameStore({
+      scheduler,
+      seed: 5,
+      mapId: 'courtyard',
+      fetchIntent: null,
+      newAttemptId: () => `attempt-${++n}`,
+    })
+    expect(store.getSnapshot().attemptId).toBe('attempt-1')
+    store.start()
+    // Advancing ticks re-notifies subscribers but never re-mints the attempt id.
+    scheduler.frame(TICK_MS * 4)
+    expect(store.getSnapshot().tick).toBe(4)
+    expect(store.getSnapshot().attemptId).toBe('attempt-1')
+  })
+
+  it('mints a fresh id on every reset and restart', () => {
+    const scheduler = new ManualScheduler()
+    let n = 0
+    const store = createGameStore({
+      scheduler,
+      seed: 5,
+      mapId: 'courtyard',
+      fetchIntent: null,
+      newAttemptId: () => `attempt-${++n}`,
+    })
+    expect(store.getSnapshot().attemptId).toBe('attempt-1')
+    store.prepareNextRun()
+    expect(store.getSnapshot().attemptId).toBe('attempt-2')
+    store.restart()
+    expect(store.getSnapshot().attemptId).toBe('attempt-3')
+  })
+
+  it('collides on the seed-derived runId across separate stores but gives each a distinct attempt id', () => {
+    // Two visits (fresh stores) starting from the same default seed reproduce the
+    // exact collision behind the P1 bug: identical seed-derived runId. Keying the
+    // reward on runId credited only the first visit ever; the per-attempt id
+    // (real crypto.randomUUID) is distinct, so each visit's win credits.
+    const visitA = createGameStore({ scheduler: new ManualScheduler(), fetchIntent: null })
+    const visitB = createGameStore({ scheduler: new ManualScheduler(), fetchIntent: null })
+    expect(visitA.getSnapshot().runId).toBe(visitB.getSnapshot().runId)
+    expect(visitA.getSnapshot().attemptId).not.toBe(visitB.getSnapshot().attemptId)
+  })
+})
