@@ -7,10 +7,12 @@
  * numeric balance resolves; a 401 / failure renders nothing (never a broken
  * pill).
  */
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { act } from 'react'
 import type { CompanionAssetsResponse } from '@shared/companion-types'
+import { pushBalance, reloadBalance, resetBalanceStore } from '@/lib/balance-store'
 import BalanceChip from './BalanceChip'
 
 const ASSETS: CompanionAssetsResponse = {
@@ -66,6 +68,13 @@ async function expectNeverRenders(container: HTMLElement) {
 }
 
 describe('BalanceChip', () => {
+  // The balance store is a module singleton shared across every subscriber, so
+  // each case starts from a clean slate (else a prior test's ready value would
+  // block the initial-load-failure hides below).
+  beforeEach(() => {
+    resetBalanceStore()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -116,8 +125,111 @@ describe('BalanceChip', () => {
     await waitFor(() => expect(screen.queryByText(/\+10.*见面礼/)).not.toBeInTheDocument())
   })
 
-  // --- Graceful degradation: every failure mode renders NOTHING (fetchAssets
-  //     guards → useBalance 'unavailable' → the chip is null). ---
+  it('repaints the balance when a fresh value is pushed (a reward response)', async () => {
+    stubAssets(200, ASSETS)
+    render(<BalanceChip />)
+
+    // Mounts at the read-time balance (12) — the mount-once value.
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+
+    // A settlement win credits +5 and the response carries the new balance; the
+    // reward-drop flow pushes it into the store, so the chip repaints WITHOUT a
+    // remount or a re-fetch (the mount-once staleness this fix removes).
+    act(() => {
+      pushBalance(17)
+    })
+
+    expect(await screen.findByRole('button', { name: /星芒余额 17/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /星芒余额 12/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps the last-known balance when a refresh fails (never hides a good chip)', async () => {
+    stubAssets(200, ASSETS)
+    render(<BalanceChip />)
+
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+
+    // A later refresh (e.g. the visibility refetch on return from a game) hits a
+    // transient 500: the chip must hold its last-known value, not blank out. The
+    // render-nothing failure path is reserved for the INITIAL empty read.
+    stubRaw(500, null)
+    await act(async () => {
+      await reloadBalance()
+    })
+
+    expect(screen.getByRole('button', { name: /星芒余额 12/ })).toBeInTheDocument()
+  })
+
+  // --- Live-refresh wiring: the effect re-reads on the DOM events that mark a
+  //     "return from a game SPA" (the mount-once staleness this fix removes).
+  //     These fire the real events so the wiring itself is under test, not just
+  //     the store's reloadBalance. ---
+
+  /** Stub a call-counting 200 assets fetch so a refetch is observable. */
+  function stubCountingAssets() {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify(ASSETS), { status: 200 }))
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('refetches when the document becomes visible (return from a game)', async () => {
+    const fetchMock = stubCountingAssets()
+    render(<BalanceChip />)
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+    expect(fetchMock).toHaveBeenCalledTimes(1) // the initial mount read
+
+    // jsdom defaults visibilityState to 'visible'; dispatching visibilitychange
+    // exercises the handler's `=== 'visible'` guard and re-reads.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(document.visibilityState).toBe('visible')
+  })
+
+  it('refetches on pageshow (bfcache restore via back/forward)', async () => {
+    const fetchMock = stubCountingAssets()
+    render(<BalanceChip />)
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      window.dispatchEvent(new Event('pageshow'))
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT refetch while hidden — the refetch is event-gated, not a timer', async () => {
+    const fetchMock = stubCountingAssets()
+    render(<BalanceChip />)
+    await screen.findByRole('button', { name: /星芒余额 12/ })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // A visibilitychange to `hidden` (tab backgrounded) must be ignored — the
+    // refetch fires only on becoming visible. This is the "no polling" guard:
+    // were the hook re-reading on a blind timer, a hidden tab would still fetch;
+    // gating on the visible transition proves it re-reads on the event alone.
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    })
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1) // unchanged — no refetch while hidden
+    } finally {
+      // Restore jsdom's default getter so later cases see 'visible'.
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState
+    }
+  })
+
+  // --- Graceful degradation: every failure mode renders NOTHING on the INITIAL
+  //     read (fetchAssets guards → store 'unavailable' → the chip is null). ---
 
   it('renders nothing on a server error (500)', async () => {
     stubRaw(500, null)
