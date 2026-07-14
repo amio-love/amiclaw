@@ -32,6 +32,7 @@ export type SfxType =
   | 'module-success'
   | 'module-error'
   | 'result-success'
+  | 'reward-checkin'
   | 'stopwatch-tick'
   | 'explosion'
 
@@ -90,6 +91,18 @@ export const SFX_PRESETS: Record<SfxType, SfxPreset> = {
     noteDuration: 0.22,
     noteStride: 0.11,
     gain: 0.28,
+  },
+  // Check-in reward landed (+3 星芒, the day's first qualified activity): a
+  // brighter four-note rising sparkle (E5 → G#5 → B5 → E6) so the starburst
+  // beat reads as a small, distinct "you earned something" cue apart from the
+  // three-note run-arrival chime. Still restrained (~0.26), never a fanfare.
+  'reward-checkin': {
+    kind: 'chime',
+    notes: [659.25, 830.61, 987.77, 1318.51],
+    waveform: 'triangle',
+    noteDuration: 0.2,
+    noteStride: 0.075,
+    gain: 0.26,
   },
   'stopwatch-tick': { sample: 'tick', rate: 1.0, gain: 0.3 },
   explosion: { sample: 'explosion', rate: 1.0, gain: 1.0 },

@@ -22,6 +22,7 @@ function hookState(partial: Partial<UseVoiceSessionResult> = {}): UseVoiceSessio
     playerTranscript: '',
     isAiSpeaking: false,
     error: null,
+    errorCode: null,
     summary: null,
     summaryReason: null,
     endSession,
@@ -181,5 +182,24 @@ describe('VoicePanel — hands-free (no push-to-talk)', () => {
   it('shows the hands-free hint', () => {
     renderPanel({ status: 'ready' })
     expect(screen.getByText(/免提对话已开启/)).toBeInTheDocument()
+  })
+})
+
+describe('VoicePanel — reward-economy intercepts', () => {
+  it('shows the insufficient-balance intercept + earn CTA, not the raw error', () => {
+    renderPanel({
+      status: 'closed',
+      error: 'insufficient balance',
+      errorCode: 'insufficient-balance',
+    })
+    expect(screen.getByText(/星芒用完了/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /去攒星芒/ })).toHaveAttribute('href', '/')
+    // The raw bounded error line is suppressed in favor of the narrative beat.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows the balance-depleted farewell beat', () => {
+    renderPanel({ status: 'closed', summaryReason: 'balance-depleted' })
+    expect(screen.getByText(/星芒聊完了/)).toBeInTheDocument()
   })
 })

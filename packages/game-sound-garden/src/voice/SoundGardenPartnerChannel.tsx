@@ -6,6 +6,11 @@ import {
 } from '@shared/voice/use-game-voice-session'
 import type { CoBuildAction } from '@shared/voice/voice-session-protocol'
 import type { ConversationPhase, VoiceStatus } from '@shared/voice/voice-session-protocol'
+import {
+  STARBURST_DEPLETED_FAREWELL,
+  STARBURST_EARN_CTA_LABEL,
+  STARBURST_INSUFFICIENT_LEAD,
+} from '@shared/reward-types'
 import type { PieceType } from '../game/constants'
 import type { GameStore } from '../game/store'
 import type { PartnerAction } from '../game/types'
@@ -92,6 +97,8 @@ function SoundGardenPartnerChannelImpl({
     playerTranscript,
     isAiSpeaking,
     error,
+    errorCode,
+    summaryReason,
     openSession,
     endSession,
     requestClosing,
@@ -132,9 +139,27 @@ function SoundGardenPartnerChannelImpl({
         <button type="button" className="sg-btn primary" onClick={() => openSession()}>
           {status === 'idle' ? '呼叫伙伴' : '重新连接'}
         </button>
-        {error && (
+        {error && errorCode !== 'insufficient-balance' && (
           <p className="sg-voice-error" role="alert">
             {error}
+          </p>
+        )}
+        {/* Insufficient-balance intercept (reward-economy §5): the pricing gate
+            refused the voice open — a warm narrative line + an earn CTA, not a
+            raw server error. NO companion-voice narration (locked Boundary). */}
+        {errorCode === 'insufficient-balance' && (
+          <div className="sg-voice-intercept" role="status">
+            <p>{STARBURST_INSUFFICIENT_LEAD}</p>
+            <a className="sg-voice-intercept-cta" href="/">
+              {STARBURST_EARN_CTA_LABEL}
+              <span aria-hidden="true"> →</span>
+            </a>
+          </div>
+        )}
+        {/* Mid-session depletion farewell (reward-economy §5 wind-down). */}
+        {summaryReason === 'balance-depleted' && (
+          <p className="sg-voice-farewell" role="status">
+            {STARBURST_DEPLETED_FAREWELL}
           </p>
         )}
         <p className="sg-voice-hint">

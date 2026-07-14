@@ -1,4 +1,5 @@
 import { BackLink, Button, Chip, PageHeader } from '@amiclaw/ui'
+import { STARBURST_GLYPH, STARBURST_LABEL, type WinReward } from '@shared/reward-types'
 
 import type { SimulationState } from '../engine/types'
 
@@ -12,7 +13,15 @@ function causalBeat(state: SimulationState): string {
   return '两条路线配合收集了最后一枚光核。'
 }
 
-export function ResultScreen({ state, onRestart }: { state: SimulationState; onRestart(): void }) {
+export function ResultScreen({
+  state,
+  reward,
+  onRestart,
+}: {
+  state: SimulationState
+  reward?: WinReward | null
+  onRestart(): void
+}) {
   const won = state.phase === 'win'
   return (
     <main className="result-shell">
@@ -43,6 +52,20 @@ export function ResultScreen({ state, onRestart }: { state: SimulationState; onR
             <dd>{(state.tick / 4).toFixed(1)} 秒</dd>
           </div>
         </dl>
+        {/* Win reward drop (reward-economy §3): a credited撤离 lands a +5 ✦ 星芒
+            beat; a capped daily quota reads a muted note; duplicate / absent =
+            nothing. Star mark rides brand yellow, not the moon-blue accent. */}
+        {won && reward?.status === 'credited' && (
+          <div className="result-reward" role="status" aria-label="撤离奖励">
+            <span className="result-reward-amount">
+              +{reward.amount} {STARBURST_GLYPH}
+            </span>
+            <span className="result-reward-label">{STARBURST_LABEL}</span>
+          </div>
+        )}
+        {won && reward?.status === 'capped' && (
+          <p className="result-reward-capped">今日过关奖励已满</p>
+        )}
         <Button variant="primary" full onClick={onRestart}>
           再玩一次
         </Button>

@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
 import { ConicAvatar, Wordmark } from '@amiclaw/ui'
 import { useAuth } from '@/hooks/useAuth'
+import BalanceChip from './BalanceChip'
 import { NAV_TABS } from './nav-tabs'
 import styles from './TopNav.module.css'
 
@@ -36,9 +37,15 @@ export default function TopNav() {
               held empty so signed-out chrome never flashes and snaps to the
               avatar once a session resolves. */}
           {status === 'loading' ? null : status === 'authed' && user ? (
-            <Link to="/me" className={styles.avatarLink} aria-label="我的">
-              <ConicAvatar size={36} spin letter={user.avatarLetter} ariaHidden />
-            </Link>
+            <>
+              {/* The starburst balance chip sits left of the avatar, authed
+                  only; it holds itself empty until its own read resolves, so
+                  the slot never flashes a broken pill (reward-economy §7). */}
+              <BalanceChip />
+              <Link to="/me" className={styles.avatarLink} aria-label="我的">
+                <ConicAvatar size={36} spin letter={user.avatarLetter} ariaHidden />
+              </Link>
+            </>
           ) : (
             /* Signed-out: a single primary 登录 / 注册 entry to the magic-link
                /login page. Magic-link is passwordless — first-time verify

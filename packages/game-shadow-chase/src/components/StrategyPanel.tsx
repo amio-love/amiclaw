@@ -1,4 +1,9 @@
 import { IconButton } from '@amiclaw/ui'
+import {
+  STARBURST_DEPLETED_FAREWELL,
+  STARBURST_EARN_CTA_LABEL,
+  STARBURST_INSUFFICIENT_LEAD,
+} from '@shared/reward-types'
 
 import type { CompanionIntent, SimulationState } from '../engine/types'
 import type { ShadowVoiceView } from '../voice/useShadowChaseVoice'
@@ -94,8 +99,27 @@ export function StrategyPanel({
         {voice.commandResult?.kind === 'clarify' && (
           <p className="voice-clarify">请只说一种明确策略：接应、探路或架点。</p>
         )}
-        {voice.status === 'error' && voice.statusMessage && (
-          <p className="voice-status-message">{voice.statusMessage}</p>
+        {/* Insufficient-balance intercept (reward-economy §5): the pricing gate
+            refused the voice open. A warm narrative line + an earn CTA, not a raw
+            server error. The socket closes right after, so this persists on the
+            stored errorCode regardless of the mapped status. */}
+        {voice.errorCode === 'insufficient-balance' ? (
+          <div className="voice-intercept" role="status">
+            <p>{STARBURST_INSUFFICIENT_LEAD}策略按钮照常可用。</p>
+            <a className="voice-intercept-cta" href="/">
+              {STARBURST_EARN_CTA_LABEL}
+              <span aria-hidden="true"> →</span>
+            </a>
+          </div>
+        ) : (
+          voice.status === 'error' &&
+          voice.statusMessage && <p className="voice-status-message">{voice.statusMessage}</p>
+        )}
+        {/* Mid-session depletion farewell (reward-economy §5 wind-down). */}
+        {voice.sessionReason === 'balance-depleted' && (
+          <p className="voice-farewell" role="status">
+            {STARBURST_DEPLETED_FAREWELL}
+          </p>
         )}
       </div>
       <button

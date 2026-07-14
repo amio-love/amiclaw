@@ -4,6 +4,11 @@ import {
   readCachedAccountStreak,
   resolveAccountStreak,
 } from '@amiclaw/arcade-profile/companion-streak'
+import {
+  STARBURST_DEPLETED_FAREWELL,
+  STARBURST_EARN_CTA_LABEL,
+  STARBURST_INSUFFICIENT_LEAD,
+} from '@shared/reward-types'
 import { useVoiceSession } from './useVoiceSession'
 import type { ConversationPhase, VoiceStatus } from './voice-session-protocol'
 import styles from './VoicePanel.module.css'
@@ -124,6 +129,8 @@ function VoicePanelImpl(
     playerTranscript,
     isAiSpeaking,
     error,
+    errorCode,
+    summaryReason,
     requestClosing,
     endSession,
   } = useVoiceSession({
@@ -192,9 +199,28 @@ function VoicePanelImpl(
         <p className={styles.replyPlaceholder}>{placeholderFor(status, conversationPhase)}</p>
       </div>
 
-      {error && (
+      {error && errorCode !== 'insufficient-balance' && (
         <p className={styles.error} role="alert">
           {error}
+        </p>
+      )}
+
+      {/* Insufficient-balance intercept (reward-economy §5): the pricing gate
+          refused the voice open — a warm narrative line + an earn CTA, not a raw
+          server error. NO companion-voice narration (locked Boundary). */}
+      {errorCode === 'insufficient-balance' && (
+        <div className={styles.intercept} role="status">
+          <p className={styles.interceptLead}>{STARBURST_INSUFFICIENT_LEAD}</p>
+          <a className={styles.interceptCta} href="/">
+            {STARBURST_EARN_CTA_LABEL}
+            <span aria-hidden="true"> →</span>
+          </a>
+        </div>
+      )}
+      {/* Mid-session depletion farewell (reward-economy §5 wind-down). */}
+      {summaryReason === 'balance-depleted' && (
+        <p className={styles.farewell} role="status">
+          {STARBURST_DEPLETED_FAREWELL}
         </p>
       )}
 

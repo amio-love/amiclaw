@@ -4,6 +4,7 @@ import type {
   ArcadeProfileClaimBody,
   ArcadeProfileClaimResponse,
   ArcadeProfileEvent,
+  ArcadeProfileEventResponse,
   ArcadeProfileResponse,
   ArcadeStreakLeaderboardResponse,
 } from './types'
@@ -35,6 +36,12 @@ export type ArcadeProfileMutationResult =
       profile: ArcadeProfileResponse['profile']
       publicProfile: ArcadeProfileResponse['public_profile']
       sourceKeys?: string[]
+      /** The check-in credit outcome (reward-economy §4), present only on an
+          event POST that qualified as the day's activity. `credited` is true
+          ONLY on the day's first qualified activity; the client plays the
+          check-in fx + sfx on that edge. Absent for claim / non-qualified /
+          anonymous / fail-open paths. */
+      checkinReward?: ArcadeProfileEventResponse['checkin_reward']
     }
   | { kind: 'anon' }
   | { kind: 'invalid' }
@@ -78,8 +85,15 @@ export async function submitArcadeProfileEvent(
     if (res.status === 204 || res.status === 401) return { kind: 'anon' }
     if (res.status === 422 || res.status === 400) return { kind: 'invalid' }
     if (!res.ok) return { kind: 'error' }
-    const data = (await res.json()) as ArcadeProfileResponse
-    return { kind: 'ok', profile: data.profile, publicProfile: publicProfileOf(data) }
+    const data = (await res.json()) as ArcadeProfileEventResponse
+    return {
+      kind: 'ok',
+      profile: data.profile,
+      publicProfile: publicProfileOf(data),
+      // The check-in credit outcome rides the event response; absent unless the
+      // server credited (or considered) a qualified activity for the UTC day.
+      ...(data.checkin_reward !== undefined ? { checkinReward: data.checkin_reward } : {}),
+    }
   } catch {
     return { kind: 'error' }
   }

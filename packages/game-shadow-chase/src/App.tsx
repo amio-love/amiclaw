@@ -8,6 +8,7 @@ import { PlanningScreen } from './components/PlanningScreen'
 import { ResultScreen } from './components/ResultScreen'
 import { StartScreen } from './components/StartScreen'
 import { StrategyPanel } from './components/StrategyPanel'
+import type { WinReward } from '@shared/reward-types'
 import type { CompanionIntent, Difficulty } from './engine/types'
 import { resolveGameShortcut } from './keyboard-shortcuts'
 import { createPlanningController } from './planning/planning-controller'
@@ -35,6 +36,11 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
   const [pendingStrategy, setPendingStrategy] = useState<CompanionIntent>('support')
   const pendingStrategyRef = useRef<CompanionIntent>('support')
   const settledRuns = useRef(new Set<string>())
+  // The settlement win reward, keyed by the attempt it belongs to so a stale
+  // reward from a previous attempt never shows on a later result (reward-economy
+  // §3). Only a credited / capped win sets it; a loss / timeout / fail-open
+  // leaves it null.
+  const [reward, setReward] = useState<{ attemptId: string; reward: WinReward } | null>(null)
 
   const selectStrategy = useCallback(
     (intent: CompanionIntent) => {
@@ -123,12 +129,15 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
     // attempt.
     if (!state.terminal || settledRuns.current.has(state.attemptId)) return
     settledRuns.current.add(state.attemptId)
+    const attemptId = state.attemptId
     handoffSettlement({
       version: 1,
       runId: state.runId,
-      attemptId: state.attemptId,
+      attemptId,
       outcome: state.terminal.outcome,
       durationTicks: state.tick,
+    }).then((won) => {
+      if (won) setReward({ attemptId, reward: won })
     })
   }, [state])
 
@@ -157,6 +166,7 @@ export function App({ voiceSource }: { voiceSource?: ShadowVoiceSource | null })
       return (
         <ResultScreen
           state={state}
+          reward={reward?.attemptId === state.attemptId ? reward.reward : null}
           onRestart={() => {
             store.prepareNextRun()
             beginPlanning(store)

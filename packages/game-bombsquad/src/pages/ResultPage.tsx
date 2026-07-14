@@ -40,6 +40,7 @@ import {
 import { deriveCompanionReaction } from './companion-reaction'
 import { playSfx } from '@/audio/useSfx'
 import type { ScoreSubmission, ScoreSubmissionResponse } from '@shared/leaderboard-types'
+import { STARBURST_GLYPH, STARBURST_LABEL } from '@shared/reward-types'
 import styles from './ResultPage.module.css'
 
 // Module label keyed by module kind (the `moduleType` stored on each stat),
@@ -173,6 +174,10 @@ export default function ResultPage() {
   const [entryRecovery] = useState(() => readEntryRecoveryState())
   const [profileSaveState, setProfileSaveState] = useState<ProfileSaveState>('idle')
   const [dailyLoop, setDailyLoop] = useState<ArcadeDailyLoopSummary | null>(null)
+  // The +3 check-in reward beat (reward-economy §4), set only when the profile
+  // event POST reports the day's FIRST qualified activity credited. Drives the
+  // fx + sfx cue — visual/audio only, never a companion-voice line.
+  const [checkinCredited, setCheckinCredited] = useState<{ amount: number } | null>(null)
   const [shareState, setShareState] = useState<ShareState>('idle')
   // Holds the share text for the terminal select-and-copy fallback (`manual`).
   const [shareText, setShareText] = useState('')
@@ -284,6 +289,13 @@ export default function ResultPage() {
           markArcadeProfileEventsClaimed([sourceKey])
           setProfileSaveState('synced')
           setDailyLoop(result.profile.daily_loop)
+          // The day's first qualified activity banked the +3 check-in reward:
+          // play the fx + sfx beat. `playSfx` is a no-op while the mode② voice
+          // partner is live (its own gate), so it never talks over the AI.
+          if (result.checkinReward?.credited) {
+            setCheckinCredited({ amount: result.checkinReward.amount })
+            playSfx('reward-checkin')
+          }
         } else if (result.kind === 'anon') {
           setProfileSaveState(localSaved ? 'saved-local' : 'unavailable')
         } else {
@@ -893,6 +905,32 @@ export default function ResultPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Settlement reward drop (reward-economy §3): a credited win lands a
+              +5 ✦ 星芒 beat; a capped daily quota reads a muted note; a duplicate
+              (run replay) / absent reward shows nothing. */}
+          {showRankCard && rankResult?.reward?.status === 'credited' && (
+            <div className={styles.rewardDrop} role="status" aria-label="过关奖励">
+              <span className={styles.rewardDropAmount}>
+                +{rankResult.reward.amount} {STARBURST_GLYPH}
+              </span>
+              <span className={styles.rewardDropLabel}>{STARBURST_LABEL}</span>
+            </div>
+          )}
+          {showRankCard && rankResult?.reward?.status === 'capped' && (
+            <p className={styles.rewardCapped}>今日过关奖励已满</p>
+          )}
+          {/* Check-in reward beat (reward-economy §4): the day's first qualified
+              activity banked +3 星芒. Distinct from the per-win drop above — a
+              single first-of-day defuse shows both. */}
+          {checkinCredited !== null && (
+            <div className={styles.checkinBeat} role="status" aria-label="今日打卡奖励">
+              <span className={styles.checkinBeatAmount}>
+                +{checkinCredited.amount} {STARBURST_GLYPH}
+              </span>
+              <span className={styles.checkinBeatLabel}>{STARBURST_LABEL} · 今日打卡</span>
             </div>
           )}
 

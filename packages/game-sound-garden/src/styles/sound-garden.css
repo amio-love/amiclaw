@@ -842,6 +842,36 @@ button {
   font-size: 12px;
   margin: 0;
 }
+/* Reward-economy voice intercepts (§5). Star mark + CTA ride the platform brand
+   yellow (atlas tokens), not the sound-garden melody accent. */
+.sg-voice-intercept {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+}
+.sg-voice-intercept p {
+  color: var(--ink-dim);
+  font-size: 13px;
+  margin: 0;
+}
+.sg-voice-intercept-cta {
+  justify-self: start;
+  color: var(--amio-yellow);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.sg-voice-intercept-cta:hover {
+  text-decoration: underline;
+}
+.sg-voice-farewell {
+  color: var(--amio-yellow);
+  font-size: 13px;
+  margin: 0;
+}
 .sg-voice-foot {
   display: flex;
   align-items: center;

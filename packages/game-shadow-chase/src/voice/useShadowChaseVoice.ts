@@ -24,6 +24,10 @@ export interface ShadowVoiceSource {
   stop?: () => void
   errorCode?: string
   statusMessage?: string
+  /** Terminal summary reason — `'balance-depleted'` when the session wound down
+      because the starburst budget ran out mid-conversation (reward-economy §5),
+      driving the companion farewell beat. */
+  sessionReason?: string
 }
 
 export interface ShadowVoiceView extends ShadowVoiceSource {

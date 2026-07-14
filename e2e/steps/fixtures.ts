@@ -272,6 +272,36 @@ export class World {
   } | null = null
   /** Captured PUT /api/companion/settings bodies (voice-posture writes). */
   readonly companionSettingsPuts: Record<string, unknown>[] = []
+  /** The route-mocked reward-economy balance + ledger (GET /api/companion/assets)
+   *  the TopNav balance chip + its drawer read. Signed-in only (401 anon). */
+  assets: {
+    asset_type: 'starburst'
+    balance: number
+    entries: { amount: number; source_product: string; kind: string; earned_at: string }[]
+  } = {
+    asset_type: 'starburst',
+    balance: 12,
+    entries: [
+      {
+        amount: 5,
+        source_product: 'bombsquad',
+        kind: 'win',
+        earned_at: '2026-07-14T00:55:00.000Z',
+      },
+      {
+        amount: 3,
+        source_product: 'amiclaw',
+        kind: 'checkin',
+        earned_at: '2026-07-14T01:00:00.000Z',
+      },
+      {
+        amount: 10,
+        source_product: 'amiclaw',
+        kind: 'welcome',
+        earned_at: '2026-07-13T09:00:00.000Z',
+      },
+    ],
+  }
   /** The route-mocked community feed (GET /api/arcade/community/feed). */
   communityFeed: CommunityFeedResponse = defaultCommunityFeed()
   /** Captured community like/unlike requests (POST/DELETE /likes). */
@@ -860,6 +890,29 @@ export const test = base.extend<{ world: World }>({
           contentType: 'application/json',
           headers: { 'Cache-Control': 'no-store' },
           body: JSON.stringify(world.companion),
+        })
+      })
+
+      // Reward-economy balance + ledger (GET /api/companion/assets) — the TopNav
+      // balance chip and its tap-through ledger drawer. require-session on the
+      // real backend, so the mock 401s an anonymous world and returns the seeded
+      // balance for a signed-in one. Registered before `**/api/companion/setup`
+      // and distinct from the exact `**/api/companion` route, so no overlap.
+      await page.route('**/api/companion/assets', async (route) => {
+        if (world.authIdentity === null) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            headers: { 'Cache-Control': 'no-store' },
+            body: JSON.stringify({ error: 'auth required' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(world.assets),
         })
       })
 
