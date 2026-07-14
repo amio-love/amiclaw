@@ -38,6 +38,14 @@ sounds harsh, nothing detonates, and bloom is a reward you can keep playing past
 Ships with three levels, dark-only, CSS-only animation, running on the shared
 creation engine.
 
+**The reward economy opens its ledger** — Added. The platform gains an
+account-level asset ledger for the earn currency (starburst): append-only
+balance records with idempotent crediting and replay-safe daily-cap markers,
+plus an authenticated `/api/companion/assets` endpoint that returns the
+balance with recent entries and self-heals a one-time +10 welcome grant on
+the first authenticated read. No gameplay rewards flow yet — win, check-in,
+and companion-time wiring land in follow-up changes.
+
 **The platform companion learns to act in co-build games** — Added. The voice
 AI pipeline gains a backward-compatible action channel: in games flagged as
 co-build, the companion's reply can carry one structured board action
