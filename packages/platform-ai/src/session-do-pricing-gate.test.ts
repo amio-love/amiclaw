@@ -284,6 +284,20 @@ function fireBurnAlarm(handle: SessionHandle, payload: BurnPayload): Promise<voi
   return handle.run((instance) => instance.onBurnThroughAlarm(payload))
 }
 
+/** The durable "this session delivered billable output" storage-key prefix. */
+const BILLABLE_KEY_PREFIX = 'reward:billable:'
+
+/**
+ * Write the durable billable marker the DO persists on a session's first delivered
+ * chunk — so a burn-through alarm for `sessionId` treats it as a DELIVERED session
+ * (bills its budget) rather than a zero-delivery one (bills ZERO, Finding #2).
+ */
+function writeBillableMarker(handle: SessionHandle, sessionId: string): Promise<void> {
+  return handle.run((_instance, state) =>
+    state.storage.put(`${BILLABLE_KEY_PREFIX}${sessionId}`, true)
+  )
+}
+
 /**
  * Poll a predicate over the DO's PRIVATE state (read inside its I/O context via
  * `handle.run`) until it holds — the async-DO-state analog of `waitFor` (which
@@ -691,15 +705,17 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down (durable DO ala
     expect(db.deductRows()[0].amount).toBeLessThan(0)
   })
 
-  it('still deducts the depleted budget when the alarm fires on a NON-resident (evicted) session', async () => {
+  it('still deducts the depleted budget when the alarm fires on a NON-resident (evicted) DELIVERED session', async () => {
     // The durability win: the old setTimeout was LOST on an isolate eviction, so a
     // depleted session was never billed. The durable schedule survives — when the
     // alarm fires on a fresh post-eviction instance (in-memory `sessionState` gone),
-    // `onBurnThroughAlarm` bills the budget from its persisted payload. Modeled here
-    // by dispatching the callback against a DO with NO bound session.
+    // `onBurnThroughAlarm` bills the budget from its persisted payload IF the session
+    // delivered output (its durable billable marker survived the eviction too).
     const db = new FakeCompanionDb()
     const handle = makeSessionDo()
     await injectCompanionDb(handle, db)
+    // The evicted session HAD delivered output → its durable marker persists.
+    await writeBillableMarker(handle, 'evicted-session')
 
     // No session is bound (fresh instance, exactly as after an eviction). The alarm
     // dispatches with the payload the schedule persisted at create.
@@ -724,7 +740,8 @@ describe('VoiceSessionDO pricing gate — burn-through wind-down (durable DO ala
     const db = new FakeCompanionDb()
     const handle = makeSessionDo()
     await injectCompanionDb(handle, db)
-    // A prior teardown already billed this session 2 minutes.
+    // A DELIVERED session (marker present) whose prior teardown already billed 2 min.
+    await writeBillableMarker(handle, 'already-billed')
     db.seed({
       user_id: 'user-A',
       asset_type: 'starburst',
@@ -1059,6 +1076,9 @@ describe('VoiceSessionDO pricing gate — PR #257 codex P2 fixes', () => {
     const idBefore = await handle.run((instance) => asPrivate(instance).burnScheduleId)
     expect(typeof idBefore).toBe('string')
 
+    // Session A HAD delivered output (its durable marker persists) — so its stale
+    // alarm would bill A, which is exactly what must NOT leak onto B.
+    await writeBillableMarker(handle, 'stale-session-A')
     // The stale alarm for session A fires while B is bound.
     await fireBurnAlarm(handle, {
       sessionId: 'stale-session-A',
@@ -1166,5 +1186,127 @@ describe('VoiceSessionDO pricing gate — PR #257 codex P2 fixes', () => {
     })
     expect(after.turnCount).toBe(before.turnCount) // no stale turnCount increment
     expect(after.historyLen).toBe(before.historyLen) // no stale history mutation
+  })
+})
+
+// --- PR #257 codex round 2 — stale-turn cross-session invariant + zero-bill alarm --
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-2 fixes', () => {
+  it('round2 #1/#3 — a stale turn resolving a chunk LATE does not flip the delivered latch / bump generation / write history on a REBOUND new session', async () => {
+    // Root-cause invariant: `return()` cannot interrupt a pending provider await, so
+    // an old session's turn can run its loop body LATE — after `clearSession` rebound
+    // the DO to a NEW session. Its session-facing writes must be gated on session
+    // identity, or they corrupt the new session (floor-charge it / skip its turn).
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      const view = asPrivate(instance)
+      view.env = { ...view.env, COMPANION_DB: db } as SessionDoEnv
+    })
+
+    // Session A: a turn parks at the gated LLM (stuck), then A ends (DO unbinds).
+    const socketA = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socketA)
+    await driveUtteranceToLlm(socketA, kit, 1) // A's turn parked at the gated LLM
+    socketA.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketA, 'summary')
+
+    // The DO is REBOUND to a NEW session B (new sessionId, fresh state).
+    const socketB = await openSocket(handle, 'user-B')
+    const sessionB = await createSessionOverWs(socketB)
+    const before = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        gen: s?.turnGeneration ?? -1,
+        delivered: asPrivate(instance).hasDeliveredTurn,
+        historyLen: s?.history.length ?? -1,
+      }
+    })
+    expect(before.delivered).toBe(false)
+
+    // Session A's stuck turn resolves a chunk LATE (its provider ignored return()).
+    // The loop-body identity guard must make it touch NOTHING on session B.
+    await handle.run(() => {
+      kit.llmTurns[0].pushDelta('late reply from A')
+      kit.llmTurns[0].finishStream()
+    })
+    await settle()
+    await settle()
+
+    const after = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return {
+        gen: s?.turnGeneration ?? -1,
+        delivered: asPrivate(instance).hasDeliveredTurn,
+        historyLen: s?.history.length ?? -1,
+      }
+    })
+    expect(after.delivered).toBe(false) // NOT floor-flagged by A's stale chunk
+    expect(after.gen).toBe(before.gen) // A's stale turn did NOT bump B's generation
+    expect(after.historyLen).toBe(before.historyLen) // no stale history on B
+    // B delivered nothing → it must bill ZERO on close (the corruption would have
+    // floor-charged it). Session A DID deliver (its transcript frame), so it bills —
+    // assert specifically that NO row exists for B.
+    socketB.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketB, 'summary')
+    await settle()
+    expect(db.deductRows().find((r) => r.source_key === `session:${sessionB}`)).toBeUndefined()
+  })
+
+  it("round2 #1 — a stale turn's deadline firing LATE does not bump a rebound new session's generation", async () => {
+    const kit = makeGatedProviders()
+    providerControl.override = kit.providers
+    const handle = makeSessionDo()
+    await handle.run((instance) => {
+      asPrivate(instance).maxTurnMs = 250 // A's stuck turn trips its deadline soon
+    })
+
+    // Session A: a turn parks at the gated LLM (never released), then A ends.
+    const socketA = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socketA)
+    await driveUtteranceToLlm(socketA, kit, 1)
+    socketA.send(JSON.stringify({ type: 'end' }))
+    await waitForMessage(socketA, 'summary')
+
+    // Rebind to a NEW session B.
+    const socketB = await openSocket(handle, 'user-B')
+    await createSessionOverWs(socketB)
+    const genBefore = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+
+    // Wait past A's per-turn deadline (250 ms): its force-cancel path fires LATE while
+    // B is bound. The epoch gate must make it skip the generation bump.
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    await settle()
+
+    const genAfter = await handle.run(
+      (instance) => asPrivate(instance).sessionState?.turnGeneration ?? -1
+    )
+    expect(genAfter).toBe(genBefore) // A's late deadline did NOT bump B's generation
+  })
+
+  it('round2 #2 — the durable alarm bills ZERO for a zero-delivery session (no billable marker, no idempotency row, failed cancel)', async () => {
+    // FIX 3 writes NO teardown deduct row for a zero-delivery session, so the ON
+    // CONFLICT idempotency guard could not stop a stale alarm from full-budget-billing
+    // it. The durable billable marker is the real gate: absent => bill ZERO.
+    const db = new FakeCompanionDb()
+    const handle = makeSessionDo()
+    await injectCompanionDb(handle, db)
+
+    // No marker written (the session delivered nothing) and no seeded deduct row (FIX 3
+    // wrote none). The schedule-cancel raced, so the alarm still fires.
+    await fireBurnAlarm(handle, {
+      sessionId: 'zero-delivery-session',
+      userId: 'user-A',
+      budgetMinutes: 8,
+      fundingSource: 'earned',
+    })
+    await settle()
+
+    // The alarm billed NOTHING — the zero-bill rule holds durably.
+    expect(db.deductRows()).toHaveLength(0)
   })
 })

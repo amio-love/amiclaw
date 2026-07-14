@@ -283,6 +283,17 @@ interface BurnThroughPayload {
   fundingSource: string
 }
 
+/**
+ * DO-storage key prefix for the durable "this session delivered billable output"
+ * marker (hardening batch B round 2, Finding #2). Written to `ctx.storage` on a
+ * session's first delivered chunk and deleted at teardown; it survives an isolate
+ * eviction (unlike the in-memory `hasDeliveredTurn` latch), so the burn-through
+ * alarm can tell a delivered-but-evicted session (bill the budget) from a
+ * zero-delivery session (bill ZERO — FIX 3 wrote no teardown deduct row). Keyed by
+ * session id (a UUID), so markers never collide across the DO's reused lifetime.
+ */
+const BILLABLE_KEY_PREFIX = 'reward:billable:'
+
 type ControlMessage =
   | CreateSessionMessage
   | SpeechStartMessage
@@ -1174,6 +1185,19 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       this.burnScheduleId = undefined
       this.ctx.waitUntil(this.cancelSchedule(scheduleId).catch(() => {}))
     }
+    // Drop the durable billable marker for this session (Finding #2 cleanup) — ONLY
+    // when one was actually written (i.e. this session delivered output). A delivered
+    // session already wrote its teardown deduct row, so a later stale alarm reading
+    // the now-absent marker bills zero harmlessly (idempotency already covers the
+    // double-bill). A zero-delivery session never wrote a marker, so it skips the
+    // delete entirely (no stray storage op). Prevents markers accumulating across the
+    // DO's lifetime while keeping teardown side-effect-free for zero-output sessions.
+    if (this.sessionId !== undefined && this.hasDeliveredTurn) {
+      const endingSessionId = this.sessionId
+      this.ctx.waitUntil(
+        this.ctx.storage.delete(`${BILLABLE_KEY_PREFIX}${endingSessionId}`).catch(() => {})
+      )
+    }
     // Drop any deferred wind-down (finding 1): the session is torn down, so a
     // pending wind-down must never fire against the next generation.
     this.pendingWindDown = undefined
@@ -1388,6 +1412,14 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     makeTurn: (signal: AbortSignal) => AsyncIterator<AiResponseChunk>
   ): Promise<void> {
     const myEpoch = this.turnEpoch
+    // The session this turn belongs to. The loop body gates its session-facing writes
+    // (delivered latch, chunk sends, billable marker) on THIS still being the bound
+    // session — the precise "don't corrupt a DIFFERENT session" check. It is NOT the
+    // epoch: a same-session barge-in advances `turnEpoch` but keeps `sessionId`, and a
+    // superseded turn on the SAME session may still legitimately flush its farewell
+    // (a depletion recap barged into mid-stream). Only a REBIND (a new `sessionId`
+    // after `clearSession`) is corruption.
+    const mySessionId = this.sessionId
     const abortController = new AbortController()
     const turn = makeTurn(abortController.signal)
     this.activeTurn = turn
@@ -1420,32 +1452,56 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           })
           abortController.abort()
           void turn.return?.(undefined)
-          // Fence a LATE settle: bump the session's turn generation so this turn's
-          // generator — which may still complete after its provider `await` finally
-          // resolves (a provider that ignored the abort, or the TTS wait that gets
-          // no signal) — sees a stale generation and SKIPS its commit path, so it
-          // cannot mutate `history` / usage / `turnCount` for the abandoned turn
-          // after newer turns have run. NB: `turnEpoch` is deliberately NOT bumped
-          // here — the `finally` below must still see `turnEpoch === myEpoch` to
-          // release the guard and fire any deferred wind-down.
-          if (this.sessionState) this.sessionState.turnGeneration += 1
-          // Unstick the client: it set its streaming flag on the first `chunk` and
-          // clears it only on a `done` frame or a socket close. A force-cancel after
-          // a partial stream would otherwise leave the client looking mid-stream
-          // forever (suppressing later utterances). Emit a terminal `done:true` so it
-          // clears — but only if a chunk actually streamed AND this turn still owns
-          // the socket (a barge-in that advanced `turnEpoch` means a newer turn owns
-          // it now; its own terminal frame must not be pre-empted).
-          if (deliveredChunk && this.turnEpoch === myEpoch) {
-            ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
+          // INVARIANT: a turn that no longer owns the epoch touches NOTHING on the
+          // session. `return()` cannot interrupt a pending provider `await`, so this
+          // deadline can fire LATE — after a barge-in / `end` advanced `turnEpoch`
+          // and possibly rebound the DO to a NEW session. In that stale case, bumping
+          // the generation or emitting a frame would corrupt the NEW session (its
+          // legitimate turn would skip history/usage/terminal `done`). So gate every
+          // session-facing write on `turnEpoch === myEpoch`. NB: when still current,
+          // `turnEpoch` is deliberately NOT bumped — the `finally` must see
+          // `turnEpoch === myEpoch` to release the guard and fire a deferred wind-down.
+          if (this.turnEpoch === myEpoch) {
+            // Fence a LATE settle: bump the turn generation so this turn's generator,
+            // if its provider `await` resolves after the guard released, sees a stale
+            // generation and SKIPS its commit (no `history` / usage / `turnCount`
+            // mutation for the abandoned turn).
+            if (this.sessionState) this.sessionState.turnGeneration += 1
+            // Unstick the client (it clears mid-stream state only on a `done` frame
+            // or a socket close): emit a terminal `done:true` if a chunk actually
+            // streamed, so a partial-then-hung reply does not leave it stuck.
+            if (deliveredChunk) {
+              ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
+            }
           }
           break
         }
         if (step.done) break
+        // INVARIANT: a turn whose provider resolved a chunk LATE, after the DO was
+        // REBOUND to a DIFFERENT session (`end`/close ran `clearSession` and a new
+        // `create` bound a new `sessionId`), must touch NOTHING on that new session —
+        // flipping its delivered latch or sending a frame would corrupt it (e.g.
+        // floor-charge a rebound zero-output session). Keyed on session IDENTITY, not
+        // epoch: a same-session barge-in advances the epoch yet the superseded turn
+        // may still legitimately flush its farewell to the same socket.
+        if (this.sessionId !== mySessionId) break
         const chunk = step.value
-        // A chunk is about to reach the player: this session has now delivered
-        // real turn output (FIX 3 — gates the billing floor at teardown).
-        this.hasDeliveredTurn = true
+        // A chunk is about to reach the player: this (current-epoch) session has now
+        // delivered real turn output (FIX 3 — gates the billing floor at teardown).
+        if (!this.hasDeliveredTurn) {
+          this.hasDeliveredTurn = true
+          // Persist a DURABLE billable marker keyed to THIS session (Finding #2): it
+          // survives eviction (unlike the in-memory latch), so the burn-through alarm
+          // bills a session that delivered ZERO output nothing even when no teardown
+          // deduct row exists (FIX 3) and its schedule-cancel raced. Written once, on
+          // the false->true transition.
+          const deliveredSessionId = this.sessionId
+          if (deliveredSessionId !== undefined) {
+            this.ctx.waitUntil(
+              this.ctx.storage.put(`${BILLABLE_KEY_PREFIX}${deliveredSessionId}`, true)
+            )
+          }
+        }
         if (chunk.kind === 'transcript') {
           // The player's recognized utterance — its OWN wire frame, NOT a
           // `chunk`: `{type:'transcript', text, final}`. Here this is the single
@@ -1741,12 +1797,20 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     // Not the currently bound session (evicted / reconnected / stale earlier-session
     // alarm): bill ONLY the depleted budget for the alarm's OWN `payload.sessionId`,
     // never touching the current session's `burnScheduleId` or state.
-    // `deductSessionMinutes` is idempotent on `session:{sessionId}` (ON CONFLICT DO
-    // NOTHING) and refuses a non-positive/non-integer amount, so a session already
-    // deducted elsewhere is an exact no-op. Fail-open: a D1 failure is an accepted
-    // undercount, never a throw out of the alarm handler.
     const db = this.env.COMPANION_DB
     if (db === undefined) return
+    // Finding #2 — bill ONLY a session that actually delivered output. The durable
+    // billable marker survives eviction (unlike in-memory `hasDeliveredTurn`); its
+    // ABSENCE means a zero-delivery session — which FIX 3 bills ZERO and for which no
+    // teardown `session:{id}` row exists, so the ON CONFLICT idempotency guard could
+    // NOT stop a stale alarm from full-budget-billing it. Present => a
+    // delivered-then-evicted (or delivered-then-raced-cancel) session that owes its
+    // budget. The idempotency key remains the double-bill guard for the present case.
+    const markerKey = `${BILLABLE_KEY_PREFIX}${payload.sessionId}`
+    const billable = await this.ctx.storage
+      .get<boolean>(markerKey)
+      .catch(() => undefined as boolean | undefined)
+    if (billable !== true) return // never delivered → bill nothing (fail-open on read error)
     await deductSessionMinutes(db, {
       userId: payload.userId,
       sessionId: payload.sessionId,
@@ -1758,6 +1822,9 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
         err
       )
     })
+    // The alarm has settled this session's bill (or no-op'd on an existing row); drop
+    // the durable marker so it does not accumulate across the DO's lifetime.
+    this.ctx.waitUntil(this.ctx.storage.delete(markerKey).catch(() => {}))
   }
 
   /**
