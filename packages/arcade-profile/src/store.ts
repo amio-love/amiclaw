@@ -689,22 +689,31 @@ async function readProxyThreadsByEvent(
   const messageIds = messageRows.map((row) => row.message_id)
   const replyByMessage = new Map<string, ArcadeCommunityProxyReply>()
   try {
-    const replyPlaceholders = messageIds.map(() => '?').join(', ')
-    const { results: replyRows } = await db
-      .prepare(
-        `SELECT message_id, responder_companion_name, responder_public_label, body, created_at
-         FROM arcade_community_proxy_reply
-         WHERE message_id IN (${replyPlaceholders})`
-      )
-      .bind(...messageIds)
-      .all<ProxyReplyRow>()
-    for (const row of replyRows) {
-      replyByMessage.set(row.message_id, {
-        responder_companion_name: row.responder_companion_name,
-        responder_public_label: row.responder_public_label,
-        body: row.body,
-        created_at: row.created_at,
-      })
+    /* D1 caps bound parameters per statement (~100). eventIds is bounded by the
+       feed page cap, but messageIds grows with author-threads per event, so the
+       reply read chunks its IN() — otherwise a popular window (>100 threads)
+       would 500 the whole anonymous mode① feed read (behavioral-pass finding,
+       2026-07-14). */
+    const REPLY_IN_BATCH_SIZE = 90
+    for (let offset = 0; offset < messageIds.length; offset += REPLY_IN_BATCH_SIZE) {
+      const batch = messageIds.slice(offset, offset + REPLY_IN_BATCH_SIZE)
+      const replyPlaceholders = batch.map(() => '?').join(', ')
+      const { results: replyRows } = await db
+        .prepare(
+          `SELECT message_id, responder_companion_name, responder_public_label, body, created_at
+           FROM arcade_community_proxy_reply
+           WHERE message_id IN (${replyPlaceholders})`
+        )
+        .bind(...batch)
+        .all<ProxyReplyRow>()
+      for (const row of replyRows) {
+        replyByMessage.set(row.message_id, {
+          responder_companion_name: row.responder_companion_name,
+          responder_public_label: row.responder_public_label,
+          body: row.body,
+          created_at: row.created_at,
+        })
+      }
     }
   } catch (error) {
     // Unified degrade: a missing reply table (impossible without a missing

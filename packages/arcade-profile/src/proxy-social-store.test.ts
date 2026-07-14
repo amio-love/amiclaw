@@ -122,6 +122,44 @@ describe('proxy thread feed read', () => {
     expect(serialized).not.toContain('anchor_source_key')
   })
 
+  it('reads replies correctly across the IN() batch boundary (>90 threads on one event)', async () => {
+    // D1 caps bound parameters (~100/statement); the reply read chunks message
+    // ids into ≤90 batches. 120 author threads forces two batches — every reply
+    // must still land on its message, including the ones past the boundary.
+    const db = createProxySocialTestDb()
+    await seedClaimedPlayer(db, 'user-yi', 'Yi', [runEvent('run-1', '2026-07-08T08:00:00.000Z')])
+    await seedCompanion(db, 'user-yi')
+    const eventId = (await readArcadeCommunityFeed(db, { today: TODAY })).items[0].id
+
+    const THREADS = 120
+    for (let i = 0; i < THREADS; i += 1) {
+      await insertProxyMessage(
+        db,
+        {
+          ...PROXY_MESSAGE,
+          eventId,
+          messageId: `msg-batch-${String(i).padStart(3, '0')}`,
+          authorUserId: `user-author-${i}`,
+        },
+        DEPS
+      )
+    }
+    // Reply to the first and the last message — one in each IN() batch.
+    for (const id of ['msg-batch-000', `msg-batch-${THREADS - 1}`]) {
+      await insertProxyReply(
+        db,
+        { messageId: id, responderCompanionName: 'Ori', responderPublicLabel: 'Yi', body: 'ty' },
+        DEPS
+      )
+    }
+
+    const feed = await readArcadeCommunityFeed(db, { today: TODAY, viewerUserId: 'user-yi' })
+    const threads = feed.items[0].threads
+    expect(threads).toHaveLength(THREADS)
+    const replied = threads.filter((t) => t.reply !== null).map((t) => t.message_id)
+    expect(replied).toEqual(['msg-batch-000', `msg-batch-${THREADS - 1}`])
+  })
+
   it('stacks multiple author threads under one event (UNIQUE is per author, not per event)', async () => {
     const db = createProxySocialTestDb()
     await seedClaimedPlayer(db, 'user-yi', 'Yi', [runEvent('run-1', '2026-07-08T08:00:00.000Z')])
