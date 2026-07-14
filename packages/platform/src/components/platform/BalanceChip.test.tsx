@@ -34,6 +34,37 @@ function stubAssets(status: number, body?: CompanionAssetsResponse) {
   )
 }
 
+/** Stub a sequence of 200 assets bodies — call N returns body N (the last body
+ *  repeats). Used to model a mint read (welcome_granted true) followed by a
+ *  reload that no longer re-mints. */
+function stubAssetsBodies(...bodies: CompanionAssetsResponse[]) {
+  let call = 0
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => {
+      const body = bodies[Math.min(call, bodies.length - 1)]
+      call += 1
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }))
+    })
+  )
+}
+
+/** Stub a raw response (any status, any body string) for the failure-mode
+ *  (graceful-degradation) tests: a 500, a malformed body, a non-numeric balance. */
+function stubRaw(status: number, rawBody: string | null) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response(rawBody, { status })))
+  )
+}
+
+/** Assert the chip rendered NOTHING even after the read would have resolved: no
+ *  button ever appears within the window, and the container is empty. */
+async function expectNeverRenders(container: HTMLElement) {
+  await expect(screen.findByRole('button', undefined, { timeout: 400 })).rejects.toBeDefined()
+  expect(container).toBeEmptyDOMElement()
+}
+
 describe('BalanceChip', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -60,5 +91,49 @@ describe('BalanceChip', () => {
 
     await waitFor(() => expect(container).toBeEmptyDOMElement())
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('shows the one-time +10 welcome beat on the minting read', async () => {
+    stubAssets(200, { ...ASSETS, balance: 10, welcome_granted: true })
+    render(<BalanceChip />)
+
+    // The beat text carries the +10, so it is distinct from a ledger 见面礼 row.
+    expect(await screen.findByText(/\+10.*见面礼/)).toBeInTheDocument()
+  })
+
+  it('shows the welcome beat only on the mint, not on the following read', async () => {
+    stubAssetsBodies(
+      { ...ASSETS, balance: 10, welcome_granted: true },
+      { ...ASSETS, balance: 10, welcome_granted: false }
+    )
+    render(<BalanceChip />)
+
+    const button = await screen.findByRole('button', { name: /星芒余额/ })
+    expect(screen.getByText(/\+10.*见面礼/)).toBeInTheDocument()
+
+    // Opening the ledger reloads; the grant no longer re-mints, so the beat clears.
+    await userEvent.click(button)
+    await waitFor(() => expect(screen.queryByText(/\+10.*见面礼/)).not.toBeInTheDocument())
+  })
+
+  // --- Graceful degradation: every failure mode renders NOTHING (fetchAssets
+  //     guards → useBalance 'unavailable' → the chip is null). ---
+
+  it('renders nothing on a server error (500)', async () => {
+    stubRaw(500, null)
+    const { container } = render(<BalanceChip />)
+    await expectNeverRenders(container)
+  })
+
+  it('renders nothing on a malformed response body', async () => {
+    stubRaw(200, 'not-json{')
+    const { container } = render(<BalanceChip />)
+    await expectNeverRenders(container)
+  })
+
+  it('renders nothing when the balance is not a number', async () => {
+    stubRaw(200, JSON.stringify({ asset_type: 'starburst', balance: 'lots', entries: [] }))
+    const { container } = render(<BalanceChip />)
+    await expectNeverRenders(container)
   })
 })

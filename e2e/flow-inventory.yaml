@@ -605,8 +605,8 @@ flows:
       (星芒) balance chip next to the avatar; tapping it opens the shared-Modal
       ledger drawer listing the recent entries by kind (过关奖励 / 每日打卡 / 见面礼
       / 语音陪伴) — no new route, the ledger stays within the existing shell. The
-      observable「看余额」beat of the reward-economy earn→see→open→spend loop; the
-      earn/spend legs run server-side (pricing gate + ledger) outside the static
-      harness.
+      observable balance-viewing beat of the reward-economy earn -> see -> open ->
+      spend loop; the earn/spend legs run server-side (pricing gate + ledger)
+      outside the static harness.
     steps: [homepage-signed-in, balance-chip-render, open-ledger, ledger-entries]
     status: active

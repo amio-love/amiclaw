@@ -92,7 +92,7 @@ export const SFX_PRESETS: Record<SfxType, SfxPreset> = {
     noteStride: 0.11,
     gain: 0.28,
   },
-  // Check-in reward landed (+3 星芒, the day's first qualified activity): a
+  // Check-in reward landed (+3 starburst, the day's first qualified activity): a
   // brighter four-note rising sparkle (E5 → G#5 → B5 → E6) so the starburst
   // beat reads as a small, distinct "you earned something" cue apart from the
   // three-note run-arrival chime. Still restrained (~0.26), never a fanfare.

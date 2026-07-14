@@ -52,9 +52,10 @@ export function ResultScreen({
             <dd>{(state.tick / 4).toFixed(1)} 秒</dd>
           </div>
         </dl>
-        {/* Win reward drop (reward-economy §3): a credited撤离 lands a +5 ✦ 星芒
-            beat; a capped daily quota reads a muted note; duplicate / absent =
-            nothing. Star mark rides brand yellow, not the moon-blue accent. */}
+        {/* Win reward drop (reward-economy §3): a credited win lands a +5 starburst
+            reward beat; a capped daily quota reads a muted note; a duplicate or
+            absent reward shows nothing. The star mark rides brand yellow, not the
+            moon-blue accent. */}
         {won && reward?.status === 'credited' && (
           <div className="result-reward" role="status" aria-label="撤离奖励">
             <span className="result-reward-amount">

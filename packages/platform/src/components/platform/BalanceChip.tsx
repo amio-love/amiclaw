@@ -40,7 +40,7 @@ export default function BalanceChip() {
   }
 
   return (
-    <>
+    <span className={styles.wrap}>
       <button
         type="button"
         className={styles.chipButton}
@@ -54,6 +54,20 @@ export default function BalanceChip() {
           <span className={styles.value}>{state.balance}</span>
         </Chip>
       </button>
+
+      {/* One-time welcome-grant beat (reward-economy §2/§6): `welcomeGranted` is
+          true ONLY on the response that first mints the +10 grant, so the cue
+          shows exactly once — a later read (the drawer's reload) returns false
+          and it clears. Floated below the chip so the nav never reflows. */}
+      {state.welcomeGranted && (
+        <span
+          className={styles.welcomeBeat}
+          role="status"
+          aria-label={`见面礼 +10 ${STARBURST_LABEL}`}
+        >
+          +10 {STARBURST_GLYPH} 见面礼
+        </span>
+      )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={`${STARBURST_LABEL}明细`}>
         <div className={styles.summary}>
@@ -81,6 +95,6 @@ export default function BalanceChip() {
           </ul>
         )}
       </Modal>
-    </>
+    </span>
   )
 }

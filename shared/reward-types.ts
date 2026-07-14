@@ -25,8 +25,9 @@ export const STARBURST_LABEL = '星芒'
 /* Player-facing copy for the voice reward-economy intercepts (design §7 mockup
    #4). Shared so the three voice panels (shadow-chase / bombsquad / sound-garden)
    read one source instead of three drifting phrasings. Each panel may append a
-   game-local clause (e.g. shadow-chase's「策略按钮照常可用」). NO companion-voice
-   narration — these are on-screen beats only (locked Boundary). */
+   game-local clause (e.g. shadow-chase adds its own "strategy buttons still work"
+   note). NO companion-voice narration — these are on-screen beats only (locked
+   Boundary). */
 export const STARBURST_EARN_CTA_LABEL = '去攒星芒'
 export const STARBURST_INSUFFICIENT_LEAD = '星芒用完了，伙伴得攒够星芒才能开口。'
 export const STARBURST_DEPLETED_FAREWELL = '这局的星芒聊完了，伙伴先陪你到这，赢下来我们再接着聊。'

@@ -1,3 +1,11 @@
+/* Relative anchor so the one-time welcome beat can float below the chip
+   without reflowing the nav row. */
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 /* The chip is a bare button wrapping the brand Chip so the whole pill is one
    tap target; the Chip carries the yellow visual, the button carries the tap +
    focus ring. Aligns to the 36px avatar height of the right slot. */
@@ -95,4 +103,45 @@
 
 .debit {
   color: var(--text-3);
+}
+
+/* ---------- one-time welcome-grant beat ---------- */
+/* A small +10 见面礼 pill floated below the chip. Brand-yellow channel, no new
+   hue; CSS-only rise, reduced-motion safe. */
+.welcomeBeat {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--amio-yellow-glow-10);
+  border: 1px solid var(--border-yellow-soft);
+  color: var(--amio-yellow);
+  font: 600 12px var(--font-body);
+  letter-spacing: 0.04em;
+  box-shadow: var(--glow-yellow);
+  z-index: 60;
+  animation: welcome-rise var(--t-bounce);
+}
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcomeBeat {
+    animation: none;
+  }
 }

@@ -1,21 +1,21 @@
 # Reward-economy starburst balance — the signed-in arcade shell shows the
-# player's 星芒 balance in the TopNav with a tap-through ledger drawer
-# (reward-economy §7). This journey covers the observable「看余额」beat within the
-# existing homepage shell — NO new route, so the flow-inventory stays within
-# existing pages.
+# player's starburst balance in the TopNav with a tap-through ledger drawer
+# (reward-economy §7). This journey covers the observable balance-viewing beat
+# within the existing homepage shell — NO new route, so the flow-inventory stays
+# within existing pages.
 #
-# Scope note: the full 赚→看余额→开局→扣减 loop's earn (win/check-in credit) and
-# spend (voice-session deduct) legs run through the platform-ai pricing gate + the
-# ledger, which are exercised by the workerd DO tests and the ledger unit tests —
-# not reachable through the static e2e harness (no Workers runtime, no live voice
-# WebSocket). The e2e stays at the observable UI: the balance chip renders the
-# authed balance and its drawer lists the ledger. The settlement reward drop, the
-# check-in beat, and the voice intercepts are covered by their per-package
-# component tests.
+# Scope note: the full earn -> see-balance -> play -> deduct loop's earn
+# (win/check-in credit) and spend (voice-session deduct) legs run through the
+# platform-ai pricing gate + the ledger, which are exercised by the workerd DO
+# tests and the ledger unit tests — not reachable through the static e2e harness
+# (no Workers runtime, no live voice WebSocket). The e2e stays at the observable
+# UI: the balance chip renders the authed balance and its drawer lists the
+# ledger. The settlement reward drop, the check-in beat, and the voice intercepts
+# are covered by their per-package component tests.
 
 Feature: Reward-economy starburst balance
   As a signed-in AMIO Arcade player
-  I want to see my 星芒 balance in the arcade header and open its ledger
+  I want to see my starburst balance in the arcade header and open its ledger
   So that I know what I have earned and what a voice session will spend
 
   Background:

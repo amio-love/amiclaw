@@ -909,8 +909,8 @@ export default function ResultPage() {
           )}
 
           {/* Settlement reward drop (reward-economy §3): a credited win lands a
-              +5 ✦ 星芒 beat; a capped daily quota reads a muted note; a duplicate
-              (run replay) / absent reward shows nothing. */}
+              +5 starburst beat; a capped daily quota reads a muted note; a
+              duplicate (run replay) / absent reward shows nothing. */}
           {showRankCard && rankResult?.reward?.status === 'credited' && (
             <div className={styles.rewardDrop} role="status" aria-label="过关奖励">
               <span className={styles.rewardDropAmount}>
@@ -923,8 +923,8 @@ export default function ResultPage() {
             <p className={styles.rewardCapped}>今日过关奖励已满</p>
           )}
           {/* Check-in reward beat (reward-economy §4): the day's first qualified
-              activity banked +3 星芒. Distinct from the per-win drop above — a
-              single first-of-day defuse shows both. */}
+              activity banked +3 starburst. Distinct from the per-win drop above —
+              a single first-of-day defuse shows both. */}
           {checkinCredited !== null && (
             <div className={styles.checkinBeat} role="status" aria-label="今日打卡奖励">
               <span className={styles.checkinBeatAmount}>
