@@ -58,6 +58,7 @@ import type { VoiceSessionDO } from './session-do'
 import {
   createSessionOverWs,
   driveUtteranceToLlm,
+  makeAbortableStuckLlm,
   makeGatedProviders,
   makeStuckLlm,
   makeTurnProviders,
@@ -1397,6 +1398,56 @@ describe('VoiceSessionDO pricing gate — PR #257 codex round-3 fixes', () => {
       return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
     })
     expect(state.turnCount).toBe(0) // superseded reply did NOT settle
+    expect(state.historyLen).toBe(0)
+  })
+})
+
+// --- PR #257 codex round 4 — abort a mid-await turn on barge-in ------------------
+
+describe('VoiceSessionDO pricing gate — PR #257 codex round-4 fix', () => {
+  it('round4 — a barge-in ABORTS a turn stuck mid provider-await so its terminal done fires PROMPTLY (no 120s wait, no further chunk)', async () => {
+    // The common barge-in case: the reply is mid-`await` on the provider when the user
+    // barges in. `return()` cannot interrupt that await, so before this fix the
+    // superseded stream would not reach its terminal-`done` emission until the next
+    // provider chunk OR the 120s hard deadline — leaving client suppression stuck.
+    // Storing + aborting the per-turn AbortController on supersede unblocks the await
+    // (a signal-honoring provider rejects), so the terminal `done` is emitted at once.
+    const abortable = makeAbortableStuckLlm() // never yields; rejects its await on abort
+    const bundle = makeTurnProviders(abortable.llm)
+    providerControl.override = bundle.providers
+    const handle = makeSessionDo() // priceless — this is about the wire + the abort
+    // maxTurnMs stays at its 120s default: the terminal `done` must NOT depend on the
+    // deadline firing. A 2 s wait budget (<< 120 s) proves promptness.
+    const socket = await openSocket(handle, 'user-A')
+    await createSessionOverWs(socket)
+
+    // A reply parks mid provider-await (the LLM never yields).
+    socket.send(SPEECH_START)
+    socket.send(TURN)
+    await waitForDoState(
+      handle,
+      (v) => v.turnInFlight === true,
+      'reply parked at the provider await'
+    )
+    expect(sawDoneChunk(socket)).toBe(false) // mid-await — no terminal yet
+
+    // The client BARGES IN → supersede must ABORT the stuck await so the superseded
+    // stream unwinds and emits its terminal `done` PROMPTLY (well within 2 s, i.e. not
+    // waiting for the 120 s deadline and not needing a further provider chunk).
+    socket.send(SPEECH_START)
+    await waitFor(
+      () => sawDoneChunk(socket),
+      'the aborted superseded turn emitted its terminal done promptly',
+      2000
+    )
+
+    // The superseded turn's state commit stayed fenced (no history / turnCount).
+    await settle()
+    const state = await handle.run((instance) => {
+      const s = asPrivate(instance).sessionState
+      return { turnCount: s?.turnCount ?? -1, historyLen: s?.history.length ?? -1 }
+    })
+    expect(state.turnCount).toBe(0)
     expect(state.historyLen).toBe(0)
   })
 })

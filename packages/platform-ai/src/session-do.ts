@@ -607,6 +607,17 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private activeTurn: AsyncIterator<AiResponseChunk> | undefined
   /**
+   * The active turn's per-turn `AbortController`, minted in `streamTurn` and stored
+   * alongside `activeTurn`. `return()` cannot interrupt a pending provider `await`,
+   * so a same-session supersession (barge-in) / cancel (`end`) ABORTS this signal to
+   * unblock the stuck provider PROMPTLY: a signal-honoring adapter's request rejects,
+   * `streamTurn`'s cancellation catch runs, and the superseded stream emits its
+   * terminal `done` at once (so the client clears barge-in suppression) — instead of
+   * hanging until the next provider chunk or the 120s hard deadline. `undefined` when
+   * no turn is in flight; cleared with `activeTurn` in the turn's epoch-gated finally.
+   */
+  private activeTurnAbort: AbortController | undefined
+  /**
    * A deferred burn-through wind-down, set when the budget timer fires WHILE a
    * turn is in flight (L2 §5, finding 1 — the wind-down recap must not overlap a
    * live turn). Holds the owner socket to wind down; consumed by `streamTurn`'s
@@ -1120,9 +1131,11 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
    */
   private supersedeActiveTurn(): void {
     const turn = this.activeTurn
+    const abort = this.activeTurnAbort
     this.turnEpoch += 1
     this.turnInFlight = false
     this.activeTurn = undefined
+    this.activeTurnAbort = undefined
     if (turn !== undefined) {
       // Fence a LATE settle by this barge-in'd turn whose provider ignored `return()`
       // (a stuck `await`): bump the turn generation so its commit path is a no-op if
@@ -1130,6 +1143,12 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
       // Only when a turn is actually superseded — a `speech-start` with nothing
       // playing has no turn to fence, so it must not perturb the generation.
       if (this.sessionState) this.sessionState.turnGeneration += 1
+      // ABORT the per-turn signal FIRST: a signal-honoring provider's pending `await`
+      // rejects at once, so the superseded turn's `streamTurn` reaches its cancellation
+      // catch and emits the terminal `done` PROMPTLY (the client clears barge-in
+      // suppression without waiting for the next chunk or the 120s deadline). `return()`
+      // alone cannot interrupt a pending provider `await`.
+      abort?.abort()
       void turn.return?.(undefined)
     }
   }
@@ -1364,6 +1383,9 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
   private async cancelActiveTurn(): Promise<void> {
     const turn = this.activeTurn
     if (turn === undefined) return
+    // ABORT the per-turn signal so a stuck provider `await` rejects promptly (return()
+    // cannot interrupt it), so the turn unwinds instead of hanging until the deadline.
+    this.activeTurnAbort?.abort()
     await turn.return?.(undefined)
   }
 
@@ -1423,6 +1445,10 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
     const abortController = new AbortController()
     const turn = makeTurn(abortController.signal)
     this.activeTurn = turn
+    // Store the controller so a same-session supersession / cancel can ABORT the
+    // pending provider `await` (return() alone cannot), unblocking a stuck turn so its
+    // terminal `done` is emitted promptly (see `activeTurnAbort` + the catch below).
+    this.activeTurnAbort = abortController
     this.turnInFlight = true
     // Whether a `type:'chunk'` frame (audio/text — the frames the client keys its
     // mid-stream state on) has reached the player on THIS turn. Drives the terminal
@@ -1564,11 +1590,26 @@ export class VoiceSessionDO extends Agent<SessionDoEnv> {
           )
         }
       }
+    } catch (err: unknown) {
+      // A provider `await` rejected. If it was OUR OWN abort — a same-session barge-in
+      // supersede or an `end`/cancel aborting the per-turn signal to unblock a stuck
+      // turn (return() cannot interrupt a pending provider await) — this is a graceful
+      // CANCELLATION, not a fault: swallow it. For a same-session barge-in (the socket
+      // is still this session's), emit a terminal `done` PROMPTLY so the client clears
+      // its barge-in suppression at once (not after the next chunk or the 120s
+      // deadline). A rebind (`sessionId` changed) or `end` (`sessionId` nulled) skips
+      // the frame (different / closing socket). A GENUINE provider error (signal not
+      // aborted) is rethrown unchanged to the caller's fail-loud path.
+      if (!abortController.signal.aborted) throw err
+      if (this.sessionId === mySessionId) {
+        ws.send(JSON.stringify({ type: 'chunk', kind: 'text', text: '', done: true }))
+      }
     } finally {
       if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
       if (this.turnEpoch === myEpoch) {
         this.turnInFlight = false
         this.activeTurn = undefined
+        this.activeTurnAbort = undefined
         // A budget depletion fired while this turn was streaming and DEFERRED the
         // wind-down (finding 1: the wind-down recap must not overlap a live turn).
         // Now that this turn has fully drained, re-invoke the deferred wind-down —
