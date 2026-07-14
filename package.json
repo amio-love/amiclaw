@@ -52,7 +52,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^5.2.1",
     "lint-staged": "^17.0.8",
     "markdownlint-cli2": "^0.22.1",
     "playwright-bdd": "^9.2.0",
