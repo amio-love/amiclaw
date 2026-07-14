@@ -1,8 +1,11 @@
 /**
  * Companion proxy social — the platform SPA's typed client for the two bounded
  * generation routes on the Platform AI Worker (L2 arch-component-proxy-social
- * §Interface). Both are same-origin `/ai-intent/*` routes carried on `API_BASE`,
- * and both ride the session cookie (`credentials: 'include'`) so the author (甲)
+ * §Interface). Both are strictly same-origin `/ai-intent/*` routes — called with
+ * RELATIVE paths (never `API_BASE`): the Worker's origin check rejects any
+ * cross-origin POST, and the routes only exist on the canonical zone, so a
+ * preview host simply 404s (best-effort no-op) instead of tripping the origin
+ * guard. Both ride the session cookie (`credentials: 'include'`) so the author (甲)
  * / responder (乙) identity is derived server-side — the client never sends an
  * owner id and never sends free text.
  *
@@ -19,7 +22,6 @@
  * returns a discriminated union and never throws at the call site.
  */
 
-import { API_BASE } from '@shared/api-base'
 import type { ArcadeCommunityFeedTemplate } from '@amiclaw/arcade-profile/types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -58,7 +60,7 @@ interface RawProxyMessageResponse {
  */
 export async function triggerCompanionProxyMessage(): Promise<CompanionProxyMessageResult> {
   try {
-    const res = await fetch(`${API_BASE}${PROXY_MESSAGE_PATH}`, {
+    const res = await fetch(PROXY_MESSAGE_PATH, {
       method: 'POST',
       headers: JSON_HEADERS,
       credentials: 'include',
@@ -101,7 +103,7 @@ export async function sendCompanionProxyReply(
   messageId: string
 ): Promise<CompanionProxyReplyResult> {
   try {
-    const res = await fetch(`${API_BASE}${PROXY_REPLY_PATH}`, {
+    const res = await fetch(PROXY_REPLY_PATH, {
       method: 'POST',
       headers: JSON_HEADERS,
       credentials: 'include',

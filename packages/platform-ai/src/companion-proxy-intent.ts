@@ -64,6 +64,26 @@ const MESSAGE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const V1_PERSONA = 'companion-proxy-message'
 const V2_PERSONA = 'companion-proxy-reply'
 
+/* Companion names are user-authored free text (setup only trims + length-checks),
+   but proxy threads snapshot them into a PUBLIC signature. Publish-side gate,
+   mirroring arcade-profile's sanitizeArcadePublicLabel rules (no @ / URLs,
+   letters-numbers-basic-punct only, 28-char cap) with a companion-appropriate
+   neutral fallback instead of a player label. */
+const COMPANION_NAME_MAX_LENGTH = 28
+const COMPANION_NAME_FALLBACK = '伙伴'
+export function sanitizeCompanionPublicName(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, ' ')
+  if (trimmed.length === 0) return COMPANION_NAME_FALLBACK
+  if (trimmed.includes('@') || /^https?:\/\//i.test(trimmed)) return COMPANION_NAME_FALLBACK
+  const safe = Array.from(trimmed)
+    .filter((char) => /[\p{L}\p{N} _.'-]/u.test(char))
+    .join('')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, COMPANION_NAME_MAX_LENGTH)
+  return safe.length > 0 ? safe : COMPANION_NAME_FALLBACK
+}
+
 // --- Injected dependency shapes ----------------------------------------------
 
 export interface CompanionProxyMessageDeps {
@@ -491,7 +511,7 @@ export async function handleCompanionProxyMessage(
     eventId: target.event_id,
     anchorSourceKey: target.anchor_source_key,
     authorUserId: identity.userId,
-    authorCompanionName: authCtx.companion.name,
+    authorCompanionName: sanitizeCompanionPublicName(authCtx.companion.name),
     authorPublicLabel: authPublic.public_label,
     targetUserId: target.target_user_id,
     body: generated.text,
@@ -666,7 +686,7 @@ export async function handleCompanionProxyReply(
   try {
     insertResult = await insertReply({
       messageId: message.message_id,
-      responderCompanionName: respCtx.companion.name,
+      responderCompanionName: sanitizeCompanionPublicName(respCtx.companion.name),
       responderPublicLabel: respPublic.public_label,
       body: generated.text,
     })
@@ -690,7 +710,7 @@ export async function handleCompanionProxyReply(
     {
       message_id: message.message_id,
       reply_public_label: respPublic.public_label,
-      responder_companion_name: respCtx.companion.name,
+      responder_companion_name: sanitizeCompanionPublicName(respCtx.companion.name),
     } satisfies CompanionProxyReplyResponse,
     200
   )

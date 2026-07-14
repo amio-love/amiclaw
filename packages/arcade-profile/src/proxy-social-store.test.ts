@@ -399,6 +399,16 @@ describe('V1 candidate selection (readProxyCandidateEvents)', () => {
     await insertProxyMessage(db, { ...PROXY_MESSAGE, eventId }, DEPS)
     expect(await readProxyCandidateEvents(db, 'user-jia', { today: TODAY })).toEqual([])
   })
+
+  it('returns no candidates at all while the proxy tables are absent (migration-lag skip, no LLM spend)', async () => {
+    const db = createTestDb() // base schema only — 0007 not applied
+    await seedClaimedPlayer(db, 'user-yi', 'Yi', [runEvent('run-1', '2026-07-08T08:00:00.000Z')])
+
+    // Eligible event exists in the derived feed, but candidate selection must
+    // skip entirely (null messaged-set signal) instead of pretending the author
+    // has no prior messages and burning a generation the insert cannot land.
+    expect(await readProxyCandidateEvents(db, 'user-jia', { today: TODAY })).toEqual([])
+  })
 })
 
 describe('V1 daily cap (countAuthorProxyMessagesForDay)', () => {

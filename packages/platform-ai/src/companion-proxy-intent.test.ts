@@ -20,6 +20,7 @@ import {
   MAX_PROXY_BODY_CODEPOINTS,
   MAX_PROXY_REQUEST_BYTES,
   PROXY_INTENT_TIMEOUT_MS,
+  sanitizeCompanionPublicName,
   type CompanionProxyMessageDeps,
   type CompanionProxyReplyDeps,
 } from './companion-proxy-intent'
@@ -545,5 +546,27 @@ describe('handleCompanionProxyReply — explicit error codes', () => {
     expect(
       (await handleCompanionProxyReply(request(V2_PATH, { message_id: 'msg-1' }), deps)).status
     ).toBe(502)
+  })
+})
+
+/* Publish-side gate for user-authored companion names entering PUBLIC thread
+   signatures (codex review P2, 2026-07-14): the setup flow only trims +
+   length-checks, so the snapshot must sanitize. */
+describe('sanitizeCompanionPublicName', () => {
+  it('passes clean names through (unicode letters incl. CJK)', () => {
+    expect(sanitizeCompanionPublicName('阿澈')).toBe('阿澈')
+    expect(sanitizeCompanionPublicName('  Nova 7 ')).toBe('Nova 7')
+  })
+
+  it('falls back to the neutral name on emails and URLs', () => {
+    expect(sanitizeCompanionPublicName('spam@example.com')).toBe('伙伴')
+    expect(sanitizeCompanionPublicName('https://spam.example')).toBe('伙伴')
+    expect(sanitizeCompanionPublicName('   ')).toBe('伙伴')
+  })
+
+  it('strips disallowed characters and caps the length at 28', () => {
+    expect(sanitizeCompanionPublicName('No<script>va!!')).toBe('Noscriptva')
+    expect(sanitizeCompanionPublicName('x'.repeat(60))).toHaveLength(28)
+    expect(sanitizeCompanionPublicName('!!!###')).toBe('伙伴')
   })
 })

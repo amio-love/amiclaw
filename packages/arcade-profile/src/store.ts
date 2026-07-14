@@ -1064,12 +1064,13 @@ export interface ProxyCandidateEvent {
 
 /* Event ids the author's companion has already proxied on — the fast candidate
    exclusion (the UNIQUE(event_id, author_user_id) is the concurrent backstop
-   behind it). Missing 0007 table → empty set (no exclusion; the insert fails safe
-   anyway), same feature-guard as the feed read. */
+   behind it). Missing 0007 table → null: the migration-lag window must SKIP
+   candidate selection entirely (no LLM spend on a generation whose insert cannot
+   land), rather than pretending the author has no prior messages. */
 async function readAuthorMessagedEventIds(
   db: ArcadeProfileDb,
   authorUserId: string
-): Promise<Set<string>> {
+): Promise<Set<string> | null> {
   try {
     const { results } = await db
       .prepare(`SELECT event_id FROM arcade_community_proxy_message WHERE author_user_id = ?`)
@@ -1078,7 +1079,10 @@ async function readAuthorMessagedEventIds(
     return new Set(results.map((row) => row.event_id))
   } catch (error) {
     if (!isMissingProxyTableError(error)) throw error
-    return new Set()
+    console.warn(
+      '[proxy-social] proxy tables absent during candidate read — skipping proxy generation'
+    )
+    return null
   }
 }
 
@@ -1100,6 +1104,9 @@ export async function readProxyCandidateEvents(
   const enrichByEvent = buildOwnerEnrichByEvent(players)
 
   const alreadyMessaged = await readAuthorMessagedEventIds(db, authorUserId)
+  // Migration-lag window (0007 not applied yet): no candidates at all — the
+  // route answers messaged:false without ever invoking the LLM.
+  if (alreadyMessaged === null) return []
 
   const candidates: ProxyCandidateEvent[] = []
   for (const item of feed) {
